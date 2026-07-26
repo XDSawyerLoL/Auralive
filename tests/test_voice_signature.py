@@ -8,7 +8,7 @@ def test_fictional_game_violence_uses_cheerful_dark_comedy():
     )
     assert "almost innocently" in instruction
     assert "fictional" in instruction
-    assert "never childish" in instruction
+    assert "adult and controlled" in instruction
 
 
 def test_real_tragedy_disables_the_comic_contrast():
@@ -27,3 +27,12 @@ def test_moderation_stays_unambiguous():
     )
     assert "firmly authoritative" in instruction
     assert "no playful ambiguity" in instruction
+
+
+def test_voice_input_is_youthful_and_spontaneous():
+    instruction = expressive_performance(
+        "voice_input",
+        "Tu en penses quoi de cette partie ?",
+    )
+    assert "bright" in instruction
+    assert "young adult" in instruction
