@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Aura Live — Automation Studio</title>
+  <link rel="stylesheet" href="/static/automation.css?v=2.0.0">
+</head>
+<body>
+  <div class="aurora aurora-a"></div><div class="aurora aurora-b"></div>
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-orb">A</span><span><strong>Aura Live</strong><small>Automation Studio 2.0</small></span></a>
+    <button class="primary full" id="newAutomation">＋ Nouvelle automatisation</button>
+    <div class="side-title">Scénarios</div>
+    <div id="automationList" class="automation-list"></div>
+    <div class="side-title">Modèles professionnels</div>
+    <div id="templateList" class="template-list"></div>
+    <a class="back" href="/">← Retour au centre de contrôle</a>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><p class="eyebrow">MOTEUR NATIF LOCAL</p><h1>Automation Studio</h1><p>Déclencheurs, logique, Mairaiy, Twitch, OBS et système dans un seul flux.</p></div>
+      <div id="statusCards" class="status-cards"></div>
+    </header>
+
+    <section class="workspace">
+      <div class="workspace-head">
+        <div class="identity-fields">
+          <input id="automationName" class="title-input" value="Nouvelle automatisation" aria-label="Nom">
+          <input id="automationDescription" class="description-input" placeholder="Décris le résultat attendu">
+        </div>
+        <div class="toolbar">
+          <label class="switch"><input id="automationEnabled" type="checkbox" checked><span></span>Active</label>
+          <button id="simulateAutomation" class="ghost">Simuler</button>
+          <button id="runAutomation" class="ghost">Exécuter</button>
+          <button id="saveAutomation" class="primary">Enregistrer</button>
+        </div>
+      </div>
+
+      <div class="meta-grid">
+        <label>Déclencheur<select id="triggerSelect"></select></label>
+        <label>Priorité<input id="priorityInput" type="number" value="100" min="1" max="1000"></label>
+        <label>Mode<select id="runMode"><option value="sequential">Séquentiel</option><option value="parallel">Parallèle</option></select></label>
+        <label>File d’exécution<input id="queueKey" placeholder="ex. twitch-{{event.user_id}}"></label>
+        <label>Cooldown (s)<input id="cooldown" type="number" value="0" min="0"></label>
+        <label>Portée<select id="cooldownScope"><option value="global">Globale</option><option value="viewer">Par viewer</option></select></label>
+      </div>
+
+      <div class="flow-shell">
+        <div class="flow-column trigger-column"><div class="column-label">QUAND</div><div id="triggerNode" class="node trigger-node"></div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-column"><div class="column-label">SI</div><div id="conditionsCanvas" class="node-stack"></div><button id="addCondition" class="add-node">＋ Condition</button></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-column actions-column"><div class="column-label">ALORS</div><div id="actionsCanvas" class="node-stack"></div><button id="addAction" class="add-node">＋ Action</button></div>
+      </div>
+    </section>
+
+    <section class="lower-grid">
+      <article class="panel"><div class="panel-head"><h2>Catalogue natif</h2><input id="catalogSearch" placeholder="Rechercher une action"></div><div id="catalog" class="catalog"></div></article>
+      <article class="panel"><div class="panel-head"><h2>Journal d’exécution</h2><button id="refreshReports" class="ghost small">Actualiser</button></div><div id="reports" class="reports"></div></article>
+    </section>
+  </main>
+
+  <dialog id="configDialog">
+    <form method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow" id="dialogCategory"></p><h2 id="dialogTitle">Configurer</h2></div><button value="cancel" class="icon-button">×</button></div>
+      <p id="dialogDescription" class="dialog-description"></p>
+      <div id="configFields" class="config-fields"></div>
+      <label class="json-label">Configuration JSON avancée<textarea id="configJson" rows="9"></textarea></label>
+      <div class="dialog-actions"><button value="cancel" class="ghost">Annuler</button><button id="applyNodeConfig" value="default" class="primary">Appliquer</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script src="/static/automation.js?v=2.0.0"></script>
+</body>
+</html>
