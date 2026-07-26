@@ -14,78 +14,29 @@
     return;
   }
 
-  let state = 'idle';
-  let audioContext = null;
-  let stream = null;
-  let source = null;
-  let processor = null;
-  let silentGain = null;
-  let chunks = [];
-  let preRoll = [];
-  let sampleRate = 48000;
-  let startedAt = 0;
-  let stopTimer = null;
-  let rearmTimer = null;
-  let requestTimer = null;
-  let maxSeconds = 20;
-  let requestSerial = 0;
-  let speechFrames = 0;
-  let candidateSpeechMs = 0;
-  let voicedMs = 0;
-  let silenceMs = 0;
-  let noiseFloor = 0.004;
-  let speechThreshold = 0.012;
-  let stopQueued = false;
-  let autoStartAttempted = false;
-  let calibrated = false;
-  let calibrationUntil = 0;
-  let calibrationSamples = [];
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const WAKE_PATTERN = /\b(mairaiy|mairay|mairai|maïra|maira|mayra|marie)\b/i;
+  const POLL_INTERVAL_MS = 500;
+  const VOICE_WAIT_LIMIT_MS = 50000;
 
-  const PRE_ROLL_FRAMES = 14;
-  const START_FRAMES = 3;
-  const START_VOICE_MS = 170;
-  const END_SILENCE_MS = 1100;
-  const MIN_UTTERANCE_MS = 650;
-  const MIN_VOICED_MS = 220;
-  const CALIBRATION_MS = 1400;
-  const REQUEST_TIMEOUT_MS = 75000;
-  const MAX_REARM_MS = 45000;
-
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  let recognition = null;
+  let recognitionRunning = false;
+  let enabled = localStorage.getItem('mairaiy-continuous-listening') !== 'off';
+  let processing = false;
+  let waitingVoice = false;
+  let wakeArmed = false;
+  let phraseParts = [];
+  let sendTimer = null;
+  let wakeTimer = null;
+  let restartTimer = null;
+  let requestController = null;
 
   const setHint = (title, detail = '', error = false) => {
     hint.innerHTML = `<b class="${error ? 'error' : ''}">${title}</b>${detail}`;
   };
 
-  function setState(next) {
-    state = next;
-    renderState();
-  }
-
-  function renderState() {
-    button.classList.toggle('listening', state === 'calibrating' || state === 'listening');
-    button.classList.toggle('recording', state === 'capturing');
-    button.classList.toggle('processing', state === 'processing' || state === 'cooldown');
-    button.disabled = state === 'processing' || state === 'cooldown';
-
-    if (state === 'calibrating') button.innerHTML = 'Réglage<br>du micro';
-    else if (state === 'listening') button.innerHTML = 'Écoute<br>active';
-    else if (state === 'capturing') button.innerHTML = 'Mairaiy<br>t’écoute';
-    else if (state === 'processing') button.innerHTML = 'Mairaiy<br>répond';
-    else if (state === 'cooldown') button.innerHTML = 'Pause<br>anti-écho';
-    else button.innerHTML = handsFree.checked ? 'Activer<br>l’écoute' : 'Cliquer<br>pour parler';
-
-    if (state === 'calibrating') micRuntime.textContent = 'Calibration du bruit ambiant';
-    else if (state === 'listening') micRuntime.textContent = `Mains libres · seuil ${speechThreshold.toFixed(3)}`;
-    else if (state === 'capturing') micRuntime.textContent = 'Phrase détectée';
-    else if (state === 'processing') micRuntime.textContent = 'Transcription, réponse et voix';
-    else if (state === 'cooldown') micRuntime.textContent = 'Attente de la fin de sa voix';
-    else micRuntime.textContent = 'Micro en pause';
-  }
-
   function visionLabel(data) {
-    const awareness = data?.live_awareness;
-    const vision = awareness?.vision;
+    const vision = data?.live_awareness?.vision;
     if (!vision) return 'Service non chargé';
     if (vision.active) {
       return `Active · ${vision.captures || 0} captures · ${vision.reactions || 0} réactions`;
@@ -101,16 +52,36 @@
     return blockers.length ? `En attente · ${blockers.join(', ')}` : 'En attente';
   }
 
+  function render() {
+    const listening = enabled && recognitionRunning && !processing && !waitingVoice;
+    const armed = listening && wakeArmed;
+    button.classList.toggle('listening', listening && !armed);
+    button.classList.toggle('recording', armed);
+    button.classList.toggle('processing', processing || waitingVoice);
+    button.disabled = processing || waitingVoice;
+
+    if (processing) button.innerHTML = 'Mairaiy<br>réfléchit';
+    else if (waitingVoice) button.innerHTML = 'Mairaiy<br>parle';
+    else if (armed) button.innerHTML = 'Mairaiy<br>t’écoute';
+    else if (listening) button.innerHTML = 'Écoute<br>continue';
+    else button.innerHTML = 'Activer<br>l’écoute';
+
+    if (!Recognition) micRuntime.textContent = 'Reconnaissance continue indisponible';
+    else if (processing) micRuntime.textContent = 'Génération de la réponse';
+    else if (waitingVoice) micRuntime.textContent = 'Voix Gemini en préparation';
+    else if (armed) micRuntime.textContent = 'Mot d’appel détecté';
+    else if (listening) micRuntime.textContent = 'Edge/Chrome · français · mains libres';
+    else micRuntime.textContent = 'Micro en pause';
+  }
+
   async function refreshStatus() {
     try {
       const response = await fetch('/api/voice/status', { cache: 'no-store' });
       const data = await response.json();
-      maxSeconds = Number(data.max_seconds || 20);
       const visionActive = Boolean(data?.live_awareness?.vision?.active);
+      const voiceLocked = Boolean(data?.audio?.voice_identity?.locked);
       statusNode.textContent = data.configured
-        ? (data.avatar_connected
-          ? (visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO')
-          : 'PRÊTE · OUVRE L’AVATAR OBS')
+        ? `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'}${voiceLocked ? ' · VOIX VERROUILLÉE' : ''}`
         : 'CONFIGURATION GEMINI MANQUANTE';
       statusNode.style.color = data.configured ? '#a9f7df' : '#ff9ab2';
       visionRuntime.textContent = visionLabel(data);
@@ -121,442 +92,299 @@
     }
   }
 
-  function hardwareAlive() {
-    const track = stream?.getAudioTracks?.()[0];
-    return Boolean(track && track.readyState === 'live' && audioContext && audioContext.state !== 'closed');
+  function clearPhrase() {
+    wakeArmed = false;
+    phraseParts = [];
+    clearTimeout(sendTimer);
+    clearTimeout(wakeTimer);
+    sendTimer = null;
+    wakeTimer = null;
+    render();
   }
 
-  async function disposeHardware() {
-    clearTimeout(stopTimer);
-    clearTimeout(rearmTimer);
-    clearTimeout(requestTimer);
-    stopTimer = null;
-    rearmTimer = null;
-    requestTimer = null;
-    try { processor?.disconnect(); } catch {}
-    try { source?.disconnect(); } catch {}
-    try { silentGain?.disconnect(); } catch {}
-    stream?.getTracks?.().forEach(track => track.stop());
-    try { await audioContext?.close(); } catch {}
-    audioContext = stream = source = processor = silentGain = null;
-    calibrated = false;
+  function hasMeaningfulQuestion(value) {
+    const cleaned = String(value || '')
+      .replace(WAKE_PATTERN, ' ')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim();
+    return cleaned.length >= 2;
   }
 
-  function frameRms(frame) {
-    let sum = 0;
-    for (let i = 0; i < frame.length; i += 1) sum += frame[i] * frame[i];
-    return Math.sqrt(sum / Math.max(1, frame.length));
+  function schedulePhraseSend(delay = 1050) {
+    clearTimeout(sendTimer);
+    sendTimer = setTimeout(() => {
+      const phrase = phraseParts.join(' ').replace(/\s+/g, ' ').trim();
+      if (!hasMeaningfulQuestion(phrase)) {
+        setHint('Mairaiy a entendu son prénom', 'Continue ta phrase, elle attend la question.');
+        wakeTimer = setTimeout(() => {
+          clearPhrase();
+          setHint('Écoute continue active', 'Dis « Mairaiy » puis ta phrase, sans toucher au bouton.');
+        }, 8000);
+        return;
+      }
+      sendPhrase(phrase);
+    }, delay);
   }
 
-  function finishCalibration() {
-    const samples = calibrationSamples.filter(Number.isFinite).sort((a, b) => a - b);
-    const index = Math.max(0, Math.min(samples.length - 1, Math.floor(samples.length * 0.72)));
-    noiseFloor = samples.length ? samples[index] : 0.004;
-    noiseFloor = clamp(noiseFloor, 0.0015, 0.025);
-    speechThreshold = clamp((noiseFloor * 2.45) + 0.0015, 0.006, 0.055);
-    calibrationSamples = [];
-    calibrated = true;
-    setState('listening');
-    setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Le niveau du micro est calibré.');
-  }
+  function consumeFinal(text) {
+    const clean = String(text || '').trim();
+    if (!clean || processing || waitingVoice) return;
 
-  function beginDetectedSpeech() {
-    setState('capturing');
-    chunks = preRoll.slice();
-    preRoll = [];
-    startedAt = Date.now();
-    silenceMs = 0;
-    voicedMs = candidateSpeechMs;
-    candidateSpeechMs = 0;
-    stopQueued = false;
-    setHint('Je t’écoute', 'Continue ta phrase. Elle sera envoyée après un court silence.');
-    clearTimeout(stopTimer);
-    stopTimer = setTimeout(() => queueStopRecording(true), Math.max(3, maxSeconds) * 1000);
-  }
-
-  function handleAudioFrame(event) {
-    const frame = new Float32Array(event.inputBuffer.getChannelData(0));
-    const rms = frameRms(frame);
-    const frameMs = (frame.length / Math.max(1, sampleRate)) * 1000;
-
-    if (state === 'calibrating') {
-      calibrationSamples.push(rms);
-      if (Date.now() >= calibrationUntil) finishCalibration();
+    if (!wakeArmed) {
+      if (!WAKE_PATTERN.test(clean)) {
+        transcript.textContent = clean;
+        return;
+      }
+      wakeArmed = true;
+      phraseParts = [clean];
+      setHint('Mairaiy t’écoute', 'Termine ta phrase normalement.');
+      render();
+      schedulePhraseSend();
       return;
     }
 
-    if (state === 'listening') {
-      preRoll.push(frame);
-      if (preRoll.length > PRE_ROLL_FRAMES) preRoll.shift();
+    phraseParts.push(clean);
+    schedulePhraseSend(850);
+  }
 
-      if (rms < speechThreshold * 0.82) {
-        noiseFloor = (noiseFloor * 0.985) + (rms * 0.015);
-        speechThreshold = clamp((noiseFloor * 2.55) + 0.0015, 0.006, 0.055);
+  function createRecognition() {
+    if (!Recognition) return null;
+    const instance = new Recognition();
+    instance.lang = 'fr-FR';
+    instance.continuous = true;
+    instance.interimResults = true;
+    instance.maxAlternatives = 1;
+
+    instance.onstart = () => {
+      recognitionRunning = true;
+      render();
+      if (!wakeArmed) {
+        setHint('Écoute continue active', 'Dis « Mairaiy » puis ta phrase. Aucun push-to-talk.');
       }
+    };
 
-      if (rms >= speechThreshold) {
-        speechFrames += 1;
-        candidateSpeechMs += frameMs;
+    instance.onresult = event => {
+      let interim = '';
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const text = String(result?.[0]?.transcript || '').trim();
+        if (!text) continue;
+        if (result.isFinal) consumeFinal(text);
+        else interim += `${text} `;
+      }
+      if (interim.trim() && !processing && !waitingVoice) {
+        transcript.textContent = interim.trim();
+        if (WAKE_PATTERN.test(interim)) {
+          setHint('Mot d’appel entendu', 'Mairaiy attend la fin de ta phrase.');
+        }
+      }
+    };
+
+    instance.onerror = event => {
+      const code = String(event.error || 'unknown');
+      recognitionRunning = false;
+      if (code === 'aborted' || code === 'no-speech') {
+        render();
+        return;
+      }
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        enabled = false;
+        localStorage.setItem('mairaiy-continuous-listening', 'off');
+        setHint('Autorisation micro nécessaire', 'Clique sur le bouton puis autorise le microphone dans Edge.', true);
+      } else if (code === 'audio-capture') {
+        setHint('Micro introuvable', 'Vérifie le périphérique sélectionné dans Windows et Edge.', true);
       } else {
-        speechFrames = Math.max(0, speechFrames - 1);
-        candidateSpeechMs = Math.max(0, candidateSpeechMs - frameMs * 0.45);
+        setHint('Reconnaissance vocale interrompue', `Erreur ${code}. La reprise est automatique.`, true);
       }
+      render();
+    };
 
-      if (speechFrames >= START_FRAMES && candidateSpeechMs >= START_VOICE_MS) {
-        speechFrames = 0;
-        beginDetectedSpeech();
-      }
-      return;
-    }
+    instance.onend = () => {
+      recognitionRunning = false;
+      render();
+      if (enabled && !processing && !waitingVoice) scheduleRestart(350);
+    };
 
-    if (state !== 'capturing') return;
-    chunks.push(frame);
-    if (rms >= speechThreshold * 0.82) {
-      voicedMs += frameMs;
-      silenceMs = 0;
-    } else {
-      silenceMs += frameMs;
-    }
-
-    const duration = Date.now() - startedAt;
-    if (duration >= MIN_UTTERANCE_MS && silenceMs >= END_SILENCE_MS) {
-      queueStopRecording(true);
-    }
+    return instance;
   }
 
-  async function ensureHardware() {
-    if (hardwareAlive()) {
-      if (audioContext.state === 'suspended') await audioContext.resume();
-      return;
-    }
-
-    await disposeHardware();
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Ce navigateur ne donne pas accès au microphone.');
-    }
-
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-      },
-      video: false,
-    });
-
-    audioContext = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-    await audioContext.resume();
-    sampleRate = audioContext.sampleRate;
-    source = audioContext.createMediaStreamSource(stream);
-    processor = audioContext.createScriptProcessor(4096, 1, 1);
-    silentGain = audioContext.createGain();
-    silentGain.gain.value = 0;
-    processor.onaudioprocess = handleAudioFrame;
-    source.connect(processor);
-    processor.connect(silentGain);
-    silentGain.connect(audioContext.destination);
-
-    const track = stream.getAudioTracks()[0];
-    track.addEventListener('ended', () => {
-      setState('idle');
-      calibrated = false;
-      setHint('Micro déconnecté', 'Reconnecte le périphérique puis clique une fois pour réactiver.', true);
-      disposeHardware();
-    }, { once: true });
+  function scheduleRestart(delay = 300) {
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => startRecognition(), delay);
   }
 
-  async function startHandsFree() {
-    if (!handsFree.checked || state === 'processing' || state === 'capturing') return;
-    clearTimeout(rearmTimer);
-    rearmTimer = null;
-
-    // Le minuteur anti-écho appelle cette fonction depuis l’état cooldown.
-    // Il faut impérativement libérer cet état avant de réarmer le micro.
-    if (state === 'cooldown') setState('idle');
-
+  function startRecognition() {
+    if (!enabled || processing || waitingVoice || recognitionRunning || !Recognition) {
+      render();
+      return;
+    }
+    if (!recognition) recognition = createRecognition();
     try {
-      await ensureHardware();
-      chunks = [];
-      preRoll = [];
-      speechFrames = 0;
-      candidateSpeechMs = 0;
-      voicedMs = 0;
-      silenceMs = 0;
-      if (!calibrated) {
-        calibrationSamples = [];
-        calibrationUntil = Date.now() + CALIBRATION_MS;
-        setState('calibrating');
-        setHint('Calibration du micro', 'Reste silencieux une seconde, puis parle normalement.');
-      } else {
-        setState('listening');
-        setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Aucun bouton à maintenir.');
-      }
+      recognition.start();
     } catch (error) {
-      setState('idle');
-      setHint('Autorisation du micro nécessaire', error.message || 'Clique une fois puis autorise le microphone.', true);
+      if (error?.name !== 'InvalidStateError') {
+        setHint('Micro non démarré', error.message || String(error), true);
+      }
+      scheduleRestart(700);
     }
   }
 
-  function pauseListening(message = '') {
-    clearTimeout(stopTimer);
-    clearTimeout(rearmTimer);
-    clearTimeout(requestTimer);
-    stopTimer = null;
-    rearmTimer = null;
-    requestTimer = null;
-    chunks = [];
-    preRoll = [];
-    speechFrames = 0;
-    candidateSpeechMs = 0;
-    voicedMs = 0;
-    silenceMs = 0;
-    setState('idle');
-    if (message) setHint('Écoute en pause', message);
+  function stopRecognition() {
+    clearTimeout(restartTimer);
+    restartTimer = null;
+    if (!recognition) return;
+    try { recognition.abort(); } catch {}
+    recognitionRunning = false;
+    render();
   }
 
-  async function startManualRecording() {
-    if (state !== 'idle') return;
+  async function sendPhrase(phrase) {
+    clearTimeout(sendTimer);
+    clearTimeout(wakeTimer);
+    sendTimer = wakeTimer = null;
+    processing = true;
+    waitingVoice = false;
+    stopRecognition();
+    render();
+    transcript.textContent = phrase;
+    setHint('Mairaiy prépare sa réponse', 'La transcription est déjà faite : elle génère directement sa réponse.');
+
+    requestController = new AbortController();
+    const timeout = setTimeout(() => requestController.abort(), 35000);
     try {
-      await ensureHardware();
-      chunks = [];
-      preRoll = [];
-      startedAt = Date.now();
-      voicedMs = MIN_VOICED_MS;
-      setState('capturing');
-      setHint('Je t’écoute', 'Clique de nouveau pour envoyer ta phrase.');
-      stopTimer = setTimeout(() => queueStopRecording(false), Math.max(3, maxSeconds) * 1000);
-    } catch (error) {
-      setState('idle');
-      setHint('Micro inaccessible', error.message || 'Autorise le microphone dans le navigateur.', true);
-    }
-  }
-
-  function queueStopRecording(requireWakeWord) {
-    if (stopQueued || state !== 'capturing') return;
-    stopQueued = true;
-    queueMicrotask(() => stopRecording(requireWakeWord));
-  }
-
-  async function returnToListening(title, detail) {
-    setState('idle');
-    setHint(title, detail);
-    if (handsFree.checked) {
-      clearTimeout(rearmTimer);
-      rearmTimer = setTimeout(() => startHandsFree(), 250);
-    }
-  }
-
-  function scheduleRearm(delayMs, title = 'Écoute mains libres active') {
-    clearTimeout(rearmTimer);
-    const wait = clamp(Number(delayMs) || 2800, 350, MAX_REARM_MS);
-    setState('cooldown');
-    setHint(title, `Le micro se réactive dans ${(wait / 1000).toFixed(1)} s.`);
-
-    rearmTimer = setTimeout(async () => {
-      rearmTimer = null;
-      if (state !== 'cooldown') return;
-      setState('idle');
-      if (handsFree.checked) await startHandsFree();
-      else pauseListening('Clique quand tu veux lui reparler.');
-    }, wait);
-  }
-
-  async function stopRecording(requireWakeWord) {
-    if (state !== 'capturing') return;
-    clearTimeout(stopTimer);
-    stopTimer = null;
-    const duration = Date.now() - startedAt;
-    stopQueued = false;
-
-    if (!chunks.length || duration < MIN_UTTERANCE_MS || (requireWakeWord && voicedMs < MIN_VOICED_MS)) {
-      chunks = [];
-      await returnToListening('Bruit ignoré', 'Aucune phrase complète détectée. L’écoute reste active.');
-      return;
-    }
-
-    setState('processing');
-    setHint('Transcription et réponse en cours', requireWakeWord
-      ? 'Elle répond uniquement si la phrase contient « Mairaiy ».'
-      : 'La phrase est envoyée à Mairaiy.');
-
-    const serial = ++requestSerial;
-    const wav = encodeWav(chunks, sampleRate);
-    chunks = [];
-    preRoll = [];
-    const controller = new AbortController();
-    requestTimer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const payload = {
-        audio_base64: arrayBufferToBase64(wav),
-        mime_type: requireWakeWord ? 'audio/wav; mode=handsfree' : 'audio/wav',
-        send_to_chat: sendChat.checked,
-      };
-      const response = await fetch('/api/voice/talk', {
+      const response = await fetch('/api/voice/text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
+        body: JSON.stringify({ transcript: phrase, send_to_chat: sendChat.checked }),
+        signal: requestController.signal,
       });
-      clearTimeout(requestTimer);
-      requestTimer = null;
-
       const raw = await response.text();
       let data = {};
       try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
       if (!response.ok) throw new Error(data.detail || 'Dialogue vocal impossible');
-      if (serial !== requestSerial) return;
-
-      transcript.textContent = data.transcript || '—';
-      answer.textContent = data.answer || '—';
 
       if (data.ignored) {
-        const noise = data.ignore_reason === 'silence_or_noise';
-        scheduleRearm(
-          Math.max(450, Number(data.rearm_after_ms || 650)),
-          noise ? 'Bruit ou silence ignoré' : 'Mot d’appel manquant',
-        );
+        answer.textContent = '—';
+        setHint('Mot d’appel non reconnu', 'Prononce « Mairaiy » au début de la phrase.');
+        processing = false;
+        clearPhrase();
+        scheduleRestart(500);
         return;
       }
 
-      const details = `${data.latency_ms || 0} ms${data.sent_to_chat ? ' · publiée dans Twitch' : ''}`;
-      setHint('Réponse reçue', details);
-      scheduleRearm(Math.max(1200, Number(data.rearm_after_ms || 2800)), 'Mairaiy parle');
-      await refreshStatus();
+      answer.textContent = data.answer || '—';
+      processing = false;
+      waitingVoice = true;
+      clearPhrase();
+      render();
+      setHint('Réponse prête', 'Mairaiy prépare maintenant sa voix verrouillée.');
+      waitForVoiceCompletion();
     } catch (error) {
-      clearTimeout(requestTimer);
-      requestTimer = null;
+      processing = false;
+      waitingVoice = false;
+      clearPhrase();
       const aborted = error?.name === 'AbortError';
-      setState('idle');
       setHint(
         aborted ? 'Réponse trop longue' : 'Mairaiy n’a pas pu répondre',
-        aborted ? 'La requête a été interrompue après 75 secondes. Le micro va se réarmer.' : (error.message || String(error)),
+        aborted ? 'La génération a dépassé 35 secondes.' : (error.message || String(error)),
         true,
       );
-      if (handsFree.checked) {
-        rearmTimer = setTimeout(() => startHandsFree(), aborted ? 8000 : 1200);
-      }
+      scheduleRestart(aborted ? 2500 : 1000);
+    } finally {
+      clearTimeout(timeout);
+      requestController = null;
+      render();
+      refreshStatus();
     }
   }
 
-  function encodeWav(parts, rate) {
-    const length = parts.reduce((sum, part) => sum + part.length, 0);
-    let peak = 0;
-    for (const part of parts) {
-      for (let i = 0; i < part.length; i += 1) peak = Math.max(peak, Math.abs(part[i]));
-    }
-    const gain = peak >= 0.004 ? clamp(0.78 / peak, 1, 6) : 1;
-    const buffer = new ArrayBuffer(44 + length * 2);
-    const view = new DataView(buffer);
-    const write = (offset, text) => {
-      for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i));
-    };
-    write(0, 'RIFF');
-    view.setUint32(4, 36 + length * 2, true);
-    write(8, 'WAVE');
-    write(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, rate, true);
-    view.setUint32(28, rate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    write(36, 'data');
-    view.setUint32(40, length * 2, true);
-    let offset = 44;
-    for (const part of parts) {
-      for (let i = 0; i < part.length; i += 1) {
-        const value = clamp(part[i] * gain, -1, 1);
-        view.setInt16(offset, value < 0 ? value * 32768 : value * 32767, true);
-        offset += 2;
-      }
-    }
-    return buffer;
-  }
-
-  function arrayBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    const step = 0x8000;
-    for (let i = 0; i < bytes.length; i += step) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + step));
-    }
-    return btoa(binary);
-  }
-
-  async function recoverWithoutReload() {
-    if (audioContext?.state === 'suspended') {
-      try { await audioContext.resume(); } catch {}
-    }
-    if (handsFree.checked && !['processing', 'capturing', 'calibrating'].includes(state)) {
-      if (state === 'cooldown') setState('idle');
-      await startHandsFree();
-    }
-    refreshStatus();
-  }
-
-  async function autoStart() {
-    if (autoStartAttempted || !handsFree.checked) return;
-    autoStartAttempted = true;
-    try {
-      if (navigator.permissions?.query) {
-        const permission = await navigator.permissions.query({ name: 'microphone' });
-        if (permission.state === 'denied') {
-          setHint('Micro bloqué', 'Autorise le microphone dans les paramètres du navigateur.', true);
-          return;
+  async function waitForVoiceCompletion() {
+    const started = Date.now();
+    while (Date.now() - started < VOICE_WAIT_LIMIT_MS) {
+      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+      try {
+        const response = await fetch('/api/voice/status', { cache: 'no-store' });
+        const data = await response.json();
+        const realtime = data.realtime || {};
+        if (realtime.voice_task_running || ['voice_pending', 'voice_generation'].includes(realtime.stage)) {
+          continue;
         }
-      }
-    } catch {}
-    await startHandsFree();
+
+        waitingVoice = false;
+        const delivered = Boolean(realtime.last_voice_delivered);
+        const delay = Math.max(500, Math.min(45000, Number(realtime.last_rearm_after_ms || 1200)));
+        if (delivered) {
+          setHint('Mairaiy a répondu', `L’écoute revient après sa voix, dans ${(delay / 1000).toFixed(1)} s.`);
+        } else {
+          const reason = realtime.last_voice_error || 'La voix Gemini n’a pas été produite.';
+          setHint('Réponse écrite prête, voix indisponible', reason, true);
+        }
+        render();
+        setTimeout(() => {
+          clearPhrase();
+          startRecognition();
+        }, delivered ? delay : 1000);
+        return;
+      } catch {}
+    }
+
+    waitingVoice = false;
+    render();
+    setHint('Voix trop longue', 'La réponse écrite est conservée et l’écoute redémarre.', true);
+    scheduleRestart(1200);
   }
 
   button.addEventListener('click', event => {
     event.preventDefault();
-    if (handsFree.checked) {
-      if (['listening', 'calibrating'].includes(state)) pauseListening('Clique de nouveau pour reprendre.');
-      else if (state === 'idle') startHandsFree();
+    if (!Recognition) {
+      setHint('Navigateur non compatible', 'Ouvre cette page dans une version récente de Microsoft Edge ou Chrome.', true);
       return;
     }
-    if (state === 'idle') startManualRecording();
-    else if (state === 'capturing') queueStopRecording(false);
+    enabled = !enabled;
+    localStorage.setItem('mairaiy-continuous-listening', enabled ? 'on' : 'off');
+    if (enabled) {
+      clearPhrase();
+      startRecognition();
+    } else {
+      stopRecognition();
+      clearPhrase();
+      setHint('Écoute en pause', 'Clique une fois pour reprendre l’écoute continue.');
+    }
+    render();
   });
 
-  handsFree.addEventListener('change', () => {
-    if (handsFree.checked) startHandsFree();
-    else pauseListening('Mode manuel : un clic démarre, un second envoie.');
-  });
+  handsFree.checked = true;
+  handsFree.disabled = true;
+  handsFree.closest('.toggle')?.setAttribute('title', 'Le mode continu remplace désormais le push-to-talk.');
 
-  window.addEventListener('keydown', event => {
-    if (handsFree.checked || event.repeat || event.code !== 'Space') return;
-    if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement?.tagName)) return;
-    event.preventDefault();
-    startManualRecording();
+  window.addEventListener('focus', () => {
+    if (enabled && !processing && !waitingVoice) startRecognition();
   });
-
-  window.addEventListener('keyup', event => {
-    if (handsFree.checked || event.code !== 'Space' || state !== 'capturing') return;
-    event.preventDefault();
-    queueStopRecording(false);
+  window.addEventListener('pageshow', () => {
+    if (enabled && !processing && !waitingVoice) startRecognition();
   });
-
-  window.addEventListener('pageshow', recoverWithoutReload);
-  window.addEventListener('focus', recoverWithoutReload);
-  window.addEventListener('online', recoverWithoutReload);
+  window.addEventListener('online', () => {
+    if (enabled && !processing && !waitingVoice) startRecognition();
+  });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') recoverWithoutReload();
+    if (document.visibilityState === 'visible' && enabled && !processing && !waitingVoice) startRecognition();
   });
-  navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
-    await disposeHardware();
-    setState('idle');
-    calibrated = false;
-    if (handsFree.checked) startHandsFree();
+  window.addEventListener('beforeunload', () => {
+    enabled = false;
+    stopRecognition();
+    requestController?.abort();
   });
-  window.addEventListener('beforeunload', () => disposeHardware());
 
-  renderState();
+  render();
   refreshStatus();
-  autoStart();
   setInterval(refreshStatus, 10000);
+  if (!Recognition) {
+    enabled = false;
+    setHint('Reconnaissance continue indisponible', 'Utilise Microsoft Edge ou Chrome récent.', true);
+  } else if (enabled) {
+    setHint('Activation du micro', 'Edge peut demander une autorisation une seule fois.');
+    setTimeout(startRecognition, 350);
+  } else {
+    setHint('Écoute en pause', 'Clique une fois pour activer l’écoute continue.');
+  }
 })();
