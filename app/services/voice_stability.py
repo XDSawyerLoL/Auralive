@@ -97,12 +97,17 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
         "last_rearm_after_ms": 0,
         "last_input_peak": 0.0,
         "last_input_gain": 1.0,
+        "last_voice_delivered": False,
+        "last_voice_error": "",
     }
 
     if not getattr(AvatarAudioService, "_mairaiy_duration_patch", False):
         original_synthesize = AvatarAudioService.synthesize
 
         async def synthesize(self: Any, *args: Any, **kwargs: Any) -> str | None:
+            # Une tentative en échec ne doit jamais réutiliser la durée du fichier précédent.
+            self.last_audio_duration_ms = 0
+            state["last_audio_duration_ms"] = 0
             url = await original_synthesize(self, *args, **kwargs)
             if url:
                 duration = _wav_duration_ms(self.output_dir / Path(url).name)
@@ -152,6 +157,8 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
                 self.ignored_count += 1
                 self.last_error = ""
                 self.last_answer = ""
+                self.last_ignore_reason = "silence_or_noise"
+                self.last_stage = "idle"
                 self.last_latency_ms = round((time.monotonic() - started) * 1000)
                 logger.debug("Bruit ou silence ignoré par l'écoute mains libres")
                 return {
@@ -168,27 +175,39 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
                     "rearm_after_ms": 650,
                     "input_peak": state["last_input_peak"],
                     "input_gain": state["last_input_gain"],
+                    "voice_delivered": False,
+                    "voice_error": "",
                 }
 
             if not hands_free:
                 return result
 
-            duration = max(
-                int(result.get("audio_duration_ms") or 0),
-                int(getattr(self.aura.avatar_audio, "last_audio_duration_ms", 0) or 0),
-            )
+            voice_delivered = bool(result.get("voice_delivered", not result.get("ignored")))
+            if voice_delivered:
+                duration = max(
+                    int(result.get("audio_duration_ms") or 0),
+                    int(getattr(self.aura.avatar_audio, "last_audio_duration_ms", 0) or 0),
+                )
+            else:
+                duration = 0
+
             if result.get("ignored"):
                 rearm = max(500, int(result.get("rearm_after_ms") or 0))
+            elif not voice_delivered:
+                # Une réponse texte sans voix ne nécessite pas de longue pause anti-écho.
+                rearm = max(1000, int(result.get("rearm_after_ms") or 0))
             else:
-                # La marge couvre la fin réelle du fichier, la latence OBS et la réverbération.
                 rearm = max(2800, duration + 1800, int(result.get("rearm_after_ms") or 0))
                 state["anti_echo_rearms"] += 1
+
             result["audio_duration_ms"] = duration
             result["rearm_after_ms"] = rearm
             result["input_peak"] = state["last_input_peak"]
             result["input_gain"] = state["last_input_gain"]
             state["last_audio_duration_ms"] = duration
             state["last_rearm_after_ms"] = rearm
+            state["last_voice_delivered"] = voice_delivered
+            state["last_voice_error"] = str(result.get("voice_error") or "")[:300]
             return result
 
         def diagnostic(self: Any) -> dict[str, Any]:
@@ -198,6 +217,7 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
             payload["controls"]["silence_is_not_error"] = True
             payload["controls"]["input_normalization"] = True
             payload["controls"]["ambient_calibration"] = True
+            payload["controls"]["text_survives_voice_failure"] = True
             return payload
 
         VoiceInputService.transcribe = transcribe
