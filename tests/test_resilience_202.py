@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from app.automation.registry import AutomationRegistry
 from app.automation.resilience_nodes import install_resilience_nodes
 from app.config import Settings
-from app.core.identity import AuraIdentity
 from app.database import Database
 from app.modules.moderation import ModerationModule
 from app.services.ai import AuraAI
@@ -71,17 +70,13 @@ def test_resilience_nodes_are_registered():
     assert expected.issubset(registry.actions)
 
 
-def test_ai_circuit_breaker_returns_immediately_after_failure(tmp_path: Path):
-    identity_file = tmp_path / "identity.json"
-    identity_file.write_text('{"name":"Aura"}', encoding="utf-8")
-    identity = AuraIdentity(identity_file)
-    identity.load()
+def test_ai_circuit_breaker_returns_immediately_after_failure():
     settings = Settings(
         ai_mode="ollama",
         ai_model="gemma3:12b",
         ai_failure_cooldown_seconds=60,
     )
-    ai = AuraAI(settings, identity)
+    ai = AuraAI(settings, SimpleNamespace(system_prompt="Tu es Aura."))
     ai._register_failure(asyncio.TimeoutError())
     assert ai.degraded is True
     diagnostic = ai.diagnostic()
