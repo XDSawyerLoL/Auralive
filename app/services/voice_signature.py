@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from app.services import avatar_audio
@@ -107,7 +106,7 @@ def _signature_prompt(
     return prompt.replace("- Never add, remove or paraphrase words.\n", extra + "- Never add, remove or paraphrase words.\n")
 
 
-def install_voice_signature(audio_service: Any | None = None) -> None:
+def install_voice_signature(_audio_service: Any | None = None) -> None:
     if getattr(avatar_audio, "_mairaiy_voice_signature_installed", False):
         return
 
@@ -116,6 +115,3 @@ def install_voice_signature(audio_service: Any | None = None) -> None:
     avatar_audio._performance_instruction = expressive_performance
     avatar_audio._build_gemini_prompt = _signature_prompt
     avatar_audio._mairaiy_voice_signature_installed = True
-
-    if audio_service is not None and not getattr(audio_service, "last_voice", ""):
-        audio_service.last_voice = "Laomedeia"
