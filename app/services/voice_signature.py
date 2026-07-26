@@ -6,12 +6,13 @@ from app.services import avatar_audio
 
 
 _SIGNATURE_PROFILE = (
-    "Mairaiy is a French adult anime-style live co-host. Her voice is bright, lively, "
-    "almost innocent on the surface, and highly expressive, while remaining unmistakably adult. "
-    "She combines playful charm, quick emotional shifts and confident control. The comic signature "
-    "comes from calmly or cheerfully announcing fictional chaos, defeats or absurdly dark events in "
-    "video games, like an upbeat television presenter in a dystopian game show. She never sounds "
-    "childish, squeaky, naive, robotic or like a parody of Japanese speech."
+    "Mairaiy is a French adult anime-style live co-host in her early twenties. Her voice is "
+    "distinctly youthful, bright, buoyant and highly expressive, with a light almost innocent "
+    "surface and an audible smile. She reacts quickly, changes intonation often and carries the "
+    "energy of an animated heroine presenting a chaotic game show. She remains unmistakably adult, "
+    "articulate and confident. The comic signature comes from cheerfully announcing fictional chaos, "
+    "defeats or absurdly dark events in video games as if they were excellent news. She never sounds "
+    "childish, squeaky, sleepy, matronly, robotic or like a parody of Japanese speech."
 )
 
 _FICTION_MARKERS = (
@@ -58,26 +59,29 @@ def expressive_performance(context: str, text: str) -> str:
         return "polite, composed and firmly authoritative, with no playful ambiguity"
     if _is_dark_fiction(normalized, clean):
         return (
-            "bright, delighted and almost innocently matter-of-fact while describing fictional "
-            "video-game chaos; the contrast should be dryly funny, controlled and never childish"
+            "very bright, delighted and almost innocently matter-of-fact while describing fictional "
+            "video-game chaos; use crisp comic timing, quick melodic shifts and a smiling delivery, "
+            "while remaining adult and controlled"
         )
     if "raid" in normalized:
-        return "explosively welcoming, sparkling and genuinely delighted, with anime-host energy"
+        return "explosively welcoming, sparkling and genuinely delighted, with youthful anime-host energy"
     if any(marker in normalized for marker in ("follow", "subscribe", "gift", "cheer")):
-        return "warm, bubbly and grateful, with a clear audible smile and quick expressive shifts"
+        return "warm, bubbly and grateful, with a clear audible smile and fast expressive shifts"
     if "cta" in normalized:
-        return "playfully inviting and conversational, never sounding like an advertisement"
+        return "playfully inviting, youthful and conversational, never sounding like an advertisement"
+    if "voice_input" in normalized:
+        return "very engaged, bright and spontaneous, like a young adult co-host answering beside the streamer"
     if "tts" in normalized:
         return "clear, animated and mischievous, as if reacting live to a viewer message"
     if "test" in normalized:
-        return "bright, highly expressive and charmingly theatrical while remaining natural"
+        return "young, sparkling, highly expressive and charmingly theatrical while remaining natural"
     if clean.rstrip().endswith("?"):
         return "curious, bright and intensely engaged, with a playful upward turn"
     if "!" in clean:
-        return "lively, sparkling and spontaneous, without forced cheerfulness"
+        return "lively, sparkling and spontaneous, with a strong audible smile"
     return (
-        "bright and almost innocent on the surface, with mature confidence, subtle mischief and "
-        "quick natural changes of intonation"
+        "distinctly youthful, bright and almost innocent on the surface, with mature confidence, "
+        "subtle mischief and frequent natural changes of intonation"
     )
 
 
@@ -98,10 +102,12 @@ def _signature_prompt(
         style=selected_style,
     )
     extra = (
+        "- The first impression must be youthful, sunny and energetic, not mature or reserved.\n"
         "- Keep the voice adult even when it sounds bright or nearly innocent.\n"
+        "- Use an audible smile, lively sentence openings and quick emotional pivots.\n"
         "- For fictional game violence, preserve the cheerful presenter contrast for dark comedy.\n"
         "- Never use that comic contrast for real tragedy, distress, harassment or real victims.\n"
-        "- Use fast emotional pivots, tiny amused breaths and precise comic timing when appropriate.\n"
+        "- Use tiny amused breaths and precise comic timing when appropriate.\n"
     )
     return prompt.replace("- Never add, remove or paraphrase words.\n", extra + "- Never add, remove or paraphrase words.\n")
 
@@ -111,7 +117,7 @@ def install_voice_signature(_audio_service: Any | None = None) -> None:
         return
 
     avatar_audio._original_build_gemini_prompt = avatar_audio._build_gemini_prompt
-    avatar_audio._GEMINI_TTS_DEFAULT_VOICE = "Laomedeia"
+    avatar_audio._GEMINI_TTS_DEFAULT_VOICE = "Leda"
     avatar_audio._performance_instruction = expressive_performance
     avatar_audio._build_gemini_prompt = _signature_prompt
     avatar_audio._mairaiy_voice_signature_installed = True
