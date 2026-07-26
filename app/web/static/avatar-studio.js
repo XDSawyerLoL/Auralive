@@ -7,9 +7,9 @@
   };
   const esc = value => String(value??'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c]);
   const naturalVoices = [
-    ['Aoede','Aérée et naturelle'], ['Sulafat','Chaleureuse'], ['Leda','Jeune et vive'],
-    ['Achernar','Douce'], ['Laomedeia','Enjouée'], ['Vindemiatrix','Délicate'],
-    ['Callirrhoe','Détendue'], ['Erinome','Claire'], ['Kore','Assurée']
+    ['Leda','Jeune, vive et lumineuse'], ['Laomedeia','Enjouée mais plus posée'],
+    ['Aoede','Aérée et naturelle'], ['Sulafat','Chaleureuse'], ['Achernar','Douce'],
+    ['Vindemiatrix','Délicate'], ['Callirrhoe','Détendue'], ['Erinome','Claire'], ['Kore','Assurée']
   ];
   let cohostProfile=null;
 
@@ -18,7 +18,7 @@
   }
   function installVoicePicker(){
     const input=$('#avatar-voice'); if(!input) return;
-    input.placeholder='Aoede — voix naturelle par défaut';
+    input.placeholder='Leda — jeune et vive';
     input.setAttribute('list','mairaiy-natural-voices');
     let list=$('#mairaiy-natural-voices');
     if(!list){
@@ -31,18 +31,31 @@
     if(label && !label.querySelector('.natural-voice-note')){
       const note=document.createElement('small');
       note.className='natural-voice-note';
-      note.textContent='Gemini TTS expressif. Laisse vide pour Aoede.';
+      note.textContent='Preset conseillé : Leda · vitesse 1.12 · hauteur 1.14.';
       label.append(note);
     }
+  }
+  function installVoiceControlButton(){
+    const heading=$('[data-page-panel="avatar"] .page-heading');
+    if(!heading||$('#voice-control-open'))return;
+    const link=document.createElement('a');
+    link.id='voice-control-open';
+    link.className='secondary-button';
+    link.href='/voice-control';
+    link.target='_blank';
+    link.rel='noopener';
+    link.innerHTML='<svg><use href="#i-mic"></use></svg>Parler à Mairaiy';
+    heading.append(link);
+    $('.preview-identity')?.remove();
   }
   async function load(){
     const form=$('#avatar-settings-form'); if(!form) return;
     try{
       const data=await api('/api/avatar/settings');
       $('#avatar-enabled').checked=Boolean(data.enabled);
-      $('#avatar-voice').value=data.voice||'';
-      $('#avatar-rate').value=Number(data.rate||1);
-      $('#avatar-pitch').value=Number(data.pitch||1);
+      $('#avatar-voice').value=data.voice||'Leda';
+      $('#avatar-rate').value=Number(data.rate||1.12);
+      $('#avatar-pitch').value=Number(data.pitch||1.14);
       $('#avatar-volume').value=Number(data.volume??1);
       $('#avatar-subtitles').checked=Boolean(data.subtitles);
     }catch(error){ if(typeof toast==='function') toast(error.message,true); }
@@ -220,6 +233,7 @@
   function setup(){
     const form=$('#avatar-settings-form'); if(!form) return;
     installVoicePicker();
+    installVoiceControlButton();
     installCohostPanel();
     form.addEventListener('submit', async event => {
       event.preventDefault();
@@ -242,7 +256,7 @@
         const preview=$('.avatar-preview-stage');
         preview?.classList.add('is-speaking');
         setTimeout(()=>preview?.classList.remove('is-speaking'),7000);
-        await api('/api/avatar/test',{method:'POST',body:JSON.stringify({text:'Bonsoir le Spot. Je suis Mairaiy, et cette fois ma voix devrait vraiment vous donner l’impression que je suis là, juste à côté de vous.'})});
+        await api('/api/avatar/test',{method:'POST',body:JSON.stringify({text:'Excellente nouvelle : l’explosion a parfaitement éliminé toute l’équipe. Sansa compris, évidemment.'})});
         const status=await runtime();
         if(!status?.avatar_overlay_connected){
           throw new Error('La source /overlay/avatar n’est pas connectée. Ouvre-la dans OBS ou dans un onglet, puis relance le test.');
