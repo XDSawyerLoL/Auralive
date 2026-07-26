@@ -36,7 +36,109 @@ async def _run_historical_support_without_default_response(
         await aura.complete.on_twitch_event(event_type, event)
 
 
+async def _block_commercial_spam(event: dict[str, Any]) -> bool:
+    user_id = str(event.get("chatter_user_id") or event.get("user_id") or "")
+    display_name = str(
+        event.get("chatter_user_name")
+        or event.get("user_name")
+        or event.get("chatter_user_login")
+        or "compte suspect"
+    )
+    message = event.get("message") or {}
+    text = str(message.get("text", "") if isinstance(message, dict) else message)
+    badges = list(event.get("badges") or [])
+    is_broadcaster = any(
+        str((badge or {}).get("set_id", "")) == "broadcaster"
+        for badge in badges
+    )
+    if not user_id or not text:
+        return False
+
+    decision = await aura.moderation.commercial_spam_decision(
+        user_id,
+        text,
+        badges,
+        is_broadcaster,
+    )
+    if not decision.blocked:
+        return False
+
+    message_id = str(event.get("message_id") or "")
+    if message_id:
+        try:
+            await aura.twitch.delete_message(message_id)
+        except Exception:
+            logger.debug("Suppression du spam impossible", exc_info=True)
+
+    action = str(
+        await db.get_setting("moderation.commercial_spam.action", "ban")
+    ).casefold()
+    applied_action = "ban"
+    try:
+        if action == "ban":
+            await aura.twitch.request(
+                "POST",
+                "/moderation/bans",
+                role="bot",
+                params={
+                    "broadcaster_id": aura.twitch.broadcaster_user_id,
+                    "moderator_id": aura.twitch.bot_user_id,
+                },
+                json_body={
+                    "data": {
+                        "user_id": user_id,
+                        "reason": decision.reason[:500],
+                    }
+                },
+            )
+        else:
+            applied_action = "timeout"
+            await aura.twitch.timeout_user(
+                user_id,
+                decision.timeout_seconds,
+                decision.reason,
+            )
+    except Exception:
+        logger.warning(
+            "Bannissement automatique impossible pour %s, bascule en timeout",
+            display_name,
+            exc_info=True,
+        )
+        applied_action = "timeout"
+        try:
+            await aura.twitch.timeout_user(
+                user_id,
+                decision.timeout_seconds,
+                decision.reason,
+            )
+        except Exception:
+            logger.exception("Sanction Twitch impossible pour %s", display_name)
+            applied_action = "suppression"
+
+    await aura.studio.log_moderation(
+        user_id,
+        display_name,
+        decision.reason,
+        applied_action,
+        text,
+    )
+    logger.warning(
+        "Spam commercial bloqué silencieusement: viewer=%s action=%s signature=%s",
+        display_name,
+        applied_action,
+        decision.fingerprint,
+    )
+    return True
+
+
 async def _combined_twitch_handler(event_type: str, event: dict[str, Any]) -> None:
+    if event_type == "channel.chat.message":
+        try:
+            if await _block_commercial_spam(event):
+                return
+        except Exception:
+            logger.exception("Préfiltre anti-faux-viewers en erreur")
+
     reports: list[dict[str, Any]] = []
     try:
         reports = await automation.dispatch(event_type, event, source="twitch")
