@@ -20,37 +20,51 @@
   let sampleRate = 48000;
   let startedAt = 0;
   let stopTimer = null;
+  let rearmTimer = null;
   let maxSeconds = 20;
   let requestSerial = 0;
   let speechFrames = 0;
+  let candidateSpeechMs = 0;
+  let voicedMs = 0;
   let silenceMs = 0;
-  let noiseFloor = 0.006;
-  let speechThreshold = 0.02;
+  let noiseFloor = 0.004;
+  let speechThreshold = 0.012;
   let stopQueued = false;
   let autoStartAttempted = false;
+  let calibrated = false;
+  let calibrationUntil = 0;
+  let calibrationSamples = [];
+  let lastPeak = 0;
 
-  const PRE_ROLL_FRAMES = 8;
-  const START_FRAMES = 2;
-  const END_SILENCE_MS = 850;
-  const MIN_UTTERANCE_MS = 500;
+  const PRE_ROLL_FRAMES = 14;
+  const START_FRAMES = 3;
+  const START_VOICE_MS = 170;
+  const END_SILENCE_MS = 1100;
+  const MIN_UTTERANCE_MS = 650;
+  const MIN_VOICED_MS = 220;
+  const CALIBRATION_MS = 1400;
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
   const setHint = (title, detail = '', error = false) => {
     hint.innerHTML = `<b class="${error ? 'error' : ''}">${title}</b>${detail}`;
   };
 
   function renderState() {
-    button.classList.toggle('listening', state === 'listening');
+    button.classList.toggle('listening', state === 'calibrating' || state === 'listening');
     button.classList.toggle('recording', state === 'capturing');
     button.classList.toggle('processing', state === 'processing' || state === 'cooldown');
     button.disabled = state === 'processing' || state === 'cooldown';
 
-    if (state === 'listening') button.innerHTML = 'Écoute<br>active';
+    if (state === 'calibrating') button.innerHTML = 'Réglage<br>du micro';
+    else if (state === 'listening') button.innerHTML = 'Écoute<br>active';
     else if (state === 'capturing') button.innerHTML = 'Mairaiy<br>t’écoute';
     else if (state === 'processing') button.innerHTML = 'Mairaiy<br>répond';
     else if (state === 'cooldown') button.innerHTML = 'Réponse<br>en cours';
     else button.innerHTML = handsFree.checked ? 'Activer<br>l’écoute' : 'Cliquer<br>pour parler';
 
-    if (state === 'listening') micRuntime.textContent = 'Mains libres · dis « Mairaiy »';
+    if (state === 'calibrating') micRuntime.textContent = 'Calibration du bruit ambiant';
+    else if (state === 'listening') micRuntime.textContent = `Mains libres · seuil ${speechThreshold.toFixed(3)}`;
     else if (state === 'capturing') micRuntime.textContent = 'Phrase détectée';
     else if (state === 'processing') micRuntime.textContent = 'Transcription en cours';
     else if (state === 'cooldown') micRuntime.textContent = 'Pause anti-écho';
@@ -102,13 +116,16 @@
 
   async function disposeHardware() {
     clearTimeout(stopTimer);
+    clearTimeout(rearmTimer);
     stopTimer = null;
+    rearmTimer = null;
     try { processor?.disconnect(); } catch {}
     try { source?.disconnect(); } catch {}
     try { silentGain?.disconnect(); } catch {}
     stream?.getTracks?.().forEach(track => track.stop());
     try { await audioContext?.close(); } catch {}
     audioContext = stream = source = processor = silentGain = null;
+    calibrated = false;
   }
 
   function frameRms(frame) {
@@ -117,15 +134,31 @@
     return Math.sqrt(sum / Math.max(1, frame.length));
   }
 
+  function finishCalibration() {
+    const samples = calibrationSamples.filter(value => Number.isFinite(value)).sort((a, b) => a - b);
+    const index = Math.max(0, Math.min(samples.length - 1, Math.floor(samples.length * 0.72)));
+    noiseFloor = samples.length ? samples[index] : 0.004;
+    noiseFloor = clamp(noiseFloor, 0.0015, 0.025);
+    speechThreshold = clamp((noiseFloor * 2.45) + 0.0015, 0.006, 0.055);
+    calibrationSamples = [];
+    calibrated = true;
+    state = 'listening';
+    renderState();
+    setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Le niveau du micro est calibré.');
+  }
+
   function beginDetectedSpeech() {
     state = 'capturing';
     chunks = preRoll.slice();
     preRoll = [];
     startedAt = Date.now();
     silenceMs = 0;
+    voicedMs = candidateSpeechMs;
+    candidateSpeechMs = 0;
+    lastPeak = 0;
     stopQueued = false;
     renderState();
-    setHint('Je t’écoute', 'Continue ta phrase, elle sera envoyée automatiquement après le silence.');
+    setHint('Je t’écoute', 'Continue ta phrase. Elle sera envoyée après un court silence.');
     clearTimeout(stopTimer);
     stopTimer = setTimeout(() => queueStopRecording(true), Math.max(3, maxSeconds) * 1000);
   }
@@ -135,19 +168,30 @@
     const rms = frameRms(frame);
     const frameMs = (frame.length / Math.max(1, sampleRate)) * 1000;
 
+    if (state === 'calibrating') {
+      calibrationSamples.push(rms);
+      if (Date.now() >= calibrationUntil) finishCalibration();
+      return;
+    }
+
     if (state === 'listening') {
       preRoll.push(frame);
       if (preRoll.length > PRE_ROLL_FRAMES) preRoll.shift();
 
-      if (rms < speechThreshold * 0.75) {
-        noiseFloor = (noiseFloor * 0.97) + (rms * 0.03);
+      if (rms < speechThreshold * 0.82) {
+        noiseFloor = (noiseFloor * 0.985) + (rms * 0.015);
+        speechThreshold = clamp((noiseFloor * 2.55) + 0.0015, 0.006, 0.055);
       }
-      speechThreshold = Math.max(0.014, Math.min(0.08, noiseFloor * 3.4));
 
-      if (rms >= speechThreshold) speechFrames += 1;
-      else speechFrames = 0;
+      if (rms >= speechThreshold) {
+        speechFrames += 1;
+        candidateSpeechMs += frameMs;
+      } else {
+        speechFrames = Math.max(0, speechFrames - 1);
+        candidateSpeechMs = Math.max(0, candidateSpeechMs - frameMs * 0.45);
+      }
 
-      if (speechFrames >= START_FRAMES) {
+      if (speechFrames >= START_FRAMES && candidateSpeechMs >= START_VOICE_MS) {
         speechFrames = 0;
         beginDetectedSpeech();
       }
@@ -156,9 +200,14 @@
 
     if (state !== 'capturing') return;
     chunks.push(frame);
+    lastPeak = Math.max(lastPeak, rms);
 
-    if (rms < speechThreshold * 0.72) silenceMs += frameMs;
-    else silenceMs = 0;
+    if (rms >= speechThreshold * 0.82) {
+      voicedMs += frameMs;
+      silenceMs = 0;
+    } else {
+      silenceMs += frameMs;
+    }
 
     const duration = Date.now() - startedAt;
     if (duration >= MIN_UTTERANCE_MS && silenceMs >= END_SILENCE_MS) {
@@ -202,6 +251,7 @@
     const track = stream.getAudioTracks()[0];
     track.addEventListener('ended', () => {
       state = 'idle';
+      calibrated = false;
       renderState();
       setHint('Micro déconnecté', 'Reconnecte le périphérique puis clique une fois pour réactiver.', true);
       disposeHardware();
@@ -210,15 +260,27 @@
 
   async function startHandsFree() {
     if (!handsFree.checked || ['processing', 'cooldown', 'capturing'].includes(state)) return;
+    clearTimeout(rearmTimer);
+    rearmTimer = null;
     try {
       await ensureHardware();
       chunks = [];
       preRoll = [];
       speechFrames = 0;
+      candidateSpeechMs = 0;
+      voicedMs = 0;
       silenceMs = 0;
-      state = 'listening';
-      renderState();
-      setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Aucun bouton à maintenir.');
+      if (!calibrated) {
+        calibrationSamples = [];
+        calibrationUntil = Date.now() + CALIBRATION_MS;
+        state = 'calibrating';
+        renderState();
+        setHint('Calibration du micro', 'Reste silencieux une seconde, puis parle normalement.');
+      } else {
+        state = 'listening';
+        renderState();
+        setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Aucun bouton à maintenir.');
+      }
     } catch (error) {
       state = 'idle';
       renderState();
@@ -228,10 +290,14 @@
 
   function pauseListening(message = '') {
     clearTimeout(stopTimer);
+    clearTimeout(rearmTimer);
     stopTimer = null;
+    rearmTimer = null;
     chunks = [];
     preRoll = [];
     speechFrames = 0;
+    candidateSpeechMs = 0;
+    voicedMs = 0;
     silenceMs = 0;
     state = 'idle';
     renderState();
@@ -245,6 +311,8 @@
       chunks = [];
       preRoll = [];
       startedAt = Date.now();
+      voicedMs = MIN_VOICED_MS;
+      lastPeak = 0;
       state = 'capturing';
       renderState();
       setHint('Je t’écoute', 'Clique de nouveau pour envoyer ta phrase.');
@@ -262,6 +330,15 @@
     queueMicrotask(() => stopRecording(requireWakeWord));
   }
 
+  async function returnToListening(title, detail) {
+    state = 'idle';
+    renderState();
+    setHint(title, detail);
+    if (handsFree.checked) {
+      rearmTimer = setTimeout(() => startHandsFree(), 250);
+    }
+  }
+
   async function stopRecording(requireWakeWord) {
     if (state !== 'capturing') return;
     clearTimeout(stopTimer);
@@ -269,10 +346,9 @@
     const duration = Date.now() - startedAt;
     stopQueued = false;
 
-    if (duration < 350 || !chunks.length) {
-      if (handsFree.checked) await startHandsFree();
-      else pauseListening();
-      setHint('Phrase trop courte', 'Parle un peu plus longtemps.', true);
+    if (!chunks.length || duration < MIN_UTTERANCE_MS || (requireWakeWord && voicedMs < MIN_VOICED_MS)) {
+      chunks = [];
+      await returnToListening('Bruit ignoré', 'Aucune phrase complète détectée. L’écoute reste active.');
       return;
     }
 
@@ -308,18 +384,21 @@
       answer.textContent = data.answer || '—';
 
       if (data.ignored) {
-        setHint('Écoute active', 'Phrase ignorée : appelle-la par « Mairaiy ».');
+        const noise = data.ignore_reason === 'silence_or_noise';
+        setHint('Écoute active', noise
+          ? 'Bruit ou silence ignoré.'
+          : 'Phrase entendue, mais le mot « Mairaiy » manque.');
         state = 'cooldown';
         renderState();
-        setTimeout(() => startHandsFree(), Math.max(350, Number(data.rearm_after_ms || 500)));
+        rearmTimer = setTimeout(() => startHandsFree(), Math.max(450, Number(data.rearm_after_ms || 650)));
         return;
       }
 
       setHint('Réponse envoyée', `${data.latency_ms || 0} ms${data.sent_to_chat ? ' · publiée dans Twitch' : ''}`);
       state = 'cooldown';
       renderState();
-      const rearm = Math.max(900, Number(data.rearm_after_ms || 1600));
-      setTimeout(() => {
+      const rearm = Math.max(1200, Number(data.rearm_after_ms || 2800));
+      rearmTimer = setTimeout(() => {
         if (handsFree.checked) startHandsFree();
         else pauseListening('Clique quand tu veux lui reparler.');
       }, rearm);
@@ -328,12 +407,17 @@
       state = 'idle';
       renderState();
       setHint('Mairaiy n’a pas pu répondre', error.message || String(error), true);
-      if (handsFree.checked) setTimeout(() => startHandsFree(), 900);
+      if (handsFree.checked) rearmTimer = setTimeout(() => startHandsFree(), 1200);
     }
   }
 
   function encodeWav(parts, rate) {
     const length = parts.reduce((sum, part) => sum + part.length, 0);
+    let peak = 0;
+    for (const part of parts) {
+      for (let i = 0; i < part.length; i += 1) peak = Math.max(peak, Math.abs(part[i]));
+    }
+    const gain = peak >= 0.004 ? clamp(0.78 / peak, 1, 6) : 1;
     const buffer = new ArrayBuffer(44 + length * 2);
     const view = new DataView(buffer);
     const write = (offset, text) => {
@@ -355,7 +439,7 @@
     let offset = 44;
     for (const part of parts) {
       for (let i = 0; i < part.length; i += 1) {
-        const value = Math.max(-1, Math.min(1, part[i]));
+        const value = clamp(part[i] * gain, -1, 1);
         view.setInt16(offset, value < 0 ? value * 32768 : value * 32767, true);
         offset += 2;
       }
@@ -377,7 +461,7 @@
     if (audioContext?.state === 'suspended') {
       try { await audioContext.resume(); } catch {}
     }
-    if (handsFree.checked && !['processing', 'cooldown', 'capturing'].includes(state)) {
+    if (handsFree.checked && !['processing', 'cooldown', 'capturing', 'calibrating'].includes(state)) {
       await startHandsFree();
     }
     refreshStatus();
@@ -401,7 +485,7 @@
   button.addEventListener('click', event => {
     event.preventDefault();
     if (handsFree.checked) {
-      if (state === 'listening') pauseListening('Clique de nouveau pour reprendre.');
+      if (['listening', 'calibrating'].includes(state)) pauseListening('Clique de nouveau pour reprendre.');
       else if (state === 'idle') startHandsFree();
       return;
     }
@@ -426,6 +510,7 @@
   navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
     await disposeHardware();
     state = 'idle';
+    calibrated = false;
     renderState();
     if (handsFree.checked) startHandsFree();
   });
