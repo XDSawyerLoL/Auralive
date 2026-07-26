@@ -5,15 +5,19 @@ import base64
 import binascii
 import logging
 import os
+import re
 import time
 from typing import Any
 
 import aiohttp
 
+from app.services.live_awareness import install_live_awareness
+
 logger = logging.getLogger(__name__)
 
 _ALLOWED_MIME_TYPES = {"audio/wav", "audio/x-wav", "audio/wave"}
 _MAX_AUDIO_BYTES = 8 * 1024 * 1024
+_WAKE_NAMES = ("mairaiy", "mairay", "mairai", "aura")
 
 
 def decode_audio_base64(value: str) -> bytes:
@@ -59,8 +63,18 @@ def _clean_transcript(value: str) -> str:
     return text.strip(' "“”')[:600]
 
 
+def _wake_invocation(value: str) -> tuple[bool, str]:
+    text = _clean_transcript(value)
+    for name in _WAKE_NAMES:
+        pattern = rf"(?i)(?<![\w]){re.escape(name)}(?![\w])[:,]?"
+        if re.search(pattern, text):
+            cleaned = re.sub(pattern, " ", text, count=1)
+            return True, " ".join(cleaned.split()).strip()
+    return False, text
+
+
 class VoiceInputService:
-    """Push-to-talk local : WAV du navigateur -> transcription Gemini -> réponse vocale."""
+    """Dialogue local : WAV du navigateur -> transcription Gemini -> réponse vocale."""
 
     def __init__(self, aura: Any, db: Any, cohost: Any, settings: Any):
         self.aura = aura
@@ -73,6 +87,7 @@ class VoiceInputService:
         self.last_error = ""
         self.last_latency_ms = 0
         self.request_count = 0
+        self.ignored_count = 0
 
     @property
     def enabled(self) -> bool:
@@ -163,12 +178,39 @@ class VoiceInputService:
             raise ValueError("Aucune parole intelligible détectée")
         return transcript
 
-    async def talk(self, audio_base64: str, mime_type: str, *, send_to_chat: bool = False) -> dict[str, Any]:
+    async def talk(
+        self,
+        audio_base64: str,
+        mime_type: str,
+        *,
+        send_to_chat: bool = False,
+        require_wake_word: bool = False,
+    ) -> dict[str, Any]:
         started = time.monotonic()
         audio = decode_audio_base64(audio_base64)
         async with self.lock:
             try:
                 transcript = await self.transcribe(audio, mime_type)
+                wake_detected, cleaned_transcript = _wake_invocation(transcript)
+                self.last_transcript = transcript
+                if require_wake_word and not wake_detected:
+                    self.last_answer = ""
+                    self.last_error = ""
+                    self.ignored_count += 1
+                    self.last_latency_ms = round((time.monotonic() - started) * 1000)
+                    return {
+                        "ok": True,
+                        "ignored": True,
+                        "wake_word_detected": False,
+                        "transcript": transcript,
+                        "answer": "",
+                        "sent_to_chat": False,
+                        "avatar_connected": self.aura.overlay.count("avatar") > 0,
+                        "latency_ms": self.last_latency_ms,
+                        "rearm_after_ms": 500,
+                    }
+
+                prompt = cleaned_transcript if wake_detected and cleaned_transcript else transcript
                 viewer = await self.db.get_viewer(user_id="voice-broadcaster")
                 if not viewer:
                     viewer = await self.db.upsert_viewer(
@@ -180,7 +222,7 @@ class VoiceInputService:
                 history = await self.aura.memory.conversation(viewer["user_id"], limit=12)
                 answer = await self.aura.ai.reply(
                     "Sansa",
-                    transcript,
+                    prompt,
                     context + "\nLe diffuseur parle au micro depuis le panneau privé Aura Live.",
                     list(self.aura.recent_chat),
                     history,
@@ -189,11 +231,9 @@ class VoiceInputService:
                 if not answer:
                     raise RuntimeError("Mairaiy n'a produit aucune réponse")
 
-                await self.aura.memory.remember_turn(viewer["user_id"], "user", transcript)
+                await self.aura.memory.remember_turn(viewer["user_id"], "user", prompt)
                 await self.aura.memory.remember_turn(viewer["user_id"], "assistant", answer)
 
-                # La génération vocale et l'événement avatar sont terminés avant
-                # l'éventuelle publication dans Twitch : aucun gros décalage.
                 await self.aura.overlay.emit(
                     {
                         "type": "aura_message",
@@ -209,18 +249,25 @@ class VoiceInputService:
                 if send_to_chat:
                     sent = bool(await self.aura.say(answer))
 
-                self.last_transcript = transcript
+                audio_duration_ms = int(
+                    getattr(self.aura.avatar_audio, "last_audio_duration_ms", 0) or 0
+                )
+                rearm_after_ms = max(1200, audio_duration_ms + 900)
                 self.last_answer = answer
                 self.last_error = ""
                 self.request_count += 1
                 self.last_latency_ms = round((time.monotonic() - started) * 1000)
                 return {
                     "ok": True,
+                    "ignored": False,
+                    "wake_word_detected": wake_detected,
                     "transcript": transcript,
                     "answer": answer,
                     "sent_to_chat": sent,
                     "avatar_connected": self.aura.overlay.count("avatar") > 0,
                     "latency_ms": self.last_latency_ms,
+                    "audio_duration_ms": audio_duration_ms,
+                    "rearm_after_ms": rearm_after_ms,
                 }
             except Exception as exc:
                 self.last_error = str(exc or exc.__class__.__name__)[:500]
@@ -229,6 +276,7 @@ class VoiceInputService:
                 raise
 
     def diagnostic(self) -> dict[str, Any]:
+        live_awareness = getattr(self.aura, "live_awareness", None)
         return {
             "enabled": self.enabled,
             "configured": bool(self.settings.ai_mode == "gemini" and self.settings.ai_api_key),
@@ -236,11 +284,20 @@ class VoiceInputService:
             "max_seconds": self.max_seconds,
             "busy": self.lock.locked(),
             "request_count": self.request_count,
+            "ignored_count": self.ignored_count,
             "last_transcript": self.last_transcript[:180],
             "last_answer": self.last_answer[:180],
             "last_error": self.last_error,
             "last_latency_ms": self.last_latency_ms,
             "audio_persisted": False,
+            "controls": {
+                "click_to_talk": True,
+                "hold_space": True,
+                "hands_free": True,
+                "wake_word": "Mairaiy",
+                "self_rearming": True,
+            },
+            "live_awareness": live_awareness.diagnostic() if live_awareness else None,
         }
 
 
@@ -250,4 +307,5 @@ def install_voice_input(aura: Any, db: Any, cohost: Any, settings: Any) -> Voice
         return existing
     service = VoiceInputService(aura, db, cohost, settings)
     aura.voice_input = service
+    install_live_awareness(aura, db, cohost, settings)
     return service
