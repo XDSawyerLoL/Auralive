@@ -16,9 +16,8 @@ _VOICE_TIMEOUT_SECONDS = 42
 class VoiceRealtimeService:
     """Dialogue direct depuis la transcription native Edge/Chrome.
 
-    Le navigateur s'occupe uniquement de reconnaître la parole. Aura Live reçoit
-    du texte, génère la réponse, puis prépare la voix en arrière-plan. Cela retire
-    la calibration audio, l'encodage WAV et une seconde requête Gemini inutile.
+    La page vocale est un canal privé réservé à Sansa : chaque phrase reconnue
+    est donc adressée à Mairaiy sans imposer de mot d'appel.
     """
 
     def __init__(self, aura: Any, db: Any, voice_input: Any):
@@ -58,27 +57,14 @@ class VoiceRealtimeService:
         if self.busy:
             raise RuntimeError("Mairaiy termine déjà une réponse")
 
-        wake_detected, prompt = _wake_invocation(text)
+        # Le prénom reste accepté et retiré du prompt lorsqu'il est prononcé,
+        # mais il n'est plus nécessaire sur ce canal vocal privé.
+        wake_detected, stripped = _wake_invocation(text)
+        prompt = stripped.strip() if wake_detected and stripped.strip() else text
         self.last_transcript = text
         self.voice_input.last_transcript = text
         self.voice_input.last_wake_detected = wake_detected
 
-        if not wake_detected:
-            self.ignored_count += 1
-            self.voice_input.ignored_count += 1
-            self.last_stage = "idle"
-            return {
-                "ok": True,
-                "ignored": True,
-                "ignore_reason": "wake_word_missing",
-                "wake_word_detected": False,
-                "transcript": text,
-                "answer": "",
-                "voice_pending": False,
-                "rearm_after_ms": 350,
-            }
-
-        prompt = prompt.strip() or "Tu m'entends ?"
         async with self.voice_input.lock:
             self.last_error = ""
             self.last_voice_error = ""
@@ -106,6 +92,7 @@ class VoiceRealtimeService:
                         prompt,
                         context
                         + "\nSansa parle directement à Mairaiy depuis le panneau vocal privé. "
+                        + "Chaque phrase reconnue lui est adressée, même sans prononcer son prénom. "
                         + "Réponds comme sa coanimatrice présente à côté de lui, naturellement et brièvement.",
                         list(self.aura.recent_chat),
                         history,
@@ -147,7 +134,9 @@ class VoiceRealtimeService:
         return {
             "ok": True,
             "ignored": False,
-            "wake_word_detected": True,
+            "wake_word_required": False,
+            "wake_word_detected": wake_detected,
+            "addressed_automatically": True,
             "transcript": text,
             "answer": answer,
             "voice_pending": True,
@@ -232,7 +221,9 @@ class VoiceRealtimeService:
         return {
             "mode": "browser-speech-recognition",
             "continuous": True,
-            "wake_word": "Mairaiy",
+            "wake_word": None,
+            "wake_word_required": False,
+            "addressing": "all_recognized_phrases",
             "busy": self.busy,
             "voice_task_running": bool(self.voice_task and not self.voice_task.done()),
             "stage": self.last_stage,
