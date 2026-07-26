@@ -20,7 +20,7 @@ function Test-AuraPythonImports {
     $exitCode = 1
     try {
         $ErrorActionPreference = "Continue"
-        $null = & $PythonPath -c "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL" 2>&1
+        $null = & $PythonPath -c "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL, piper" 2>&1
         $exitCode = $LASTEXITCODE
     } catch {
         $exitCode = 1
@@ -72,11 +72,50 @@ if ($RequirementsChanged -or -not $ImportsReady) {
     Write-Host "Dependances pretes." -ForegroundColor Green
 }
 
+$LocalVoiceEnabled = $true
+if ($env:MAIRAIY_LOCAL_VOICE_ENABLED) {
+    $LocalVoiceEnabled = $env:MAIRAIY_LOCAL_VOICE_ENABLED.ToLowerInvariant() -notin @("0", "false", "no", "non", "off")
+}
+$LocalVoiceAutoDownload = $true
+if ($env:MAIRAIY_LOCAL_VOICE_AUTO_DOWNLOAD) {
+    $LocalVoiceAutoDownload = $env:MAIRAIY_LOCAL_VOICE_AUTO_DOWNLOAD.ToLowerInvariant() -notin @("0", "false", "no", "non", "off")
+}
+$LocalVoiceName = if ($env:MAIRAIY_LOCAL_VOICE) { $env:MAIRAIY_LOCAL_VOICE } else { "fr_FR-siwis-medium" }
+$LocalVoiceDirValue = if ($env:MAIRAIY_LOCAL_VOICE_DIR) { $env:MAIRAIY_LOCAL_VOICE_DIR } else { "data\voices\piper" }
+$LocalVoiceDir = if ([System.IO.Path]::IsPathRooted($LocalVoiceDirValue)) {
+    $LocalVoiceDirValue
+} else {
+    Join-Path $ProjectRoot $LocalVoiceDirValue
+}
+$LocalVoiceModel = Join-Path $LocalVoiceDir ($LocalVoiceName + ".onnx")
+$LocalVoiceConfig = $LocalVoiceModel + ".json"
+
+if ($LocalVoiceEnabled -and $LocalVoiceAutoDownload -and -not $LocalVoiceName.EndsWith(".onnx") -and ((-not (Test-Path $LocalVoiceModel)) -or (-not (Test-Path $LocalVoiceConfig)))) {
+    Write-Host "Installation de la voix locale fixe de Mairaiy (une seule fois, environ 65 Mo)..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force -Path $LocalVoiceDir | Out-Null
+    $previousPreference = $ErrorActionPreference
+    $downloadExitCode = 1
+    try {
+        $ErrorActionPreference = "Continue"
+        & $VenvPython -m piper.download_voices --data-dir $LocalVoiceDir $LocalVoiceName
+        $downloadExitCode = $LASTEXITCODE
+    } catch {
+        $downloadExitCode = 1
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($downloadExitCode -ne 0 -or -not (Test-Path $LocalVoiceModel) -or -not (Test-Path $LocalVoiceConfig)) {
+        Write-Warning "La voix locale n'a pas pu etre installee. Gemini restera le seul moteur vocal disponible."
+    } else {
+        Write-Host "Voix locale Mairaiy prete." -ForegroundColor Green
+    }
+}
+
 $AuraHost = if ($env:AURA_HOST) { $env:AURA_HOST } else { "127.0.0.1" }
 $AuraPort = if ($env:AURA_PORT) { $env:AURA_PORT } else { "8787" }
 $AuraLogLevel = if ($env:LOG_LEVEL) { $env:LOG_LEVEL.ToLowerInvariant() } else { "info" }
 
-Write-Host "Aura Live 2.4.2 - dialogue direct sans mot d'appel, voix verrouillee et perception live" -ForegroundColor Cyan
+Write-Host "Aura Live 2.5 - Leda avec secours local fixe et protection quota" -ForegroundColor Cyan
 & $VenvPython -m uvicorn app.main_v3:app --host $AuraHost --port $AuraPort --log-level $AuraLogLevel
 if ($LASTEXITCODE -ne 0) {
     throw "Aura s'est arretee avec le code $LASTEXITCODE."

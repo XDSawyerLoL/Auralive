@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 _ANSWER_TIMEOUT_SECONDS = 25
 _VOICE_TIMEOUT_SECONDS = 42
+_DELIVERED_VOICE_ENGINES = {"gemini-tts", "piper-local"}
 
 
 class VoiceRealtimeService:
@@ -33,6 +34,7 @@ class VoiceRealtimeService:
         self.last_stage = "idle"
         self.last_voice_delivered = False
         self.last_voice_error = ""
+        self.last_voice_engine = ""
         self.last_audio_duration_ms = 0
         self.last_rearm_after_ms = 1200
         self.last_latency_ms = 0
@@ -57,8 +59,6 @@ class VoiceRealtimeService:
         if self.busy:
             raise RuntimeError("Mairaiy termine déjà une réponse")
 
-        # Le prénom reste accepté et retiré du prompt lorsqu'il est prononcé,
-        # mais il n'est plus nécessaire sur ce canal vocal privé.
         wake_detected, stripped = _wake_invocation(text)
         prompt = stripped.strip() if wake_detected and stripped.strip() else text
         self.last_transcript = text
@@ -69,6 +69,7 @@ class VoiceRealtimeService:
             self.last_error = ""
             self.last_voice_error = ""
             self.last_voice_delivered = False
+            self.last_voice_engine = ""
             self.last_audio_duration_ms = 0
             self.last_rearm_after_ms = 1200
             self.last_stage = "response_generation"
@@ -152,6 +153,7 @@ class VoiceRealtimeService:
         self.aura.avatar_audio.last_audio_duration_ms = 0
         voice_error = ""
         delivered = False
+        engine = ""
 
         try:
             await asyncio.wait_for(
@@ -168,18 +170,19 @@ class VoiceRealtimeService:
                 ),
                 timeout=_VOICE_TIMEOUT_SECONDS,
             )
+            engine = str(getattr(self.aura.avatar_audio, "last_engine", ""))
             delivered = bool(
                 int(getattr(self.aura.avatar_audio, "generated_count", 0) or 0)
                 > previous_count
-                and str(getattr(self.aura.avatar_audio, "last_engine", "")) == "gemini-tts"
+                and engine in _DELIVERED_VOICE_ENGINES
             )
             if not delivered:
                 voice_error = str(
                     getattr(self.aura.avatar_audio, "last_error", "")
-                    or "La voix Gemini n'a pas été produite"
+                    or "La voix de Mairaiy n'a pas été produite"
                 )[:300]
         except asyncio.TimeoutError:
-            voice_error = "La voix Gemini a dépassé 42 secondes"
+            voice_error = "La génération vocale a dépassé 42 secondes"
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -199,6 +202,7 @@ class VoiceRealtimeService:
         rearm = max(1800, duration + 1500) if delivered else 1200
         self.last_voice_delivered = delivered
         self.last_voice_error = voice_error
+        self.last_voice_engine = engine
         self.last_audio_duration_ms = duration
         self.last_rearm_after_ms = rearm
         self.last_stage = "idle"
@@ -234,6 +238,7 @@ class VoiceRealtimeService:
             "last_error": self.last_error,
             "last_voice_delivered": self.last_voice_delivered,
             "last_voice_error": self.last_voice_error,
+            "last_voice_engine": self.last_voice_engine,
             "last_audio_duration_ms": self.last_audio_duration_ms,
             "last_rearm_after_ms": self.last_rearm_after_ms,
             "last_latency_ms": self.last_latency_ms,
