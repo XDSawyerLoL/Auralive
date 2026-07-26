@@ -4,6 +4,8 @@ import logging
 from contextvars import ContextVar
 from typing import Any
 
+from app.services.public_identity import install_public_identity
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,4 +101,5 @@ def install_response_sync(aura: Any, cohost: Any | None = None) -> ResponseSynch
     aura.answer_ai = synchronizer.answer_ai
     if cohost is not None and synchronizer._original_publish is not None:
         cohost._publish = synchronizer.publish
+        install_public_identity(aura, cohost)
     return synchronizer
