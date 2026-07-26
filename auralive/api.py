@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from .automation import Event
+from .automation.serialization import automation_from_dict, automation_to_dict, report_to_dict
+from .runtime import AuraRuntime
+
+_WEB_ROOT = Path(__file__).with_name("web")
+_LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+
+
+def create_app(runtime: AuraRuntime | None = None) -> FastAPI:
+    aura = runtime or AuraRuntime()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        await aura.initialize()
+        app.state.aura = aura
+        try:
+            yield
+        finally:
+            await aura.shutdown()
+
+    app = FastAPI(
+        title="Aura Live 2 — Automation Studio",
+        version="2.0.0-alpha.2",
+        lifespan=lifespan,
+    )
+
+    @app.middleware("http")
+    async def local_only(request: Request, call_next):
+        allow_remote = os.getenv("AURALIVE_ALLOW_REMOTE", "false").lower() == "true"
+        host = request.client.host if request.client else ""
+        if not allow_remote and host not in _LOCAL_HOSTS:
+            return JSONResponse(
+                {"detail": "Aura Live refuse les connexions distantes par défaut."},
+                status_code=403,
+            )
+        return await call_next(request)
+
+    app.mount("/assets", StaticFiles(directory=_WEB_ROOT), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def studio() -> FileResponse:
+        return FileResponse(_WEB_ROOT / "index.html")
+
+    @app.get("/api/health")
+    async def health() -> dict[str, Any]:
+        return aura.health()
+
+    @app.get("/api/catalog")
+    async def catalog() -> dict[str, Any]:
+        return aura.catalog()
+
+    @app.get("/api/automations")
+    async def list_automations() -> list[dict[str, Any]]:
+        return [
+            automation_to_dict(item)
+            for item in sorted(aura.engine.automations.values(), key=lambda value: value.priority)
+        ]
+
+    @app.get("/api/automations/{automation_id}")
+    async def get_automation(automation_id: str) -> dict[str, Any]:
+        automation = aura.engine.automations.get(automation_id)
+        if automation is None:
+            raise HTTPException(404, "Automatisation introuvable")
+        return automation_to_dict(automation)
+
+    @app.post("/api/automations")
+    async def save_automation(document: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        try:
+            automation = automation_from_dict(document)
+            saved = await aura.upsert(automation)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return automation_to_dict(saved)
+
+    @app.put("/api/automations/{automation_id}")
+    async def replace_automation(
+        automation_id: str, document: dict[str, Any] = Body(...)
+    ) -> dict[str, Any]:
+        document["id"] = automation_id
+        return await save_automation(document)
+
+    @app.delete("/api/automations/{automation_id}", status_code=204)
+    async def delete_automation(automation_id: str) -> None:
+        if automation_id not in aura.engine.automations:
+            raise HTTPException(404, "Automatisation introuvable")
+        await aura.remove(automation_id)
+
+    @app.post("/api/events/dispatch")
+    async def dispatch_event(document: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        event = Event(
+            type=str(document.get("type", "internal.test")),
+            payload=dict(document.get("payload", {})),
+            source=str(document.get("source", "api")),
+        )
+        reports = await aura.dispatch(event)
+        return {
+            "event": {
+                "id": event.id,
+                "type": event.type,
+                "source": event.source,
+                "payload": event.payload,
+            },
+            "reports": [report_to_dict(report) for report in reports],
+        }
+
+    @app.post("/api/automations/{automation_id}/simulate")
+    async def simulate(
+        automation_id: str, document: dict[str, Any] = Body(default={})
+    ) -> dict[str, Any]:
+        if automation_id not in aura.engine.automations:
+            raise HTTPException(404, "Automatisation introuvable")
+        event = Event(
+            type=str(document.get("type") or aura.engine.automations[automation_id].trigger),
+            payload=dict(document.get("payload", {})),
+            source="simulation",
+        )
+        return report_to_dict(await aura.simulate(automation_id, event))
+
+    @app.get("/api/executions")
+    async def executions(limit: int = 100) -> list[dict[str, Any]]:
+        return await aura.store.list_reports(limit=limit)
+
+    @app.websocket("/ws/executions")
+    async def execution_socket(websocket: WebSocket) -> None:
+        host = websocket.client.host if websocket.client else ""
+        allow_remote = os.getenv("AURALIVE_ALLOW_REMOTE", "false").lower() == "true"
+        if not allow_remote and host not in _LOCAL_HOSTS:
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        try:
+            async for payload in aura.bus.subscribe():
+                await websocket.send_json(payload)
+        except WebSocketDisconnect:
+            return
+
+    return app
+
+
+app = create_app()
