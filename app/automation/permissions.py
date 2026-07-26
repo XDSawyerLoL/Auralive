@@ -18,9 +18,9 @@ class PermissionDecision:
 class AutomationPermissionPolicy:
     """Politique locale pour les blocs capables d'agir sur le PC ou la chaîne.
 
-    Aura Live reste puissant, mais une automatisation importée ne peut pas lancer
-    silencieusement un programme, contacter une URL arbitraire ou couper le live.
-    Les autorisations sont stockées localement dans SQLite.
+    Les fonctions Twitch, OBS, IA et modération sont disponibles immédiatement.
+    Les actions arbitraires vers le réseau, PowerShell, les processus et l'arrêt
+    du direct demandent une autorisation locale explicite.
     """
 
     DEFAULT_ALLOWED = {
@@ -31,6 +31,8 @@ class AutomationPermissionPolicy:
         "visual",
         "obs-control",
         "twitch-write",
+        "moderation",
+        "moderation-high",
     }
     ALWAYS_BLOCKED = {"secret-access", "credential-export"}
 
@@ -95,7 +97,14 @@ class AutomationPermissionPolicy:
             self.DEFAULT_ALLOWED
             | self.ALWAYS_BLOCKED
             | set(overrides)
-            | {"network", "process", "powershell", "moderation", "moderation-high", "broadcast-critical"}
+            | {
+                "network",
+                "webhook",
+                "udp",
+                "process",
+                "powershell",
+                "broadcast-critical",
+            }
         )
         return {
             "permissions": {
@@ -130,7 +139,11 @@ class AutomationPermissionPolicy:
         import json
 
         safe_payload = {
-            key: ("***" if any(secret in key.lower() for secret in ("token", "secret", "password", "key")) else value)
+            key: (
+                "***"
+                if any(secret in key.lower() for secret in ("token", "secret", "password", "key"))
+                else value
+            )
             for key, value in config.items()
         }
         await self.db.execute(
