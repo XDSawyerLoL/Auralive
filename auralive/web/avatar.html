@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mairaiy — Avatar OBS</title>
+  <link rel="stylesheet" href="/assets/avatar.css">
+</head>
+<body>
+  <main class="avatar-stage" id="avatarStage">
+    <div class="signal-ring ring-one"></div>
+    <div class="signal-ring ring-two"></div>
+    <div class="avatar-shell" id="avatarShell">
+      <img class="avatar-image idle-image" id="idleImage" alt="Mairaiy au repos">
+      <img class="avatar-image talking-image" id="talkingImage" alt="Mairaiy parle">
+      <div class="fallback-avatar" id="fallbackAvatar" aria-hidden="true">
+        <div class="fallback-hair"></div>
+        <div class="fallback-face">
+          <span class="eye left"></span><span class="eye right"></span>
+          <span class="nose"></span><span class="mouth"></span>
+        </div>
+        <div class="fallback-neck"></div>
+        <div class="fallback-body"></div>
+      </div>
+      <div class="voice-aura"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+    <section class="identity-plate" id="identityPlate">
+      <span class="live-dot"></span>
+      <div><strong id="avatarName">MAIRAIY</strong><small>COANIMATRICE NEURALE</small></div>
+      <span class="connection-state" id="connectionState">CONNEXION</span>
+    </section>
+    <div class="subtitle" id="subtitle" aria-live="polite"></div>
+  </main>
+  <script type="module" src="/assets/avatar.js"></script>
+</body>
+</html>
