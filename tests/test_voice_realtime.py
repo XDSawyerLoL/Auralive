@@ -27,8 +27,9 @@ class FakeMemory:
 
 
 class FakeOverlay:
-    def __init__(self, audio):
+    def __init__(self, audio, engine: str):
         self.audio = audio
+        self.engine = engine
 
     def count(self, _target):
         return 1
@@ -36,7 +37,7 @@ class FakeOverlay:
     async def emit(self, _event, *, target=None):
         assert target == "avatar"
         self.audio.generated_count += 1
-        self.audio.last_engine = "gemini-tts"
+        self.audio.last_engine = self.engine
         self.audio.last_audio_duration_ms = 1200
 
 
@@ -64,7 +65,7 @@ class FakeVoiceInput:
         self.ignored_count = 0
 
 
-def build_service():
+def build_service(engine: str = "gemini-tts"):
     audio = SimpleNamespace(
         generated_count=0,
         last_engine="",
@@ -78,7 +79,7 @@ def build_service():
         recent_chat=[],
         avatar_audio=audio,
     )
-    aura.overlay = FakeOverlay(audio)
+    aura.overlay = FakeOverlay(audio, engine)
 
     async def say(_text):
         return {"is_sent": True}
@@ -102,11 +103,29 @@ def test_browser_transcript_produces_answer_then_voice() -> None:
 
         diagnostic = service.diagnostic()
         assert diagnostic["last_voice_delivered"] is True
+        assert diagnostic["last_voice_engine"] == "gemini-tts"
         assert diagnostic["last_audio_duration_ms"] == 1200
         assert diagnostic["last_rearm_after_ms"] >= 2700
         assert diagnostic["stage"] == "idle"
         assert diagnostic["wake_word_required"] is False
         assert diagnostic["wake_word"] is None
+        assert voice_input.last_voice_delivered is True
+
+    asyncio.run(scenario())
+
+
+def test_fixed_local_voice_is_a_delivered_response() -> None:
+    async def scenario() -> None:
+        service, voice_input, _ai = build_service("piper-local")
+        await service.talk_text("Continue de commenter la partie")
+        assert service.voice_task is not None
+        await service.voice_task
+
+        diagnostic = service.diagnostic()
+        assert diagnostic["last_voice_delivered"] is True
+        assert diagnostic["last_voice_engine"] == "piper-local"
+        assert diagnostic["last_audio_duration_ms"] == 1200
+        assert diagnostic["last_voice_error"] == ""
         assert voice_input.last_voice_delivered is True
 
     asyncio.run(scenario())
