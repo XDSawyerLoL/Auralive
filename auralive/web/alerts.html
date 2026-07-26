@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aura Live — Alertes OBS</title>
+  <style>
+    :root { color-scheme: dark; --accent: #9a74ff; --cyan: #65e1ff; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body { margin: 0; overflow: hidden; background: transparent; font-family: Inter, system-ui, sans-serif; }
+    #stage { width: 100%; height: 100%; display: grid; place-items: center; padding: 4%; }
+    .alert {
+      position: relative;
+      min-width: min(720px, 86vw);
+      max-width: 920px;
+      display: grid;
+      grid-template-columns: 78px minmax(0,1fr) auto;
+      align-items: center;
+      gap: 18px;
+      padding: 19px 24px;
+      border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+      border-radius: 20px;
+      color: white;
+      background: linear-gradient(120deg, rgba(10,12,28,.93), rgba(38,23,72,.88));
+      box-shadow: 0 26px 80px rgba(0,0,0,.48), 0 0 55px color-mix(in srgb, var(--accent) 24%, transparent);
+      backdrop-filter: blur(20px);
+      opacity: 0;
+      transform: translateY(45px) scale(.92);
+    }
+    .alert.show { animation: enter .55s cubic-bezier(.18,.88,.22,1.14) forwards, leave .5s 5.5s ease forwards; }
+    .glyph { width: 72px; height: 72px; display: grid; place-items: center; border-radius: 18px; color: #e7e0ff; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.2), rgba(154,116,255,.2) 45%, rgba(13,14,33,.7)); border: 1px solid rgba(174,149,255,.4); font-size: 30px; box-shadow: inset 0 0 24px rgba(255,255,255,.04), 0 0 32px rgba(154,116,255,.2); }
+    .copy small { display: block; margin-bottom: 4px; color: #9ca5c9; font-size: 11px; font-weight: 750; letter-spacing: .18em; }
+    .copy strong { display: block; font-size: clamp(27px, 4vw, 54px); line-height: 1; letter-spacing: -.03em; text-shadow: 0 4px 22px rgba(0,0,0,.35); }
+    .copy p { margin: 8px 0 0; color: #c3c9e1; font-size: clamp(13px, 1.6vw, 21px); }
+    .value { min-width: 80px; padding: 10px 13px; border-radius: 12px; color: var(--cyan); background: rgba(101,225,255,.08); border: 1px solid rgba(101,225,255,.22); font-size: clamp(22px, 3vw, 38px); font-weight: 800; text-align: center; }
+    .scan { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+    .scan::after { content: ""; position: absolute; top: -30%; bottom: -30%; width: 100px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); transform: skewX(-18deg); animation: scan 2.6s linear infinite; }
+    @keyframes enter { to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes leave { to { opacity: 0; transform: translateY(-35px) scale(.96); } }
+    @keyframes scan { from { left: -30%; } to { left: 120%; } }
+  </style>
+</head>
+<body>
+  <main id="stage"></main>
+  <script type="module">
+    const stage = document.querySelector('#stage');
+    const symbols = { follow: '✦', raid: '⚡', sub: '◆', cheer: '◈', reward: '◎', alert: '!' };
+    let timer;
+    function display(payload) {
+      clearTimeout(timer);
+      const type = String(payload.type || 'alert').toLowerCase();
+      const title = payload.title || type.toUpperCase();
+      const user = payload.user || payload.user_name || '';
+      const message = payload.message || payload.text || '';
+      const value = payload.value ?? payload.amount ?? '';
+      stage.innerHTML = `<section class="alert show" style="--accent:${payload.color || '#9a74ff'}">
+        <div class="glyph">${symbols[type] || symbols.alert}</div>
+        <div class="copy"><small>${escapeHtml(title)}</small><strong>${escapeHtml(user)}</strong>${message ? `<p>${escapeHtml(message)}</p>` : ''}</div>
+        ${value !== '' ? `<div class="value">${escapeHtml(value)}</div>` : ''}<div class="scan"></div></section>`;
+      timer = setTimeout(() => { stage.innerHTML = ''; }, Number(payload.duration || 6200));
+      if (payload.sound) new Audio(payload.sound).play().catch(() => {});
+    }
+    function escapeHtml(value) { return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char])); }
+    function connect() {
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      const socket = new WebSocket(`${scheme}://${location.host}/ws/overlay/alerts`);
+      socket.onmessage = (event) => { try { display(JSON.parse(event.data)); } catch (_) {} };
+      socket.onclose = () => setTimeout(connect, 1500);
+      socket.onerror = () => socket.close();
+    }
+    connect();
+  </script>
+</body>
+</html>
