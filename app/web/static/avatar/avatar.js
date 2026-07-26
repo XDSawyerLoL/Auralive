@@ -6,6 +6,7 @@ let settings={enabled:true,voice:'',rate:1,pitch:1,volume:1,subtitles:true,subti
 let speaking=false;
 let queue=[];
 let safetyTimer;
+let loadingTimer;
 
 function cleanText(value){return String(value||'').replace(/^@\w+\s*/,'').trim()}
 async function loadSettings(){
@@ -19,25 +20,42 @@ function chooseVoice(event={}){
   const wanted=String(event.voice||settings.voice||'').toLowerCase();
   return voices.find(v=>wanted&&v.name.toLowerCase().includes(wanted))||voices.find(v=>/^fr(-|_)/i.test(v.lang))||voices[0];
 }
-function setSpeaking(value){speaking=value;stage.classList.toggle('speaking',value);stage.classList.toggle('idle',!value)}
+function setSpeaking(value){
+  speaking=value;
+  stage.classList.toggle('speaking',value);
+  stage.classList.toggle('idle',!value);
+  stage.setAttribute('aria-hidden',value?'false':'true');
+}
 function showCaption(text){
   if(!settings.subtitles)return;
-  captionText.textContent=text;caption.classList.remove('hidden');
+  captionText.textContent=text;
+  caption.classList.remove('hidden');
 }
 function hideCaption(){caption.classList.add('hidden')}
 function armSafety(text){
   clearTimeout(safetyTimer);
   safetyTimer=setTimeout(finishSpeech,Math.max(5000,text.length*140));
 }
+function beginSpeech(text){
+  clearTimeout(loadingTimer);
+  setSpeaking(true);
+  showCaption(text);
+  armSafety(text);
+}
 function finishSpeech(){
   clearTimeout(safetyTimer);
+  clearTimeout(loadingTimer);
   audio.onplay=audio.onended=audio.onerror=null;
+  hideCaption();
   setSpeaking(false);
-  setTimeout(hideCaption,Math.max(1200,Number(settings.subtitle_seconds||12)*1000));
-  const next=queue.shift();if(next)setTimeout(()=>speak(next.text,next.event),180);
+  const next=queue.shift();
+  if(next)setTimeout(()=>speak(next.text,next.event),140);
 }
 function browserSpeak(text,event={}){
-  if(!('speechSynthesis' in window)){setSpeaking(true);armSafety(text);return}
+  if(!('speechSynthesis' in window)){
+    beginSpeech(text);
+    return;
+  }
   speechSynthesis.cancel();
   const utterance=new SpeechSynthesisUtterance(text);
   utterance.lang='fr-FR';
@@ -45,16 +63,18 @@ function browserSpeak(text,event={}){
   utterance.pitch=Number(event.pitch||settings.pitch||1);
   utterance.volume=Number(event.volume??settings.volume??1);
   const voice=chooseVoice(event);if(voice)utterance.voice=voice;
-  utterance.onstart=()=>{setSpeaking(true);armSafety(text)};
+  utterance.onstart=()=>beginSpeech(text);
   utterance.onend=finishSpeech;
   utterance.onerror=finishSpeech;
-  setSpeaking(true);armSafety(text);speechSynthesis.speak(utterance);
+  loadingTimer=setTimeout(()=>beginSpeech(text),1200);
+  speechSynthesis.speak(utterance);
 }
 function playGeneratedAudio(text,event={}){
   let fallbackStarted=false;
   const fallback=()=>{
     if(fallbackStarted)return;
     fallbackStarted=true;
+    clearTimeout(loadingTimer);
     audio.pause();audio.removeAttribute('src');
     browserSpeak(text,event);
   };
@@ -62,17 +82,16 @@ function playGeneratedAudio(text,event={}){
   audio.src=`${event.audio_url}${event.audio_url.includes('?')?'&':'?'}v=${Date.now()}`;
   audio.volume=Math.max(0,Math.min(1,Number(event.volume??settings.volume??1)));
   audio.currentTime=0;
-  audio.onplay=()=>{setSpeaking(true);armSafety(text)};
+  audio.onplay=()=>beginSpeech(text);
   audio.onended=finishSpeech;
   audio.onerror=fallback;
-  setSpeaking(true);armSafety(text);
+  loadingTimer=setTimeout(fallback,10000);
   const promise=audio.play();
   if(promise&&typeof promise.catch==='function')promise.catch(fallback);
 }
 function speak(raw,event={}){
   const text=cleanText(raw);if(!text||!settings.enabled)return;
   if(speaking){queue.push({text,event});return}
-  showCaption(text);
   if(event.audio_url)playGeneratedAudio(text,event);else browserSpeak(text,event);
 }
 function handle(event){
@@ -88,5 +107,6 @@ function connect(){
   socket.onopen=()=>socket.send('overlay-avatar-ready');
   socket.onclose=()=>setTimeout(connect,1800);
 }
+setSpeaking(false);
 loadSettings().then(connect);
 if('speechSynthesis' in window)speechSynthesis.onvoiceschanged=()=>chooseVoice();
