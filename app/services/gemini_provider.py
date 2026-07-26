@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from time import monotonic
 from typing import Any
 
 import aiohttp
 
+logger = logging.getLogger(__name__)
 
 _DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 _DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+_MIN_OUTPUT_TOKENS = 32
+
+
+class GeminiEmptyResponse(RuntimeError):
+    pass
 
 
 def _effective_base_url(settings: Any) -> str:
@@ -54,25 +62,59 @@ def _convert_messages(messages: list[dict[str, str]]) -> tuple[str, list[dict[st
     return "\n\n".join(system_parts), contents
 
 
-async def _gemini_chat(self: Any, messages: list[dict[str, str]], max_tokens: int) -> str:
-    await self.start()
-    if not self.settings.ai_api_key:
-        raise RuntimeError("Clé API Gemini absente dans AI_API_KEY")
-
-    assert self.session
-    model = _effective_model(self.settings)
-    base_url = _effective_base_url(self.settings)
-    system_instruction, contents = _convert_messages(messages)
-    payload: dict[str, Any] = {
-        "contents": contents,
-        "generationConfig": {
-            "maxOutputTokens": max(1, min(int(max_tokens), 360)),
+def _generation_config(max_tokens: int) -> dict[str, Any]:
+    # Les modèles Gemini 3 utilisent la réflexion par défaut. Pour un chat Twitch,
+    # le niveau minimal réduit la latence et évite qu'un budget de sortie trop court
+    # soit entièrement consommé avant la réponse visible.
+    return {
+        "candidateCount": 1,
+        "maxOutputTokens": max(_MIN_OUTPUT_TOKENS, min(int(max_tokens), 360)),
+        "thinkingConfig": {
+            "thinkingLevel": "minimal",
+            "includeThoughts": False,
         },
     }
-    if system_instruction:
-        payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
 
-    started = monotonic()
+
+def _extract_text(body: dict[str, Any]) -> str:
+    candidates = body.get("candidates") or []
+    if not candidates:
+        feedback = body.get("promptFeedback") or {}
+        raise GeminiEmptyResponse(
+            "Gemini n'a renvoyé aucun candidat"
+            + (f" ({feedback})" if feedback else "")
+        )
+
+    candidate = candidates[0] or {}
+    finish_reason = str(candidate.get("finishReason") or "inconnu")
+    parts = candidate.get("content", {}).get("parts", []) or []
+    visible_parts = [
+        str(part.get("text") or "").strip()
+        for part in parts
+        if not bool(part.get("thought")) and str(part.get("text") or "").strip()
+    ]
+    text = " ".join(visible_parts).strip()
+    if text:
+        return text
+
+    usage = body.get("usageMetadata") or {}
+    feedback = body.get("promptFeedback") or {}
+    details = [f"finishReason={finish_reason}"]
+    if usage:
+        details.append(f"usage={usage}")
+    if feedback:
+        details.append(f"feedback={feedback}")
+    raise GeminiEmptyResponse("Gemini a renvoyé une réponse vide (" + ", ".join(details) + ")")
+
+
+async def _post_generate_content(
+    self: Any,
+    *,
+    base_url: str,
+    model: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    assert self.session
     async with self.session.post(
         f"{base_url}/models/{model}:generateContent",
         headers={
@@ -89,19 +131,53 @@ async def _gemini_chat(self: Any, messages: list[dict[str, str]], max_tokens: in
             error = body.get("error") if isinstance(body, dict) else None
             detail = error.get("message") if isinstance(error, dict) else str(body)
             raise RuntimeError(f"Gemini a répondu {response.status}: {detail}")
+        if not isinstance(body, dict):
+            raise RuntimeError("Gemini a renvoyé un format de réponse inattendu")
+        return body
+
+
+async def _gemini_chat(self: Any, messages: list[dict[str, str]], max_tokens: int) -> str:
+    await self.start()
+    if not self.settings.ai_api_key:
+        raise RuntimeError("Clé API Gemini absente dans AI_API_KEY")
+
+    model = _effective_model(self.settings)
+    base_url = _effective_base_url(self.settings)
+    system_instruction, contents = _convert_messages(messages)
+    payload: dict[str, Any] = {
+        "contents": contents,
+        "generationConfig": _generation_config(max_tokens),
+    }
+    if system_instruction:
+        payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+
+    started = monotonic()
+    body = await _post_generate_content(
+        self,
+        base_url=base_url,
+        model=model,
+        payload=payload,
+    )
+    try:
+        text = _extract_text(body)
+    except GeminiEmptyResponse:
+        # Un préchargement très court ou une réponse de fin de quota peut parfois
+        # produire un candidat sans texte. Une seule relance plus large est permise.
+        retry_payload = dict(payload)
+        retry_payload["generationConfig"] = {
+            **payload["generationConfig"],
+            "maxOutputTokens": max(96, payload["generationConfig"]["maxOutputTokens"]),
+        }
+        logger.info("Réponse Gemini vide, nouvelle tentative unique avec un budget élargi")
+        body = await _post_generate_content(
+            self,
+            base_url=base_url,
+            model=model,
+            payload=retry_payload,
+        )
+        text = _extract_text(body)
 
     self.last_latency_ms = round((monotonic() - started) * 1000)
-    candidates = body.get("candidates") or []
-    if not candidates:
-        feedback = body.get("promptFeedback") or {}
-        raise RuntimeError(
-            "Gemini n'a renvoyé aucune réponse"
-            + (f" ({feedback})" if feedback else "")
-        )
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = " ".join(str(part.get("text") or "").strip() for part in parts).strip()
-    if not text:
-        raise RuntimeError("Gemini a renvoyé une réponse vide")
     return self._clean(text)
 
 
@@ -112,6 +188,8 @@ def install_gemini_provider(ai: Any) -> None:
         return
 
     original_chat = cls._chat
+    original_warmup = cls._warmup
+    original_diagnostic = cls.diagnostic
     original_active_model = cls.active_model.fget
     original_degraded_fallback = cls._degraded_fallback
 
@@ -120,6 +198,27 @@ def install_gemini_provider(ai: Any) -> None:
             return await _gemini_chat(self, messages, max_tokens)
         return await original_chat(self, messages, max_tokens)
 
+    async def warmup(self: Any) -> None:
+        if self.settings.ai_mode != "gemini":
+            await original_warmup(self)
+            return
+        try:
+            await asyncio.wait_for(
+                self.generate(
+                    "Réponds uniquement par OK.",
+                    "Initialisation silencieuse. Aucun commentaire supplémentaire.",
+                    32,
+                ),
+                timeout=max(5, int(self.settings.ai_warmup_timeout_seconds)),
+            )
+            logger.info("Moteur IA Gemini préchargé avec %s", self.active_model)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # Un échec de préchargement ne doit pas couper les premières réponses du live.
+            self.last_error = self._error_label(exc)
+            logger.info("Préchargement Gemini non bloquant indisponible: %s", self.last_error)
+
     def enabled(self: Any) -> bool:
         return self.settings.ai_mode in {"ollama", "openai_compatible", "gemini"}
 
@@ -127,6 +226,20 @@ def install_gemini_provider(ai: Any) -> None:
         if self.settings.ai_mode == "gemini":
             return _effective_model(self.settings)
         return original_active_model(self)
+
+    def diagnostic(self: Any) -> dict[str, Any]:
+        result = original_diagnostic(self)
+        if self.settings.ai_mode == "gemini":
+            result.update(
+                {
+                    "provider": "google-gemini",
+                    "base_url": _effective_base_url(self.settings),
+                    "configured_model": _effective_model(self.settings),
+                    "active_model": _effective_model(self.settings),
+                    "api_key_configured": bool(self.settings.ai_api_key),
+                }
+            )
+        return result
 
     def degraded_fallback(self: Any, viewer_name: str, message: str) -> str:
         if self.settings.ai_mode != "gemini":
@@ -147,7 +260,9 @@ def install_gemini_provider(ai: Any) -> None:
         )
 
     cls._chat = chat
+    cls._warmup = warmup
     cls.enabled = property(enabled)
     cls.active_model = property(active_model)
+    cls.diagnostic = diagnostic
     cls._degraded_fallback = degraded_fallback
     cls._aura_gemini_provider_installed = True
