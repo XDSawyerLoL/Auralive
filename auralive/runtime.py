@@ -11,7 +11,14 @@ from .automation import Automation, AutomationEngine, AutomationRegistry, Event,
 from .automation.models import ExecutionReport
 from .automation.serialization import report_to_dict
 from .catalog import trigger_catalog
-from .gateways import MairaiyHttpGateway, ObsWebSocketGateway, OverlayHub, TwitchHelixGateway
+from .defaults import system_automations
+from .gateways import (
+    MairaiyHttpGateway,
+    ObsWebSocketGateway,
+    OverlayHub,
+    TwitchEventSubGateway,
+    TwitchHelixGateway,
+)
 from .integrations.mairaiy import install_mairaiy_actions
 from .integrations.obs import OBS_EVENT_CATALOG, install_obs_actions
 from .integrations.twitch import install_twitch_actions
@@ -62,6 +69,7 @@ class AuraRuntime:
         self.services.setdefault("files_root", "data/automation-files")
         self.services.setdefault("emergency", False)
         self.engine = AutomationEngine(self.registry, services=self.services)
+        self.services["dispatch"] = self.dispatch
         self.bus = ExecutionBus()
         self.engine.add_listener(self._persist_report)
         self.engine.add_listener(self.bus.publish)
@@ -72,6 +80,13 @@ class AuraRuntime:
         obs = self.services.get("obs")
         if obs is not None and hasattr(obs, "event_callback"):
             obs.event_callback = self._handle_obs_event
+
+        twitch = self.services.get("twitch")
+        if twitch is not None and self.services.get("eventsub") is None:
+            self.services["eventsub"] = TwitchEventSubGateway(
+                twitch=twitch,
+                event_callback=self._handle_twitch_event,
+            )
 
     @staticmethod
     def _default_services() -> dict[str, Any]:
@@ -105,6 +120,7 @@ class AuraRuntime:
         self.engine.global_variables.update(await self.store.load_variables("global"))
         for automation in await self.store.load_automations():
             self.engine.upsert(automation)
+        await self._install_system_automations()
 
         mairaiy = self.services.get("mairaiy")
         if mairaiy is not None and hasattr(mairaiy, "initialize"):
@@ -122,11 +138,19 @@ class AuraRuntime:
             try:
                 await obs.connect()
                 self.services["obs_scene"] = await self._current_obs_scene(obs)
+                self.service_errors.pop("obs", None)
             except Exception as exc:  # noqa: BLE001
                 self.service_errors["obs"] = str(exc)
 
         self.initialized = True
         await self.engine.dispatch(Event("aura.started", {"version": "2.0.0-alpha.2"}))
+
+        eventsub = self.services.get("eventsub")
+        if eventsub is not None and os.getenv("TWITCH_EVENTSUB_ENABLED", "true").lower() != "false":
+            try:
+                await eventsub.start()
+            except Exception as exc:  # noqa: BLE001
+                self.service_errors["eventsub"] = str(exc)
 
         if (
             mairaiy is not None
@@ -143,7 +167,7 @@ class AuraRuntime:
         await self.store.save_variables("global", self.engine.global_variables)
         for task in tuple(self._background_tasks):
             task.cancel()
-        for service_name in ("twitch", "obs", "mairaiy"):
+        for service_name in ("eventsub", "twitch", "obs", "mairaiy"):
             service = self.services.get(service_name)
             close = getattr(service, "close", None)
             if close is None:
@@ -197,6 +221,22 @@ class AuraRuntime:
     async def simulate(self, automation_id: str, event: Event) -> ExecutionReport:
         return await self.engine.simulate(automation_id, event)
 
+    async def simulate_document(
+        self,
+        automation: Automation,
+        event: Event,
+    ) -> ExecutionReport:
+        temporary_id = automation.id
+        previous = self.engine.automations.get(temporary_id)
+        self.engine.upsert(automation)
+        try:
+            return await self.engine.simulate(temporary_id, event)
+        finally:
+            if previous is not None:
+                self.engine.upsert(previous)
+            else:
+                self.engine.remove(temporary_id)
+
     async def set_emergency(self, active: bool) -> bool:
         self.services["emergency"] = bool(active)
         await self.dispatch(
@@ -207,6 +247,22 @@ class AuraRuntime:
             )
         )
         return self.emergency_active
+
+    async def _install_system_automations(self) -> None:
+        if os.getenv("AURALIVE_INSTALL_DEFAULTS", "true").lower() == "false":
+            return
+        available_services = set(self.services)
+        for automation in system_automations():
+            required = {
+                action.type.split(".", 1)[0]
+                for action in automation.actions
+                if action.type.startswith(("twitch.", "mairaiy.", "obs.", "overlay."))
+            }
+            if not required.issubset(available_services | {"overlay"}):
+                continue
+            if automation.id not in self.engine.automations:
+                self.engine.upsert(automation)
+                await self.store.save_automation(automation)
 
     async def _persist_report(self, report: ExecutionReport) -> None:
         await self.store.save_report(report)
@@ -220,14 +276,18 @@ class AuraRuntime:
             )
 
     async def _handle_obs_event(self, event_type: str, event_data: dict[str, Any]) -> None:
-        mapping = {
-            item["obs_event"]: item["type"]
-            for item in OBS_EVENT_CATALOG
-        }
+        mapping = {item["obs_event"]: item["type"] for item in OBS_EVENT_CATALOG}
         aura_type = mapping.get(event_type, f"obs.raw.{event_type}")
         if event_type == "CurrentProgramSceneChanged":
             self.services["obs_scene"] = event_data.get("sceneName")
         await self.dispatch(Event(aura_type, event_data, source="obs"))
+
+    async def _handle_twitch_event(self, event_type: str, event_data: dict[str, Any]) -> None:
+        if event_type == "twitch.stream.online":
+            self.services["stream_live"] = True
+        elif event_type == "twitch.stream.offline":
+            self.services["stream_live"] = False
+        await self.dispatch(Event(event_type, event_data, source="twitch"))
 
     async def _current_obs_scene(self, obs: Any) -> str | None:
         try:
@@ -254,6 +314,8 @@ class AuraRuntime:
     def health(self) -> dict[str, Any]:
         obs = self.services.get("obs")
         overlay = self.services.get("overlay")
+        eventsub = self.services.get("eventsub")
+        eventsub_status = eventsub.status() if eventsub is not None else {}
         return {
             "ok": self.initialized,
             "version": "2.0.0-alpha.2",
@@ -263,10 +325,13 @@ class AuraRuntime:
             "emergency": self.emergency_active,
             "services": {
                 "twitch": self.services.get("twitch") is not None,
+                "twitch_chat": bool(eventsub_status.get("chat_connected", False)),
+                "twitch_channel": bool(eventsub_status.get("channel_connected", False)),
                 "obs": bool(obs is not None and getattr(obs, "connected", False)),
                 "mairaiy": self.services.get("mairaiy") is not None,
                 "mairaiy_ready": bool(self.services.get("mairaiy_ready", False)),
                 "avatar_listeners": overlay.listener_count("avatar") if overlay else 0,
             },
+            "eventsub": eventsub_status,
             "service_errors": dict(self.service_errors),
         }
