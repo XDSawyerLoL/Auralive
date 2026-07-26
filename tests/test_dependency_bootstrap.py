@@ -4,19 +4,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_pillow_is_declared_for_live_vision():
+def test_audio_and_vision_dependencies_are_declared():
     requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert "Pillow==" in requirements
+    assert "piper-tts==" in requirements
 
 
-def test_windows_launcher_repairs_dependencies_after_git_update():
+def test_windows_launcher_repairs_dependencies_and_downloads_voice():
     path = ROOT / "scripts" / "run.ps1"
     payload = path.read_bytes()
     payload.decode("ascii")
     script = payload.decode("ascii")
     assert "requirements.sha256" in script
     assert "pip install -r" in script
-    assert "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL" in script
+    assert "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL, piper" in script
+    assert "piper.download_voices" in script
+    assert "fr_FR-siwis-medium" in script
     assert "Dependances pretes" in script
 
 
