@@ -18,6 +18,7 @@ def test_v2_keeps_legacy_routes_and_adds_automation_studio():
     assert "/api/ai/runtime" in paths
     assert "/api/ai/recover" in paths
     assert "/api/twitch/eventsub" in paths
+    assert "/api/twitch/oauth" in paths
     assert "/api/security/diagnostic" in paths
     assert "/api/security/block-domain" in paths
-    assert app.version == "2.0.4-alpha"
+    assert app.version == "2.0.5-alpha"
