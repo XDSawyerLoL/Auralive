@@ -146,6 +146,9 @@ Write-Host "Installation des dépendances..." -ForegroundColor Cyan
 Invoke-NativeChecked $venvPython -m pip install --upgrade pip
 Invoke-NativeChecked $venvPython -m pip install -r "requirements.txt"
 
+$requirementsHash = (Get-FileHash (Join-Path $ProjectRoot "requirements.txt") -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -Path (Join-Path $ProjectRoot ".venv\requirements.sha256") -Value $requirementsHash -Encoding ascii
+
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
     Write-Host "Le fichier .env a été créé." -ForegroundColor Yellow
