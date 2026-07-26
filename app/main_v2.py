@@ -16,6 +16,7 @@ from app.automation.routes import build_automation_router
 from app.automation.runtime import AutomationStudioRuntime
 from app.config import settings
 from app.main import app, aura, db
+from app.services.avatar_audio import install_avatar_audio
 from app.services.eventsub_compat import install_eventsub_compat
 from app.services.gemini_provider import install_gemini_provider
 from app.services.oauth_resilience import install_oauth_resilience
@@ -24,6 +25,7 @@ logger = logging.getLogger("aura-live-v2")
 install_gemini_provider(aura.ai)
 install_eventsub_compat(aura.twitch)
 install_oauth_resilience(aura.twitch)
+install_avatar_audio(aura)
 automation = AutomationStudioRuntime(aura, db, settings)
 install_pro_nodes(automation.registry)
 install_resilience_nodes(automation.registry)
@@ -170,7 +172,7 @@ async def _v2_lifespan(application):
         await automation.initialize()
         await automation.dispatch(
             "aura.started",
-            {"version": "2.0.5-alpha", "stream_online": aura.stream_online},
+            {"version": "2.0.6-alpha", "stream_online": aura.stream_online},
             source="system",
         )
         try:
@@ -179,7 +181,7 @@ async def _v2_lifespan(application):
             try:
                 await automation.dispatch(
                     "aura.stopping",
-                    {"version": "2.0.5-alpha", "stream_online": aura.stream_online},
+                    {"version": "2.0.6-alpha", "stream_online": aura.stream_online},
                     source="system",
                 )
             finally:
@@ -188,7 +190,7 @@ async def _v2_lifespan(application):
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
-app.version = "2.0.5-alpha"
+app.version = "2.0.6-alpha"
 
 
 @app.get("/api/ai/runtime")
@@ -202,6 +204,17 @@ async def ai_runtime_recover() -> dict[str, Any]:
         return await aura.ai.recover()
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc) or exc.__class__.__name__) from exc
+
+
+@app.get("/api/avatar/runtime")
+async def avatar_runtime_diagnostic() -> dict[str, Any]:
+    return {
+        "enabled": bool(await db.get_setting("avatar.enabled", True)),
+        "avatar_overlay_connected": aura.overlay.count("avatar") > 0,
+        "overlay_clients": aura.overlay.summary(),
+        "audio": aura.avatar_audio.diagnostic(),
+        "obs_instruction": "Active Contrôler l’audio via OBS sur la source /overlay/avatar.",
+    }
 
 
 @app.get("/api/twitch/eventsub")
