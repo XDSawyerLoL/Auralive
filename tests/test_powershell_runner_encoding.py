@@ -13,4 +13,5 @@ def test_run_ps1_is_ascii_safe_for_windows_powershell_51() -> None:
 def test_run_ps1_starts_main_v3_through_uvicorn() -> None:
     source = RUNNER.read_text(encoding="ascii")
     assert "-m uvicorn app.main_v3:app" in source
-    assert "Aura Live 2.4.1" in source
+    assert "Aura Live 2.4.2" in source
+    assert "sans mot d'appel" in source
