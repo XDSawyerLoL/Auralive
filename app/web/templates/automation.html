@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Aura Live — Automation Studio</title>
-  <link rel="stylesheet" href="/static/automation.css?v=2.0.0">
+  <link rel="stylesheet" href="/static/automation.css?v=2.0.1">
 </head>
 <body>
   <div class="aurora aurora-a"></div><div class="aurora aurora-b"></div>
   <aside class="sidebar">
-    <a class="brand" href="/"><span class="brand-orb">A</span><span><strong>Aura Live</strong><small>Automation Studio 2.0</small></span></a>
+    <a class="brand" href="/"><span class="brand-orb">A</span><span><strong>Aura Live</strong><small>Automation Studio 2.0.1</small></span></a>
     <button class="primary full" id="newAutomation">＋ Nouvelle automatisation</button>
-    <div class="side-title">Scénarios</div>
+    <div class="side-title">Scénarios installés</div>
     <div id="automationList" class="automation-list"></div>
     <div class="side-title">Modèles professionnels</div>
     <div id="templateList" class="template-list"></div>
@@ -32,11 +32,12 @@
         </div>
         <div class="toolbar">
           <label class="switch"><input id="automationEnabled" type="checkbox" checked><span></span>Active</label>
-          <button id="simulateAutomation" class="ghost">Simuler</button>
-          <button id="runAutomation" class="ghost">Exécuter</button>
+          <button id="simulateAutomation" class="ghost" title="N’envoie rien à Twitch ou OBS">Simuler sans action</button>
+          <button id="runAutomation" class="ghost" title="Peut réellement publier et modifier OBS">Test réel</button>
           <button id="saveAutomation" class="primary">Enregistrer</button>
         </div>
       </div>
+      <p><strong>Simulation</strong> vérifie le flux sans rien envoyer. <strong>Test réel</strong> demande une confirmation et ne peut être exécuté qu’une fois par clic.</p>
 
       <div class="meta-grid">
         <label>Déclencheur<select id="triggerSelect"></select></label>
@@ -73,6 +74,6 @@
   </dialog>
 
   <div id="toast" class="toast"></div>
-  <script src="/static/automation.js?v=2.0.0"></script>
+  <script src="/static/automation.js?v=2.0.1"></script>
 </body>
 </html>
