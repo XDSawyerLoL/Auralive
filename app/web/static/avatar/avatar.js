@@ -9,6 +9,10 @@ let safetyTimer;
 let loadingTimer;
 
 function cleanText(value){return String(value||'').replace(/^@\w+\s*/,'').trim()}
+function isVoiceLocked(event={}){
+  const engine=String(event.audio_engine||'').toLowerCase();
+  return engine.startsWith('gemini-tts');
+}
 async function loadSettings(){
   try{const r=await fetch('/api/avatar/settings',{cache:'no-store'});if(r.ok)settings={...settings,...await r.json()}}catch{}
   const params=new URLSearchParams(location.search);
@@ -76,6 +80,11 @@ function playGeneratedAudio(text,event={}){
     fallbackStarted=true;
     clearTimeout(loadingTimer);
     audio.pause();audio.removeAttribute('src');
+    if(isVoiceLocked(event)){
+      console.warn('Voix Gemini indisponible : changement de timbre refusé');
+      finishSpeech();
+      return;
+    }
     browserSpeak(text,event);
   };
   audio.pause();
@@ -92,7 +101,12 @@ function playGeneratedAudio(text,event={}){
 function speak(raw,event={}){
   const text=cleanText(raw);if(!text||!settings.enabled)return;
   if(speaking){queue.push({text,event});return}
-  if(event.audio_url)playGeneratedAudio(text,event);else browserSpeak(text,event);
+  if(event.audio_url){playGeneratedAudio(text,event);return}
+  if(isVoiceLocked(event)){
+    console.warn('Mairaiy reste silencieuse : aucune voix Gemini disponible');
+    return;
+  }
+  browserSpeak(text,event);
 }
 function handle(event){
   if(event.type==='avatar_voice'&&event.speak!==false)speak(event.text||event.message,event);
