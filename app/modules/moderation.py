@@ -62,6 +62,21 @@ class ModerationModule:
             lambda: deque(maxlen=50)
         )
 
+    async def commercial_spam_decision(
+        self,
+        user_id: str,
+        text: str,
+        badges: list[dict],
+        is_broadcaster: bool,
+    ) -> ModerationDecision:
+        """Préfiltre silencieux réservé aux promotions de faux viewers."""
+        if is_broadcaster or self._is_privileged(badges):
+            return ModerationDecision()
+        return await self._commercial_spam_decision(
+            user_id,
+            self.normalize_text(text),
+        )
+
     async def evaluate(
         self,
         user_id: str,
@@ -226,9 +241,7 @@ class ModerationModule:
 
         signature_source = blocked_domain or marker or self._compact_promo_text(lowered)
         fingerprint = self._fingerprint(signature_source)
-        probable_evasion = self._record_signature(
-            fingerprint, user_id
-        )
+        probable_evasion = self._record_signature(fingerprint, user_id)
         timeout = int(
             await self.db.get_setting(
                 "moderation.commercial_spam.timeout_seconds",
