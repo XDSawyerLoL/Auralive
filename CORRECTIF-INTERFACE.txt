@@ -1,0 +1,16 @@
+AURA LIVE 0.2.1 — CORRECTIF INTERFACE
+
+La capture avec les boutons horizontaux vient d'un mélange de versions :
+le navigateur avait chargé le HTML 0.2 mais gardé les anciens fichiers CSS et JavaScript 0.1 en cache.
+
+INSTALLATION SUR LA VERSION EXISTANTE
+
+1. Arrêter Aura avec Ctrl+C.
+2. Conserver les fichiers .env et data\aura_live.db.
+3. Extraire cette archive dans C:\Users\valen\Desktop\AuraLive.
+4. Accepter le remplacement des fichiers.
+5. Relancer .\aura.bat.
+6. Ouvrir http://localhost:8787.
+
+La version 0.2.1 ajoute un numéro aux ressources et interdit leur mise en cache,
+ce qui empêche le problème de revenir.
