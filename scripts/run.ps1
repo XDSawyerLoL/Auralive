@@ -11,6 +11,30 @@ $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $RequirementsPath = Join-Path $ProjectRoot "requirements.txt"
 $RequirementsStamp = Join-Path $ProjectRoot ".venv\requirements.sha256"
 
+function Test-AuraPythonImports {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonPath
+    )
+
+    # Sous Windows PowerShell 5.1, un module absent écrit son traceback sur stderr.
+    # Avec ErrorActionPreference=Stop, ce stderr devient une NativeCommandError avant
+    # que le script puisse lire $LASTEXITCODE et lancer la réparation. On neutralise
+    # donc uniquement ce test attendu, puis on restaure immédiatement le comportement strict.
+    $previousPreference = $ErrorActionPreference
+    $exitCode = 1
+    try {
+        $ErrorActionPreference = "Continue"
+        $null = & $PythonPath -c "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL" 2>&1
+        $exitCode = $LASTEXITCODE
+    } catch {
+        $exitCode = 1
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return ($exitCode -eq 0)
+}
+
 if (-not (Test-Path $VenvPython)) {
     Write-Host "Aura n'est pas encore installée. Lancement de la réparation..." -ForegroundColor Yellow
     & (Join-Path $ProjectRoot "reparer-installation.ps1")
@@ -33,8 +57,7 @@ if (Test-Path $RequirementsStamp) {
     $InstalledRequirementsHash = (Get-Content $RequirementsStamp -Raw).Trim().ToLowerInvariant()
 }
 
-& $VenvPython -c "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL" *> $null
-$ImportsReady = ($LASTEXITCODE -eq 0)
+$ImportsReady = Test-AuraPythonImports -PythonPath $VenvPython
 $RequirementsChanged = (-not $CurrentRequirementsHash) -or ($CurrentRequirementsHash -ne $InstalledRequirementsHash)
 
 if ($RequirementsChanged -or -not $ImportsReady) {
@@ -44,8 +67,7 @@ if ($RequirementsChanged -or -not $ImportsReady) {
         throw "La mise à jour des dépendances a échoué. Vérifie la connexion Internet puis relance .\aura.bat."
     }
 
-    & $VenvPython -c "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL" *> $null
-    if ($LASTEXITCODE -ne 0) {
+    if (-not (Test-AuraPythonImports -PythonPath $VenvPython)) {
         throw "Les dépendances sont toujours incomplètes après réparation. Lance .\reparer-installation.ps1."
     }
 
