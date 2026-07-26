@@ -15,7 +15,7 @@ logger = logging.getLogger("aura-live-v3")
 
 install_voice_identity_lock(aura)
 voice_realtime = install_voice_realtime(aura, db, voice_input)
-app.version = "2.4.0-alpha"
+app.version = "2.4.2-alpha"
 
 
 def _remove_route(path: str, method: str) -> None:

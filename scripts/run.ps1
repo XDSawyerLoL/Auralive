@@ -76,7 +76,7 @@ $AuraHost = if ($env:AURA_HOST) { $env:AURA_HOST } else { "127.0.0.1" }
 $AuraPort = if ($env:AURA_PORT) { $env:AURA_PORT } else { "8787" }
 $AuraLogLevel = if ($env:LOG_LEVEL) { $env:LOG_LEVEL.ToLowerInvariant() } else { "info" }
 
-Write-Host "Aura Live 2.4.1 - ecoute continue stable, voix verrouillee et perception live" -ForegroundColor Cyan
+Write-Host "Aura Live 2.4.2 - dialogue direct sans mot d'appel, voix verrouillee et perception live" -ForegroundColor Cyan
 & $VenvPython -m uvicorn app.main_v3:app --host $AuraHost --port $AuraPort --log-level $AuraLogLevel
 if ($LASTEXITCODE -ne 0) {
     throw "Aura s'est arretee avec le code $LASTEXITCODE."
