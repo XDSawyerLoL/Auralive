@@ -9,10 +9,11 @@
     *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(circle at 30% 0,#182746 0,#09111f 44%,#050a12 100%);color:#eef8ff}
     body{display:grid;place-items:center;padding:24px}.shell{width:min(760px,100%);display:grid;gap:18px}.head{display:flex;align-items:center;justify-content:space-between;gap:18px}.head span{font-size:11px;letter-spacing:.2em;color:var(--cyan);font-weight:800}.head h1{margin:5px 0 0;font-size:clamp(25px,5vw,42px)}.status{padding:9px 13px;border:1px solid rgba(89,233,255,.22);border-radius:999px;color:var(--muted);font-size:12px;background:rgba(9,17,31,.75)}
     .card{padding:24px;border:1px solid rgba(130,173,220,.16);border-radius:25px;background:linear-gradient(150deg,rgba(18,29,49,.96),rgba(8,16,29,.94));box-shadow:0 28px 90px rgba(0,0,0,.42)}
-    .mic-zone{display:grid;place-items:center;gap:18px;padding:24px 10px}.mic{width:190px;aspect-ratio:1;border:0;border-radius:50%;cursor:pointer;color:white;font-size:19px;font-weight:850;letter-spacing:.04em;background:radial-gradient(circle at 35% 28%,#84f4ff,var(--cyan) 22%,#687bff 64%,#3d285f 100%);box-shadow:0 0 0 12px rgba(89,233,255,.06),0 0 0 24px rgba(155,120,255,.04),0 26px 70px rgba(39,92,160,.38);transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;touch-action:none;user-select:none}.mic:hover{transform:translateY(-3px);filter:saturate(1.12)}.mic.recording{transform:scale(.94);background:radial-gradient(circle at 35% 28%,#ffb0c2,#ff4d79 44%,#8a285c 100%);box-shadow:0 0 0 14px rgba(255,77,121,.11),0 0 0 30px rgba(255,77,121,.05),0 26px 70px rgba(255,45,105,.35);animation:pulse 1s ease-in-out infinite}.mic.processing{cursor:wait;filter:grayscale(.25);animation:spinGlow 1.3s linear infinite}.hint{text-align:center;color:var(--muted);line-height:1.5}.hint b{display:block;color:#eaf9ff;font-size:16px}.options{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.toggle{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:13px;background:rgba(255,255,255,.035);color:#c7d7e7;font-size:13px}.toggle input{accent-color:var(--violet)}
+    .mic-zone{display:grid;place-items:center;gap:18px;padding:24px 10px}.mic{width:190px;aspect-ratio:1;border:0;border-radius:50%;cursor:pointer;color:white;font-size:18px;font-weight:850;letter-spacing:.04em;background:radial-gradient(circle at 35% 28%,#84f4ff,var(--cyan) 22%,#687bff 64%,#3d285f 100%);box-shadow:0 0 0 12px rgba(89,233,255,.06),0 0 0 24px rgba(155,120,255,.04),0 26px 70px rgba(39,92,160,.38);transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;touch-action:none;user-select:none}.mic:hover{transform:translateY(-3px);filter:saturate(1.12)}.mic.listening{background:radial-gradient(circle at 35% 28%,#c6fff1,#39dcaa 42%,#206986 100%);box-shadow:0 0 0 14px rgba(57,220,170,.11),0 0 0 30px rgba(57,220,170,.05),0 26px 70px rgba(34,176,155,.35);animation:listenPulse 1.8s ease-in-out infinite}.mic.recording{transform:scale(.94);background:radial-gradient(circle at 35% 28%,#ffb0c2,#ff4d79 44%,#8a285c 100%);box-shadow:0 0 0 14px rgba(255,77,121,.11),0 0 0 30px rgba(255,77,121,.05),0 26px 70px rgba(255,45,105,.35);animation:pulse 1s ease-in-out infinite}.mic.processing{cursor:wait;filter:grayscale(.25);animation:spinGlow 1.3s linear infinite}.hint{text-align:center;color:var(--muted);line-height:1.5}.hint b{display:block;color:#eaf9ff;font-size:16px}.options{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.toggle{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:13px;background:rgba(255,255,255,.035);color:#c7d7e7;font-size:13px}.toggle input{accent-color:var(--violet)}
+    .runtime{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:min(560px,100%)}.runtime div{padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06)}.runtime small{display:block;color:var(--cyan);font-size:9px;font-weight:850;letter-spacing:.14em;margin-bottom:5px}.runtime span{font-size:13px;color:#dcecff}
     .exchange{display:grid;gap:13px}.bubble{padding:16px 18px;border-radius:17px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);min-height:62px}.bubble small{display:block;margin-bottom:7px;color:var(--cyan);font-size:10px;font-weight:850;letter-spacing:.18em}.bubble p{margin:0;line-height:1.55}.bubble.answer{background:linear-gradient(135deg,rgba(85,232,255,.07),rgba(155,120,255,.08))}.error{color:#ff9ab2}.footer{font-size:12px;line-height:1.55;color:var(--muted);text-align:center}.footer code{color:#dbeeff}
-    @keyframes pulse{50%{box-shadow:0 0 0 22px rgba(255,77,121,.05),0 0 0 42px rgba(255,77,121,.02),0 26px 70px rgba(255,45,105,.35)}}@keyframes spinGlow{50%{box-shadow:0 0 0 18px rgba(89,233,255,.05),0 0 65px rgba(155,120,255,.35)}}
-    @media(max-width:560px){.head{align-items:flex-start;flex-direction:column}.card{padding:17px}.mic{width:155px}}
+    @keyframes pulse{50%{box-shadow:0 0 0 22px rgba(255,77,121,.05),0 0 0 42px rgba(255,77,121,.02),0 26px 70px rgba(255,45,105,.35)}}@keyframes listenPulse{50%{box-shadow:0 0 0 21px rgba(57,220,170,.05),0 0 0 40px rgba(57,220,170,.02),0 26px 70px rgba(34,176,155,.35)}}@keyframes spinGlow{50%{box-shadow:0 0 0 18px rgba(89,233,255,.05),0 0 65px rgba(155,120,255,.35)}}
+    @media(max-width:560px){.head{align-items:flex-start;flex-direction:column}.card{padding:17px}.mic{width:155px}.runtime{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -23,10 +24,15 @@
     </header>
     <section class="card">
       <div class="mic-zone">
-        <button id="mic-button" class="mic" type="button" aria-label="Cliquer pour parler">Cliquer<br>pour parler</button>
-        <div id="mic-hint" class="hint"><b>Un clic démarre le micro</b>Un second clic envoie la phrase. La barre Espace fonctionne aussi en maintien.</div>
+        <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute mains libres">Activer<br>l'écoute</button>
+        <div id="mic-hint" class="hint"><b>Dis « Mairaiy » puis ta phrase</b>Elle détecte ta voix, attend la fin de la phrase et répond sans push-to-talk.</div>
         <div class="options">
+          <label class="toggle"><input id="hands-free" type="checkbox" checked> Écoute mains libres</label>
           <label class="toggle"><input id="send-chat" type="checkbox"> Publier aussi sa réponse dans le chat Twitch</label>
+        </div>
+        <div class="runtime">
+          <div><small>MICRO</small><span id="mic-runtime">En attente d'autorisation</span></div>
+          <div><small>LECTURE DU LIVE</small><span id="vision-runtime">Vérification…</span></div>
         </div>
       </div>
       <div class="exchange">
@@ -34,8 +40,8 @@
         <div class="bubble answer"><small>RÉPONSE</small><p id="answer">—</p></div>
       </div>
     </section>
-    <div class="footer">Le micro reste initialisé dans cette page et se réarme après chaque réponse, sans F5. Aucun enregistrement n’est conservé sur le disque.</div>
+    <div class="footer">La page doit rester ouverte pendant le live. Après la première autorisation du micro, l'écoute se réactive automatiquement. Les captures OBS et les enregistrements vocaux restent en mémoire et ne sont pas conservés.</div>
   </main>
-  <script src="/static/avatar/voice-control.js?v=2.2.0"></script>
+  <script src="/static/avatar/voice-control.js?v=2.3.0"></script>
 </body>
 </html>
