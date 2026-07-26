@@ -25,7 +25,7 @@
     <section class="card">
       <div class="mic-zone">
         <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute mains libres">Activer<br>l'écoute</button>
-        <div id="mic-hint" class="hint"><b>Dis « Mairaiy » puis ta phrase</b>Elle détecte ta voix, attend la fin de la phrase et répond sans push-to-talk.</div>
+        <div id="mic-hint" class="hint"><b>Dis « Mairaiy » puis ta phrase</b>Elle calibre le bruit ambiant, détecte ta voix puis envoie la phrase après le silence.</div>
         <div class="options">
           <label class="toggle"><input id="hands-free" type="checkbox" checked> Écoute mains libres</label>
           <label class="toggle"><input id="send-chat" type="checkbox"> Publier aussi sa réponse dans le chat Twitch</label>
@@ -40,8 +40,8 @@
         <div class="bubble answer"><small>RÉPONSE</small><p id="answer">—</p></div>
       </div>
     </section>
-    <div class="footer">La page doit rester ouverte pendant le live. Après la première autorisation du micro, l'écoute se réactive automatiquement. Les captures OBS et les enregistrements vocaux restent en mémoire et ne sont pas conservés.</div>
+    <div class="footer">Au premier démarrage, reste silencieux une seconde pendant la calibration. La page doit rester ouverte pendant le live. Les captures OBS et les enregistrements vocaux restent en mémoire et ne sont pas conservés.</div>
   </main>
-  <script src="/static/avatar/voice-control.js?v=2.3.0"></script>
+  <script src="/static/avatar/voice-control.js?v=2.3.2"></script>
 </body>
 </html>
