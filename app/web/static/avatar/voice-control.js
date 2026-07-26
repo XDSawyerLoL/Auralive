@@ -15,19 +15,17 @@
   }
 
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const WAKE_PATTERN = /\b(mairaiy|mairay|mairai|maïra|maira|mayra|marie)\b/i;
   const POLL_INTERVAL_MS = 500;
   const VOICE_WAIT_LIMIT_MS = 50000;
+  const PHRASE_DELAY_MS = 900;
 
   let recognition = null;
   let recognitionRunning = false;
   let enabled = localStorage.getItem('mairaiy-continuous-listening') !== 'off';
   let processing = false;
   let waitingVoice = false;
-  let wakeArmed = false;
   let phraseParts = [];
   let sendTimer = null;
-  let wakeTimer = null;
   let restartTimer = null;
   let requestController = null;
 
@@ -54,23 +52,23 @@
 
   function render() {
     const listening = enabled && recognitionRunning && !processing && !waitingVoice;
-    const armed = listening && wakeArmed;
-    button.classList.toggle('listening', listening && !armed);
-    button.classList.toggle('recording', armed);
+    const hearing = listening && phraseParts.length > 0;
+    button.classList.toggle('listening', listening && !hearing);
+    button.classList.toggle('recording', hearing);
     button.classList.toggle('processing', processing || waitingVoice);
     button.disabled = processing || waitingVoice;
 
     if (processing) button.innerHTML = 'Mairaiy<br>réfléchit';
     else if (waitingVoice) button.innerHTML = 'Mairaiy<br>parle';
-    else if (armed) button.innerHTML = 'Mairaiy<br>t’écoute';
+    else if (hearing) button.innerHTML = 'Mairaiy<br>t’écoute';
     else if (listening) button.innerHTML = 'Écoute<br>continue';
     else button.innerHTML = 'Activer<br>l’écoute';
 
     if (!Recognition) micRuntime.textContent = 'Reconnaissance continue indisponible';
     else if (processing) micRuntime.textContent = 'Génération de la réponse';
     else if (waitingVoice) micRuntime.textContent = 'Voix Gemini en préparation';
-    else if (armed) micRuntime.textContent = 'Mot d’appel détecté';
-    else if (listening) micRuntime.textContent = 'Edge/Chrome · français · mains libres';
+    else if (hearing) micRuntime.textContent = 'Phrase reconnue · envoi automatique';
+    else if (listening) micRuntime.textContent = 'Edge/Chrome · chaque phrase lui est adressée';
     else micRuntime.textContent = 'Micro en pause';
   }
 
@@ -93,33 +91,26 @@
   }
 
   function clearPhrase() {
-    wakeArmed = false;
     phraseParts = [];
     clearTimeout(sendTimer);
-    clearTimeout(wakeTimer);
     sendTimer = null;
-    wakeTimer = null;
     render();
   }
 
-  function hasMeaningfulQuestion(value) {
+  function hasMeaningfulSpeech(value) {
     const cleaned = String(value || '')
-      .replace(WAKE_PATTERN, ' ')
       .replace(/[^\p{L}\p{N}]+/gu, ' ')
       .trim();
     return cleaned.length >= 2;
   }
 
-  function schedulePhraseSend(delay = 1050) {
+  function schedulePhraseSend(delay = PHRASE_DELAY_MS) {
     clearTimeout(sendTimer);
     sendTimer = setTimeout(() => {
       const phrase = phraseParts.join(' ').replace(/\s+/g, ' ').trim();
-      if (!hasMeaningfulQuestion(phrase)) {
-        setHint('Mairaiy a entendu son prénom', 'Continue ta phrase, elle attend la question.');
-        wakeTimer = setTimeout(() => {
-          clearPhrase();
-          setHint('Écoute continue active', 'Dis « Mairaiy » puis ta phrase, sans toucher au bouton.');
-        }, 8000);
+      if (!hasMeaningfulSpeech(phrase)) {
+        clearPhrase();
+        setHint('Écoute continue active', 'Parle normalement : aucun prénom ni bouton n’est nécessaire.');
         return;
       }
       sendPhrase(phrase);
@@ -128,23 +119,12 @@
 
   function consumeFinal(text) {
     const clean = String(text || '').trim();
-    if (!clean || processing || waitingVoice) return;
-
-    if (!wakeArmed) {
-      if (!WAKE_PATTERN.test(clean)) {
-        transcript.textContent = clean;
-        return;
-      }
-      wakeArmed = true;
-      phraseParts = [clean];
-      setHint('Mairaiy t’écoute', 'Termine ta phrase normalement.');
-      render();
-      schedulePhraseSend();
-      return;
-    }
-
+    if (!clean || processing || waitingVoice || !hasMeaningfulSpeech(clean)) return;
     phraseParts.push(clean);
-    schedulePhraseSend(850);
+    transcript.textContent = phraseParts.join(' ');
+    setHint('Mairaiy t’écoute', 'Termine ta phrase ; elle sera envoyée après le silence.');
+    render();
+    schedulePhraseSend();
   }
 
   function createRecognition() {
@@ -158,9 +138,7 @@
     instance.onstart = () => {
       recognitionRunning = true;
       render();
-      if (!wakeArmed) {
-        setHint('Écoute continue active', 'Dis « Mairaiy » puis ta phrase. Aucun push-to-talk.');
-      }
+      setHint('Écoute continue active', 'Parle normalement : toutes tes phrases sont adressées à Mairaiy.');
     };
 
     instance.onresult = event => {
@@ -173,10 +151,8 @@
         else interim += `${text} `;
       }
       if (interim.trim() && !processing && !waitingVoice) {
-        transcript.textContent = interim.trim();
-        if (WAKE_PATTERN.test(interim)) {
-          setHint('Mot d’appel entendu', 'Mairaiy attend la fin de ta phrase.');
-        }
+        transcript.textContent = `${phraseParts.join(' ')} ${interim}`.trim();
+        setHint('Mairaiy t’écoute', 'Continue naturellement, sans prononcer son prénom.');
       }
     };
 
@@ -240,14 +216,13 @@
 
   async function sendPhrase(phrase) {
     clearTimeout(sendTimer);
-    clearTimeout(wakeTimer);
-    sendTimer = wakeTimer = null;
+    sendTimer = null;
     processing = true;
     waitingVoice = false;
     stopRecognition();
     render();
     transcript.textContent = phrase;
-    setHint('Mairaiy prépare sa réponse', 'La transcription est déjà faite : elle génère directement sa réponse.');
+    setHint('Mairaiy prépare sa réponse', 'La phrase est reconnue ; elle génère directement sa réponse.');
 
     requestController = new AbortController();
     const timeout = setTimeout(() => requestController.abort(), 35000);
@@ -262,15 +237,6 @@
       let data = {};
       try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
       if (!response.ok) throw new Error(data.detail || 'Dialogue vocal impossible');
-
-      if (data.ignored) {
-        answer.textContent = '—';
-        setHint('Mot d’appel non reconnu', 'Prononce « Mairaiy » au début de la phrase.');
-        processing = false;
-        clearPhrase();
-        scheduleRestart(500);
-        return;
-      }
 
       answer.textContent = data.answer || '—';
       processing = false;
@@ -355,7 +321,7 @@
 
   handsFree.checked = true;
   handsFree.disabled = true;
-  handsFree.closest('.toggle')?.setAttribute('title', 'Le mode continu remplace désormais le push-to-talk.');
+  handsFree.closest('.toggle')?.setAttribute('title', 'Toutes les phrases reconnues sont adressées à Mairaiy.');
 
   window.addEventListener('focus', () => {
     if (enabled && !processing && !waitingVoice) startRecognition();
