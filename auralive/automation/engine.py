@@ -27,7 +27,13 @@ _TEMPLATE = re.compile(r"\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}")
 
 
 class AutomationEngine:
-    def __init__(self, registry: AutomationRegistry, *, history_limit: int = 500) -> None:
+    def __init__(
+        self,
+        registry: AutomationRegistry,
+        *,
+        history_limit: int = 500,
+        services: dict[str, Any] | None = None,
+    ) -> None:
         self.registry = registry
         self.automations: dict[str, Automation] = {}
         self._queues: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -37,6 +43,11 @@ class AutomationEngine:
         self.viewer_variables: dict[str, dict[str, Any]] = defaultdict(dict)
         self.history: deque[ExecutionReport] = deque(maxlen=history_limit)
         self.listeners: list[ReportListener] = []
+        self.services: dict[str, Any] = services or {}
+        self.services.setdefault("dispatch", self.dispatch)
+
+    def set_service(self, name: str, service: Any) -> None:
+        self.services[name] = service
 
     def upsert(self, automation: Automation) -> None:
         if automation.max_concurrency < 1:
@@ -262,6 +273,7 @@ class AutomationEngine:
             "global": global_values,
             "viewer": viewer_values,
             "local": {},
+            "services": self.services,
         }
 
     def _resolve(self, value: Any, context: dict[str, Any]) -> Any:
@@ -337,13 +349,23 @@ class AutomationEngine:
             status=ExecutionStatus.RUNNING,
         )
 
+    @staticmethod
+    def _snapshot_context(context: dict[str, Any]) -> dict[str, Any]:
+        snapshot = {key: value for key, value in context.items() if key != "services"}
+        snapshot["services"] = {
+            name: service is not None
+            for name, service in context.get("services", {}).items()
+            if name != "dispatch"
+        }
+        return copy.deepcopy(snapshot)
+
     async def _finish_report(
         self, report: ExecutionReport, started: float, *, persist: bool = True
     ) -> None:
         report.finished_at = utc_now_iso()
         report.duration_ms = round((time.perf_counter() - started) * 1000, 3)
+        report.variables = self._snapshot_context(report.variables)
         if persist:
-            report.variables = copy.deepcopy(report.variables)
             self.history.append(report)
         for listener in self.listeners:
             result = listener(report)
