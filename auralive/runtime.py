@@ -57,11 +57,16 @@ class AuraRuntime:
         self.store = SQLiteStore(database_path)
         self.services = services or {}
         self.services.setdefault("files_root", "data/automation-files")
+        self.services.setdefault("emergency", False)
         self.engine = AutomationEngine(self.registry, services=self.services)
         self.bus = ExecutionBus()
         self.engine.add_listener(self._persist_report)
         self.engine.add_listener(self.bus.publish)
         self.initialized = False
+
+    @property
+    def emergency_active(self) -> bool:
+        return bool(self.services.get("emergency", False))
 
     async def initialize(self) -> None:
         await self.store.initialize()
@@ -87,10 +92,40 @@ class AuraRuntime:
         await self.store.delete_automation(automation_id)
 
     async def dispatch(self, event: Event) -> list[ExecutionReport]:
-        return await self.engine.dispatch(event)
+        if not self.emergency_active:
+            return await self.engine.dispatch(event)
+
+        safe = sorted(
+            (
+                automation
+                for automation in self.engine.automations.values()
+                if automation.enabled
+                and self.engine._trigger_matches(automation.trigger, event.type)
+                and (
+                    "emergency-safe" in automation.tags
+                    or automation.trigger == "aura.emergency"
+                    or automation.trigger.startswith("twitch.moderation.")
+                )
+            ),
+            key=lambda automation: automation.priority,
+        )
+        return await asyncio.gather(
+            *(self.engine._run_queued(automation, event) for automation in safe)
+        ) if safe else []
 
     async def simulate(self, automation_id: str, event: Event) -> ExecutionReport:
         return await self.engine.simulate(automation_id, event)
+
+    async def set_emergency(self, active: bool) -> bool:
+        self.services["emergency"] = bool(active)
+        await self.dispatch(
+            Event(
+                "aura.emergency",
+                {"active": bool(active)},
+                source="control-panel",
+            )
+        )
+        return self.emergency_active
 
     async def _persist_report(self, report: ExecutionReport) -> None:
         await self.store.save_report(report)
@@ -116,6 +151,7 @@ class AuraRuntime:
             "automations": len(self.engine.automations),
             "actions": len(self.registry.actions),
             "conditions": len(self.registry.conditions),
+            "emergency": self.emergency_active,
             "services": {
                 name: service is not None
                 for name, service in self.services.items()
