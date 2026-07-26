@@ -36,6 +36,9 @@
   "assistant": {
     "initiative_enabled": true,
     "screen_awareness_enabled": true,
+    "live_vision_enabled": true,
+    "live_vision_max_reactions_per_hour": 5,
+    "welcome_arrivals_enabled": true,
     "initiative_min_interval_minutes": 4,
     "max_initiatives_per_hour": 3,
     "min_chat_messages": 6,
