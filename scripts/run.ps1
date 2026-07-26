@@ -18,7 +18,8 @@ if (-not (Test-Path $VenvPython)) {
     throw "Python virtuel introuvable après installation."
 }
 
-& $VenvPython -m app.main
+Write-Host "Aura Live 2.0 — lancement du noyau historique et d'Automation Studio" -ForegroundColor Cyan
+& $VenvPython -m app.main_v2
 if ($LASTEXITCODE -ne 0) {
     throw "Aura s'est arrêtée avec le code $LASTEXITCODE."
 }
