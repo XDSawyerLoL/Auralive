@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
     $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -77,8 +77,8 @@ if ($RequirementsChanged -or -not $ImportsReady) {
     Write-Host "Dépendances prêtes." -ForegroundColor Green
 }
 
-Write-Host "Aura Live 2.2 — lancement du noyau, de la coanimation et de la perception live" -ForegroundColor Cyan
-& $VenvPython -m app.main_v2
+Write-Host "Aura Live 2.4 — écoute continue stable, voix verrouillée et perception live" -ForegroundColor Cyan
+& $VenvPython -m app.main_v3
 if ($LASTEXITCODE -ne 0) {
     throw "Aura s'est arrêtée avec le code $LASTEXITCODE."
 }
