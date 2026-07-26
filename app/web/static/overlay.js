@@ -41,8 +41,8 @@ function show(event){
   card.dataset.layout=event.layout||"card";card.dataset.in=event.animation_in||"pop";card.dataset.out=event.animation_out||"fade";
   setMedia(event.media_path);playSound(event.sound_path,event.volume);
   if(["raid","giveaway_winner","shop_purchase","reward_action"].includes(event.type)){field.classList.remove("go");void field.offsetWidth;field.classList.add("go")}
-  if(event.type==="tts")speak(event);
+  if(event.type==="tts"&&event.speak!==false)speak(event);
   card.classList.remove("hidden","leaving");clearTimeout(hideTimer);hideTimer=setTimeout(()=>hide(event),(Number(event.duration)||7)*1000);
 }
-function connect(){const protocol=location.protocol==="https:"?"wss":"ws";const socket=new WebSocket(`${protocol}://${location.host}/ws/overlay`);socket.onmessage=e=>show(JSON.parse(e.data));socket.onopen=()=>socket.send(`overlay-${mode}-ready`);socket.onclose=()=>setTimeout(connect,2000)}
+function connect(){const protocol=location.protocol==="https:"?"wss":"ws";const socket=new WebSocket(`${protocol}://${location.host}/ws/overlay?client=${encodeURIComponent(mode)}`);socket.onmessage=e=>show(JSON.parse(e.data));socket.onopen=()=>socket.send(`overlay-${mode}-ready`);socket.onclose=()=>setTimeout(connect,2000)}
 if(mode==="goal")loadGoal();connect();
