@@ -5,12 +5,13 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import Request
+from fastapi import Body, HTTPException, Request
 
 from app.automation.pro_nodes import (
     automation_replaces_legacy,
     install_pro_nodes,
 )
+from app.automation.resilience_nodes import install_resilience_nodes
 from app.automation.routes import build_automation_router
 from app.automation.runtime import AutomationStudioRuntime
 from app.config import settings
@@ -19,6 +20,8 @@ from app.main import app, aura, db
 logger = logging.getLogger("aura-live-v2")
 automation = AutomationStudioRuntime(aura, db, settings)
 install_pro_nodes(automation.registry)
+install_resilience_nodes(automation.registry)
+automation.engine.set_service("moderation", aura.moderation)
 _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
 
@@ -34,9 +37,6 @@ async def _run_historical_support_without_default_response(
 
 
 async def _combined_twitch_handler(event_type: str, event: dict[str, Any]) -> None:
-    # Automation Studio est évalué en premier. Un scénario réussi devient
-    # propriétaire de l’événement et remplace uniquement la réponse V1.2
-    # correspondante. Les fonctions historiques de sécurité restent actives.
     reports: list[dict[str, Any]] = []
     try:
         reports = await automation.dispatch(event_type, event, source="twitch")
@@ -50,8 +50,6 @@ async def _combined_twitch_handler(event_type: str, event: dict[str, Any]) -> No
             logger.exception("Les services historiques annexes ont échoué pour %s", event_type)
         return
 
-    # Aucun scénario actif n’a pris en charge l’événement, ou son exécution a
-    # échoué : la V1.2 reste le filet de sécurité et répond normalement.
     await _original_twitch_handler(event_type, event)
 
 
@@ -64,7 +62,7 @@ async def _v2_lifespan(application):
         await automation.initialize()
         await automation.dispatch(
             "aura.started",
-            {"version": "2.0.1-alpha", "stream_online": aura.stream_online},
+            {"version": "2.0.2-alpha", "stream_online": aura.stream_online},
             source="system",
         )
         try:
@@ -73,7 +71,7 @@ async def _v2_lifespan(application):
             try:
                 await automation.dispatch(
                     "aura.stopping",
-                    {"version": "2.0.1-alpha", "stream_online": aura.stream_online},
+                    {"version": "2.0.2-alpha", "stream_online": aura.stream_online},
                     source="system",
                 )
             finally:
@@ -82,7 +80,71 @@ async def _v2_lifespan(application):
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
-app.version = "2.0.1-alpha"
+app.version = "2.0.2-alpha"
+
+
+@app.get("/api/ai/runtime")
+async def ai_runtime_diagnostic() -> dict[str, Any]:
+    return aura.ai.diagnostic()
+
+
+@app.post("/api/ai/recover")
+async def ai_runtime_recover() -> dict[str, Any]:
+    try:
+        return await aura.ai.recover()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc) or exc.__class__.__name__) from exc
+
+
+@app.get("/api/security/diagnostic")
+async def security_diagnostic() -> dict[str, Any]:
+    domains = await db.get_setting(
+        "moderation.commercial_spam.blocked_domains",
+        ["streamboo.com"],
+    )
+    logs = await db.fetchall(
+        """
+        SELECT user_id,display_name,reason,action,message,created_at
+        FROM moderation_log
+        ORDER BY id DESC LIMIT 30
+        """
+    )
+    return {
+        "commercial_spam_enabled": bool(
+            await db.get_setting("moderation.commercial_spam.enabled", True)
+        ),
+        "commercial_spam_timeout_seconds": int(
+            await db.get_setting(
+                "moderation.commercial_spam.timeout_seconds",
+                1_209_600,
+            )
+        ),
+        "blocked_domains": domains,
+        "recent_moderation": logs,
+    }
+
+
+@app.post("/api/security/block-domain")
+async def security_block_domain(
+    payload: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    domain = str(payload.get("domain", "")).casefold().strip()
+    if domain.startswith("www."):
+        domain = domain[4:]
+    if not domain or "." not in domain:
+        raise HTTPException(status_code=422, detail="Domaine invalide")
+    domains = {
+        str(item).casefold().strip()
+        for item in await db.get_setting(
+            "moderation.commercial_spam.blocked_domains",
+            ["streamboo.com"],
+        )
+        if str(item).strip()
+    }
+    domains.add(domain)
+    result = sorted(domains)
+    await db.set_setting("moderation.commercial_spam.blocked_domains", result)
+    return {"ok": True, "blocked_domains": result}
 
 
 @app.middleware("http")
