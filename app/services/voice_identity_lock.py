@@ -26,7 +26,9 @@ def install_voice_identity_lock(aura: Any) -> Any:
         return service
 
     original_diagnostic = service.diagnostic
-    locked_voice = str(os.getenv("TTS_VOICE", "Leda") or "Leda").strip() or "Leda"
+    # Ne réutilise pas un ancien TTS_VOICE resté dans .env : le preset public
+    # validé pour Mairaiy est Leda, sauf changement volontaire de cette variable.
+    locked_voice = str(os.getenv("MAIRAIY_LOCKED_VOICE", "Leda") or "Leda").strip() or "Leda"
     voice_locked = _bool_env("MAIRAIY_VOICE_LOCKED", True)
     allow_fallback = _bool_env("TTS_ALLOW_VOICE_FALLBACK", False)
 
