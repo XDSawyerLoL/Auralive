@@ -40,23 +40,23 @@ def test_text_and_voice_values_are_normalized():
     assert _volume_to_sapi(4) == 100
 
 
-def test_gemini_voice_and_prompt_keep_mairaiy_natural_and_expressive(monkeypatch):
+def test_gemini_voice_and_prompt_keep_mairaiy_youthful_and_expressive(monkeypatch):
     monkeypatch.delenv("TTS_VOICE", raising=False)
     install_voice_signature()
-    assert avatar_audio._select_gemini_voice("laomedeia") == "Laomedeia"
-    assert avatar_audio._select_gemini_voice("voix inconnue") == "Laomedeia"
+    assert avatar_audio._select_gemini_voice("leda") == "Leda"
+    assert avatar_audio._select_gemini_voice("voix inconnue") == "Leda"
     prompt = avatar_audio._build_gemini_prompt(
         "Le boss vient d'être éliminé dans une explosion !",
-        rate=1.10,
-        pitch=1.08,
+        rate=1.12,
+        pitch=1.14,
         context="screen game initiative",
     )
     assert "Mairaiy" in prompt
     assert "native French from France" in prompt
     assert "Avoid robotic cadence" in prompt
-    assert "almost innocent" in prompt
+    assert "youthful" in prompt
     assert "fictional game violence" in prompt
-    assert "never childish" in prompt.casefold()
+    assert "childish" in prompt.casefold()
     assert prompt.rstrip().endswith("Le boss vient d'être éliminé dans une explosion !")
 
 
