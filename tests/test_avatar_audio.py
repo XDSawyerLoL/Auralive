@@ -1,13 +1,17 @@
 import asyncio
+import wave
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.core.event_bus import OverlayBus
 from app.services.avatar_audio import (
     AvatarAudioService,
+    _build_gemini_prompt,
     _normalize_text,
+    _pcm_rate_from_mime,
     _rate_to_sapi,
+    _select_gemini_voice,
     _volume_to_sapi,
+    _write_pcm_wav,
 )
 
 
@@ -36,6 +40,34 @@ def test_text_and_voice_values_are_normalized():
     assert _volume_to_sapi(4) == 100
 
 
+def test_gemini_voice_and_prompt_keep_mairaiy_natural(monkeypatch):
+    monkeypatch.delenv("TTS_VOICE", raising=False)
+    assert _select_gemini_voice("aoede") == "Aoede"
+    assert _select_gemini_voice("voix inconnue") == "Aoede"
+    prompt = _build_gemini_prompt(
+        "Salut le Spot !",
+        rate=1.08,
+        pitch=1.0,
+        context="aura_message",
+    )
+    assert "Mairaiy" in prompt
+    assert "native French from France" in prompt
+    assert "Avoid robotic cadence" in prompt
+    assert prompt.rstrip().endswith("Salut le Spot !")
+
+
+def test_pcm_audio_is_wrapped_in_a_valid_wav(tmp_path: Path):
+    path = tmp_path / "voice.wav"
+    pcm = b"\x00\x00" * 2400
+    _write_pcm_wav(path, pcm, rate=24_000)
+    with wave.open(str(path), "rb") as audio:
+        assert audio.getnchannels() == 1
+        assert audio.getsampwidth() == 2
+        assert audio.getframerate() == 24_000
+        assert audio.getnframes() == 2400
+    assert _pcm_rate_from_mime("audio/L16;codec=pcm;rate=24000") == 24_000
+
+
 def test_overlay_bus_targets_only_avatar_clients():
     async def scenario():
         bus = OverlayBus()
@@ -52,8 +84,13 @@ def test_overlay_bus_targets_only_avatar_clients():
     run(scenario())
 
 
-def test_non_windows_service_reports_browser_fallback(tmp_path: Path):
+def test_service_reports_a_secure_provider_without_exposing_key(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AI_API_KEY", "secret-test-key")
+    monkeypatch.delenv("TTS_MODE", raising=False)
     service = AvatarAudioService(tmp_path)
     diagnostic = service.diagnostic()
-    assert diagnostic["engine"] in {"windows-system-speech", "browser-fallback"}
+    assert diagnostic["preferred_mode"] == "gemini"
+    assert diagnostic["gemini_configured"] is True
+    assert diagnostic["model"] == "gemini-3.1-flash-tts-preview"
+    assert "secret-test-key" not in str(diagnostic)
     assert diagnostic["last_error"] == ""
