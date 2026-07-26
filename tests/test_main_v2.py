@@ -18,8 +18,13 @@ def test_v2_keeps_legacy_routes_and_adds_automation_studio():
     assert "/api/ai/runtime" in paths
     assert "/api/ai/recover" in paths
     assert "/api/avatar/runtime" in paths
+    assert "/api/cohost/status" in paths
+    assert "/api/cohost/profile" in paths
+    assert "/api/cohost/screen/analyze" in paths
+    assert "/api/cohost/test/initiative" in paths
+    assert "/api/cohost/test/cta" in paths
     assert "/api/twitch/eventsub" in paths
     assert "/api/twitch/oauth" in paths
     assert "/api/security/diagnostic" in paths
     assert "/api/security/block-domain" in paths
-    assert app.version == "2.0.7-alpha"
+    assert app.version == "2.0.8-alpha"

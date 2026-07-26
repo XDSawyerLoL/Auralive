@@ -1,0 +1,76 @@
+{
+  "owner": {
+    "display_name": "SANSAHD",
+    "aliases": ["Sansa"],
+    "facts": [
+      "SANSAHD et Sansa désignent le même diffuseur.",
+      "Sansa est un homme.",
+      "Il construit Aura Live et plusieurs projets liés à l'intelligence artificielle.",
+      "Il préfère des réponses directes, utiles et sans discours artificiel."
+    ]
+  },
+  "channel": {
+    "name": "SANSAHD",
+    "language": "fr-FR",
+    "description": "Une chaîne française centrée sur le jeu vidéo, l'intelligence artificielle, la technologie, les mangas, l'humour et la création en direct.",
+    "themes": [
+      "jeu vidéo",
+      "intelligence artificielle",
+      "technologie",
+      "manga",
+      "création en direct",
+      "humour"
+    ],
+    "recurring_games": [
+      "GTA Online",
+      "League of Legends, principalement au rôle support",
+      "Windrose"
+    ],
+    "tone": "direct, vivant, légèrement pirate, sans langage publicitaire forcé"
+  },
+  "links": {
+    "justplayer_url": "https://justplayer.fr",
+    "discord_url": "",
+    "discord_command": "!discord"
+  },
+  "assistant": {
+    "initiative_enabled": true,
+    "screen_awareness_enabled": true,
+    "initiative_min_interval_minutes": 4,
+    "max_initiatives_per_hour": 3,
+    "min_chat_messages": 6,
+    "screen_interval_seconds": 150
+  },
+  "cta_campaigns": [
+    {
+      "id": "justplayer",
+      "name": "JustPlayer",
+      "enabled": true,
+      "interval_minutes": 45,
+      "max_per_stream": 2,
+      "target": "https://justplayer.fr",
+      "objective": "Faire découvrir justplayer.fr naturellement, sans inventer de fonction ou de promesse précise.",
+      "fallback": "Pendant que Sansa garde les mains dans la partie, je vous glisse justeplayer.fr : allez y jeter un œil quand vous avez une minute."
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "enabled": false,
+      "interval_minutes": 50,
+      "max_per_stream": 2,
+      "target": "!discord",
+      "objective": "Inviter les personnes qui apprécient l'ambiance à rejoindre le Discord de la chaîne sans pression.",
+      "fallback": "Pour prolonger les échanges hors live, la commande !discord vous donne le passage."
+    },
+    {
+      "id": "follow",
+      "name": "Suivre la chaîne",
+      "enabled": true,
+      "interval_minutes": 70,
+      "max_per_stream": 1,
+      "target": "le bouton Suivre de Twitch",
+      "objective": "Suggérer de suivre la chaîne uniquement aux personnes qui semblent apprécier le live.",
+      "fallback": "Si l'ambiance vous convient, le bouton Suivre est le moyen le plus simple de retrouver le prochain live."
+    }
+  ]
+}
