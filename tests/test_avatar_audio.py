@@ -3,16 +3,16 @@ import wave
 from pathlib import Path
 
 from app.core.event_bus import OverlayBus
+from app.services import avatar_audio
 from app.services.avatar_audio import (
     AvatarAudioService,
-    _build_gemini_prompt,
     _normalize_text,
     _pcm_rate_from_mime,
     _rate_to_sapi,
-    _select_gemini_voice,
     _volume_to_sapi,
     _write_pcm_wav,
 )
+from app.services.voice_signature import install_voice_signature
 
 
 def run(coro):
@@ -40,20 +40,24 @@ def test_text_and_voice_values_are_normalized():
     assert _volume_to_sapi(4) == 100
 
 
-def test_gemini_voice_and_prompt_keep_mairaiy_natural(monkeypatch):
+def test_gemini_voice_and_prompt_keep_mairaiy_natural_and_expressive(monkeypatch):
     monkeypatch.delenv("TTS_VOICE", raising=False)
-    assert _select_gemini_voice("aoede") == "Aoede"
-    assert _select_gemini_voice("voix inconnue") == "Aoede"
-    prompt = _build_gemini_prompt(
-        "Salut le Spot !",
-        rate=1.08,
-        pitch=1.0,
-        context="aura_message",
+    install_voice_signature()
+    assert avatar_audio._select_gemini_voice("laomedeia") == "Laomedeia"
+    assert avatar_audio._select_gemini_voice("voix inconnue") == "Laomedeia"
+    prompt = avatar_audio._build_gemini_prompt(
+        "Le boss vient d'être éliminé dans une explosion !",
+        rate=1.10,
+        pitch=1.08,
+        context="screen game initiative",
     )
     assert "Mairaiy" in prompt
     assert "native French from France" in prompt
     assert "Avoid robotic cadence" in prompt
-    assert prompt.rstrip().endswith("Salut le Spot !")
+    assert "almost innocent" in prompt
+    assert "fictional game violence" in prompt
+    assert "never childish" in prompt.casefold()
+    assert prompt.rstrip().endswith("Le boss vient d'être éliminé dans une explosion !")
 
 
 def test_pcm_audio_is_wrapped_in_a_valid_wav(tmp_path: Path):
@@ -87,6 +91,7 @@ def test_overlay_bus_targets_only_avatar_clients():
 def test_service_reports_a_secure_provider_without_exposing_key(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AI_API_KEY", "secret-test-key")
     monkeypatch.delenv("TTS_MODE", raising=False)
+    install_voice_signature()
     service = AvatarAudioService(tmp_path)
     diagnostic = service.diagnostic()
     assert diagnostic["preferred_mode"] == "gemini"
