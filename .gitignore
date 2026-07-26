@@ -1,9 +1,31 @@
-﻿.env
+# Secrets locaux
+.env
+.env.*
+*.env
+*Copie.env
+!.env.example
+
+# Données et médias locaux
 data/
+uploads/
+media/
+
+# Environnements et caches
 .venv/
 venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Journaux et sauvegardes
 *.log
-uploads/
-media/
+*.db
+*.db-*
+*.bak
+
+# Éditeurs et système
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
