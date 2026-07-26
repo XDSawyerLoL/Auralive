@@ -1,0 +1,17 @@
+﻿CORRECTIF AURA LIVE — PYTHON
+
+1. Copie reparer-installation.ps1 à la racine du dossier AuraLive.
+2. Remplace scripts\install.ps1 par le fichier install.ps1 fourni.
+3. Remplace scripts\run.ps1 par le fichier run.ps1 fourni.
+4. Dans PowerShell, à la racine d'AuraLive :
+
+   Set-ExecutionPolicy -Scope Process Bypass
+   .\reparer-installation.ps1
+
+Le script :
+- ignore le faux alias Microsoft Store ;
+- détecte py.exe ou un vrai python.exe ;
+- installe Python 3.12 avec winget si nécessaire ;
+- recrée proprement .venv ;
+- installe les dépendances ;
+- crée .env.

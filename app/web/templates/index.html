@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#111a2d">
+  <title>Aura Live — Studio</title>
+  <link rel="stylesheet" href="/static/styles.css?v=1.2.0">
+  <link rel="stylesheet" href="/static/power.css?v=1.2.0">
+  <link rel="stylesheet" href="/static/complete.css?v=1.2.0">
+  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/><path d="M9 21h6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M9 6H6a3 3 0 1 1 3-3v18a3 3 0 1 1-3-3h12a3 3 0 1 1-3 3V3a3 3 0 1 1 3 3H6a3 3 0 1 1 3 3"/></symbol>
+    <symbol id="i-megaphone" viewBox="0 0 24 24"><path d="m3 11 16-7v16L3 13Z"/><path d="M11.6 16.8 13 22H8l-1.5-7"/><path d="M19 9a3 3 0 0 1 0 6"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2 3 6 7 .9-5 4.8 1.3 7-6.3-3.3-6.3 3.3 1.3-7-5-4.8L9 8Z"/></symbol>
+    <symbol id="i-shop" viewBox="0 0 24 24"><path d="M3 9h18l-1-5H4Z"/><path d="M5 9v11h14V9M9 20v-6h6v6"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/></symbol>
+    <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1"/><path d="M12 8v13M3 12h18M7.5 8C5 8 5 4 7.5 4 10 4 12 8 12 8s2-4 4.5-4S19 8 16.5 8"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3" cy="6" r="1"/><circle cx="3" cy="12" r="1"/><circle cx="3" cy="18" r="1"/></symbol>
+    <symbol id="i-poll" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"/></symbol>
+    <symbol id="i-counter" viewBox="0 0 24 24"><path d="M4 19h16M6 16l3-4 3 2 5-7 2 2"/><path d="M4 4v15h16"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 1.7 5.3L19 9l-5.3 1.7L12 16l-1.7-5.3L5 9l5.3-1.7ZM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8Z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 5.6a9 9 0 1 1-12.8 0"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8 8 0 0 1 0 12"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 3h7v7M10 14 21 3M21 14v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0 2 5M20 4v7h-7"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.5 9a3 3 0 1 1 5 2.2c-1.5 1-2.5 1.5-2.5 3.3M12 18h.01"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-orb"><span></span></div>
+        <div><strong>AURA LIVE</strong><small>Control Center</small></div>
+        <button class="sidebar-collapse" id="sidebar-collapse" aria-label="Réduire le menu">‹</button>
+      </div>
+
+      <section class="profile-card">
+        <div class="profile-cover"></div>
+        <div class="profile-avatar"><img src="/static/avatar/mairaiy-idle.png?v=1.2.0" alt="Mairaiy"><b id="profile-live-badge">HORS LIGNE</b></div>
+        <strong>SANSAHD</strong>
+        <span id="profile-bot-name">Bot : mairaiy</span>
+        <div class="profile-stat"><b id="profile-riders">0</b><small>Membres connus</small></div>
+      </section>
+
+      <div class="quick-controls">
+        <button data-control="activate" title="Activer Aura"><svg><use href="#i-power"/></svg><span>Activer</span></button>
+        <button data-control="silence" title="Mode silence"><svg><use href="#i-volume"/></svg><span>Silence</span></button>
+        <button data-control="emergency" title="Mode urgence"><svg><use href="#i-lock"/></svg><span>Urgence</span></button>
+      </div>
+
+      <label class="nav-search"><svg><use href="#i-search"/></svg><input id="nav-search" placeholder="Fonctions, commandes…"></label>
+
+      <nav class="main-nav" id="main-nav">
+        <button class="nav-link active" data-page="dashboard" data-search="accueil tableau de bord statistiques"><svg><use href="#i-home"/></svg><span>Accueil</span></button>
+        <button class="nav-link" data-page="connections" data-search="compte twitch obs connexion"><svg><use href="#i-user"/></svg><span>Mon compte</span><i id="connection-dot"></i></button>
+
+        <div class="nav-group open">
+          <button class="nav-group-title"><span><svg><use href="#i-settings"/></svg>Gestion</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
+          <div class="nav-group-items">
+            <button class="nav-link" data-page="commands" data-search="commandes chat réponses"><svg><use href="#i-command"/></svg><span>Mes commandes</span><em id="nav-command-count">0</em></button>
+            <button class="nav-link" data-page="announcements" data-search="annonces périodiques"><svg><use href="#i-megaphone"/></svg><span>Mes annonces</span><em id="nav-announcement-count">0</em></button>
+            <button class="nav-link" data-page="notifications" data-search="notifications alertes follow sub raid bits"><svg><use href="#i-bell"/></svg><span>Notifications</span></button>
+            <button class="nav-link" data-page="protections" data-search="protections modération liens spam urgence"><svg><use href="#i-shield"/></svg><span>Protections</span></button>
+          </div>
+        </div>
+
+        <div class="nav-group">
+          <button class="nav-group-title"><span><svg><use href="#i-users"/></svg>Communauté</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
+          <div class="nav-group-items">
+            <button class="nav-link" data-page="community" data-search="viewers communauté classement mémoire"><svg><use href="#i-users"/></svg><span>Communauté</span></button>
+            <button class="nav-link" data-page="loyalty" data-search="fidélité écumes niveaux xp"><svg><use href="#i-star"/></svg><span>Fidélité & niveaux</span></button>
+            <button class="nav-link" data-page="shop" data-search="boutique écumes récompenses"><svg><use href="#i-shop"/></svg><span>Boutique</span></button>
+            <button class="nav-link" data-page="rewards" data-search="points de chaîne récompenses twitch actions"><svg><use href="#i-spark"/></svg><span>Points Twitch</span></button>
+          </div>
+        </div>
+
+        <div class="nav-group">
+          <button class="nav-group-title"><span><svg><use href="#i-gift"/></svg>Interactions</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
+          <div class="nav-group-items">
+            <button class="nav-link" data-page="giveaway" data-search="concours giveaway tirage"><svg><use href="#i-gift"/></svg><span>Concours</span></button>
+            <button class="nav-link" data-page="queue" data-search="file attente jouer viewers"><svg><use href="#i-list"/></svg><span>Play with viewers</span></button>
+            <button class="nav-link" data-page="polls" data-search="sondages prédictions twitch"><svg><use href="#i-poll"/></svg><span>Sondages & paris</span></button>
+            <button class="nav-link" data-page="tts" data-search="tts voix synthèse"><svg><use href="#i-mic"/></svg><span>Text-to-Speech</span></button>
+            <button class="nav-link" data-page="counters" data-search="compteurs victoires morts fails"><svg><use href="#i-counter"/></svg><span>Compteurs</span></button>
+          </div>
+        </div>
+
+        <div class="nav-group">
+          <button class="nav-group-title"><span><svg><use href="#i-monitor"/></svg>Diffusion</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
+          <div class="nav-group-items">
+            <button class="nav-link" data-page="overlays" data-search="overlay obs alertes chat screen"><svg><use href="#i-monitor"/></svg><span>Widgets & OBS</span></button>
+            <button class="nav-link" data-page="avatar" data-search="avatar mairaiy visage voix tts obs"><svg><use href="#i-mic"/></svg><span>Avatar & voix</span></button>
+            <button class="nav-link" data-page="goals" data-search="objectifs goals paliers"><svg><use href="#i-target"/></svg><span>Objectifs</span></button>
+            <button class="nav-link" data-page="ai" data-search="aura ia personnalité ollama"><svg><use href="#i-spark"/></svg><span>Aura IA</span><i class="ai-dot"></i></button>
+          </div>
+        </div>
+
+        <div class="nav-group open">
+          <button class="nav-group-title"><span><svg><use href="#i-spark"/></svg>Suite complète</span><svg class="chevron"><use href="#i-chevron"/></svg></button>
+          <div class="nav-group-items">
+            <button class="nav-link" data-page="gamesplus" data-search="mini jeux bingo bombe drop decryptage topwords tickets"><svg><use href="#i-gift"/></svg><span>Jeux & animations</span></button>
+            <button class="nav-link" data-page="knowledge" data-search="faq permissions restrictions liens"><svg><use href="#i-help"/></svg><span>FAQ & permissions</span></button>
+            <button class="nav-link" data-page="audience" data-search="followers abonnés unfollowers historique"><svg><use href="#i-users"/></svg><span>Audience</span></button>
+            <button class="nav-link" data-page="livefinish" data-search="générique recap ia titres clips fin live"><svg><use href="#i-star"/></svg><span>Fin de live & IA</span></button>
+            <button class="nav-link" data-page="advanced-overlays" data-search="emotes topwords giveaway credits ping overlays"><svg><use href="#i-monitor"/></svg><span>Widgets avancés</span></button>
+            <button class="nav-link" data-page="connectors" data-search="discord bluesky x lastfm steam streamdeck rcon telnet"><svg><use href="#i-link"/></svg><span>Intégrations</span></button>
+            <button class="nav-link" data-page="coverage" data-search="fonctions complet parité état couverture"><svg><use href="#i-target"/></svg><span>Couverture fonctionnelle</span></button>
+          </div>
+        </div>
+      </nav>
+
+      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Aura Live 1.2.0</small></div></footer>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobile-menu">☰</button>
+        <div class="breadcrumbs"><span>Aura Live</span><b>/</b><strong id="page-title">Accueil</strong></div>
+        <div class="topbar-actions">
+          <div class="system-pill" id="top-system-pill"><span></span><b>Connexion</b></div>
+          <button class="round-button" id="refresh-all" title="Actualiser"><svg><use href="#i-refresh"/></svg></button>
+          <button class="primary-button" data-open-modal="ai-modal"><svg><use href="#i-spark"/></svg>Parler à Aura</button>
+        </div>
+      </header>
+
+      <div class="content-wrap">
+        <section class="page active" data-page-panel="dashboard">
+          <div class="alert-banner hidden" id="global-banner"><svg><use href="#i-power"/></svg><strong id="global-banner-text"></strong><button id="global-banner-action">Corriger</button></div>
+
+          <article class="feature-card">
+            <div class="feature-visual">
+              <div class="feature-grid"></div>
+              <div class="feature-orb"><span></span><i></i></div>
+              <div class="signal-line one"></div><div class="signal-line two"></div>
+            </div>
+            <div class="feature-content">
+              <span class="feature-kicker"><svg><use href="#i-spark"/></svg>AURA INTELLIGENCE</span>
+              <h2>Un bot qui a une identité, pas seulement des commandes.</h2>
+              <p>Aura anime le chat, reconnaît les habitués, déclenche les outils du stream et conserve une personnalité cohérente.</p>
+              <div class="feature-tags"><span>Ollama local</span><span>Mémoire viewers</span><span>Interventions contrôlées</span></div>
+              <button class="primary-button wide" data-page-jump="ai">Configurer Aura IA</button>
+            </div>
+          </article>
+
+          <div class="dashboard-layout">
+            <article class="welcome-card">
+              <div class="welcome-head"><div><span class="wave-hand">◌</span><h2>Bienvenue SANSAHD</h2></div><div class="live-state" id="dashboard-live-state"><span></span>Hors ligne</div></div>
+              <div class="metric-row" id="dashboard-metrics"></div>
+              <p class="welcome-copy">Le centre de contrôle réunit les outils essentiels de la chaîne. Chaque bouton ci-dessous ouvre un module réellement configurable.</p>
+              <div class="quick-link-grid">
+                <button data-page-jump="commands"><svg><use href="#i-command"/></svg>Gérer mes commandes</button>
+                <button data-page-jump="announcements"><svg><use href="#i-megaphone"/></svg>Gérer mes annonces</button>
+                <button data-page-jump="overlays"><svg><use href="#i-monitor"/></svg>Installer mes overlays</button>
+                <button data-page-jump="protections"><svg><use href="#i-shield"/></svg>Configurer la protection</button>
+                <button data-page-jump="community"><svg><use href="#i-users"/></svg>Voir la communauté</button>
+                <button data-page-jump="polls"><svg><use href="#i-poll"/></svg>Lancer une interaction</button>
+              </div>
+            </article>
+
+            <aside class="help-card">
+              <div class="help-icon"><svg><use href="#i-help"/></svg></div>
+              <h3>État du système</h3>
+              <div id="health-list" class="health-list"></div>
+              <button class="secondary-button wide" data-page-jump="connections">Vérifier les connexions</button>
+              <div class="service-badge"><span></span><b id="service-status">SERVICE EN COURS</b></div>
+            </aside>
+          </div>
+
+          <div class="home-bottom-grid">
+            <article class="panel-card"><div class="card-head"><div><small>ACTIVITÉ RÉCENTE</small><h3>Événements du stream</h3></div><button class="text-button" data-page-jump="notifications">Tout voir</button></div><div id="activity-list" class="activity-list"></div></article>
+            <article class="panel-card"><div class="card-head"><div><small>TOP COMMUNAUTÉ</small><h3>Membres actifs</h3></div><button class="text-button" data-page-jump="community">Classement</button></div><div id="dashboard-ranking" class="mini-ranking"></div></article>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="commands">
+          <div class="page-heading"><div><span>GESTION DU CHAT</span><h1>Mes commandes</h1><p>Réponses, permissions, cooldowns et activation depuis un seul écran.</p></div><button class="primary-button" data-open-modal="command-modal"><svg><use href="#i-plus"/></svg>Nouvelle commande</button></div>
+          <article class="panel-card"><div class="table-toolbar"><label><svg><use href="#i-search"/></svg><input id="command-search" placeholder="Rechercher une commande"></label><div class="filter-chips"><button class="active" data-command-filter="all">Toutes</button><button data-command-filter="enabled">Actives</button><button data-command-filter="disabled">Désactivées</button></div><b id="command-count">0 commande</b></div><div id="commands-table" class="professional-table"></div></article>
+        </section>
+
+        <section class="page" data-page-panel="announcements">
+          <div class="page-heading"><div><span>AUTOMATISATION</span><h1>Mes annonces</h1><p>Messages périodiques avec intervalle, conditions et activation indépendante.</p></div><button class="primary-button" data-open-modal="announcement-modal"><svg><use href="#i-plus"/></svg>Nouvelle annonce</button></div>
+          <div id="announcement-grid" class="module-grid"></div>
+        </section>
+
+        <section class="page" data-page-panel="notifications">
+          <div class="page-heading"><div><span>ÉVÉNEMENTS TWITCH</span><h1>Notifications & alertes</h1><p>Personnalise le texte, la durée et l’apparence de chaque événement.</p></div><button class="secondary-button" data-page-jump="overlays"><svg><use href="#i-monitor"/></svg>Voir les liens OBS</button></div>
+          <div id="alert-template-grid" class="module-grid two"></div>
+        </section>
+
+        <section class="page" data-page-panel="protections">
+          <div class="page-heading"><div><span>SÉCURITÉ</span><h1>Protections du chat</h1><p>Règles vérifiables, liste blanche et journal de modération.</p></div><button class="danger-button" data-control="emergency"><svg><use href="#i-lock"/></svg>Basculer le mode urgence</button></div>
+          <div class="settings-columns">
+            <article class="panel-card settings-stack">
+              <div class="card-head"><div><small>FILTRES</small><h3>Protection automatique</h3></div></div>
+              <label class="switch-row"><div><b>Bloquer les liens inconnus</b><span>Les domaines de la liste blanche restent autorisés.</span></div><label class="switch"><input type="checkbox" data-setting="moderation.links"><span></span></label></label>
+              <label class="switch-row"><div><b>Mode urgence</b><span>Messages longs et comportements suspects sanctionnés plus durement.</span></div><label class="switch danger"><input type="checkbox" data-setting="moderation.emergency_mode"><span></span></label></label>
+              <label class="field-row"><span>Ratio de majuscules toléré</span><div><input id="caps-ratio" type="range" min="0.4" max="1" step="0.01"><b id="caps-value">78 %</b></div></label>
+              <label class="field-row"><span>Durée du timeout pour un lien</span><div><input id="timeout-seconds" type="number" min="1" max="1209600"><small>secondes</small></div></label>
+              <button class="primary-button" id="save-moderation">Enregistrer la protection</button>
+            </article>
+            <article class="panel-card settings-stack">
+              <div class="card-head"><div><small>LISTES</small><h3>Mots et domaines</h3></div></div>
+              <label>Mots ou phrases interdits<textarea id="banned-words" rows="7" placeholder="Une expression par ligne"></textarea></label>
+              <label>Domaines autorisés<textarea id="allowed-domains" rows="6" placeholder="twitch.tv&#10;youtube.com"></textarea></label>
+              <button class="primary-button" id="save-lists">Enregistrer les listes</button>
+            </article>
+            <article class="panel-card settings-stack">
+              <div class="card-head"><div><small>FOLLOW GUARD</small><h3>Détection de raids de faux follows</h3></div><span class="state-badge ok">AUTOMATIQUE</span></div>
+              <label class="switch-row"><div><b>Surveiller les pics de follows</b><span>Détecte un nombre anormal de nouveaux follows dans une courte fenêtre.</span></div><label class="switch"><input id="follow-guard-enabled" type="checkbox"><span></span></label></label>
+              <label class="field-row"><span>Seuil de déclenchement</span><div><input id="follow-guard-threshold" type="number" min="3" max="100"><small>follows</small></div></label>
+              <label class="field-row"><span>Fenêtre de détection</span><div><input id="follow-guard-window" type="number" min="3" max="120"><small>secondes</small></div></label>
+              <label class="switch-row"><div><b>Activer le mode urgence</b><span>Renforce immédiatement la modération lorsqu’un pic est détecté.</span></div><label class="switch danger"><input id="follow-guard-emergency" type="checkbox"><span></span></label></label>
+              <div class="module-card-actions"><button class="primary-button" id="save-follow-guard">Enregistrer</button><button class="secondary-button" id="test-follow-guard">Tester la détection</button></div>
+            </article>
+          </div>
+          <article class="panel-card"><div class="card-head"><div><small>HISTORIQUE</small><h3>Dernières actions de modération</h3></div></div><div id="moderation-log" class="professional-table compact"></div></article><article class="panel-card"><div class="card-head"><div><small>SÉCURITÉ</small><h3>Alertes Follow Guard</h3></div></div><div id="security-log" class="professional-table compact"></div></article>
+        </section>
+
+        <section class="page" data-page-panel="community">
+          <div class="page-heading"><div><span>COMMUNAUTÉ</span><h1>Communauté</h1><p>Activité, Écumes, niveau, mémoire et dernière présence.</p></div></div>
+          <div class="summary-cards" id="community-summary"></div>
+          <article class="panel-card"><div class="table-toolbar"><label><svg><use href="#i-search"/></svg><input id="viewer-search" placeholder="Rechercher un membre"></label><b id="viewer-count">0 membre</b></div><div id="community-table" class="professional-table"></div></article>
+        </section>
+
+        <section class="page" data-page-panel="loyalty">
+          <div class="page-heading"><div><span>PROGRESSION</span><h1>Fidélité & niveaux</h1><p>Règle la vitesse de progression et la monnaie du Spot.</p></div></div>
+          <div class="settings-columns">
+            <article class="panel-card form-card"><div class="card-head"><div><small>ÉCONOMIE</small><h3>Attribution des Écumes</h3></div></div><label>Écumes par message<input id="points-per-message" type="number" min="0"></label><label>XP par message<input id="xp-per-message" type="number" min="0"></label><label>Cooldown d’activité<input id="loyalty-cooldown" type="number" min="1"><small>secondes entre deux gains</small></label><button class="primary-button" id="save-loyalty">Enregistrer</button></article>
+            <article class="panel-card"><div class="card-head"><div><small>APERÇU</small><h3>Progression d’un membre</h3></div></div><div class="level-preview"><div class="level-badge">12</div><div><b>Membre confirmé</b><span>1 240 / 1 690 XP</span><div class="progress"><i style="width:73%"></i></div></div></div><div class="info-box">Le système actuel calcule automatiquement les niveaux à partir de l’XP. Les rangs personnalisés seront ajoutés sur cette base.</div></article>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="shop">
+          <div class="page-heading"><div><span>CABANE DU SPOT</span><h1>Boutique virtuelle</h1><p>Récompenses achetées avec les Écumes et actions associées.</p></div><button class="primary-button" data-open-modal="shop-modal"><svg><use href="#i-plus"/></svg>Nouvel objet</button></div>
+          <div id="shop-grid" class="shop-grid"></div>
+        </section>
+
+        <section class="page" data-page-panel="rewards">
+          <div class="page-heading"><div><span>POINTS DE CHAÎNE</span><h1>Actions automatiques Twitch</h1><p>Associe le titre exact d’une récompense Twitch à une alerte, un TTS ou un compteur.</p></div><button class="primary-button" data-open-modal="reward-modal"><svg><use href="#i-plus"/></svg>Nouvelle action</button></div>
+          <article class="panel-card"><div id="reward-action-list" class="professional-table"></div></article>
+        </section>
+
+        <section class="page" data-page-panel="giveaway">
+          <div class="page-heading"><div><span>JEUX & GIVEAWAY</span><h1>Concours</h1><p>Participation depuis le chat, coût optionnel et tirage visuel.</p></div></div>
+          <div class="settings-columns">
+            <article class="panel-card form-card"><div class="card-head"><div><small>NOUVEAU CONCOURS</small><h3>Ouvrir les inscriptions</h3></div></div><form id="giveaway-form"><label>Titre<input id="giveaway-title" required placeholder="Une clé de jeu à gagner"></label><label>Commande<input id="giveaway-keyword" value="!concours"></label><label>Coût en Écumes<input id="giveaway-cost" type="number" min="0" value="0"></label><button class="primary-button" type="submit">Ouvrir le concours</button></form></article>
+            <article class="panel-card"><div class="card-head"><div><small>EN DIRECT</small><h3>État du concours</h3></div><button class="primary-button" id="draw-giveaway">Tirer au sort</button></div><div id="giveaway-state" class="empty-state"></div></article>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="queue">
+          <div class="page-heading"><div><span>PLAY WITH VIEWERS</span><h1>File de jeu</h1><p>Gère l’ordre de passage des viewers sans perdre le fil du live.</p></div><div class="heading-actions"><button class="secondary-button" id="queue-clear">Vider</button><button class="primary-button" id="queue-next">Appeler le suivant</button></div></div>
+          <div class="settings-columns"><article class="panel-card"><div id="queue-list" class="queue-list"></div></article><article class="panel-card"><div class="card-head"><div><small>COMMANDES CHAT</small><h3>Utilisation</h3></div></div><div class="command-help"><div><code>!join [note]</code><span>Rejoindre la file</span></div><div><code>!leave</code><span>Quitter la file</span></div><div><code>!queue</code><span>Voir les premières places</span></div><div><code>!next</code><span>Appeler le suivant · mod</span></div></div></article></div>
+        </section>
+
+        <section class="page" data-page-panel="polls">
+          <div class="page-heading"><div><span>TWITCH NATIF</span><h1>Sondages & prédictions</h1><p>Les votes sont affichés directement dans Twitch.</p></div></div>
+          <div class="interaction-tabs"><button class="active" data-interaction-tab="poll">Sondage</button><button data-interaction-tab="prediction">Prédiction</button></div>
+          <div class="interaction-panel active" data-interaction-panel="poll"><div class="settings-columns"><article class="panel-card form-card"><div class="card-head"><div><small>CRÉER</small><h3>Nouveau sondage</h3></div></div><form id="poll-form"><label>Question<input id="poll-question" maxlength="60" required placeholder="Quel jeu ensuite ?"></label><label>Réponses<textarea id="poll-options" required placeholder="GTA V&#10;Windrose"></textarea><small>2 à 5 réponses, une par ligne.</small></label><label>Durée<select id="poll-duration"><option value="60">1 minute</option><option value="120" selected>2 minutes</option><option value="300">5 minutes</option><option value="600">10 minutes</option></select></label><button class="primary-button" type="submit">Lancer sur Twitch</button></form></article><article class="panel-card"><div class="card-head"><div><small>RÉSULTATS</small><h3>Sondage actif</h3></div><button class="secondary-button" id="poll-close">Clôturer</button></div><div id="poll-state" class="empty-state"></div></article></div></div>
+          <div class="interaction-panel" data-interaction-panel="prediction"><div class="settings-columns"><article class="panel-card form-card"><div class="card-head"><div><small>PARIS TWITCH</small><h3>Nouvelle prédiction</h3></div></div><form id="prediction-form"><label>Question<input id="prediction-title" maxlength="45" required placeholder="Sansa gagne la prochaine partie ?"></label><label>Résultats<textarea id="prediction-outcomes" required placeholder="Oui&#10;Non"></textarea></label><label>Temps de participation<select id="prediction-window"><option value="60">1 minute</option><option value="120" selected>2 minutes</option><option value="300">5 minutes</option></select></label><button class="primary-button" type="submit">Lancer la prédiction</button></form></article><article class="panel-card"><div class="card-head"><div><small>EN COURS</small><h3>Prédiction active</h3></div></div><div id="prediction-state" class="empty-state"></div></article></div></div>
+        </section>
+
+        <section class="page" data-page-panel="tts">
+          <div class="page-heading"><div><span>VOIX DU SPOT</span><h1>Text-to-Speech</h1><p>File vocale, coût en Écumes et lecture depuis l’overlay OBS.</p></div></div>
+          <div class="settings-columns"><article class="panel-card form-card"><div class="card-head"><div><small>TESTER</small><h3>Envoyer un message</h3></div></div><form id="tts-form"><label>Message<textarea id="tts-message" required placeholder="Mairaiy lit ce message dans OBS."></textarea></label><button class="primary-button" type="submit">Envoyer au TTS</button></form><hr><div class="form-grid two"><label>Coût en Écumes<input id="tts-cost" type="number" min="0"></label><label>Longueur maximale<input id="tts-max" type="number" min="20" max="500"></label><label>Voix navigateur<input id="tts-voice" placeholder="Nom de voix facultatif"></label><label>Vitesse<input id="tts-rate" type="number" min="0.5" max="2" step="0.05"></label><label>Tonalité<input id="tts-pitch" type="number" min="0.5" max="2" step="0.05"></label><label>Volume<input id="tts-volume" type="number" min="0" max="1" step="0.05"></label></div><label class="toggle-row"><span><b>Modération préalable</b><small>Chaque message doit être approuvé avant lecture.</small></span><input id="tts-approval" type="checkbox"></label><button class="secondary-button" id="save-tts" type="button">Enregistrer les règles</button></article><article class="panel-card"><div class="card-head"><div><small>FILE VOCALE</small><h3>Modération et lecture</h3></div><button class="primary-button" id="tts-next">Lire le suivant approuvé</button></div><div id="tts-list" class="queue-list"></div></article></div>
+        </section>
+
+        <section class="page" data-page-panel="counters">
+          <div class="page-heading"><div><span>LIVE DECK</span><h1>Compteurs</h1><p>Victoires, morts et fails utilisables depuis le panneau ou le chat.</p></div></div>
+          <div id="counter-grid" class="counter-grid"></div>
+        </section>
+
+        <section class="page" data-page-panel="overlays">
+          <div class="page-heading"><div><span>OBS BROWSER SOURCES</span><h1>Widgets & overlays</h1><p>Chaque fonction dispose désormais de son propre lien, prêt à coller dans OBS.</p></div><button class="secondary-button" id="obs-test"><svg><use href="#i-monitor"/></svg>Tester OBS WebSocket</button></div>
+          <div class="overlay-grid">
+            <article class="overlay-card"><div class="overlay-preview alerts"><div class="preview-alert"><i></i><div><small>MARÉE MONTANTE</small><b>Raid de 42 viewers</b></div></div></div><div class="overlay-info"><span>Alertes</span><h3>Alertes & animations</h3><p>Follows, subs, raids, bits, récompenses, concours et TTS.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay"><button data-copy-url="/overlay"><svg><use href="#i-copy"/></svg></button><a href="/overlay" target="_blank"><svg><use href="#i-external"/></svg></a></div><button class="secondary-button overlay-test" data-overlay-test="raid">Tester un raid</button></div></article>
+            <article class="overlay-card"><div class="overlay-preview chat"><div class="preview-chat"><span><b>Luna</b> Bienvenue sur le Spot !</span><span><b>Kaito</b> Aura est en forme ce soir.</span></div></div><div class="overlay-info"><span>Chat</span><h3>Overlay du chat</h3><p>Messages en direct avec badges et identité visuelle Aura.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/chat"><button data-copy-url="/overlay/chat"><svg><use href="#i-copy"/></svg></button><a href="/overlay/chat" target="_blank"><svg><use href="#i-external"/></svg></a></div></div></article>
+            <article class="overlay-card avatar-overlay-card"><div class="overlay-preview avatar"><img src="/static/avatar/mairaiy-speaking.png?v=1.2.0" alt="Aperçu de Mairaiy"></div><div class="overlay-info"><span>Avatar vocal</span><h3>Mairaiy à l’écran</h3><p>Visage persistant, bouche ouverte pendant la voix et sous-titres synchronisés.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/avatar"><button data-copy-url="/overlay/avatar"><svg><use href="#i-copy"/></svg></button><a href="/overlay/avatar" target="_blank"><svg><use href="#i-external"/></svg></a></div><button class="secondary-button" data-page-jump="avatar">Configurer l’avatar</button></div></article>
+            <article class="overlay-card"><div class="overlay-preview goal"><div class="preview-goal"><small>OBJECTIF FOLLOWERS</small><b>1 108 / 1 200</b><div><i></i></div></div></div><div class="overlay-info"><span>Objectif</span><h3>Goal dynamique</h3><p>Objectif actif avec progression et mise à jour en temps réel.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/goal"><button data-copy-url="/overlay/goal"><svg><use href="#i-copy"/></svg></button><a href="/overlay/goal" target="_blank"><svg><use href="#i-external"/></svg></a></div><button class="secondary-button" data-page-jump="goals">Configurer l’objectif</button></div></article>
+            <article class="overlay-card"><div class="overlay-preview screen"><div class="screen-orb"></div><span>SCREEN GLOBAL</span></div><div class="overlay-info"><span>Global</span><h3>Overlay Screen</h3><p>Source unique pour toutes les animations déclenchées par Aura.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/screen"><button data-copy-url="/overlay/screen"><svg><use href="#i-copy"/></svg></button><a href="/overlay/screen" target="_blank"><svg><use href="#i-external"/></svg></a></div></div></article>
+          </div>
+          <pre id="obs-output" class="console-output"></pre>
+        </section>
+
+        <section class="page" data-page-panel="goals">
+          <div class="page-heading"><div><span>WIDGET OBJECTIF</span><h1>Objectifs</h1><p>Crée un objectif visible dans OBS avec une progression personnalisée.</p></div><button class="primary-button" data-open-modal="goal-modal"><svg><use href="#i-plus"/></svg>Nouvel objectif</button></div>
+          <div id="goal-grid" class="module-grid"></div>
+        </section>
+
+        <section class="page" data-page-panel="ai">
+          <div class="page-heading"><div><span>IDENTITÉ & CERVEAU</span><h1>Aura IA</h1><p>Une conversation suivie, séparée des annonces de bots et fondée uniquement sur les faits connus.</p></div><button class="primary-button" data-open-modal="ai-modal"><svg><use href="#i-spark"/></svg>Ouvrir la conversation</button></div>
+          <div class="ai-layout"><article class="ai-identity-card neural-identity"><img src="/static/avatar/mairaiy-idle.png?v=1.2.0" alt="Aura / Mairaiy"><div><small>IDENTITÉ ACTIVE</small><h2>Aura <span>@mairaiy</span></h2><p>Conscience artificielle de la chaîne. Elle sait que SANSAHD et Sansa désignent le diffuseur, un homme, et elle n’invente plus d’anecdotes personnelles.</p><div class="feature-tags"><span>Mémoire par interlocuteur</span><span>Réponse finale uniquement</span><span>Contexte anti-bots</span></div></div></article><article class="panel-card"><div class="card-head"><div><small>MOTEUR</small><h3>État de l’IA</h3></div></div><div id="ai-health" class="health-list"></div><label class="switch-row"><div><b>Interventions spontanées</b><span>Aura peut intervenir sans être appelée selon la probabilité configurée.</span></div><label class="switch"><input type="checkbox" id="ai-spontaneous"><span></span></label></label><div class="info-box success-box"><b>Mode conversation cohérente</b><br>Les réponses imbriquées et le message « je réfléchis » sont désactivés de force. Les suivis comme « pourquoi ? » utilisent l’historique de la même personne.</div><div class="info-box">Le modèle, l’URL et la clé restent dans <code>.env</code> afin de ne jamais exposer les secrets dans le navigateur.</div></article></div>
+        </section>
+
+        <section class="page" data-page-panel="avatar">
+          <div class="page-heading"><div><span>PRÉSENCE À L’ÉCRAN</span><h1>Avatar & voix de Mairaiy</h1><p>Une source navigateur transparente qui parle avec les réponses d’Aura et passe automatiquement de l’image au repos à l’image parlante.</p></div><button class="primary-button" id="avatar-test-button"><svg><use href="#i-volume"/></svg>Tester la voix</button></div>
+          <div class="avatar-studio-grid">
+            <article class="avatar-preview-panel"><div class="avatar-preview-stage"><div class="preview-energy"><i></i><i></i></div><img class="preview-avatar preview-avatar-idle" src="/static/avatar/mairaiy-idle.png?v=1.2.0" alt="Mairaiy au repos"><img class="preview-avatar preview-avatar-speaking" src="/static/avatar/mairaiy-speaking.png?v=1.2.0" alt="Mairaiy en train de parler"><div class="preview-identity"><span></span><b>MAIRAIY</b><small>AURA LIVE</small></div><div class="preview-caption"><small>AURA</small><p>Je suis prête à apparaître et parler dans OBS.</p></div></div></article>
+            <article class="panel-card avatar-settings-card"><div class="card-head"><div><small>SOURCE OBS</small><h3>Configuration</h3></div></div><div class="copy-field"><input readonly value="http://localhost:8787/overlay/avatar"><button data-copy-url="/overlay/avatar"><svg><use href="#i-copy"/></svg></button><a href="/overlay/avatar" target="_blank"><svg><use href="#i-external"/></svg></a></div><form id="avatar-settings-form"><label class="switch-row"><div><b>Avatar vocal actif</b><span>Lit uniquement les réponses finales d’Aura.</span></div><label class="switch"><input id="avatar-enabled" type="checkbox" checked><span></span></label></label><label>Nom de voix Windows / navigateur<input id="avatar-voice" placeholder="Laisser vide pour la meilleure voix française"></label><div class="form-row"><label>Vitesse<input id="avatar-rate" type="number" min="0.5" max="2" step="0.05" value="1"></label><label>Hauteur<input id="avatar-pitch" type="number" min="0.5" max="2" step="0.05" value="1"></label></div><label>Volume<input id="avatar-volume" type="range" min="0" max="1" step="0.05" value="1"></label><label class="switch-row"><div><b>Sous-titres</b><span>Affiche la phrase prononcée sous le personnage.</span></div><label class="switch"><input id="avatar-subtitles" type="checkbox" checked><span></span></label></label><button class="primary-button wide" type="submit">Enregistrer</button></form><div class="info-box"><b>Dans OBS :</b> ajoute une Source navigateur 700 × 1050, colle le lien, puis active « Contrôler l’audio via OBS ». La voix sera alors envoyée au mixage du live.</div></article>
+          </div>
+        </section>
+
+
+        <section class="page" data-page-panel="gamesplus">
+          <div class="page-heading"><div><span>ANIMATION COMMUNAUTAIRE</span><h1>Jeux & animations</h1><p>Mini-jeux intégrés, sessions collectives et widgets temps réel.</p></div><button class="secondary-button" id="complete-refresh-games"><svg><use href="#i-refresh"/></svg>Actualiser</button></div>
+          <div class="complete-summary" id="complete-game-summary"></div>
+          <div class="complete-grid two">
+            <article class="panel-card"><div class="card-head"><div><small>RÉFLEXE</small><h3>Drop du Spot</h3></div></div><p>Le premier viewer qui utilise <code>!drop</code> remporte les Écumes.</p><form id="drop-form" class="inline-form"><label>Montant<input id="drop-amount" type="number" value="100" min="1"></label><button class="primary-button" type="submit">Lancer</button></form></article>
+            <article class="panel-card"><div class="card-head"><div><small>RÉFLEXION</small><h3>Décryptage</h3></div></div><p>Aura mélange un mot. Le premier à le retrouver gagne.</p><form id="decrypt-form" class="inline-form"><label>Mot<input id="decrypt-word" required placeholder="hippocampe"></label><button class="primary-button" type="submit">Lancer</button></form></article>
+            <article class="panel-card"><div class="card-head"><div><small>COLLECTIF</small><h3>Bingo</h3></div></div><p>Les viewers rejoignent avec <code>!bingo</code>, puis Aura tire les numéros.</p><div class="button-row"><button class="primary-button" id="bingo-start">Ouvrir</button><button class="secondary-button" id="bingo-draw">Tirer un numéro</button><button class="danger-button" id="bingo-end">Terminer</button></div><div id="bingo-last-number" class="big-number">—</div></article>
+            <article class="panel-card"><div class="card-head"><div><small>VOTE ÉCLAIR</small><h3>TopWords</h3></div></div><form id="topwords-form"><label>Question<input id="topwords-title" required placeholder="Quel jeu ensuite ?"></label><label>Choix séparés par |<input id="topwords-options" required placeholder="GTA V | Windrose | LoL"></label><div class="button-row"><button class="primary-button" type="submit">Lancer</button><button class="danger-button" type="button" id="topwords-close">Clôturer</button></div></form><div id="topwords-panel"></div></article>
+          </div>
+          <article class="panel-card"><div class="card-head"><div><small>COMMANDES DISPONIBLES</small><h3>Mini-jeux du chat</h3></div></div><div class="command-chip-grid"><code>!run</code><code>!drop</code><code>!decrypt</code><code>!bomb @pseudo</code><code>!love @pseudo</code><code>!hate @pseudo</code><code>!ticket</code><code>!bingo</code><code>!topvote choix</code><code>!sublottery</code></div></article>
+        </section>
+
+        <section class="page" data-page-panel="knowledge">
+          <div class="page-heading"><div><span>CONNAISSANCE & CONTRÔLE</span><h1>FAQ & permissions</h1><p>Réponses automatiques, permis de liens et restrictions ciblées.</p></div></div>
+          <div class="complete-grid two">
+            <article class="panel-card"><div class="card-head"><div><small>FAQ</small><h3>Base de réponses</h3></div></div><form id="faq-form"><label>Question<input id="faq-question" required></label><label>Réponse<textarea id="faq-answer" required></textarea></label><label>Mots-clés séparés par virgule<input id="faq-keywords" placeholder="points, écumes, monnaie"></label><button class="primary-button wide" type="submit">Ajouter</button></form><div id="faq-list" class="complete-list"></div></article>
+            <article class="panel-card"><div class="card-head"><div><small>PERMIS TEMPORAIRE</small><h3>Liens autorisés</h3></div></div><form id="permit-form" class="inline-form"><label>Viewer<input id="permit-login" required placeholder="@pseudo"></label><label>Minutes<input id="permit-minutes" type="number" value="5" min="1"></label><button class="primary-button" type="submit">Autoriser</button></form><div id="permit-list" class="complete-list compact"></div><hr><div class="card-head"><div><small>RESTRICTIONS</small><h3>Limiter un viewer</h3></div></div><form id="restriction-form"><div class="form-row"><label>Viewer<input id="restriction-login" required placeholder="@pseudo"></label><label>Minutes<input id="restriction-minutes" type="number" value="10" min="1"></label></div><label>Raison<input id="restriction-reason" value="Restriction temporaire"></label><button class="danger-button wide" type="submit">Restreindre commandes et TTS</button></form><div id="restriction-list" class="complete-list compact"></div></article>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="audience">
+          <div class="page-heading"><div><span>HISTORIQUE TWITCH</span><h1>Audience</h1><p>Followers, abonnés et départs détectés par synchronisation.</p></div><button class="primary-button" id="audience-sync"><svg><use href="#i-refresh"/></svg>Synchroniser Twitch</button></div>
+          <div class="complete-summary" id="audience-summary"></div>
+          <div class="complete-grid two"><article class="panel-card"><div class="card-head"><div><small>ACTIFS</small><h3>Followers et abonnés</h3></div></div><div id="audience-active" class="complete-table"></div></article><article class="panel-card"><div class="card-head"><div><small>HISTORIQUE</small><h3>Unfollowers détectés</h3></div></div><div id="audience-ended" class="complete-table"></div></article></div>
+        </section>
+
+        <section class="page" data-page-panel="livefinish">
+          <div class="page-heading"><div><span>PRODUCTION DU LIVE</span><h1>Fin de live & outils IA</h1><p>Titres, amélioration de textes, récapitulatif et générique OBS.</p></div><button class="primary-button" id="credits-start"><svg><use href="#i-star"/></svg>Lancer le générique</button></div>
+          <div class="complete-grid two"><article class="panel-card"><div class="card-head"><div><small>AI TITLES</small><h3>Proposer un titre</h3></div></div><form id="title-ai-form"><label>Contexte<textarea id="title-ai-text" required placeholder="GTA Online, progression business, détente et défis"></textarea></label><button class="primary-button wide" type="submit">Générer</button></form><div id="title-ai-result" class="ai-result-box"></div></article><article class="panel-card"><div class="card-head"><div><small>AI ENHANCER</small><h3>Améliorer une annonce</h3></div></div><form id="enhance-ai-form"><label>Texte<textarea id="enhance-ai-text" required></textarea></label><button class="primary-button wide" type="submit">Améliorer</button></form><div id="enhance-ai-result" class="ai-result-box"></div></article><article class="panel-card"><div class="card-head"><div><small>RÉCAP IA</small><h3>Résumé de session</h3></div></div><button class="secondary-button wide" id="recap-ai">Générer le récapitulatif</button><div id="recap-ai-result" class="ai-result-box"></div></article><article class="panel-card"><div class="card-head"><div><small>CLIPS AUTOMATIQUES</small><h3>Règles d'événements</h3></div></div><div id="clip-rule-list" class="complete-list"></div></article></div>
+        </section>
+
+        <section class="page" data-page-panel="advanced-overlays">
+          <div class="page-heading"><div><span>OBS BROWSER SOURCES</span><h1>Widgets avancés</h1><p>Sources dédiées aux animations communautaires et au générique.</p></div></div>
+          <div class="advanced-overlay-grid">
+            <article><span>EMOTES</span><h3>Mur d'émoticônes</h3><p>Les emotes Twitch traversent l'écran.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/emotes"><button data-copy-complete="/overlay/emotes"><svg><use href="#i-copy"/></svg></button><a href="/overlay/emotes" target="_blank"><svg><use href="#i-external"/></svg></a></div></article>
+            <article><span>TOPWORDS</span><h3>Vote éclair</h3><p>Classement des mots votés en temps réel.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/topwords"><button data-copy-complete="/overlay/topwords"><svg><use href="#i-copy"/></svg></button><a href="/overlay/topwords" target="_blank"><svg><use href="#i-external"/></svg></a></div></article>
+            <article><span>GIVEAWAY</span><h3>Tirages visuels</h3><p>Gagnants de concours, tickets et abonnés.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/giveaway"><button data-copy-complete="/overlay/giveaway"><svg><use href="#i-copy"/></svg></button><a href="/overlay/giveaway" target="_blank"><svg><use href="#i-external"/></svg></a></div></article>
+            <article><span>CRÉDITS</span><h3>Générique de fin</h3><p>Récap, membres les plus actifs, soutiens et raids.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/credits"><button data-copy-complete="/overlay/credits"><svg><use href="#i-copy"/></svg></button><a href="/overlay/credits" target="_blank"><svg><use href="#i-external"/></svg></a></div></article>
+            <article><span>PING</span><h3>Notification streamer</h3><p>Message discret envoyé par les modérateurs.</p><div class="copy-field"><input readonly value="http://localhost:8787/overlay/ping"><button data-copy-complete="/overlay/ping"><svg><use href="#i-copy"/></svg></button><a href="/overlay/ping" target="_blank"><svg><use href="#i-external"/></svg></a></div><form id="ping-form"><input id="ping-message-input" placeholder="Message discret"><button class="secondary-button" type="submit">Tester</button></form></article>
+          </div>
+        </section>
+
+        <section class="page" data-page-panel="connectors">
+          <div class="page-heading"><div><span>PASSERELLES EXTERNES</span><h1>Intégrations</h1><p>Discord, webhooks, réseaux, musique, jeux et contrôleurs.</p></div><a class="secondary-button" href="/channel" target="_blank"><svg><use href="#i-external"/></svg>Ouvrir le site public</a></div>
+          <div class="complete-grid two"><article class="panel-card"><div class="card-head"><div><small>CONNECTEUR</small><h3>Ajouter une intégration</h3></div></div><form id="connector-form"><div class="form-row"><label>Nom<input id="connector-name" required></label><label>Type<select id="connector-kind"><option value="discord_webhook">Discord webhook</option><option value="generic_webhook">Webhook générique</option><option value="bluesky">Bluesky</option><option value="x">X / Twitter</option><option value="lastfm">LastFM</option><option value="youtube">YouTube</option><option value="steam">Steam</option><option value="igdb">IGDB</option><option value="streamdeck">StreamDeck</option><option value="loupedeck">Loupedeck</option><option value="home_assistant">Home Assistant</option><option value="n8n">n8n</option><option value="make">Make</option><option value="telnet">Telnet</option><option value="rcon">RCON</option></select></label></div><label>Configuration JSON<textarea id="connector-config" placeholder='{"url":"..."}'>{}</textarea></label><label class="checkbox-line"><input id="connector-enabled" type="checkbox">Activer</label><button class="primary-button wide" type="submit">Enregistrer</button></form></article><article class="panel-card"><div class="card-head"><div><small>CONNEXIONS</small><h3>État des intégrations</h3></div></div><div id="connector-list" class="complete-list"></div></article><article class="panel-card"><div class="card-head"><div><small>STREAMDECK / LOUPEDECK</small><h3>API locale d'actions</h3></div></div><p>Les contrôleurs peuvent appeler :</p><code class="block-code">POST http://localhost:8787/api/complete/deck/action</code><p>Actions : chat, overlay, scene, counter, clip, silence, emergency, credits et ping.</p></article><article class="panel-card"><div class="card-head"><div><small>SITE PUBLIC</small><h3>Page communautaire</h3></div></div><p>Classement et commandes consultables dans le navigateur local.</p><div class="copy-field"><input readonly value="http://localhost:8787/channel"><button data-copy-complete="/channel"><svg><use href="#i-copy"/></svg></button><a href="/channel" target="_blank"><svg><use href="#i-external"/></svg></a></div></article></div>
+        </section>
+
+        <section class="page" data-page-panel="coverage">
+          <div class="page-heading"><div><span>VÉRITÉ FONCTIONNELLE</span><h1>Couverture fonctionnelle</h1><p>Ce qui est prêt, ce qui exige une configuration et ce qui dépend d'un service externe.</p></div></div>
+          <div class="coverage-legend"><span class="ready">Prêt localement</span><span class="configured">Configuration requise</span><span class="external">Service externe requis</span></div><div id="feature-matrix" class="feature-matrix"></div>
+        </section>
+
+        <section class="page" data-page-panel="connections">
+          <div class="page-heading"><div><span>CONNEXIONS</span><h1>Mon compte & services</h1><p>Vérifie l’identité qui parle, le diffuseur, OBS et les autorisations.</p></div></div>
+          <div id="account-grid" class="account-grid"></div>
+          <article class="panel-card"><div class="card-head"><div><small>CONFIGURATION LOCALE</small><h3>Informations utiles</h3></div></div><div class="config-list"><div><span>Panneau Aura</span><code>http://localhost:8787</code></div><div><span>Compte bot attendu</span><code>mairaiy</code></div><div><span>Chaîne attendue</span><code>sansahd</code></div><div><span>Port OBS</span><code>4455</code></div></div></article>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="command-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><span class="modal-kicker">COMMANDE</span><h2 id="command-modal-title">Nouvelle commande</h2><form id="command-form"><input type="hidden" id="command-id"><label>Nom<input id="command-name" required placeholder="!discord"></label><label>Réponse<textarea id="command-response" required></textarea></label><div class="form-row"><label>Permission<select id="command-role"><option value="everyone">Tout le monde</option><option value="subscriber">Abonnés</option><option value="mod">Modérateurs</option><option value="broadcaster">Sansa uniquement</option></select></label><label>Cooldown<input id="command-cooldown" type="number" min="0" value="10"></label></div><label class="checkbox-line"><input id="command-enabled" type="checkbox" checked>Commande active</label><button class="primary-button wide" type="submit">Enregistrer</button></form></div></div>
+
+  <div class="modal" id="announcement-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><span class="modal-kicker">ANNONCE</span><h2 id="announcement-modal-title">Nouvelle annonce</h2><form id="announcement-form"><input type="hidden" id="announcement-id"><label>Titre<input id="announcement-title" required></label><label>Message<textarea id="announcement-message" required></textarea></label><div class="form-row"><label>Intervalle<input id="announcement-interval" type="number" min="1" value="20"><small>minutes</small></label><label>Messages minimum<input id="announcement-min-messages" type="number" min="0" value="0"></label></div><div class="checkbox-grid"><label><input id="announcement-only-live" type="checkbox" checked>Uniquement en live</label><label><input id="announcement-enabled" type="checkbox" checked>Annonce active</label></div><button class="primary-button wide" type="submit">Enregistrer</button></form></div></div>
+
+  <div class="modal" id="shop-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><span class="modal-kicker">BOUTIQUE</span><h2>Nouvel objet</h2><form id="shop-form"><label>Nom<input id="shop-name" required></label><label>Description<textarea id="shop-description"></textarea></label><div class="form-row"><label>Coût<input id="shop-cost" type="number" min="0" value="100"></label><label>Action<select id="shop-action"><option value="manual">Validation manuelle</option><option value="overlay">Overlay</option><option value="tts">TTS</option><option value="obs">OBS</option></select></label></div><button class="primary-button wide" type="submit">Ajouter à la boutique</button></form></div></div>
+
+  <div class="modal" id="reward-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><span class="modal-kicker">POINTS TWITCH</span><h2>Nouvelle action</h2><form id="reward-form"><label>Titre exact de la récompense<input id="reward-title" required placeholder="Faire parler Aura"></label><label>Action<select id="reward-action-type"><option value="overlay">Afficher une alerte</option><option value="tts">Lire un TTS</option><option value="counter">Modifier un compteur</option><option value="chat">Répondre dans le chat</option></select></label><label>Configuration JSON<textarea id="reward-payload" placeholder='{"type":"wave","message":"Une vague arrive"}'>{}</textarea></label><label>Réponse dans le chat<textarea id="reward-response" placeholder="{viewer} a déclenché {reward}."></textarea></label><button class="primary-button wide" type="submit">Créer l’action</button></form></div></div>
+
+  <div class="modal" id="goal-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><span class="modal-kicker">OBJECTIF</span><h2 id="goal-modal-title">Nouvel objectif</h2><form id="goal-form"><input type="hidden" id="goal-id"><label>Titre<input id="goal-title" required placeholder="Objectif followers"></label><div class="form-row"><label>Valeur actuelle<input id="goal-current" type="number" min="0" value="0"></label><label>Cible<input id="goal-target" type="number" min="1" value="100"></label></div><div class="form-row"><label>Type<select id="goal-type"><option value="custom">Personnalisé</option><option value="followers">Followers</option><option value="subs">Abonnements</option><option value="bits">Bits</option></select></label><label>Unité<input id="goal-unit" placeholder="followers"></label></div><label class="checkbox-line"><input id="goal-enabled" type="checkbox" checked>Objectif affiché</label><button class="primary-button wide" type="submit">Enregistrer</button></form></div></div>
+
+  <div class="modal ai-modal" id="ai-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><div class="ai-modal-head"><div class="mini-orb"><span></span></div><div><span class="modal-kicker">CONVERSATION PRIVÉE</span><h2>Parler à Aura</h2></div></div><div id="ai-conversation" class="ai-conversation"><div class="ai-message aura"><b>Aura</b><p>Je t’écoute. Cette conversation ne part pas dans le chat sauf si tu coches l’option dédiée.</p></div></div><form id="ai-form"><textarea id="ai-message" required placeholder="Écris à Aura…"></textarea><div class="ai-form-options"><label><input id="ai-speak-aloud" type="checkbox" checked>Lire sa réponse à voix haute</label><label><input id="ai-send-chat" type="checkbox">Publier sa réponse sur Twitch</label></div><button class="primary-button wide" type="submit">Envoyer à Aura</button></form></div></div>
+
+  <div id="toast-zone" class="toast-zone"></div>
+  <script src="/static/app.js?v=1.2.0"></script>
+  <script src="/static/power.js?v=1.2.0"></script>
+  <script src="/static/complete.js?v=1.2.0"></script>
+  <script src="/static/avatar-studio.js?v=1.2.0"></script>
+</body>
+</html>

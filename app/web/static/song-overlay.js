@@ -1,0 +1,5 @@
+const shell=document.querySelector('#song-shell'),frame=document.querySelector('#song-frame'),title=document.querySelector('#song-title'),requester=document.querySelector('#song-requester');
+function play(song){if(!song||!song.video_id)return;shell.classList.remove('hidden');title.textContent=song.title||'Morceau YouTube';requester.textContent=`Demandé par ${song.display_name||'le Spot'}`;frame.src=`https://www.youtube.com/embed/${encodeURIComponent(song.video_id)}?autoplay=1&controls=1&rel=0`}
+function stop(){frame.src='about:blank';shell.classList.add('hidden')}
+function connect(){const protocol=location.protocol==='https:'?'wss':'ws';const ws=new WebSocket(`${protocol}://${location.host}/ws/overlay`);ws.onmessage=e=>{const data=JSON.parse(e.data);if(data.type==='song_play')play(data);if(data.type==='song_stop')stop()};ws.onopen=()=>ws.send('song-overlay-ready');ws.onclose=()=>setTimeout(connect,2000)}
+fetch('/api/power/songs').then(r=>r.json()).then(rows=>play(rows.find(v=>v.status==='playing'))).catch(()=>{});connect();

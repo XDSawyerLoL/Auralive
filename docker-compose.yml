@@ -1,0 +1,15 @@
+services:
+  aura-live:
+    build: .
+    container_name: aura-live
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AURA_HOST: 0.0.0.0
+      AURA_PORT: 8787
+      DATABASE_PATH: data/aura_live.db
+      MEDIA_DIR: data/media
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./data:/app/data

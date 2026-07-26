@@ -1,0 +1,25 @@
+AURA LIVE 0.2.2 — INSTALLATION DU CORRECTIF
+
+1. Ferme Aura avec Ctrl+C.
+2. Copie ton fichier .env et le dossier data par sécurité.
+3. Décompresse l'archive directement dans ton dossier AuraLive.
+4. Accepte le remplacement des fichiers.
+5. Ne remplace pas et ne supprime pas .env ni data\aura_live.db.
+6. Relance .\aura.bat.
+7. Ouvre http://localhost:8787 puis va dans Aura IA.
+8. Vérifie la section « Identités Twitch ».
+
+Si le compte qui parle est SANSAHD :
+- clique sur Déconnecter sous « Compte qui parle » ;
+- déconnecte-toi de Twitch dans le navigateur ;
+- clique sur Connecter/Reconnecter ;
+- autorise avec le compte auralive1.
+
+Pour les alertes OBS :
+- va dans Alertes & OBS ;
+- clique sur Copier le lien ;
+- colle ce lien dans une source navigateur OBS.
+
+Pour les sondages :
+- ils apparaissent maintenant comme de vrais sondages Twitch ;
+- les viewers votent dans la carte Twitch et non avec !vote.
