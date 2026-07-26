@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import io
 import logging
+import sys
 import time
 import wave
+from array import array
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +31,50 @@ def _wav_duration_ms(path: Path) -> int:
         return 0
 
 
+def _normalize_wav_level(audio: bytes) -> tuple[bytes, float, float]:
+    """Remonte une voix faible sans amplifier un silence presque total."""
+    try:
+        with wave.open(io.BytesIO(audio), "rb") as source:
+            params = source.getparams()
+            if source.getnchannels() != 1 or source.getsampwidth() != 2:
+                return audio, 0.0, 1.0
+            frames = source.readframes(source.getnframes())
+    except (OSError, EOFError, wave.Error):
+        return audio, 0.0, 1.0
+
+    samples = array("h")
+    samples.frombytes(frames)
+    if sys.byteorder != "little":
+        samples.byteswap()
+    if not samples:
+        return audio, 0.0, 1.0
+
+    peak_value = max(abs(int(value)) for value in samples)
+    peak = peak_value / 32768.0
+    if peak < 0.008 or peak >= 0.72:
+        return audio, round(peak, 5), 1.0
+
+    gain = min(6.0, 0.78 / max(peak, 0.001))
+    if gain <= 1.05:
+        return audio, round(peak, 5), 1.0
+
+    normalized = array(
+        "h",
+        (
+            max(-32768, min(32767, round(int(value) * gain)))
+            for value in samples
+        ),
+    )
+    if sys.byteorder != "little":
+        normalized.byteswap()
+
+    output = io.BytesIO()
+    with wave.open(output, "wb") as target:
+        target.setparams(params)
+        target.writeframes(normalized.tobytes())
+    return output.getvalue(), round(peak, 5), round(gain, 2)
+
+
 def _is_hands_free(mime_type: str, require_wake_word: bool) -> bool:
     compact = str(mime_type or "").casefold().replace(" ", "")
     return bool(require_wake_word or "mode=handsfree" in compact)
@@ -48,6 +95,8 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
         "anti_echo_rearms": 0,
         "last_audio_duration_ms": 0,
         "last_rearm_after_ms": 0,
+        "last_input_peak": 0.0,
+        "last_input_gain": 1.0,
     }
 
     if not getattr(AvatarAudioService, "_mairaiy_duration_patch", False):
@@ -66,8 +115,15 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
         AvatarAudioService._mairaiy_duration_patch = True
 
     if not getattr(VoiceInputService, "_mairaiy_stability_patch", False):
+        original_transcribe = VoiceInputService.transcribe
         original_talk = VoiceInputService.talk
         original_diagnostic = VoiceInputService.diagnostic
+
+        async def transcribe(self: Any, audio: bytes, mime_type: str) -> str:
+            normalized, peak, gain = _normalize_wav_level(audio)
+            state["last_input_peak"] = peak
+            state["last_input_gain"] = gain
+            return await original_transcribe(self, normalized, mime_type)
 
         async def talk(
             self: Any,
@@ -110,6 +166,8 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
                     "latency_ms": self.last_latency_ms,
                     "audio_duration_ms": 0,
                     "rearm_after_ms": 650,
+                    "input_peak": state["last_input_peak"],
+                    "input_gain": state["last_input_gain"],
                 }
 
             if not hands_free:
@@ -127,6 +185,8 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
                 state["anti_echo_rearms"] += 1
             result["audio_duration_ms"] = duration
             result["rearm_after_ms"] = rearm
+            result["input_peak"] = state["last_input_peak"]
+            result["input_gain"] = state["last_input_gain"]
             state["last_audio_duration_ms"] = duration
             state["last_rearm_after_ms"] = rearm
             return result
@@ -136,8 +196,11 @@ def install_voice_stability(aura: Any) -> dict[str, Any]:
             payload["stability"] = dict(state)
             payload["controls"]["anti_echo"] = True
             payload["controls"]["silence_is_not_error"] = True
+            payload["controls"]["input_normalization"] = True
+            payload["controls"]["ambient_calibration"] = True
             return payload
 
+        VoiceInputService.transcribe = transcribe
         VoiceInputService.talk = talk
         VoiceInputService.diagnostic = diagnostic
         VoiceInputService._mairaiy_stability_patch = True
