@@ -25,12 +25,52 @@ _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
 
 
+def _normalize_frontier_event(event_type: str, event: dict[str, Any]) -> dict[str, Any]:
+    """Ajoute des champs stables sans altérer le payload Twitch original."""
+    payload = dict(event)
+    message = payload.get("message")
+    if isinstance(message, dict):
+        payload.setdefault("text", str(message.get("text") or ""))
+        payload.setdefault("fragments", list(message.get("fragments") or []))
+    payload.setdefault(
+        "user_id",
+        payload.get("chatter_user_id")
+        or payload.get("from_broadcaster_user_id")
+        or payload.get("user_id"),
+    )
+    payload.setdefault(
+        "user_name",
+        payload.get("chatter_user_name")
+        or payload.get("from_broadcaster_user_name")
+        or payload.get("user_name"),
+    )
+    payload.setdefault("message_id", payload.get("message_id"))
+    badges = payload.get("badges") or []
+    if isinstance(badges, list):
+        payload.setdefault(
+            "roles",
+            sorted(
+                {
+                    str(item.get("set_id"))
+                    for item in badges
+                    if isinstance(item, dict) and item.get("set_id")
+                }
+            ),
+        )
+    payload["event_type"] = event_type
+    return payload
+
+
 async def _combined_twitch_handler(event_type: str, event: dict[str, Any]) -> None:
     # Les fonctions historiques restent exécutées en premier. Automation Studio
     # ajoute ensuite les scénarios personnalisés sans supprimer le comportement V1.2.
     await _original_twitch_handler(event_type, event)
     try:
-        await automation.dispatch(event_type, event, source="twitch")
+        await automation.dispatch(
+            event_type,
+            _normalize_frontier_event(event_type, event),
+            source="twitch",
+        )
     except Exception:
         logger.exception("Automation Studio n’a pas pu traiter %s", event_type)
 
