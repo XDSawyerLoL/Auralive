@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Parler à Mairaiy — Aura Live</title>
+  <style>
+    :root{font-family:Inter,"Segoe UI",sans-serif;color-scheme:dark;--cyan:#59e9ff;--violet:#9b78ff;--ink:#07101d;--panel:#111b2d;--muted:#8ca2ba}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:radial-gradient(circle at 30% 0,#182746 0,#09111f 44%,#050a12 100%);color:#eef8ff}
+    body{display:grid;place-items:center;padding:24px}.shell{width:min(760px,100%);display:grid;gap:18px}.head{display:flex;align-items:center;justify-content:space-between;gap:18px}.head span{font-size:11px;letter-spacing:.2em;color:var(--cyan);font-weight:800}.head h1{margin:5px 0 0;font-size:clamp(25px,5vw,42px)}.status{padding:9px 13px;border:1px solid rgba(89,233,255,.22);border-radius:999px;color:var(--muted);font-size:12px;background:rgba(9,17,31,.75)}
+    .card{padding:24px;border:1px solid rgba(130,173,220,.16);border-radius:25px;background:linear-gradient(150deg,rgba(18,29,49,.96),rgba(8,16,29,.94));box-shadow:0 28px 90px rgba(0,0,0,.42)}
+    .mic-zone{display:grid;place-items:center;gap:18px;padding:24px 10px}.mic{width:190px;aspect-ratio:1;border:0;border-radius:50%;cursor:pointer;color:white;font-size:19px;font-weight:850;letter-spacing:.04em;background:radial-gradient(circle at 35% 28%,#84f4ff,var(--cyan) 22%,#687bff 64%,#3d285f 100%);box-shadow:0 0 0 12px rgba(89,233,255,.06),0 0 0 24px rgba(155,120,255,.04),0 26px 70px rgba(39,92,160,.38);transition:transform .16s ease,box-shadow .16s ease,filter .16s ease;touch-action:none;user-select:none}.mic:hover{transform:translateY(-3px);filter:saturate(1.12)}.mic.recording{transform:scale(.94);background:radial-gradient(circle at 35% 28%,#ffb0c2,#ff4d79 44%,#8a285c 100%);box-shadow:0 0 0 14px rgba(255,77,121,.11),0 0 0 30px rgba(255,77,121,.05),0 26px 70px rgba(255,45,105,.35);animation:pulse 1s ease-in-out infinite}.mic.processing{cursor:wait;filter:grayscale(.25);animation:spinGlow 1.3s linear infinite}.hint{text-align:center;color:var(--muted);line-height:1.5}.hint b{display:block;color:#eaf9ff;font-size:16px}.options{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}.toggle{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:13px;background:rgba(255,255,255,.035);color:#c7d7e7;font-size:13px}.toggle input{accent-color:var(--violet)}
+    .exchange{display:grid;gap:13px}.bubble{padding:16px 18px;border-radius:17px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);min-height:62px}.bubble small{display:block;margin-bottom:7px;color:var(--cyan);font-size:10px;font-weight:850;letter-spacing:.18em}.bubble p{margin:0;line-height:1.55}.bubble.answer{background:linear-gradient(135deg,rgba(85,232,255,.07),rgba(155,120,255,.08))}.error{color:#ff9ab2}.footer{font-size:12px;line-height:1.55;color:var(--muted);text-align:center}.footer code{color:#dbeeff}
+    @keyframes pulse{50%{box-shadow:0 0 0 22px rgba(255,77,121,.05),0 0 0 42px rgba(255,77,121,.02),0 26px 70px rgba(255,45,105,.35)}}@keyframes spinGlow{50%{box-shadow:0 0 0 18px rgba(89,233,255,.05),0 0 65px rgba(155,120,255,.35)}}
+    @media(max-width:560px){.head{align-items:flex-start;flex-direction:column}.card{padding:17px}.mic{width:155px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="head">
+      <div><span>MICRO LIVE PRIVÉ</span><h1>Parler à Mairaiy</h1></div>
+      <div id="system-status" class="status">Vérification…</div>
+    </header>
+    <section class="card">
+      <div class="mic-zone">
+        <button id="mic-button" class="mic" type="button" aria-label="Maintenir pour parler">Maintenir<br>pour parler</button>
+        <div id="mic-hint" class="hint"><b>Maintiens le bouton ou la barre Espace</b>Relâche pour envoyer ta phrase à Mairaiy.</div>
+        <div class="options">
+          <label class="toggle"><input id="send-chat" type="checkbox"> Publier aussi sa réponse dans le chat Twitch</label>
+        </div>
+      </div>
+      <div class="exchange">
+        <div class="bubble"><small>CE QUE MAIRAIY A ENTENDU</small><p id="transcript">—</p></div>
+        <div class="bubble answer"><small>RÉPONSE</small><p id="answer">—</p></div>
+      </div>
+    </section>
+    <div class="footer">L’audio est converti en WAV dans ce navigateur, envoyé à Gemini pour transcription, puis supprimé de la mémoire. La réponse vocale sort dans la source OBS <code>/overlay/avatar</code>.</div>
+  </main>
+  <script>
+    const button=document.querySelector('#mic-button');
+    const hint=document.querySelector('#mic-hint');
+    const transcript=document.querySelector('#transcript');
+    const answer=document.querySelector('#answer');
+    const statusNode=document.querySelector('#system-status');
+    const sendChat=document.querySelector('#send-chat');
+    let recording=false,processing=false,audioContext=null,stream=null,source=null,processor=null,silentGain=null,chunks=[],sampleRate=48000,startedAt=0,stopTimer=null;
+
+    const setHint=(title,detail='',error=false)=>{hint.innerHTML=`<b class="${error?'error':''}">${title}</b>${detail}`};
+    async function refreshStatus(){
+      try{
+        const r=await fetch('/api/voice/status',{cache:'no-store'});const data=await r.json();
+        statusNode.textContent=data.configured?(data.avatar_connected?'PRÊTE · AVATAR CONNECTÉ':'PRÊTE · OUVRE L’AVATAR OBS'):'CONFIGURATION GEMINI MANQUANTE';
+        statusNode.style.color=data.configured?'#a9f7df':'#ff9ab2';
+      }catch{statusNode.textContent='AURA LIVE INJOIGNABLE';statusNode.style.color='#ff9ab2'}
+    }
+    async function startRecording(){
+      if(recording||processing)return;
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+        audioContext=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+        sampleRate=audioContext.sampleRate;
+        source=audioContext.createMediaStreamSource(stream);
+        processor=audioContext.createScriptProcessor(4096,1,1);
+        silentGain=audioContext.createGain();silentGain.gain.value=0;
+        chunks=[];recording=true;startedAt=Date.now();
+        processor.onaudioprocess=e=>{if(recording)chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))};
+        source.connect(processor);processor.connect(silentGain);silentGain.connect(audioContext.destination);
+        button.classList.add('recording');button.innerHTML='Je t’écoute…';
+        setHint('Parle maintenant','Relâche quand ta phrase est terminée.');
+        stopTimer=setTimeout(stopRecording,20000);
+      }catch(error){setHint('Micro inaccessible',error.message||'Autorise le microphone dans le navigateur.',true)}
+    }
+    async function stopRecording(){
+      if(!recording)return;
+      recording=false;clearTimeout(stopTimer);button.classList.remove('recording');
+      try{processor?.disconnect();source?.disconnect();silentGain?.disconnect()}catch{}
+      stream?.getTracks().forEach(track=>track.stop());
+      try{await audioContext?.close()}catch{}
+      if(Date.now()-startedAt<350||!chunks.length){setHint('Phrase trop courte','Maintiens le bouton un peu plus longtemps.',true);button.innerHTML='Maintenir<br>pour parler';return}
+      processing=true;button.classList.add('processing');button.innerHTML='Mairaiy<br>réfléchit';
+      setHint('Transcription et réponse en cours','Le micro est déjà coupé : elle ne peut pas s’entendre elle-même.');
+      try{
+        const wav=encodeWav(chunks,sampleRate);const payload={audio_base64:arrayBufferToBase64(wav),mime_type:'audio/wav',send_to_chat:sendChat.checked};
+        const response=await fetch('/api/voice/talk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const raw=await response.text();let data={};try{data=JSON.parse(raw)}catch{data={detail:raw}}
+        if(!response.ok)throw new Error(data.detail||'Dialogue vocal impossible');
+        transcript.textContent=data.transcript||'—';answer.textContent=data.answer||'—';
+        setHint('Réponse envoyée à l’avatar OBS',`${data.latency_ms||0} ms${data.sent_to_chat?' · publiée dans Twitch':''}`);
+        await refreshStatus();
+      }catch(error){setHint('Mairaiy n’a pas pu répondre',error.message||String(error),true)}
+      finally{processing=false;button.classList.remove('processing');button.innerHTML='Maintenir<br>pour parler';chunks=[]}
+    }
+    function encodeWav(parts,rate){
+      const length=parts.reduce((sum,p)=>sum+p.length,0);const buffer=new ArrayBuffer(44+length*2);const view=new DataView(buffer);
+      const write=(offset,text)=>{for(let i=0;i<text.length;i++)view.setUint8(offset+i,text.charCodeAt(i))};
+      write(0,'RIFF');view.setUint32(4,36+length*2,true);write(8,'WAVE');write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);write(36,'data');view.setUint32(40,length*2,true);
+      let offset=44;for(const part of parts){for(let i=0;i<part.length;i++){const value=Math.max(-1,Math.min(1,part[i]));view.setInt16(offset,value<0?value*32768:value*32767,true);offset+=2}}
+      return buffer;
+    }
+    function arrayBufferToBase64(buffer){
+      const bytes=new Uint8Array(buffer);let binary='';const step=0x8000;
+      for(let i=0;i<bytes.length;i+=step)binary+=String.fromCharCode(...bytes.subarray(i,i+step));
+      return btoa(binary);
+    }
+    button.addEventListener('pointerdown',event=>{event.preventDefault();button.setPointerCapture?.(event.pointerId);startRecording()});
+    button.addEventListener('pointerup',event=>{event.preventDefault();stopRecording()});
+    button.addEventListener('pointercancel',stopRecording);
+    window.addEventListener('keydown',event=>{if(event.code==='Space'&&!event.repeat&&!['INPUT','TEXTAREA'].includes(document.activeElement?.tagName)){event.preventDefault();startRecording()}});
+    window.addEventListener('keyup',event=>{if(event.code==='Space'){event.preventDefault();stopRecording()}});
+    refreshStatus();setInterval(refreshStatus,10000);
+  </script>
+</body>
+</html>
