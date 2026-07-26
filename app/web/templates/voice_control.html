@@ -25,9 +25,9 @@
     <section class="card">
       <div class="mic-zone">
         <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute continue">Activer<br>l'écoute</button>
-        <div id="mic-hint" class="hint"><b>Dis « Mairaiy » puis ta phrase</b>Edge reconnaît directement ta voix. Il n’y a plus de push-to-talk ni de calibration manuelle.</div>
+        <div id="mic-hint" class="hint"><b>Parle-lui normalement</b>Tu n’as plus besoin de dire « Mairaiy ». Chaque phrase reconnue lui est adressée directement.</div>
         <div class="options">
-          <label class="toggle"><input id="hands-free" type="checkbox" checked disabled> Écoute continue</label>
+          <label class="toggle"><input id="hands-free" type="checkbox" checked disabled> Écoute directe</label>
           <label class="toggle"><input id="send-chat" type="checkbox"> Publier aussi sa réponse dans le chat Twitch</label>
         </div>
         <div class="runtime">
@@ -40,8 +40,8 @@
         <div class="bubble answer"><small>RÉPONSE</small><p id="answer">—</p></div>
       </div>
     </section>
-    <div class="footer">Un clic suffit pour autoriser le micro la première fois. Ensuite, la page relance automatiquement l’écoute continue. Mairaiy n’utilise qu’une seule voix Gemini ; elle ne bascule plus sur une autre voix en cas de panne.</div>
+    <div class="footer">Le bouton active ou coupe l’écoute. Pendant qu’elle répond, le micro est suspendu pour éviter qu’elle s’entende elle-même, puis il redémarre automatiquement.</div>
   </main>
-  <script src="/static/avatar/voice-control.js?v=2.4.0"></script>
+  <script src="/static/avatar/voice-control.js?v=2.4.2"></script>
 </body>
 </html>
