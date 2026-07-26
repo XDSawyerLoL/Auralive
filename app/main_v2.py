@@ -6,13 +6,19 @@ from typing import Any
 
 import uvicorn
 from fastapi import Request
+from fastapi.responses import JSONResponse
 
 from app.automation.routes import build_automation_router
 from app.automation.runtime import AutomationStudioRuntime
 from app.config import settings
 from app.main import app, aura, db
+from app.services.twitch_frontier import FrontierTwitchClient
 
 logger = logging.getLogger("aura-live-v2")
+
+# Remplacement avant le démarrage : tous les modules V1.2 continuent d'utiliser
+# aura.twitch, mais reçoivent désormais le client natif Frontier.
+aura.twitch = FrontierTwitchClient(settings, db, aura.handle_twitch_event)
 automation = AutomationStudioRuntime(aura, db, settings)
 _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
@@ -35,9 +41,10 @@ aura.twitch.handler = _combined_twitch_handler
 async def _v2_lifespan(application):
     async with _original_lifespan(application):
         await automation.initialize()
+        await automation.install_frontier_defaults()
         await automation.dispatch(
             "aura.started",
-            {"version": "2.0.0-alpha", "stream_online": aura.stream_online},
+            {"version": "2.0.0-frontier", "stream_online": aura.stream_online},
             source="system",
         )
         try:
@@ -46,7 +53,7 @@ async def _v2_lifespan(application):
             try:
                 await automation.dispatch(
                     "aura.stopping",
-                    {"version": "2.0.0-alpha", "stream_online": aura.stream_online},
+                    {"version": "2.0.0-frontier", "stream_online": aura.stream_online},
                     source="system",
                 )
             finally:
@@ -55,15 +62,31 @@ async def _v2_lifespan(application):
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
-app.version = "2.0.0-alpha"
+app.version = "2.0.0-frontier"
+app.title = "Aura Live 2 — Frontier"
 
 
 @app.middleware("http")
-async def automation_no_cache(request: Request, call_next):
+async def frontier_local_and_no_cache(request: Request, call_next):
+    client_host = request.client.host if request.client else ""
+    if request.url.path.startswith(("/automation", "/api/automation")):
+        if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+            return JSONResponse(
+                {"detail": "Automation Studio est réservé au PC de streaming."},
+                status_code=403,
+            )
     response = await call_next(request)
     if request.url.path == "/automation" or request.url.path.startswith("/static/automation"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
+
+
+@app.get("/api/frontier/status")
+async def frontier_status() -> dict[str, Any]:
+    status = await automation.status()
+    status["twitch_frontier"] = isinstance(aura.twitch, FrontierTwitchClient)
+    status["version"] = "2.0.0-frontier"
+    return status
 
 
 if __name__ == "__main__":
