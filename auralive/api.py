@@ -56,6 +56,14 @@ def create_app(runtime: AuraRuntime | None = None) -> FastAPI:
     async def health() -> dict[str, Any]:
         return aura.health()
 
+    @app.get("/api/emergency")
+    async def emergency_status() -> dict[str, bool]:
+        return {"active": aura.emergency_active}
+
+    @app.post("/api/emergency")
+    async def emergency(document: dict[str, Any] = Body(...)) -> dict[str, bool]:
+        return {"active": await aura.set_emergency(bool(document.get("active", True)))}
+
     @app.get("/api/catalog")
     async def catalog() -> dict[str, Any]:
         return aura.catalog()
