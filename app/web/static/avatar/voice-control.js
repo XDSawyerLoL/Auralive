@@ -9,6 +9,11 @@
   const micRuntime = document.querySelector('#mic-runtime');
   const visionRuntime = document.querySelector('#vision-runtime');
 
+  if (!button || !hint || !transcript || !answer || !statusNode || !sendChat || !handsFree || !micRuntime || !visionRuntime) {
+    console.error('Interface vocale Mairaiy incomplète');
+    return;
+  }
+
   let state = 'idle';
   let audioContext = null;
   let stream = null;
@@ -21,6 +26,7 @@
   let startedAt = 0;
   let stopTimer = null;
   let rearmTimer = null;
+  let requestTimer = null;
   let maxSeconds = 20;
   let requestSerial = 0;
   let speechFrames = 0;
@@ -34,7 +40,6 @@
   let calibrated = false;
   let calibrationUntil = 0;
   let calibrationSamples = [];
-  let lastPeak = 0;
 
   const PRE_ROLL_FRAMES = 14;
   const START_FRAMES = 3;
@@ -43,12 +48,19 @@
   const MIN_UTTERANCE_MS = 650;
   const MIN_VOICED_MS = 220;
   const CALIBRATION_MS = 1400;
+  const REQUEST_TIMEOUT_MS = 75000;
+  const MAX_REARM_MS = 45000;
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
   const setHint = (title, detail = '', error = false) => {
     hint.innerHTML = `<b class="${error ? 'error' : ''}">${title}</b>${detail}`;
   };
+
+  function setState(next) {
+    state = next;
+    renderState();
+  }
 
   function renderState() {
     button.classList.toggle('listening', state === 'calibrating' || state === 'listening');
@@ -60,14 +72,14 @@
     else if (state === 'listening') button.innerHTML = 'Écoute<br>active';
     else if (state === 'capturing') button.innerHTML = 'Mairaiy<br>t’écoute';
     else if (state === 'processing') button.innerHTML = 'Mairaiy<br>répond';
-    else if (state === 'cooldown') button.innerHTML = 'Réponse<br>en cours';
+    else if (state === 'cooldown') button.innerHTML = 'Pause<br>anti-écho';
     else button.innerHTML = handsFree.checked ? 'Activer<br>l’écoute' : 'Cliquer<br>pour parler';
 
     if (state === 'calibrating') micRuntime.textContent = 'Calibration du bruit ambiant';
     else if (state === 'listening') micRuntime.textContent = `Mains libres · seuil ${speechThreshold.toFixed(3)}`;
     else if (state === 'capturing') micRuntime.textContent = 'Phrase détectée';
-    else if (state === 'processing') micRuntime.textContent = 'Transcription en cours';
-    else if (state === 'cooldown') micRuntime.textContent = 'Pause anti-écho';
+    else if (state === 'processing') micRuntime.textContent = 'Transcription, réponse et voix';
+    else if (state === 'cooldown') micRuntime.textContent = 'Attente de la fin de sa voix';
     else micRuntime.textContent = 'Micro en pause';
   }
 
@@ -103,7 +115,7 @@
       statusNode.style.color = data.configured ? '#a9f7df' : '#ff9ab2';
       visionRuntime.textContent = visionLabel(data);
     } catch {
-      statusNode.textContent = 'AURA LIVE INJOIGNABLE';
+      statusNode.textContent = 'SERVEUR LOCAL INJOIGNABLE';
       statusNode.style.color = '#ff9ab2';
       visionRuntime.textContent = 'Serveur local injoignable';
     }
@@ -117,8 +129,10 @@
   async function disposeHardware() {
     clearTimeout(stopTimer);
     clearTimeout(rearmTimer);
+    clearTimeout(requestTimer);
     stopTimer = null;
     rearmTimer = null;
+    requestTimer = null;
     try { processor?.disconnect(); } catch {}
     try { source?.disconnect(); } catch {}
     try { silentGain?.disconnect(); } catch {}
@@ -135,29 +149,26 @@
   }
 
   function finishCalibration() {
-    const samples = calibrationSamples.filter(value => Number.isFinite(value)).sort((a, b) => a - b);
+    const samples = calibrationSamples.filter(Number.isFinite).sort((a, b) => a - b);
     const index = Math.max(0, Math.min(samples.length - 1, Math.floor(samples.length * 0.72)));
     noiseFloor = samples.length ? samples[index] : 0.004;
     noiseFloor = clamp(noiseFloor, 0.0015, 0.025);
     speechThreshold = clamp((noiseFloor * 2.45) + 0.0015, 0.006, 0.055);
     calibrationSamples = [];
     calibrated = true;
-    state = 'listening';
-    renderState();
+    setState('listening');
     setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Le niveau du micro est calibré.');
   }
 
   function beginDetectedSpeech() {
-    state = 'capturing';
+    setState('capturing');
     chunks = preRoll.slice();
     preRoll = [];
     startedAt = Date.now();
     silenceMs = 0;
     voicedMs = candidateSpeechMs;
     candidateSpeechMs = 0;
-    lastPeak = 0;
     stopQueued = false;
-    renderState();
     setHint('Je t’écoute', 'Continue ta phrase. Elle sera envoyée après un court silence.');
     clearTimeout(stopTimer);
     stopTimer = setTimeout(() => queueStopRecording(true), Math.max(3, maxSeconds) * 1000);
@@ -200,8 +211,6 @@
 
     if (state !== 'capturing') return;
     chunks.push(frame);
-    lastPeak = Math.max(lastPeak, rms);
-
     if (rms >= speechThreshold * 0.82) {
       voicedMs += frameMs;
       silenceMs = 0;
@@ -250,18 +259,22 @@
 
     const track = stream.getAudioTracks()[0];
     track.addEventListener('ended', () => {
-      state = 'idle';
+      setState('idle');
       calibrated = false;
-      renderState();
       setHint('Micro déconnecté', 'Reconnecte le périphérique puis clique une fois pour réactiver.', true);
       disposeHardware();
     }, { once: true });
   }
 
   async function startHandsFree() {
-    if (!handsFree.checked || ['processing', 'cooldown', 'capturing'].includes(state)) return;
+    if (!handsFree.checked || state === 'processing' || state === 'capturing') return;
     clearTimeout(rearmTimer);
     rearmTimer = null;
+
+    // Le minuteur anti-écho appelle cette fonction depuis l’état cooldown.
+    // Il faut impérativement libérer cet état avant de réarmer le micro.
+    if (state === 'cooldown') setState('idle');
+
     try {
       await ensureHardware();
       chunks = [];
@@ -273,17 +286,14 @@
       if (!calibrated) {
         calibrationSamples = [];
         calibrationUntil = Date.now() + CALIBRATION_MS;
-        state = 'calibrating';
-        renderState();
+        setState('calibrating');
         setHint('Calibration du micro', 'Reste silencieux une seconde, puis parle normalement.');
       } else {
-        state = 'listening';
-        renderState();
+        setState('listening');
         setHint('Écoute mains libres active', 'Dis « Mairaiy » puis ta phrase. Aucun bouton à maintenir.');
       }
     } catch (error) {
-      state = 'idle';
-      renderState();
+      setState('idle');
       setHint('Autorisation du micro nécessaire', error.message || 'Clique une fois puis autorise le microphone.', true);
     }
   }
@@ -291,16 +301,17 @@
   function pauseListening(message = '') {
     clearTimeout(stopTimer);
     clearTimeout(rearmTimer);
+    clearTimeout(requestTimer);
     stopTimer = null;
     rearmTimer = null;
+    requestTimer = null;
     chunks = [];
     preRoll = [];
     speechFrames = 0;
     candidateSpeechMs = 0;
     voicedMs = 0;
     silenceMs = 0;
-    state = 'idle';
-    renderState();
+    setState('idle');
     if (message) setHint('Écoute en pause', message);
   }
 
@@ -312,14 +323,11 @@
       preRoll = [];
       startedAt = Date.now();
       voicedMs = MIN_VOICED_MS;
-      lastPeak = 0;
-      state = 'capturing';
-      renderState();
+      setState('capturing');
       setHint('Je t’écoute', 'Clique de nouveau pour envoyer ta phrase.');
       stopTimer = setTimeout(() => queueStopRecording(false), Math.max(3, maxSeconds) * 1000);
     } catch (error) {
-      state = 'idle';
-      renderState();
+      setState('idle');
       setHint('Micro inaccessible', error.message || 'Autorise le microphone dans le navigateur.', true);
     }
   }
@@ -331,12 +339,27 @@
   }
 
   async function returnToListening(title, detail) {
-    state = 'idle';
-    renderState();
+    setState('idle');
     setHint(title, detail);
     if (handsFree.checked) {
+      clearTimeout(rearmTimer);
       rearmTimer = setTimeout(() => startHandsFree(), 250);
     }
+  }
+
+  function scheduleRearm(delayMs, title = 'Écoute mains libres active') {
+    clearTimeout(rearmTimer);
+    const wait = clamp(Number(delayMs) || 2800, 350, MAX_REARM_MS);
+    setState('cooldown');
+    setHint(title, `Le micro se réactive dans ${(wait / 1000).toFixed(1)} s.`);
+
+    rearmTimer = setTimeout(async () => {
+      rearmTimer = null;
+      if (state !== 'cooldown') return;
+      setState('idle');
+      if (handsFree.checked) await startHandsFree();
+      else pauseListening('Clique quand tu veux lui reparler.');
+    }, wait);
   }
 
   async function stopRecording(requireWakeWord) {
@@ -352,8 +375,7 @@
       return;
     }
 
-    state = 'processing';
-    renderState();
+    setState('processing');
     setHint('Transcription et réponse en cours', requireWakeWord
       ? 'Elle répond uniquement si la phrase contient « Mairaiy ».'
       : 'La phrase est envoyée à Mairaiy.');
@@ -362,6 +384,8 @@
     const wav = encodeWav(chunks, sampleRate);
     chunks = [];
     preRoll = [];
+    const controller = new AbortController();
+    requestTimer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
       const payload = {
@@ -373,7 +397,11 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       });
+      clearTimeout(requestTimer);
+      requestTimer = null;
+
       const raw = await response.text();
       let data = {};
       try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
@@ -385,29 +413,30 @@
 
       if (data.ignored) {
         const noise = data.ignore_reason === 'silence_or_noise';
-        setHint('Écoute active', noise
-          ? 'Bruit ou silence ignoré.'
-          : 'Phrase entendue, mais le mot « Mairaiy » manque.');
-        state = 'cooldown';
-        renderState();
-        rearmTimer = setTimeout(() => startHandsFree(), Math.max(450, Number(data.rearm_after_ms || 650)));
+        scheduleRearm(
+          Math.max(450, Number(data.rearm_after_ms || 650)),
+          noise ? 'Bruit ou silence ignoré' : 'Mot d’appel manquant',
+        );
         return;
       }
 
-      setHint('Réponse envoyée', `${data.latency_ms || 0} ms${data.sent_to_chat ? ' · publiée dans Twitch' : ''}`);
-      state = 'cooldown';
-      renderState();
-      const rearm = Math.max(1200, Number(data.rearm_after_ms || 2800));
-      rearmTimer = setTimeout(() => {
-        if (handsFree.checked) startHandsFree();
-        else pauseListening('Clique quand tu veux lui reparler.');
-      }, rearm);
+      const details = `${data.latency_ms || 0} ms${data.sent_to_chat ? ' · publiée dans Twitch' : ''}`;
+      setHint('Réponse reçue', details);
+      scheduleRearm(Math.max(1200, Number(data.rearm_after_ms || 2800)), 'Mairaiy parle');
       await refreshStatus();
     } catch (error) {
-      state = 'idle';
-      renderState();
-      setHint('Mairaiy n’a pas pu répondre', error.message || String(error), true);
-      if (handsFree.checked) rearmTimer = setTimeout(() => startHandsFree(), 1200);
+      clearTimeout(requestTimer);
+      requestTimer = null;
+      const aborted = error?.name === 'AbortError';
+      setState('idle');
+      setHint(
+        aborted ? 'Réponse trop longue' : 'Mairaiy n’a pas pu répondre',
+        aborted ? 'La requête a été interrompue après 75 secondes. Le micro va se réarmer.' : (error.message || String(error)),
+        true,
+      );
+      if (handsFree.checked) {
+        rearmTimer = setTimeout(() => startHandsFree(), aborted ? 8000 : 1200);
+      }
     }
   }
 
@@ -461,7 +490,8 @@
     if (audioContext?.state === 'suspended') {
       try { await audioContext.resume(); } catch {}
     }
-    if (handsFree.checked && !['processing', 'cooldown', 'capturing', 'calibrating'].includes(state)) {
+    if (handsFree.checked && !['processing', 'capturing', 'calibrating'].includes(state)) {
+      if (state === 'cooldown') setState('idle');
       await startHandsFree();
     }
     refreshStatus();
@@ -494,11 +524,21 @@
   });
 
   handsFree.addEventListener('change', () => {
-    if (handsFree.checked) {
-      startHandsFree();
-    } else {
-      pauseListening('Mode manuel : un clic démarre, un second envoie.');
-    }
+    if (handsFree.checked) startHandsFree();
+    else pauseListening('Mode manuel : un clic démarre, un second envoie.');
+  });
+
+  window.addEventListener('keydown', event => {
+    if (handsFree.checked || event.repeat || event.code !== 'Space') return;
+    if (['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement?.tagName)) return;
+    event.preventDefault();
+    startManualRecording();
+  });
+
+  window.addEventListener('keyup', event => {
+    if (handsFree.checked || event.code !== 'Space' || state !== 'capturing') return;
+    event.preventDefault();
+    queueStopRecording(false);
   });
 
   window.addEventListener('pageshow', recoverWithoutReload);
@@ -509,9 +549,8 @@
   });
   navigator.mediaDevices?.addEventListener?.('devicechange', async () => {
     await disposeHardware();
-    state = 'idle';
+    setState('idle');
     calibrated = false;
-    renderState();
     if (handsFree.checked) startHandsFree();
   });
   window.addEventListener('beforeunload', () => disposeHardware());
