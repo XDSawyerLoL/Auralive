@@ -1,5 +1,12 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { catalog: { actions: [], conditions: [], triggers: [] }, definitions: [], templates: [], current: null, editing: null };
+const state = {
+  catalog: { actions: [], conditions: [], triggers: [] },
+  definitions: [],
+  templates: [],
+  current: null,
+  editing: null,
+  realRunLocked: false,
+};
 
 async function api(path, options = {}) {
   const response = await fetch(path, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
@@ -17,7 +24,7 @@ function toast(message, error = false) {
   node.classList.toggle("error", error);
   node.classList.add("show");
   clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => node.classList.remove("show"), 2800);
+  toast.timer = setTimeout(() => node.classList.remove("show"), 3600);
 }
 
 function emptyDefinition() {
@@ -73,6 +80,7 @@ function fillForm() {
   $("#cooldownScope").value = item.cooldown_scope || "global";
   renderFlow();
   renderAutomationList();
+  renderTemplates();
 }
 
 function renderStatus(status) {
@@ -80,6 +88,10 @@ function renderStatus(status) {
     [status.definitions, "scénarios"], [status.enabled, "actifs"], [status.actions, "actions"], [status.conditions, "conditions"]
   ];
   $("#statusCards").innerHTML = values.map(([value, label]) => `<div class="status-card"><b>${value}</b><span>${label}</span></div>`).join("");
+}
+
+async function refreshStatus() {
+  renderStatus(await api("/api/automation/status"));
 }
 
 function renderTriggerOptions() {
@@ -90,7 +102,7 @@ function renderTriggerOptions() {
 function renderAutomationList() {
   const root = $("#automationList");
   if (!state.definitions.length) { root.innerHTML = `<div class="automation-card"><small>Aucun scénario enregistré</small></div>`; return; }
-  root.innerHTML = state.definitions.map((item) => `<button class="automation-card ${state.current?.id === item.id ? "active" : ""}" data-id="${escapeHtml(item.id)}"><strong><span class="dot ${item.enabled ? "on" : ""}"></span>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.trigger)}</small></button>`).join("");
+  root.innerHTML = state.definitions.map((item) => `<button class="automation-card ${state.current?.id === item.id ? "active" : ""}" data-id="${escapeHtml(item.id)}"><strong><span class="dot ${item.enabled ? "on" : ""}"></span>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.trigger)} · ${item.enabled ? "ACTIF" : "INACTIF"}</small></button>`).join("");
   root.querySelectorAll("[data-id]").forEach((button) => button.addEventListener("click", () => {
     syncFormToState();
     state.current = structuredClone(state.definitions.find((item) => item.id === button.dataset.id));
@@ -98,20 +110,36 @@ function renderAutomationList() {
   }));
 }
 
+function installedIdForTemplate(templateId) {
+  return templateId.replace("template-", "automation-");
+}
+
 function renderTemplates() {
   const root = $("#templateList");
-  root.innerHTML = state.templates.map((item) => `<button class="template-card" data-template="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.trigger)}</small></button>`).join("");
+  root.innerHTML = state.templates.map((item) => {
+    const existing = state.definitions.find((definition) => definition.id === installedIdForTemplate(item.id));
+    return `<button class="template-card ${existing ? "installed" : ""}" data-template="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.trigger)} · ${existing ? (existing.enabled ? "INSTALLÉ ET ACTIF" : "INSTALLÉ") : "À INSTALLER"}</small></button>`;
+  }).join("");
   root.querySelectorAll("[data-template]").forEach((button) => button.addEventListener("click", async () => {
+    const automationId = installedIdForTemplate(button.dataset.template);
+    const existing = state.definitions.find((item) => item.id === automationId);
+    if (existing) {
+      state.current = structuredClone(existing);
+      fillForm();
+      toast("Scénario déjà installé : ouverture sans modifier son état.");
+      return;
+    }
     try {
       const installed = await api(`/api/automation/templates/${encodeURIComponent(button.dataset.template)}/install`, { method: "POST", body: "{}" });
       await reloadDefinitions(installed.id);
-      toast("Modèle installé. Il reste désactivé jusqu’à ta validation.");
+      toast("Modèle installé et laissé inactif jusqu’à ta validation.");
     } catch (error) { toast(error.message, true); }
   }));
 }
 
 function renderFlow() {
   const current = state.current;
+  if (!current) return;
   const trigger = state.catalog.triggers.find((item) => item.name === current.trigger) || { title: current.trigger, category: "Avancé" };
   $("#triggerNode").innerHTML = `<strong>${escapeHtml(trigger.title)}</strong><small>${escapeHtml(trigger.category)} · ${escapeHtml(current.trigger)}</small>`;
   renderNodes("condition");
@@ -232,33 +260,75 @@ async function reloadDefinitions(selectId = null) {
   state.definitions = await api("/api/automation/definitions");
   if (selectId) state.current = structuredClone(state.definitions.find((item) => item.id === selectId));
   else if (state.current) state.current = structuredClone(state.definitions.find((item) => item.id === state.current.id) || state.current);
-  renderAutomationList(); fillForm();
+  renderAutomationList(); renderTemplates(); fillForm(); await refreshStatus();
 }
 
-async function saveCurrent() {
+async function saveCurrent(showMessage = true) {
   syncFormToState();
   try {
     const saved = await api("/api/automation/definitions", { method: "POST", body: JSON.stringify(state.current) });
-    await reloadDefinitions(saved.id); toast("Automatisation enregistrée");
-  } catch (error) { toast(error.message, true); }
+    await reloadDefinitions(saved.id);
+    if (showMessage) toast(`Automatisation enregistrée — ${saved.enabled ? "ACTIVE" : "INACTIVE"}`);
+    return saved;
+  } catch (error) {
+    toast(error.message, true);
+    return null;
+  }
 }
 
 async function simulateCurrent() {
   syncFormToState();
   try {
-    if (!state.definitions.some((item) => item.id === state.current.id)) await saveCurrent();
-    const report = await api(`/api/automation/definitions/${encodeURIComponent(state.current.id)}/simulate`, { method: "POST", body: JSON.stringify({ event_type: state.current.trigger, user_id: "simulation", user_name: "Viewer Test", text: "Message de test", viewers: 42, reward: { title: "CHANGE_SCENE" } }) });
-    renderReports([report]); toast("Simulation terminée sans mutation réelle");
+    if (!state.definitions.some((item) => item.id === state.current.id)) {
+      const saved = await saveCurrent(false);
+      if (!saved) return;
+    }
+    const report = await api(`/api/automation/definitions/${encodeURIComponent(state.current.id)}/simulate`, { method: "POST", body: JSON.stringify({ event_type: state.current.trigger, user_id: "simulation", user_name: "Viewer Test", from_broadcaster_user_name: "Chaîne Test", text: "Message de test", viewers: 42, bits: 500, reward: { id: "reward-test", title: "CHANGE_SCENE" }, id: "redemption-test" }) });
+    renderReports([report]); toast("Simulation terminée : aucun message Twitch et aucune action OBS n’ont été envoyés.");
   } catch (error) { toast(error.message, true); }
+}
+
+function realTestPayload(trigger) {
+  const payload = {
+    event_type: trigger,
+    confirm_real: true,
+    test_run_id: crypto.randomUUID(),
+    user_id: "dashboard-test",
+    user_name: "Viewer Test",
+    user_login: "viewer_test",
+    text: "Déclenchement réel depuis Automation Studio",
+  };
+  if (trigger === "channel.raid") Object.assign(payload, { from_broadcaster_user_name: "Chaîne Test", from_broadcaster_user_login: "chaine_test", viewers: 42 });
+  if (trigger === "channel.cheer") payload.bits = 500;
+  if (trigger === "channel.subscription.gift") payload.total = 5;
+  if (trigger === "channel.channel_points_custom_reward_redemption.add") Object.assign(payload, { id: "redemption-test", reward: { id: "reward-test", title: "CHANGE_SCENE" } });
+  return payload;
 }
 
 async function runCurrent() {
   syncFormToState();
+  if (state.realRunLocked) return;
+  const accepted = window.confirm(`TEST RÉEL — ${state.current.name}\n\nCette action peut publier dans Twitch, parler, modifier OBS ou appeler un service externe.\n\nContinuer une seule fois ?`);
+  if (!accepted) return;
+  state.realRunLocked = true;
+  const button = $("#runAutomation");
+  button.disabled = true;
+  button.textContent = "Test en cours…";
   try {
-    await saveCurrent();
-    const result = await api("/api/automation/dispatch", { method: "POST", body: JSON.stringify({ event_type: state.current.trigger, user_id: "dashboard", user_name: "Sansa", text: "Déclenchement manuel" }) });
-    renderReports(result.reports || []); toast("Événement envoyé au moteur");
+    const saved = await saveCurrent(false);
+    if (!saved) return;
+    const result = await api("/api/automation/dispatch", { method: "POST", body: JSON.stringify(realTestPayload(state.current.trigger)) });
+    renderReports(result.reports || []);
+    await refreshStatus();
+    toast(result.matched ? `Test réel exécuté par ${result.matched} scénario(s).` : "Aucun scénario actif ne correspond à ce déclencheur.", !result.matched);
   } catch (error) { toast(error.message, true); }
+  finally {
+    window.setTimeout(() => {
+      state.realRunLocked = false;
+      button.disabled = false;
+      button.textContent = "Test réel";
+    }, 1800);
+  }
 }
 
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char])); }
@@ -274,7 +344,7 @@ async function initialize() {
 }
 
 $("#newAutomation").addEventListener("click", () => { state.current = emptyDefinition(); fillForm(); });
-$("#saveAutomation").addEventListener("click", saveCurrent);
+$("#saveAutomation").addEventListener("click", () => saveCurrent(true));
 $("#simulateAutomation").addEventListener("click", simulateCurrent);
 $("#runAutomation").addEventListener("click", runCurrent);
 $("#addAction").addEventListener("click", () => openPicker("action"));
