@@ -38,7 +38,7 @@ def build_automation_router(runtime: AutomationStudioRuntime) -> APIRouter:
             "recent_runs": len(reports),
             "actions": len(runtime.registry.actions),
             "conditions": len(runtime.registry.conditions),
-            "version": "2.0.2-alpha",
+            "version": "2.0.3-alpha",
         }
 
     @router.get("/api/automation/catalog")

@@ -16,8 +16,10 @@ from app.automation.routes import build_automation_router
 from app.automation.runtime import AutomationStudioRuntime
 from app.config import settings
 from app.main import app, aura, db
+from app.services.gemini_provider import install_gemini_provider
 
 logger = logging.getLogger("aura-live-v2")
+install_gemini_provider(aura.ai)
 automation = AutomationStudioRuntime(aura, db, settings)
 install_pro_nodes(automation.registry)
 install_resilience_nodes(automation.registry)
@@ -164,7 +166,7 @@ async def _v2_lifespan(application):
         await automation.initialize()
         await automation.dispatch(
             "aura.started",
-            {"version": "2.0.2-alpha", "stream_online": aura.stream_online},
+            {"version": "2.0.3-alpha", "stream_online": aura.stream_online},
             source="system",
         )
         try:
@@ -173,7 +175,7 @@ async def _v2_lifespan(application):
             try:
                 await automation.dispatch(
                     "aura.stopping",
-                    {"version": "2.0.2-alpha", "stream_online": aura.stream_online},
+                    {"version": "2.0.3-alpha", "stream_online": aura.stream_online},
                     source="system",
                 )
             finally:
@@ -182,7 +184,7 @@ async def _v2_lifespan(application):
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
-app.version = "2.0.2-alpha"
+app.version = "2.0.3-alpha"
 
 
 @app.get("/api/ai/runtime")
