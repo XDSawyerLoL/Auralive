@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services.voice_input import VoiceInputService, decode_audio_base64
+from app.services.voice_input import VoiceInputService, _wake_invocation, decode_audio_base64
 
 
 def make_wav() -> bytes:
@@ -32,6 +32,15 @@ def test_decode_rejects_empty_or_invalid_audio():
         decode_audio_base64("pas-du-base64")
 
 
+def test_wake_word_is_detected_and_removed_from_prompt():
+    detected, prompt = _wake_invocation("Mairaiy, tu as vu ce qui vient de se passer ?")
+    assert detected is True
+    assert prompt == "tu as vu ce qui vient de se passer ?"
+    detected, prompt = _wake_invocation("Je parle simplement au chat")
+    assert detected is False
+    assert prompt == "Je parle simplement au chat"
+
+
 def test_voice_input_uses_low_latency_gemini_model(monkeypatch):
     monkeypatch.delenv("VOICE_INPUT_MODEL", raising=False)
     aura = SimpleNamespace()
@@ -41,4 +50,5 @@ def test_voice_input_uses_low_latency_gemini_model(monkeypatch):
     assert diagnostic["configured"] is True
     assert diagnostic["model"] == "gemini-3.5-flash-lite"
     assert diagnostic["audio_persisted"] is False
+    assert diagnostic["controls"]["self_rearming"] is True
     assert "secret" not in str(diagnostic)
