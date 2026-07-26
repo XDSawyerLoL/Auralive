@@ -15,4 +15,4 @@ def test_v2_keeps_legacy_routes_and_adds_automation_studio():
     assert "/automation" in paths
     assert "/api/automation/catalog" in paths
     assert "/api/automation/definitions" in paths
-    assert app.version == "2.0.0-alpha"
+    assert app.version == "2.0.1-alpha"
