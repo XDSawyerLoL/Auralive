@@ -17,19 +17,24 @@ from app.automation.runtime import AutomationStudioRuntime
 from app.config import settings
 from app.main import app, aura, db
 from app.services.avatar_audio import install_avatar_audio
+from app.services.cohost import install_cohost
 from app.services.eventsub_compat import install_eventsub_compat
 from app.services.gemini_provider import install_gemini_provider
 from app.services.oauth_resilience import install_oauth_resilience
+from app.services.tts_budget import install_tts_budget
 
 logger = logging.getLogger("aura-live-v2")
 install_gemini_provider(aura.ai)
 install_eventsub_compat(aura.twitch)
 install_oauth_resilience(aura.twitch)
 install_avatar_audio(aura)
+install_tts_budget(aura.avatar_audio)
+cohost = install_cohost(aura, db, settings)
 automation = AutomationStudioRuntime(aura, db, settings)
 install_pro_nodes(automation.registry)
 install_resilience_nodes(automation.registry)
 automation.engine.set_service("moderation", aura.moderation)
+automation.engine.set_service("cohost", cohost)
 _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
 
@@ -147,6 +152,11 @@ async def _combined_twitch_handler(event_type: str, event: dict[str, Any]) -> No
         except Exception:
             logger.exception("Préfiltre anti-faux-viewers en erreur")
 
+    try:
+        await cohost.observe_event(event_type, event)
+    except Exception:
+        logger.exception("Le contexte de coanimation n'a pas pu observer %s", event_type)
+
     reports: list[dict[str, Any]] = []
     try:
         reports = await automation.dispatch(event_type, event, source="twitch")
@@ -170,9 +180,10 @@ aura.twitch.handler = _combined_twitch_handler
 async def _v2_lifespan(application):
     async with _original_lifespan(application):
         await automation.initialize()
+        await cohost.start()
         await automation.dispatch(
             "aura.started",
-            {"version": "2.0.7-alpha", "stream_online": aura.stream_online},
+            {"version": "2.0.8-alpha", "stream_online": aura.stream_online},
             source="system",
         )
         try:
@@ -181,16 +192,17 @@ async def _v2_lifespan(application):
             try:
                 await automation.dispatch(
                     "aura.stopping",
-                    {"version": "2.0.7-alpha", "stream_online": aura.stream_online},
+                    {"version": "2.0.8-alpha", "stream_online": aura.stream_online},
                     source="system",
                 )
             finally:
+                await cohost.close()
                 await automation.close()
 
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
-app.version = "2.0.7-alpha"
+app.version = "2.0.8-alpha"
 
 
 @app.get("/api/ai/runtime")
@@ -215,6 +227,64 @@ async def avatar_runtime_diagnostic() -> dict[str, Any]:
         "audio": aura.avatar_audio.diagnostic(),
         "obs_instruction": "Active Contrôler l’audio via OBS sur la source /overlay/avatar.",
     }
+
+
+@app.get("/api/cohost/status")
+async def cohost_status() -> dict[str, Any]:
+    return await cohost.status()
+
+
+@app.get("/api/cohost/profile")
+async def cohost_profile() -> dict[str, Any]:
+    return cohost.profile
+
+
+@app.put("/api/cohost/profile")
+async def cohost_profile_update(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        return await cohost.save_profile(payload)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/cohost/context/refresh")
+async def cohost_context_refresh() -> dict[str, Any]:
+    await cohost.refresh_live_context(force=True)
+    return cohost.current_context()
+
+
+@app.post("/api/cohost/screen/analyze")
+async def cohost_screen_analyze() -> dict[str, Any]:
+    return await cohost.analyze_screen(force=True)
+
+
+@app.post("/api/cohost/session/reset")
+async def cohost_session_reset() -> dict[str, Any]:
+    cohost.reset_session()
+    return await cohost.status()
+
+
+@app.post("/api/cohost/test/initiative")
+async def cohost_test_initiative(
+    payload: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    text = await cohost.generate_initiative(force=True)
+    published = False
+    if bool(payload.get("publish", False)) and text:
+        published = await cohost._publish(text, kind="initiative:test")
+    return {"text": text, "published": published}
+
+
+@app.post("/api/cohost/test/cta")
+async def cohost_test_cta(
+    payload: dict[str, Any] = Body(default_factory=dict),
+) -> dict[str, Any]:
+    campaign_id = str(payload.get("campaign_id") or "justplayer")
+    text = await cohost.generate_cta(campaign_id, force=True)
+    published = False
+    if bool(payload.get("publish", False)) and text:
+        published = await cohost._publish(text, kind=f"cta:{campaign_id}:test")
+    return {"campaign_id": campaign_id, "text": text, "published": published}
 
 
 @app.get("/api/twitch/eventsub")
@@ -281,7 +351,11 @@ async def security_block_domain(
 @app.middleware("http")
 async def automation_no_cache(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path == "/automation" or request.url.path.startswith("/static/automation"):
+    if (
+        request.url.path == "/automation"
+        or request.url.path.startswith("/static/automation")
+        or request.url.path.startswith("/static/cohost")
+    ):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
 
