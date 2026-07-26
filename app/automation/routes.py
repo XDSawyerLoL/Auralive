@@ -18,8 +18,6 @@ def build_automation_router(runtime: AutomationStudioRuntime) -> APIRouter:
     recent_test_ids: deque[str] = deque(maxlen=200)
 
     def templates() -> list[dict[str, Any]]:
-        # Les modèles professionnels remplacent proprement une ancienne version
-        # portant le même identifiant, sans toucher aux scénarios déjà installés.
         merged = {item["id"]: item for item in runtime.templates()}
         merged.update({item["id"]: item for item in professional_templates()})
         return list(merged.values())
@@ -40,7 +38,7 @@ def build_automation_router(runtime: AutomationStudioRuntime) -> APIRouter:
             "recent_runs": len(reports),
             "actions": len(runtime.registry.actions),
             "conditions": len(runtime.registry.conditions),
-            "version": "2.0.1-alpha",
+            "version": "2.0.2-alpha",
         }
 
     @router.get("/api/automation/catalog")
@@ -114,7 +112,6 @@ def build_automation_router(runtime: AutomationStudioRuntime) -> APIRouter:
             None,
         )
         if existing:
-            # Ne réécrit jamais un scénario déjà validé par l’utilisateur.
             return {**existing, "already_installed": True}
         definition = dict(template)
         definition["id"] = automation_id
