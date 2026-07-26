@@ -7,7 +7,7 @@ from auralive.runtime import AuraRuntime
 
 
 def test_api_crud_simulation_and_emergency(tmp_path: Path) -> None:
-    runtime = AuraRuntime(database_path=tmp_path / "aura.db")
+    runtime = AuraRuntime(database_path=tmp_path / "aura.db", services={})
     app = create_app(runtime)
     document = {
         "id": "api-test",
@@ -49,7 +49,7 @@ def test_api_crud_simulation_and_emergency(tmp_path: Path) -> None:
 
 
 def test_catalog_exposes_native_platform_nodes(tmp_path: Path) -> None:
-    app = create_app(AuraRuntime(database_path=tmp_path / "aura.db"))
+    app = create_app(AuraRuntime(database_path=tmp_path / "aura.db", services={}))
     with TestClient(app) as client:
         catalog = client.get("/api/catalog").json()
 
