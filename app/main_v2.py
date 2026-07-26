@@ -8,8 +8,8 @@ import uvicorn
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.automation.frontier_runtime import FrontierAutomationRuntime
 from app.automation.routes import build_automation_router
-from app.automation.runtime import AutomationStudioRuntime
 from app.config import settings
 from app.main import app, aura, db
 from app.services.twitch_frontier import FrontierTwitchClient
@@ -19,7 +19,7 @@ logger = logging.getLogger("aura-live-v2")
 # Remplacement avant le démarrage : tous les modules V1.2 continuent d'utiliser
 # aura.twitch, mais reçoivent désormais le client natif Frontier.
 aura.twitch = FrontierTwitchClient(settings, db, aura.handle_twitch_event)
-automation = AutomationStudioRuntime(aura, db, settings)
+automation = FrontierAutomationRuntime(aura, db, settings)
 _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
 
