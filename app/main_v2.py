@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.automation.frontier_routes import build_frontier_router
 from app.automation.frontier_runtime import FrontierAutomationRuntime
 from app.automation.routes import build_automation_router
 from app.config import settings
@@ -62,6 +63,7 @@ async def _v2_lifespan(application):
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
+app.include_router(build_frontier_router(automation))
 app.version = "2.0.0-frontier"
 app.title = "Aura Live 2 — Frontier"
 
