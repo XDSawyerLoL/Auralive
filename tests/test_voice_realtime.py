@@ -7,7 +7,11 @@ from app.services.voice_realtime import VoiceRealtimeService
 
 
 class FakeAI:
-    async def reply(self, *_args, **_kwargs):
+    def __init__(self):
+        self.last_message = ""
+
+    async def reply(self, _name, message, *_args, **_kwargs):
+        self.last_message = message
         return "Oui, je t'entends parfaitement."
 
 
@@ -67,8 +71,9 @@ def build_service():
         last_error="",
         last_audio_duration_ms=0,
     )
+    ai = FakeAI()
     aura = SimpleNamespace(
-        ai=FakeAI(),
+        ai=ai,
         memory=FakeMemory(),
         recent_chat=[],
         avatar_audio=audio,
@@ -80,16 +85,18 @@ def build_service():
 
     aura.say = say
     voice_input = FakeVoiceInput()
-    return VoiceRealtimeService(aura, FakeDB(), voice_input), voice_input
+    return VoiceRealtimeService(aura, FakeDB(), voice_input), voice_input, ai
 
 
 def test_browser_transcript_produces_answer_then_voice() -> None:
     async def scenario() -> None:
-        service, voice_input = build_service()
-        result = await service.talk_text("Mairaiy, est-ce que tu m'entends ?")
+        service, voice_input, _ai = build_service()
+        result = await service.talk_text("Est-ce que tu m'entends ?")
 
         assert result["answer"] == "Oui, je t'entends parfaitement."
         assert result["voice_pending"] is True
+        assert result["wake_word_required"] is False
+        assert result["addressed_automatically"] is True
         assert service.voice_task is not None
         await service.voice_task
 
@@ -98,18 +105,35 @@ def test_browser_transcript_produces_answer_then_voice() -> None:
         assert diagnostic["last_audio_duration_ms"] == 1200
         assert diagnostic["last_rearm_after_ms"] >= 2700
         assert diagnostic["stage"] == "idle"
+        assert diagnostic["wake_word_required"] is False
+        assert diagnostic["wake_word"] is None
         assert voice_input.last_voice_delivered is True
 
     asyncio.run(scenario())
 
 
-def test_sentence_without_wake_word_is_ignored() -> None:
+def test_sentence_without_name_is_not_ignored() -> None:
     async def scenario() -> None:
-        service, _voice_input = build_service()
-        result = await service.talk_text("Je parle simplement au chat")
+        service, _voice_input, ai = build_service()
+        result = await service.talk_text("Je parle simplement avec toi")
 
-        assert result["ignored"] is True
-        assert result["ignore_reason"] == "wake_word_missing"
-        assert service.voice_task is None
+        assert result["ignored"] is False
+        assert result["wake_word_detected"] is False
+        assert result["answer"]
+        assert ai.last_message == "Je parle simplement avec toi"
+        assert service.voice_task is not None
+        await service.voice_task
+
+    asyncio.run(scenario())
+
+
+def test_optional_name_is_removed_from_prompt() -> None:
+    async def scenario() -> None:
+        service, _voice_input, ai = build_service()
+        result = await service.talk_text("Mairaiy, regarde ce combat")
+
+        assert result["wake_word_detected"] is True
+        assert ai.last_message == "regarde ce combat"
+        await service.voice_task
 
     asyncio.run(scenario())
