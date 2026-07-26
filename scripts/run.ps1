@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
     $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -16,10 +16,6 @@ function Test-AuraPythonImports {
         [Parameter(Mandatory = $true)][string]$PythonPath
     )
 
-    # Sous Windows PowerShell 5.1, un module absent écrit son traceback sur stderr.
-    # Avec ErrorActionPreference=Stop, ce stderr devient une NativeCommandError avant
-    # que le script puisse lire $LASTEXITCODE et lancer la réparation. On neutralise
-    # donc uniquement ce test attendu, puis on restaure immédiatement le comportement strict.
     $previousPreference = $ErrorActionPreference
     $exitCode = 1
     try {
@@ -44,9 +40,6 @@ if (-not (Test-Path $VenvPython)) {
     throw "Python virtuel introuvable après installation."
 }
 
-# Après un git pull/reset, requirements.txt peut avoir changé alors que .venv existe
-# toujours. Aura vérifie donc le hash et les imports indispensables avant chaque
-# lancement, puis ne relance pip que lorsqu'une réparation est réellement utile.
 $CurrentRequirementsHash = ""
 if (Test-Path $RequirementsPath) {
     $CurrentRequirementsHash = (Get-FileHash $RequirementsPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -77,8 +70,12 @@ if ($RequirementsChanged -or -not $ImportsReady) {
     Write-Host "Dépendances prêtes." -ForegroundColor Green
 }
 
-Write-Host "Aura Live 2.2 — lancement du noyau, de la coanimation et de la perception live" -ForegroundColor Cyan
-& $VenvPython -m app.main_v2
+$AuraHost = if ($env:AURA_HOST) { $env:AURA_HOST } else { "127.0.0.1" }
+$AuraPort = if ($env:AURA_PORT) { $env:AURA_PORT } else { "8787" }
+$AuraLogLevel = if ($env:LOG_LEVEL) { $env:LOG_LEVEL.ToLowerInvariant() } else { "info" }
+
+Write-Host "Aura Live 2.4 — écoute continue stable, voix verrouillée et perception live" -ForegroundColor Cyan
+& $VenvPython -m uvicorn app.main_v3:app --host $AuraHost --port $AuraPort --log-level $AuraLogLevel
 if ($LASTEXITCODE -ne 0) {
     throw "Aura s'est arrêtée avec le code $LASTEXITCODE."
 }
