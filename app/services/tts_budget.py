@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.services.voice_signature import install_voice_signature
+
 _AUDIO_USD_PER_SECOND = 20.0 * 25.0 / 1_000_000.0
 
 
@@ -107,6 +109,7 @@ def install_tts_budget(audio: Any) -> TTSBudgetGuard:
     existing = getattr(audio, "budget_guard", None)
     if existing:
         return existing
+    install_voice_signature(audio)
     guard = TTSBudgetGuard(audio)
     audio.budget_guard = guard
     audio._synthesize_gemini = guard.guarded_gemini
