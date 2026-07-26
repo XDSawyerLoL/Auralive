@@ -24,14 +24,14 @@
     </header>
     <section class="card">
       <div class="mic-zone">
-        <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute mains libres">Activer<br>l'écoute</button>
-        <div id="mic-hint" class="hint"><b>Dis « Mairaiy » puis ta phrase</b>Elle calibre le bruit ambiant, détecte ta voix puis envoie la phrase après le silence.</div>
+        <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute continue">Activer<br>l'écoute</button>
+        <div id="mic-hint" class="hint"><b>Dis « Mairaiy » puis ta phrase</b>Edge reconnaît directement ta voix. Il n’y a plus de push-to-talk ni de calibration manuelle.</div>
         <div class="options">
-          <label class="toggle"><input id="hands-free" type="checkbox" checked> Écoute mains libres</label>
+          <label class="toggle"><input id="hands-free" type="checkbox" checked disabled> Écoute continue</label>
           <label class="toggle"><input id="send-chat" type="checkbox"> Publier aussi sa réponse dans le chat Twitch</label>
         </div>
         <div class="runtime">
-          <div><small>MICRO</small><span id="mic-runtime">En attente d'autorisation</span></div>
+          <div><small>MICRO</small><span id="mic-runtime">Activation de la reconnaissance vocale</span></div>
           <div><small>LECTURE DU LIVE</small><span id="vision-runtime">Vérification…</span></div>
         </div>
       </div>
@@ -40,8 +40,8 @@
         <div class="bubble answer"><small>RÉPONSE</small><p id="answer">—</p></div>
       </div>
     </section>
-    <div class="footer">Au premier démarrage, reste silencieux une seconde pendant la calibration. La page doit rester ouverte pendant le live. Les captures OBS et les enregistrements vocaux restent en mémoire et ne sont pas conservés.</div>
+    <div class="footer">Un clic suffit pour autoriser le micro la première fois. Ensuite, la page relance automatiquement l’écoute continue. Mairaiy n’utilise qu’une seule voix Gemini ; elle ne bascule plus sur une autre voix en cas de panne.</div>
   </main>
-  <script src="/static/avatar/voice-control.js?v=2.3.3"></script>
+  <script src="/static/avatar/voice-control.js?v=2.4.0"></script>
 </body>
 </html>
