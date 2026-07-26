@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090b18">
+  <title>Aura Live 2 — Automation Studio</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true"><span></span></div>
+        <div class="brand-copy">
+          <strong>AURA LIVE</strong>
+          <small>NEURAL CONTROL</small>
+        </div>
+        <button class="icon-button collapse-button" id="collapseSidebar" title="Rétracter le menu">☰</button>
+      </div>
+
+      <nav class="main-nav" aria-label="Navigation principale">
+        <button class="nav-item" data-view="dashboard"><span>◈</span><b>Vue d’ensemble</b></button>
+        <button class="nav-item active" data-view="studio"><span>⌘</span><b>Automation Studio</b><em>ALPHA</em></button>
+        <button class="nav-item" data-view="mairaiy"><span>✦</span><b>Mairaiy</b></button>
+        <button class="nav-item" data-view="twitch"><span>◫</span><b>Twitch</b></button>
+        <button class="nav-item" data-view="obs"><span>◎</span><b>OBS & diffusion</b></button>
+        <button class="nav-item" data-view="community"><span>♢</span><b>Communauté</b></button>
+        <button class="nav-item" data-view="analytics"><span>⌁</span><b>Analytics</b></button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <div class="mairaiy-card">
+        <div class="avatar-orb"><span class="avatar-eye"></span></div>
+        <div>
+          <strong>Mairaiy</strong>
+          <small id="mairaiyStatus">En attente des services</small>
+        </div>
+        <span class="status-dot" id="mairaiyDot"></span>
+      </div>
+      <button class="nav-item settings" data-view="settings"><span>⚙</span><b>Paramètres</b></button>
+      <div class="version-line">Aura Live <span id="appVersion">2.0</span></div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">SYSTÈME LOCAL · SANSAHD</span>
+          <h1>Automation Studio</h1>
+        </div>
+        <div class="topbar-actions">
+          <div class="health-pill"><span id="healthDot"></span><b id="healthText">Connexion…</b></div>
+          <button class="ghost-button" id="openExecutions">Journal</button>
+          <button class="danger-button" id="emergencyButton">MODE URGENCE</button>
+        </div>
+      </header>
+
+      <main class="studio-layout">
+        <section class="automation-rail panel">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">BIBLIOTHÈQUE</span>
+              <h2>Automatisations</h2>
+            </div>
+            <button class="primary-icon" id="newAutomation" title="Nouvelle automatisation">＋</button>
+          </div>
+          <label class="search-field">
+            <span>⌕</span>
+            <input id="automationSearch" placeholder="Rechercher un scénario">
+          </label>
+          <div class="automation-list" id="automationList"></div>
+          <div class="rail-footer">
+            <span><b id="automationCount">0</b> scénarios</span>
+            <button id="importButton">Importer JSON</button>
+          </div>
+        </section>
+
+        <section class="canvas-panel panel">
+          <div class="canvas-toolbar">
+            <div class="scenario-title-block">
+              <span class="scenario-state" id="scenarioState"></span>
+              <div>
+                <input class="scenario-title" id="scenarioName" value="Nouvelle automatisation" aria-label="Nom du scénario">
+                <div class="scenario-meta"><span id="scenarioId">non enregistré</span><span>•</span><span id="scenarioVersion">v1</span></div>
+              </div>
+            </div>
+            <div class="toolbar-buttons">
+              <button class="ghost-button" id="duplicateAutomation">Dupliquer</button>
+              <button class="ghost-button" id="simulateAutomation">▶ Tester</button>
+              <button class="primary-button" id="saveAutomation">Enregistrer</button>
+            </div>
+          </div>
+
+          <div class="flow-shell">
+            <div class="node-library" id="nodeLibrary">
+              <div class="library-tabs">
+                <button class="active" data-library="triggers">Déclencheurs</button>
+                <button data-library="conditions">Conditions</button>
+                <button data-library="actions">Actions</button>
+              </div>
+              <label class="search-field compact">
+                <span>⌕</span>
+                <input id="nodeSearch" placeholder="Chercher un bloc">
+              </label>
+              <div class="library-items" id="libraryItems"></div>
+            </div>
+
+            <div class="flow-canvas" id="flowCanvas">
+              <div class="grid-overlay"></div>
+              <div class="canvas-statusbar">
+                <span>ÉVÉNEMENT → CONDITIONS → ACTIONS</span>
+                <span id="canvasStats">0 bloc</span>
+              </div>
+              <div class="flow-column" id="flowColumn"></div>
+              <button class="add-node-floating" id="addNodeFloating">＋ Ajouter un bloc</button>
+            </div>
+
+            <aside class="inspector" id="inspector">
+              <div class="inspector-heading">
+                <div>
+                  <span class="eyebrow">INSPECTEUR</span>
+                  <h2 id="inspectorTitle">Scénario</h2>
+                </div>
+                <button class="icon-button" id="closeInspector">×</button>
+              </div>
+              <div class="inspector-content" id="inspectorContent"></div>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <section class="execution-drawer" id="executionDrawer" aria-hidden="true">
+        <div class="drawer-heading">
+          <div>
+            <span class="eyebrow">OBSERVABILITÉ</span>
+            <h2>Journal d’exécution</h2>
+          </div>
+          <div class="drawer-actions">
+            <button class="ghost-button" id="clearConsole">Effacer l’affichage</button>
+            <button class="icon-button" id="closeExecutions">×</button>
+          </div>
+        </div>
+        <div class="execution-console" id="executionConsole">
+          <div class="empty-console">Aucune exécution reçue pendant cette session.</div>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <dialog id="simulationDialog" class="modal-card">
+    <form method="dialog">
+      <div class="modal-heading">
+        <div><span class="eyebrow">SIMULATION SANS EFFET RÉEL</span><h2>Tester le scénario</h2></div>
+        <button value="cancel" class="icon-button">×</button>
+      </div>
+      <label>Type d’événement<input id="simulationType" value="internal.test"></label>
+      <label>Payload JSON<textarea id="simulationPayload" rows="10">{
+  "user_id": "test-viewer",
+  "user_name": "Valentin",
+  "message": "Test Aura Live"
+}</textarea></label>
+      <pre class="simulation-result" id="simulationResult">Le résultat apparaîtra ici.</pre>
+      <div class="modal-actions">
+        <button value="cancel" class="ghost-button">Fermer</button>
+        <button type="button" class="primary-button" id="runSimulation">Lancer la simulation</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="jsonDialog" class="modal-card wide">
+    <form method="dialog">
+      <div class="modal-heading">
+        <div><span class="eyebrow">IMPORT / EXPORT</span><h2>Document d’automatisation</h2></div>
+        <button value="cancel" class="icon-button">×</button>
+      </div>
+      <textarea id="jsonDocument" rows="22" spellcheck="false"></textarea>
+      <div class="modal-actions">
+        <button value="cancel" class="ghost-button">Annuler</button>
+        <button type="button" class="primary-button" id="applyJson">Appliquer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast-stack" id="toastStack"></div>
+  <script type="module" src="/assets/studio.js"></script>
+</body>
+</html>
