@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from time import monotonic
 from typing import Any
 
@@ -129,20 +128,21 @@ def install_gemini_provider(ai: Any) -> None:
             return _effective_model(self.settings)
         return original_active_model(self)
 
-    @staticmethod
-    def degraded_fallback(viewer_name: str, message: str) -> str:
+    def degraded_fallback(self: Any, viewer_name: str, message: str) -> str:
+        if self.settings.ai_mode != "gemini":
+            return original_degraded_fallback(viewer_name, message)
         lowered = message.casefold()
         if any(word in lowered for word in ("salut", "bonjour", "bonsoir")):
-            return f"Salut {viewer_name}. Je suis connectée, mais mon fournisseur IA est momentanément indisponible."
+            return f"Salut {viewer_name}. Je suis connectée, mais Gemini est momentanément indisponible."
         if "ça va" in lowered or "ca va" in lowered:
-            return "Je suis connectée. Mon fournisseur IA ralentit, donc je réponds en mode de secours."
+            return "Je suis connectée. Gemini ralentit, donc je réponds en mode de secours."
         if "qui es-tu" in lowered or "qui tu es" in lowered:
             return (
                 "Je suis Aura, présente sur Twitch avec le compte mairaiy. "
-                "Mon fournisseur IA récupère, mais le reste du bot continue de fonctionner."
+                "Gemini récupère, mais le reste du bot continue de fonctionner."
             )
         return (
-            "Mon fournisseur IA n'a pas répondu assez vite. "
+            "Gemini n'a pas répondu assez vite. "
             "Je reste opérationnelle pour le chat, les alertes, la modération et OBS."
         )
 
