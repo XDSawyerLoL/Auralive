@@ -31,13 +31,15 @@ function Test-AuraPythonImports {
     return ($exitCode -eq 0)
 }
 
+# Keep this launcher strictly ASCII. Windows PowerShell 5.1 can misread UTF-8
+# without a BOM and turn an em dash into a smart quote that breaks parsing.
 if (-not (Test-Path $VenvPython)) {
-    Write-Host "Aura n'est pas encore installée. Lancement de la réparation..." -ForegroundColor Yellow
+    Write-Host "Aura n'est pas encore installee. Lancement de la reparation..." -ForegroundColor Yellow
     & (Join-Path $ProjectRoot "reparer-installation.ps1")
 }
 
 if (-not (Test-Path $VenvPython)) {
-    throw "Python virtuel introuvable après installation."
+    throw "Python virtuel introuvable apres installation."
 }
 
 $CurrentRequirementsHash = ""
@@ -54,28 +56,28 @@ $ImportsReady = Test-AuraPythonImports -PythonPath $VenvPython
 $RequirementsChanged = (-not $CurrentRequirementsHash) -or ($CurrentRequirementsHash -ne $InstalledRequirementsHash)
 
 if ($RequirementsChanged -or -not $ImportsReady) {
-    Write-Host "Mise à jour des dépendances Aura Live..." -ForegroundColor Yellow
+    Write-Host "Mise a jour des dependances Aura Live..." -ForegroundColor Yellow
     & $VenvPython -m pip install -r $RequirementsPath
     if ($LASTEXITCODE -ne 0) {
-        throw "La mise à jour des dépendances a échoué. Vérifie la connexion Internet puis relance .\aura.bat."
+        throw "La mise a jour des dependances a echoue. Verifie la connexion Internet puis relance .\aura.bat."
     }
 
     if (-not (Test-AuraPythonImports -PythonPath $VenvPython)) {
-        throw "Les dépendances sont toujours incomplètes après réparation. Lance .\reparer-installation.ps1."
+        throw "Les dependances sont toujours incompletes apres reparation. Lance .\reparer-installation.ps1."
     }
 
     if ($CurrentRequirementsHash) {
         Set-Content -Path $RequirementsStamp -Value $CurrentRequirementsHash -Encoding ascii
     }
-    Write-Host "Dépendances prêtes." -ForegroundColor Green
+    Write-Host "Dependances pretes." -ForegroundColor Green
 }
 
 $AuraHost = if ($env:AURA_HOST) { $env:AURA_HOST } else { "127.0.0.1" }
 $AuraPort = if ($env:AURA_PORT) { $env:AURA_PORT } else { "8787" }
 $AuraLogLevel = if ($env:LOG_LEVEL) { $env:LOG_LEVEL.ToLowerInvariant() } else { "info" }
 
-Write-Host "Aura Live 2.4 — écoute continue stable, voix verrouillée et perception live" -ForegroundColor Cyan
+Write-Host "Aura Live 2.4.1 - ecoute continue stable, voix verrouillee et perception live" -ForegroundColor Cyan
 & $VenvPython -m uvicorn app.main_v3:app --host $AuraHost --port $AuraPort --log-level $AuraLogLevel
 if ($LASTEXITCODE -ne 0) {
-    throw "Aura s'est arrêtée avec le code $LASTEXITCODE."
+    throw "Aura s'est arretee avec le code $LASTEXITCODE."
 }
