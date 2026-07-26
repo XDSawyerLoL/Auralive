@@ -5,6 +5,9 @@
     if (!response.ok) throw new Error((await response.text()).replace(/^"|"$/g,''));
     return response.status === 204 ? {} : response.json();
   };
+  async function runtime(){
+    try{return await api('/api/avatar/runtime')}catch{return null}
+  }
   async function load(){
     const form=$('#avatar-settings-form'); if(!form) return;
     try{
@@ -41,7 +44,15 @@
         preview?.classList.add('is-speaking');
         setTimeout(()=>preview?.classList.remove('is-speaking'),4200);
         await api('/api/avatar/test',{method:'POST',body:JSON.stringify({text:'Bonjour, je suis Aura. Ma voix et mon avatar sont correctement reliés à OBS.'})});
-        if(typeof toast==='function') toast('Test envoyé à la source avatar');
+        const status=await runtime();
+        if(!status?.avatar_overlay_connected){
+          throw new Error('La source /overlay/avatar n’est pas connectée. Ouvre-la dans OBS ou dans un onglet, puis relance le test.');
+        }
+        if(status?.audio?.last_error){
+          if(typeof toast==='function') toast(`Voix Windows indisponible, repli navigateur : ${status.audio.last_error}`,true);
+        }else if(typeof toast==='function'){
+          toast(`Test audio envoyé à Mairaiy en ${status?.audio?.last_duration_ms||0} ms`);
+        }
       }catch(error){ if(typeof toast==='function') toast(error.message,true); }
     });
     load();
