@@ -5,6 +5,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from app.services.public_identity import install_public_identity
+from app.services.voice_stability import install_voice_stability
 
 logger = logging.getLogger(__name__)
 
@@ -102,4 +103,5 @@ def install_response_sync(aura: Any, cohost: Any | None = None) -> ResponseSynch
     if cohost is not None and synchronizer._original_publish is not None:
         cohost._publish = synchronizer.publish
         install_public_identity(aura, cohost)
+        install_voice_stability(aura)
     return synchronizer
