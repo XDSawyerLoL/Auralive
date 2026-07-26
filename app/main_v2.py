@@ -172,7 +172,7 @@ async def _v2_lifespan(application):
         await automation.initialize()
         await automation.dispatch(
             "aura.started",
-            {"version": "2.0.6-alpha", "stream_online": aura.stream_online},
+            {"version": "2.0.7-alpha", "stream_online": aura.stream_online},
             source="system",
         )
         try:
@@ -181,7 +181,7 @@ async def _v2_lifespan(application):
             try:
                 await automation.dispatch(
                     "aura.stopping",
-                    {"version": "2.0.6-alpha", "stream_online": aura.stream_online},
+                    {"version": "2.0.7-alpha", "stream_online": aura.stream_online},
                     source="system",
                 )
             finally:
@@ -190,7 +190,7 @@ async def _v2_lifespan(application):
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
-app.version = "2.0.6-alpha"
+app.version = "2.0.7-alpha"
 
 
 @app.get("/api/ai/runtime")
