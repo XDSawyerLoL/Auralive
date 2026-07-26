@@ -17,6 +17,11 @@ _WEB_ROOT = Path(__file__).with_name("web")
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
+def _remote_allowed(host: str) -> bool:
+    allow_remote = os.getenv("AURALIVE_ALLOW_REMOTE", "false").lower() == "true"
+    return allow_remote or host in _LOCAL_HOSTS
+
+
 def create_app(runtime: AuraRuntime | None = None) -> FastAPI:
     aura = runtime or AuraRuntime()
 
@@ -37,9 +42,8 @@ def create_app(runtime: AuraRuntime | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def local_only(request: Request, call_next):
-        allow_remote = os.getenv("AURALIVE_ALLOW_REMOTE", "false").lower() == "true"
         host = request.client.host if request.client else ""
-        if not allow_remote and host not in _LOCAL_HOSTS:
+        if not _remote_allowed(host):
             return JSONResponse(
                 {"detail": "Aura Live refuse les connexions distantes par défaut."},
                 status_code=403,
@@ -51,6 +55,14 @@ def create_app(runtime: AuraRuntime | None = None) -> FastAPI:
     @app.get("/", include_in_schema=False)
     async def studio() -> FileResponse:
         return FileResponse(_WEB_ROOT / "index.html")
+
+    @app.get("/overlay/avatar", include_in_schema=False)
+    async def avatar_overlay() -> FileResponse:
+        return FileResponse(_WEB_ROOT / "avatar.html")
+
+    @app.get("/overlay/alerts", include_in_schema=False)
+    async def alerts_overlay() -> FileResponse:
+        return FileResponse(_WEB_ROOT / "alerts.html")
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
@@ -135,20 +147,59 @@ def create_app(runtime: AuraRuntime | None = None) -> FastAPI:
         )
         return report_to_dict(await aura.simulate(automation_id, event))
 
+    @app.post("/api/simulate")
+    async def simulate_document(document: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        try:
+            automation = automation_from_dict(dict(document["automation"]))
+            event_document = dict(document.get("event", {}))
+            event = Event(
+                type=str(event_document.get("type") or automation.trigger),
+                payload=dict(event_document.get("payload", {})),
+                source="simulation",
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return report_to_dict(await aura.simulate_document(automation, event))
+
     @app.get("/api/executions")
     async def executions(limit: int = 100) -> list[dict[str, Any]]:
         return await aura.store.list_reports(limit=limit)
 
+    @app.post("/api/overlay/{channel}")
+    async def publish_overlay(
+        channel: str, document: dict[str, Any] = Body(...)
+    ) -> dict[str, Any]:
+        overlay = aura.services.get("overlay")
+        if overlay is None:
+            raise HTTPException(503, "Service overlay indisponible")
+        return await overlay.publish(channel, document)
+
     @app.websocket("/ws/executions")
     async def execution_socket(websocket: WebSocket) -> None:
         host = websocket.client.host if websocket.client else ""
-        allow_remote = os.getenv("AURALIVE_ALLOW_REMOTE", "false").lower() == "true"
-        if not allow_remote and host not in _LOCAL_HOSTS:
+        if not _remote_allowed(host):
             await websocket.close(code=1008)
             return
         await websocket.accept()
         try:
             async for payload in aura.bus.subscribe():
+                await websocket.send_json(payload)
+        except WebSocketDisconnect:
+            return
+
+    @app.websocket("/ws/overlay/{channel}")
+    async def overlay_socket(websocket: WebSocket, channel: str) -> None:
+        host = websocket.client.host if websocket.client else ""
+        if not _remote_allowed(host):
+            await websocket.close(code=1008)
+            return
+        overlay = aura.services.get("overlay")
+        if overlay is None:
+            await websocket.close(code=1011)
+            return
+        await websocket.accept()
+        try:
+            async for payload in overlay.subscribe(channel):
                 await websocket.send_json(payload)
         except WebSocketDisconnect:
             return
