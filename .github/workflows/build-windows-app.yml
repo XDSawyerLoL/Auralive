@@ -39,6 +39,20 @@ jobs:
         shell: pwsh
         run: .\scripts\build-windows.ps1 -Python python
 
+      - name: Verify Windows package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\AuraLive\AuraLive.exe")) {
+            throw "AuraLive.exe est absent du package."
+          }
+          $forbidden = Get-ChildItem "dist\AuraLive" -Recurse -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -eq "Python.Runtime.dll" -or $_.FullName -match "[\\/]pythonnet[\\/]"
+          }
+          if ($forbidden) {
+            $forbidden | ForEach-Object { Write-Host $_.FullName }
+            throw "Le package contient encore pythonnet/Python.Runtime.dll."
+          }
+
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
