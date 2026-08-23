@@ -1,0 +1,45 @@
+name: Build Aura Live Windows app
+
+on:
+  push:
+    branches:
+      - feature/windows-desktop-app
+      - main
+    paths:
+      - "app/**"
+      - "config/**"
+      - "scripts/build-windows.ps1"
+      - "requirements*.txt"
+      - ".github/workflows/build-windows-app.yml"
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-desktop.txt
+
+      - name: Compile Python sources
+        shell: pwsh
+        run: python -m compileall -q app
+
+      - name: Build AuraLive.exe
+        shell: pwsh
+        run: .\scripts\build-windows.ps1 -Python python
+
+      - name: Upload Windows application
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuraLive-Windows
+          path: dist/AuraLive
+          if-no-files-found: error
+          retention-days: 30
