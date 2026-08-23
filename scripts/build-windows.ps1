@@ -20,7 +20,6 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     --onedir `
     --name "AuraLive" `
     --paths "." `
-    --collect-all "webview" `
     --collect-all "piper" `
     --collect-submodules "uvicorn" `
     --collect-submodules "aiohttp" `
@@ -43,8 +42,9 @@ AURA LIVE - APPLICATION WINDOWS
 
 1. Copie ton fichier .env existant dans ce dossier, a cote de AuraLive.exe.
 2. Double-clique AuraLive.exe.
-3. Le moteur local et le tableau de bord demarrent automatiquement dans la meme application.
+3. Aura Live demarre son moteur local puis ouvre une fenetre d'application dediee via Microsoft Edge ou Google Chrome.
 
+Aucun onglet de navigateur classique n'est necessaire.
 Tes donnees sont conservees dans le dossier data place a cote de l'application.
 Les overlays OBS restent disponibles sur http://localhost:8787/overlay et les autres URL Aura habituelles.
 "@ | Set-Content "dist\AuraLive\DEMARRAGE.txt" -Encoding UTF8
