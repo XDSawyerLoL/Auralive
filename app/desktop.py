@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-import html
+import ctypes
 import logging
 import os
+import shutil
 import socket
+import subprocess
+import sys
+import tempfile
 import threading
 import time
-import urllib.error
 import urllib.request
 import webbrowser
-from typing import Any
+from pathlib import Path
 
 import uvicorn
 
@@ -118,78 +121,98 @@ def _stop_backend() -> None:
             _server_thread.join(timeout=8)
 
 
-def _loading_html() -> str:
-    return """
-<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aura Live</title>
-<style>
-html,body{height:100%;margin:0;background:#071019;color:#f3f7fb;font-family:Segoe UI,system-ui,sans-serif}
-body{display:grid;place-items:center;overflow:hidden}
-.shell{width:min(620px,84vw);padding:42px;border:1px solid rgba(115,223,255,.18);border-radius:28px;background:linear-gradient(145deg,rgba(14,31,46,.96),rgba(6,14,22,.96));box-shadow:0 32px 90px rgba(0,0,0,.45)}
-.brand{font-size:13px;letter-spacing:.24em;text-transform:uppercase;color:#77dfff;margin-bottom:12px}.title{font-size:40px;font-weight:750;letter-spacing:-.04em}.sub{margin-top:10px;color:#9fb1c2;line-height:1.55}.bar{height:5px;border-radius:99px;background:#142737;overflow:hidden;margin-top:28px}.bar:after{content:"";display:block;height:100%;width:38%;border-radius:99px;background:#78e4ff;animation:move 1.2s ease-in-out infinite}@keyframes move{0%{transform:translateX(-110%)}100%{transform:translateX(330%)}}
-</style>
-</head>
-<body><main class="shell"><div class="brand">Mairaiy system</div><div class="title">Aura Live</div><div class="sub">Demarrage du moteur Twitch, de l'IA et du tableau de bord...</div><div class="bar"></div></main></body>
-</html>
-"""
+def _browser_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    for executable in ("msedge.exe", "chrome.exe"):
+        resolved = shutil.which(executable)
+        if resolved:
+            candidates.append(Path(resolved))
+
+    env_paths = [
+        (os.environ.get("PROGRAMFILES(X86)"), "Microsoft/Edge/Application/msedge.exe"),
+        (os.environ.get("PROGRAMFILES"), "Microsoft/Edge/Application/msedge.exe"),
+        (os.environ.get("LOCALAPPDATA"), "Microsoft/Edge/Application/msedge.exe"),
+        (os.environ.get("PROGRAMFILES"), "Google/Chrome/Application/chrome.exe"),
+        (os.environ.get("PROGRAMFILES(X86)"), "Google/Chrome/Application/chrome.exe"),
+        (os.environ.get("LOCALAPPDATA"), "Google/Chrome/Application/chrome.exe"),
+    ]
+    for base, relative in env_paths:
+        if base:
+            candidates.append(Path(base) / relative)
+
+    seen: set[str] = set()
+    result: list[Path] = []
+    for candidate in candidates:
+        key = str(candidate).casefold()
+        if key not in seen and candidate.is_file():
+            seen.add(key)
+            result.append(candidate)
+    return result
 
 
-def _error_html(exc: BaseException) -> str:
-    message = html.escape(str(exc) or exc.__class__.__name__)
-    return f"""
-<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Aura Live</title>
-<style>html,body{{height:100%;margin:0;background:#0b1118;color:#f4f7fa;font-family:Segoe UI,system-ui,sans-serif}}body{{display:grid;place-items:center}}main{{width:min(720px,84vw);padding:38px;border-radius:24px;background:#121d28;border:1px solid #2c4052}}h1{{margin:0 0 12px;font-size:30px}}p{{color:#b8c6d1;line-height:1.6}}code{{display:block;white-space:pre-wrap;padding:16px;border-radius:14px;background:#091018;color:#ffb2b2}}</style></head>
-<body><main><h1>Aura Live n'a pas pu demarrer</h1><p>Le portail n'est pas perdu : le moteur local a rencontre un probleme au lancement.</p><code>{message}</code><p>Tu peux fermer cette fenetre, corriger le probleme puis relancer Aura Live.</p></main></body></html>
-"""
+def _launch_app_window(url: str) -> tuple[subprocess.Popen[bytes], Path]:
+    browsers = _browser_candidates()
+    if not browsers:
+        raise RuntimeError(
+            "Microsoft Edge ou Google Chrome est requis pour afficher Aura Live. "
+            "Edge est normalement deja installe avec Windows."
+        )
+
+    profile_root = Path(tempfile.mkdtemp(prefix="AuraLiveBrowser-"))
+    args = [
+        str(browsers[0]),
+        f"--app={url}",
+        f"--user-data-dir={profile_root}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-background-mode",
+        "--disable-features=msEdgeFirstRunExperience",
+        "--window-size=1480,920",
+    ]
+    creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    process = subprocess.Popen(args, creationflags=creationflags)
+    return process, profile_root
 
 
-def _boot_window(window: Any) -> None:
-    try:
-        _start_backend()
-        _wait_until_ready()
-        window.load_url(_dashboard_url())
-    except Exception as exc:
-        logger.exception("Demarrage desktop Aura Live impossible")
+def _show_error(message: str) -> None:
+    logger.error(message)
+    if sys.platform == "win32":
         try:
-            window.load_html(_error_html(exc))
+            ctypes.windll.user32.MessageBoxW(0, message, "Aura Live - erreur", 0x10)
+            return
         except Exception:
             pass
+    try:
+        webbrowser.open("data:text/plain," + message)
+    except Exception:
+        pass
 
 
 def run_desktop() -> None:
-    os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
-
+    browser_process: subprocess.Popen[bytes] | None = None
+    profile_root: Path | None = None
     try:
-        import webview
-    except Exception:
-        # Secours pour une installation source incomplete : le portail reste accessible.
         _start_backend()
         _wait_until_ready()
-        webbrowser.open(_dashboard_url())
-        try:
-            while _server_thread is not None and _server_thread.is_alive():
-                time.sleep(0.5)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            _stop_backend()
-        return
-
-    window = webview.create_window(
-        "Aura Live",
-        html=_loading_html(),
-        width=1480,
-        height=920,
-        min_size=(1080, 700),
-        resizable=True,
-    )
-    window.events.closed += lambda: _stop_backend()
-    webview.start(_boot_window, window, debug=False)
-    _stop_backend()
+        browser_process, profile_root = _launch_app_window(_dashboard_url())
+        browser_process.wait()
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:
+        logger.exception("Demarrage desktop Aura Live impossible")
+        _show_error(str(exc) or exc.__class__.__name__)
+    finally:
+        if browser_process is not None and browser_process.poll() is None:
+            try:
+                browser_process.terminate()
+            except Exception:
+                pass
+        _stop_backend()
+        if profile_root is not None:
+            try:
+                shutil.rmtree(profile_root, ignore_errors=True)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
