@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+_SOURCE_BASE_DIR = Path(__file__).resolve().parent.parent
+IS_FROZEN = bool(getattr(sys, "frozen", False))
+BASE_DIR = Path(getattr(sys, "_MEIPASS", _SOURCE_BASE_DIR)) if IS_FROZEN else _SOURCE_BASE_DIR
+RUNTIME_DIR = Path(sys.executable).resolve().parent if IS_FROZEN else BASE_DIR
+
+# En mode application Windows, le .env reste volontairement a cote de AuraLive.exe.
+# En mode developpement, le comportement historique du depot est conserve.
+load_dotenv(RUNTIME_DIR / ".env")
 
 
 def _bool(name: str, default: bool = False) -> bool:
@@ -29,6 +36,13 @@ def _int(name: str, default: int) -> int:
         return int(os.getenv(name, str(default)))
     except ValueError:
         return default
+
+
+def _runtime_path(env_name: str, default: str) -> Path:
+    value = Path(os.getenv(env_name, default))
+    if value.is_absolute():
+        return value
+    return RUNTIME_DIR / value
 
 
 @dataclass(slots=True)
@@ -72,9 +86,9 @@ class Settings:
     obs_password: str = os.getenv("OBS_PASSWORD", "")
 
     youtube_api_key: str = os.getenv("YOUTUBE_API_KEY", "")
-    media_dir: Path = BASE_DIR / os.getenv("MEDIA_DIR", "data/media")
+    media_dir: Path = _runtime_path("MEDIA_DIR", "data/media")
 
-    database_path: Path = BASE_DIR / os.getenv("DATABASE_PATH", "data/aura_live.db")
+    database_path: Path = _runtime_path("DATABASE_PATH", "data/aura_live.db")
     identity_path: Path = BASE_DIR / "config" / "aura_identity.json"
     log_level: str = os.getenv("LOG_LEVEL", "INFO").upper()
 
