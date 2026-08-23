@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -45,6 +46,30 @@ def _runtime_path(env_name: str, default: str) -> Path:
     return RUNTIME_DIR / value
 
 
+def _local_obs_websocket_config() -> dict[str, object]:
+    if not _bool("OBS_DISCOVER_LOCAL", True):
+        return {}
+    candidates: list[Path] = []
+    appdata = os.getenv("APPDATA")
+    if appdata:
+        candidates.append(Path(appdata) / "obs-studio" / "plugin_config" / "obs-websocket" / "config.json")
+    candidates.append(Path.home() / "AppData" / "Roaming" / "obs-studio" / "plugin_config" / "obs-websocket" / "config.json")
+    for path in candidates:
+        try:
+            if path.is_file():
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    return payload
+        except Exception:
+            continue
+    return {}
+
+
+_OBS_LOCAL = _local_obs_websocket_config()
+_OBS_DISCOVERED_PORT = int(_OBS_LOCAL.get("server_port") or 4455)
+_OBS_DISCOVERED_PASSWORD = str(_OBS_LOCAL.get("server_password") or "")
+
+
 @dataclass(slots=True)
 class Settings:
     host: str = os.getenv("AURA_HOST", "127.0.0.1")
@@ -80,10 +105,11 @@ class Settings:
     ai_temperature: float = _float("AI_TEMPERATURE", 0.78)
     ai_warmup_enabled: bool = _bool("AI_WARMUP_ENABLED", True)
 
-    obs_enabled: bool = _bool("OBS_ENABLED", False)
+    obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
+    obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")
-    obs_port: int = _int("OBS_PORT", 4455)
-    obs_password: str = os.getenv("OBS_PASSWORD", "")
+    obs_port: int = _int("OBS_PORT", _OBS_DISCOVERED_PORT)
+    obs_password: str = os.getenv("OBS_PASSWORD") or _OBS_DISCOVERED_PASSWORD
 
     youtube_api_key: str = os.getenv("YOUTUBE_API_KEY", "")
     media_dir: Path = _runtime_path("MEDIA_DIR", "data/media")
