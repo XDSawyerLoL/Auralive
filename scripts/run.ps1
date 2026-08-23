@@ -1,3 +1,7 @@
+param(
+    [switch]$Headless
+)
+
 $ErrorActionPreference = "Stop"
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -10,6 +14,8 @@ Set-Location $ProjectRoot
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $RequirementsPath = Join-Path $ProjectRoot "requirements.txt"
 $RequirementsStamp = Join-Path $ProjectRoot ".venv\requirements.sha256"
+$DesktopRequirementsPath = Join-Path $ProjectRoot "requirements-desktop.txt"
+$DesktopRequirementsStamp = Join-Path $ProjectRoot ".venv\requirements-desktop.sha256"
 
 function Test-AuraPythonImports {
     param(
@@ -21,6 +27,26 @@ function Test-AuraPythonImports {
     try {
         $ErrorActionPreference = "Continue"
         $null = & $PythonPath -c "import fastapi, uvicorn, aiohttp, dotenv, websockets, multipart, PIL, piper" 2>&1
+        $exitCode = $LASTEXITCODE
+    } catch {
+        $exitCode = 1
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return ($exitCode -eq 0)
+}
+
+function Test-AuraDesktopImports {
+    param(
+        [Parameter(Mandatory = $true)][string]$PythonPath
+    )
+
+    $previousPreference = $ErrorActionPreference
+    $exitCode = 1
+    try {
+        $ErrorActionPreference = "Continue"
+        $null = & $PythonPath -c "import webview" 2>&1
         $exitCode = $LASTEXITCODE
     } catch {
         $exitCode = 1
@@ -72,6 +98,36 @@ if ($RequirementsChanged -or -not $ImportsReady) {
     Write-Host "Dependances pretes." -ForegroundColor Green
 }
 
+if (-not $Headless) {
+    $CurrentDesktopHash = ""
+    if (Test-Path $DesktopRequirementsPath) {
+        $CurrentDesktopHash = (Get-FileHash $DesktopRequirementsPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+
+    $InstalledDesktopHash = ""
+    if (Test-Path $DesktopRequirementsStamp) {
+        $InstalledDesktopHash = (Get-Content $DesktopRequirementsStamp -Raw).Trim().ToLowerInvariant()
+    }
+
+    $DesktopReady = Test-AuraDesktopImports -PythonPath $VenvPython
+    $DesktopChanged = (-not $CurrentDesktopHash) -or ($CurrentDesktopHash -ne $InstalledDesktopHash)
+
+    if ($DesktopChanged -or -not $DesktopReady) {
+        Write-Host "Installation de l'interface Windows Aura Live..." -ForegroundColor Yellow
+        & $VenvPython -m pip install -r $DesktopRequirementsPath
+        if ($LASTEXITCODE -ne 0) {
+            throw "L'interface Windows n'a pas pu etre installee."
+        }
+        if (-not (Test-AuraDesktopImports -PythonPath $VenvPython)) {
+            throw "Le moteur de fenetre Windows pywebview est indisponible."
+        }
+        if ($CurrentDesktopHash) {
+            Set-Content -Path $DesktopRequirementsStamp -Value $CurrentDesktopHash -Encoding ascii
+        }
+        Write-Host "Interface Windows prete." -ForegroundColor Green
+    }
+}
+
 $LocalVoiceEnabled = $true
 if ($env:MAIRAIY_LOCAL_VOICE_ENABLED) {
     $LocalVoiceEnabled = $env:MAIRAIY_LOCAL_VOICE_ENABLED.ToLowerInvariant() -notin @("0", "false", "no", "non", "off")
@@ -115,8 +171,14 @@ $AuraHost = if ($env:AURA_HOST) { $env:AURA_HOST } else { "127.0.0.1" }
 $AuraPort = if ($env:AURA_PORT) { $env:AURA_PORT } else { "8787" }
 $AuraLogLevel = if ($env:LOG_LEVEL) { $env:LOG_LEVEL.ToLowerInvariant() } else { "info" }
 
-Write-Host "Aura Live 2.5 - Leda avec secours local fixe et protection quota" -ForegroundColor Cyan
-& $VenvPython -m uvicorn app.main_v3:app --host $AuraHost --port $AuraPort --log-level $AuraLogLevel
+if ($Headless) {
+    Write-Host "Aura Live 2.5 - mode serveur" -ForegroundColor Cyan
+    & $VenvPython -m uvicorn app.main_v3:app --host $AuraHost --port $AuraPort --log-level $AuraLogLevel
+} else {
+    Write-Host "Aura Live 2.5 - application Windows" -ForegroundColor Cyan
+    & $VenvPython -m app.desktop
+}
+
 if ($LASTEXITCODE -ne 0) {
     throw "Aura s'est arretee avec le code $LASTEXITCODE."
 }
