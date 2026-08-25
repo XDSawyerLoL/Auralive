@@ -24,3 +24,8 @@ def test_desktop_launcher_uses_chromium_app_mode() -> None:
     assert "chrome.exe" in desktop
     assert 'f"--app={url}"' in desktop
     assert "--disable-background-mode" in desktop
+
+
+def test_desktop_disables_uvicorn_default_formatter_config() -> None:
+    desktop = DESKTOP.read_text(encoding="utf-8")
+    assert "log_config=None" in desktop

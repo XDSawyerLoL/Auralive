@@ -87,6 +87,7 @@ def _start_backend() -> bool:
         port=port,
         log_level=str(settings.log_level or "INFO").lower(),
         access_log=False,
+        log_config=None,
     )
     _server = uvicorn.Server(config)
     _server_thread = threading.Thread(
