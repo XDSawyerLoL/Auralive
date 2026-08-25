@@ -53,6 +53,42 @@ jobs:
             throw "Le package contient encore pythonnet/Python.Runtime.dll."
           }
 
+      - name: Smoke test AuraLive.exe startup
+        shell: pwsh
+        env:
+          AURA_PORT: "18787"
+          AURA_PUBLIC_BASE_URL: "http://localhost:18787"
+          TWITCH_REDIRECT_URI: "http://localhost:18787/auth/callback"
+          AI_MODE: "off"
+          OBS_AUTO_CONNECT: "false"
+        run: |
+          $process = Start-Process "dist\AuraLive\AuraLive.exe" -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(45)
+            $ready = $false
+            while ((Get-Date) -lt $deadline) {
+              if ($process.HasExited) {
+                throw "AuraLive.exe s'est ferme pendant le demarrage (code $($process.ExitCode))."
+              }
+              try {
+                $response = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200 -and $response.Content -match "Aura Live") {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $ready) {
+              throw "AuraLive.exe n'a pas expose /health dans le delai imparti."
+            }
+            Write-Host "AuraLive.exe a demarre et /health repond correctement."
+          } finally {
+            if (-not $process.HasExited) {
+              taskkill /PID $process.Id /T /F | Out-Null
+            }
+          }
+
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
