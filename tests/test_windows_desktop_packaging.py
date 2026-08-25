@@ -29,3 +29,11 @@ def test_desktop_launcher_uses_chromium_app_mode() -> None:
 def test_desktop_disables_uvicorn_default_formatter_config() -> None:
     desktop = DESKTOP.read_text(encoding="utf-8")
     assert "log_config=None" in desktop
+
+
+def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
+    desktop = DESKTOP.read_text(encoding="utf-8")
+    assert "--remote-debugging-port=0" in desktop
+    assert "DevToolsActivePort" in desktop
+    assert "_wait_for_app_window" in desktop
+    assert "browser_process.wait()" not in desktop

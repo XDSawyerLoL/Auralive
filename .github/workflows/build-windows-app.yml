@@ -83,6 +83,18 @@ jobs:
               throw "AuraLive.exe n'a pas expose /health dans le delai imparti."
             }
             Write-Host "AuraLive.exe a demarre et /health repond correctement."
+
+            # Regression test for Chromium process handoff: the launcher must remain
+            # alive after the initial browser bootstrap PID has had time to detach.
+            Start-Sleep -Seconds 8
+            if ($process.HasExited) {
+              throw "AuraLive.exe s'est ferme juste apres l'ouverture de Chromium (code $($process.ExitCode))."
+            }
+            $stable = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 3
+            if ($stable.StatusCode -ne 200 -or $stable.Content -notmatch "Aura Live") {
+              throw "Le backend Aura Live n'est plus disponible apres l'ouverture de la fenetre."
+            }
+            Write-Host "AuraLive.exe reste actif et /health repond encore apres 8 secondes."
           } finally {
             if (-not $process.HasExited) {
               taskkill /PID $process.Id /T /F | Out-Null
