@@ -164,6 +164,8 @@ def _launch_app_window(url: str) -> tuple[subprocess.Popen[bytes], Path]:
         str(browsers[0]),
         f"--app={url}",
         f"--user-data-dir={profile_root}",
+        "--remote-debugging-address=127.0.0.1",
+        "--remote-debugging-port=0",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-background-mode",
@@ -173,6 +175,55 @@ def _launch_app_window(url: str) -> tuple[subprocess.Popen[bytes], Path]:
     creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
     process = subprocess.Popen(args, creationflags=creationflags)
     return process, profile_root
+
+
+def _read_devtools_port(profile_root: Path) -> int | None:
+    marker = profile_root / "DevToolsActivePort"
+    try:
+        if not marker.is_file():
+            return None
+        first_line = marker.read_text(encoding="utf-8", errors="ignore").splitlines()[0].strip()
+        port = int(first_line)
+        return port if 0 < port < 65536 else None
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _wait_for_app_window(profile_root: Path, process: subprocess.Popen[bytes]) -> None:
+    """Keep Aura alive for the actual Chromium profile, not only its launcher PID.
+
+    Edge/Chrome may hand the app window to a child process and let the process returned
+    by Popen exit immediately. Chromium exposes a local DevTools port in the dedicated
+    temporary profile, which remains alive for the lifetime of the real app window.
+    """
+
+    deadline = time.monotonic() + 15.0
+    devtools_port: int | None = None
+    while time.monotonic() < deadline:
+        devtools_port = _read_devtools_port(profile_root)
+        if devtools_port is not None:
+            break
+        if _owns_server and _server_thread is not None and not _server_thread.is_alive():
+            raise RuntimeError("Le moteur Aura Live s'est arrete pendant l'ouverture de la fenetre.")
+        time.sleep(0.2)
+
+    if devtools_port is None:
+        # Some managed Chromium installations can disable remote debugging. In that
+        # case never kill the backend merely because the bootstrap PID was delegated.
+        logger.warning("Suivi Chromium avance indisponible; maintien du moteur Aura Live en mode securise.")
+        while _looks_like_aura(_dashboard_url()):
+            if _owns_server and _server_thread is not None and not _server_thread.is_alive():
+                return
+            time.sleep(2.0)
+        return
+
+    logger.info("Fenetre Aura Live suivie via Chromium sur le port local %s", devtools_port)
+    while True:
+        if _owns_server and _server_thread is not None and not _server_thread.is_alive():
+            return
+        if not _port_is_busy("127.0.0.1", devtools_port):
+            return
+        time.sleep(0.75)
 
 
 def _show_error(message: str) -> None:
@@ -196,7 +247,7 @@ def run_desktop() -> None:
         _start_backend()
         _wait_until_ready()
         browser_process, profile_root = _launch_app_window(_dashboard_url())
-        browser_process.wait()
+        _wait_for_app_window(profile_root, browser_process)
     except KeyboardInterrupt:
         pass
     except Exception as exc:
