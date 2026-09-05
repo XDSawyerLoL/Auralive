@@ -219,6 +219,7 @@ def _launch_app_window(url: str) -> tuple[subprocess.Popen[bytes], Path]:
         "--no-default-browser-check",
         "--disable-background-mode",
         "--disable-features=msEdgeFirstRunExperience",
+        "--autoplay-policy=no-user-gesture-required",
         "--window-size=1480,920",
     ]
     creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
