@@ -38,6 +38,7 @@ class FakeOverlay:
         assert target == "avatar"
         self.audio.generated_count += 1
         self.audio.last_engine = self.engine
+        self.audio.last_file = "mairaiy-test.wav"
         self.audio.last_audio_duration_ms = 1200
 
 
@@ -70,6 +71,7 @@ def build_service(engine: str = "gemini-tts"):
         generated_count=0,
         last_engine="",
         last_error="",
+        last_file="",
         last_audio_duration_ms=0,
     )
     ai = FakeAI()
@@ -104,6 +106,7 @@ def test_browser_transcript_produces_answer_then_voice() -> None:
         diagnostic = service.diagnostic()
         assert diagnostic["last_voice_delivered"] is True
         assert diagnostic["last_voice_engine"] == "gemini-tts"
+        assert diagnostic["last_audio_url"] == "/media/tts/mairaiy-test.wav"
         assert diagnostic["last_audio_duration_ms"] == 1200
         assert diagnostic["last_rearm_after_ms"] >= 2700
         assert diagnostic["stage"] == "idle"
@@ -124,6 +127,7 @@ def test_fixed_local_voice_is_a_delivered_response() -> None:
         diagnostic = service.diagnostic()
         assert diagnostic["last_voice_delivered"] is True
         assert diagnostic["last_voice_engine"] == "piper-local"
+        assert diagnostic["last_audio_url"] == "/media/tts/mairaiy-test.wav"
         assert diagnostic["last_audio_duration_ms"] == 1200
         assert diagnostic["last_voice_error"] == ""
         assert voice_input.last_voice_delivered is True
@@ -141,6 +145,7 @@ def test_kokoro_local_voice_is_a_delivered_response() -> None:
         diagnostic = service.diagnostic()
         assert diagnostic["last_voice_delivered"] is True
         assert diagnostic["last_voice_engine"] == "kokoro-local"
+        assert diagnostic["last_audio_url"] == "/media/tts/mairaiy-test.wav"
         assert diagnostic["last_audio_duration_ms"] == 1200
         assert diagnostic["last_voice_error"] == ""
         assert voice_input.last_voice_delivered is True
