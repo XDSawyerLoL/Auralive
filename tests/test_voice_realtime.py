@@ -131,6 +131,23 @@ def test_fixed_local_voice_is_a_delivered_response() -> None:
     asyncio.run(scenario())
 
 
+def test_kokoro_local_voice_is_a_delivered_response() -> None:
+    async def scenario() -> None:
+        service, voice_input, _ai = build_service("kokoro-local")
+        await service.talk_text("Parle-moi avec ta voix locale")
+        assert service.voice_task is not None
+        await service.voice_task
+
+        diagnostic = service.diagnostic()
+        assert diagnostic["last_voice_delivered"] is True
+        assert diagnostic["last_voice_engine"] == "kokoro-local"
+        assert diagnostic["last_audio_duration_ms"] == 1200
+        assert diagnostic["last_voice_error"] == ""
+        assert voice_input.last_voice_delivered is True
+
+    asyncio.run(scenario())
+
+
 def test_sentence_without_name_is_not_ignored() -> None:
     async def scenario() -> None:
         service, _voice_input, ai = build_service()
