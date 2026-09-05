@@ -18,6 +18,12 @@
   const POLL_INTERVAL_MS = 500;
   const VOICE_WAIT_LIMIT_MS = 50000;
   const PHRASE_DELAY_MS = 900;
+  const localAudio = Object.assign(document.createElement('audio'), {
+    id: 'mairaiy-local-monitor',
+    preload: 'auto',
+  });
+  localAudio.setAttribute('playsinline', '');
+  document.body.appendChild(localAudio);
 
   let recognition = null;
   let recognitionRunning = false;
@@ -28,6 +34,7 @@
   let sendTimer = null;
   let restartTimer = null;
   let requestController = null;
+  let lastLocalAudioUrl = '';
 
   const setHint = (title, detail = '', error = false) => {
     hint.innerHTML = `<b class="${error ? 'error' : ''}">${title}</b>${detail}`;
@@ -231,6 +238,42 @@
     render();
   }
 
+  async function playLocalVoice(url, expectedDurationMs = 0) {
+    const cleanUrl = String(url || '').trim();
+    if (!cleanUrl) return false;
+    if (lastLocalAudioUrl === cleanUrl && !localAudio.paused) return true;
+    lastLocalAudioUrl = cleanUrl;
+    localAudio.pause();
+    localAudio.src = `${cleanUrl}${cleanUrl.includes('?') ? '&' : '?'}monitor=${Date.now()}`;
+    localAudio.currentTime = 0;
+    localAudio.volume = 1;
+
+    try {
+      await localAudio.play();
+    } catch (error) {
+      console.warn('Lecture locale Mairaiy bloquée', error);
+      return false;
+    }
+
+    return await new Promise(resolve => {
+      let settled = false;
+      const done = value => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        localAudio.onended = null;
+        localAudio.onerror = null;
+        resolve(value);
+      };
+      localAudio.onended = () => done(true);
+      localAudio.onerror = () => done(false);
+      const timer = setTimeout(
+        () => done(true),
+        Math.max(5000, Number(expectedDurationMs || 0) + 5000),
+      );
+    });
+  }
+
   async function sendPhrase(phrase) {
     clearTimeout(sendTimer);
     sendTimer = null;
@@ -296,8 +339,33 @@
         waitingVoice = false;
         const delivered = Boolean(realtime.last_voice_delivered);
         const delay = Math.max(500, Math.min(45000, Number(realtime.last_rearm_after_ms || 1200)));
-        if (delivered) {
-          setHint('Mairaiy a répondu', `L’écoute revient après sa voix, dans ${(delay / 1000).toFixed(1)} s.`);
+        let playedLocally = false;
+        let localPlaybackFailed = false;
+
+        if (delivered && !Boolean(data.avatar_connected) && realtime.last_audio_url) {
+          playedLocally = await playLocalVoice(
+            realtime.last_audio_url,
+            Number(realtime.last_audio_duration_ms || 0),
+          );
+          localPlaybackFailed = !playedLocally;
+        }
+
+        if (delivered && playedLocally) {
+          setHint('Mairaiy a répondu', 'Voix Kokoro lue directement dans Aura Live.');
+        } else if (delivered && localPlaybackFailed) {
+          setHint(
+            'Voix générée mais lecture bloquée',
+            'Clique une fois sur le bouton micro puis réessaie : le navigateur doit autoriser le son.',
+            true,
+          );
+        } else if (delivered) {
+          const obsReady = Boolean(realtime?.obs_audio?.ok);
+          setHint(
+            'Mairaiy a répondu',
+            obsReady
+              ? 'Voix envoyée dans OBS · Monitor + Output actif.'
+              : `L’écoute revient après sa voix, dans ${(delay / 1000).toFixed(1)} s.`,
+          );
         } else {
           const reason = realtime.last_voice_error || 'La voix de Mairaiy n’a pas été produite.';
           setHint('Réponse écrite prête, voix indisponible', reason, true);
@@ -306,7 +374,7 @@
         setTimeout(() => {
           clearPhrase();
           startRecognition();
-        }, delivered ? delay : 1000);
+        }, playedLocally ? 250 : (delivered ? delay : 1000));
         return;
       } catch {}
     }
@@ -323,6 +391,11 @@
       setHint('Navigateur non compatible', 'Ouvre cette page dans une version récente de Microsoft Edge ou Chrome.', true);
       return;
     }
+    // Ce geste utilisateur autorise aussi la lecture audio dans les politiques
+    // d'autoplay strictes d'Edge/Chrome.
+    try {
+      localAudio.load();
+    } catch {}
     enabled = !enabled;
     localStorage.setItem('mairaiy-continuous-listening', enabled ? 'on' : 'off');
     if (enabled) {
@@ -355,6 +428,7 @@
   window.addEventListener('beforeunload', () => {
     enabled = false;
     stopRecognition();
+    localAudio.pause();
     requestController?.abort();
   });
 
