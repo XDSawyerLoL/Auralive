@@ -35,9 +35,11 @@ class VoiceRealtimeService:
         self.last_voice_delivered = False
         self.last_voice_error = ""
         self.last_voice_engine = ""
+        self.last_audio_url = ""
         self.last_audio_duration_ms = 0
         self.last_rearm_after_ms = 1200
         self.last_latency_ms = 0
+        self.last_obs_audio: dict[str, Any] = {}
 
     @property
     def busy(self) -> bool:
@@ -70,6 +72,7 @@ class VoiceRealtimeService:
             self.last_voice_error = ""
             self.last_voice_delivered = False
             self.last_voice_engine = ""
+            self.last_audio_url = ""
             self.last_audio_duration_ms = 0
             self.last_rearm_after_ms = 1200
             self.last_stage = "response_generation"
@@ -146,6 +149,21 @@ class VoiceRealtimeService:
             "rearm_after_ms": 0,
         }
 
+    async def _prepare_obs_audio(self) -> None:
+        obs = getattr(self.aura, "obs", None)
+        ensure = getattr(obs, "ensure_avatar_audio_monitor", None)
+        if not callable(ensure):
+            self.last_obs_audio = {"ok": False, "reason": "obs_helper_unavailable"}
+            return
+        try:
+            self.last_obs_audio = dict(await ensure())
+        except Exception as exc:
+            self.last_obs_audio = {
+                "ok": False,
+                "reason": "obs_error",
+                "error": str(exc or exc.__class__.__name__)[:300],
+            }
+
     async def _deliver_voice(self, answer: str, *, send_to_chat: bool) -> None:
         previous_count = int(getattr(self.aura.avatar_audio, "generated_count", 0) or 0)
         self.last_stage = "voice_generation"
@@ -154,6 +172,11 @@ class VoiceRealtimeService:
         voice_error = ""
         delivered = False
         engine = ""
+        self.last_audio_url = ""
+
+        # Si OBS est lancé, Aura configure automatiquement la Browser Source
+        # avatar en Monitor + Output avant d'envoyer la nouvelle voix.
+        await self._prepare_obs_audio()
 
         try:
             await asyncio.wait_for(
@@ -176,7 +199,11 @@ class VoiceRealtimeService:
                 > previous_count
                 and engine in _DELIVERED_VOICE_ENGINES
             )
-            if not delivered:
+            if delivered:
+                filename = str(getattr(self.aura.avatar_audio, "last_file", "") or "").strip()
+                if filename:
+                    self.last_audio_url = f"/media/tts/{filename}"
+            else:
                 voice_error = str(
                     getattr(self.aura.avatar_audio, "last_error", "")
                     or "La voix de Mairaiy n'a pas été produite"
@@ -239,9 +266,11 @@ class VoiceRealtimeService:
             "last_voice_delivered": self.last_voice_delivered,
             "last_voice_error": self.last_voice_error,
             "last_voice_engine": self.last_voice_engine,
+            "last_audio_url": self.last_audio_url,
             "last_audio_duration_ms": self.last_audio_duration_ms,
             "last_rearm_after_ms": self.last_rearm_after_ms,
             "last_latency_ms": self.last_latency_ms,
+            "obs_audio": self.last_obs_audio,
         }
 
 

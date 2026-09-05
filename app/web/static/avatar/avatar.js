@@ -11,7 +11,7 @@ let loadingTimer;
 function cleanText(value){return String(value||'').replace(/^@\w+\s*/,'').trim()}
 function isVoiceLocked(event={}){
   const engine=String(event.audio_engine||'').toLowerCase();
-  return engine.startsWith('gemini-tts')||engine==='piper-local'||engine==='voice-unavailable';
+  return engine==='kokoro-local'||engine.startsWith('gemini-tts')||engine==='piper-local'||engine==='voice-unavailable';
 }
 async function loadSettings(){
   try{const r=await fetch('/api/avatar/settings',{cache:'no-store'});if(r.ok)settings={...settings,...await r.json()}}catch{}
