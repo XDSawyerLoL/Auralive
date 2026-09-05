@@ -31,6 +31,14 @@ def test_desktop_disables_uvicorn_default_formatter_config() -> None:
     assert "log_config=None" in desktop
 
 
+def test_desktop_restores_windowed_stdio_before_uvicorn_import() -> None:
+    desktop = DESKTOP.read_text(encoding="utf-8")
+    assert "sys.stdout is None" in desktop
+    assert "sys.stderr is None" in desktop
+    assert "AuraLive-startup.log" in desktop
+    assert desktop.index("_ensure_stdio()") < desktop.index("import uvicorn")
+
+
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
     desktop = DESKTOP.read_text(encoding="utf-8")
     assert "--remote-debugging-port=0" in desktop
