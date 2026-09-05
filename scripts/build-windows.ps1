@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "AuraLive-2.5-Windows-NaturalMairaiy-2026-09-05"
+$BuildId = "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05"
 $KokoroModelUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
 $KokoroVoicesUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
 
@@ -98,9 +98,10 @@ AURA LIVE - APPLICATION WINDOWS
 Build: $BuildId
 
 1. Double-clique AuraLive.exe.
-2. Aura Live demarre son moteur local puis ouvre une fenetre d'application dediee via Microsoft Edge ou Google Chrome.
-3. Mairaiy utilise Kokoro local avec la voix ff_siwis comme voix principale.
-4. Les conversations vocales directes avec Sansa utilisent le modele local de qualite configure (gemma3:12b par defaut) et ignorent le bruit du chat Twitch.
+2. Aura Live ouvre son interface dediee via Edge/Chrome.
+3. Les connexions Twitch s'ouvrent dans ton navigateur Windows normal, pas dans la fenetre Aura Live.
+4. Tester la voix fonctionne directement, meme sans OBS ni /overlay/avatar.
+5. Le vocal prive utilise un chemin court gemma3:12b -> Kokoro et OBS ne peut plus ralentir la reponse.
 
 Aucune cle Gemini n'est necessaire pour la voix principale.
 Le fichier .env livre avec l'application est deja configure en Ollama + Kokoro.
