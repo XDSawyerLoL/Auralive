@@ -68,14 +68,14 @@
     if (processing) button.innerHTML = 'Mairaiy<br>réfléchit';
     else if (waitingVoice) button.innerHTML = 'Mairaiy<br>parle';
     else if (hearing) button.innerHTML = 'Mairaiy<br>t’écoute';
-    else if (listening) button.innerHTML = 'Écoute<br>continue';
+    else if (listening) button.innerHTML = 'Écoute<br>filtrée';
     else button.innerHTML = 'Activer<br>l’écoute';
 
     if (!Recognition) micRuntime.textContent = 'Reconnaissance continue indisponible';
-    else if (processing) micRuntime.textContent = 'Génération de la réponse';
+    else if (processing) micRuntime.textContent = 'Vérification + génération de la réponse';
     else if (waitingVoice) micRuntime.textContent = 'Voix de Mairaiy en préparation';
-    else if (hearing) micRuntime.textContent = 'Phrase reconnue · envoi automatique';
-    else if (listening) micRuntime.textContent = 'Edge/Chrome · chaque phrase lui est adressée';
+    else if (hearing) micRuntime.textContent = 'Phrase reconnue · vérification en cours';
+    else if (listening) micRuntime.textContent = 'Edge/Chrome · conversation filtrée · pubs et sons ambiants ignorés';
     else micRuntime.textContent = 'Micro en pause';
   }
 
@@ -134,7 +134,7 @@
       const phrase = phraseParts.join(' ').replace(/\s+/g, ' ').trim();
       if (!hasMeaningfulSpeech(phrase)) {
         clearPhrase();
-        setHint('Écoute continue active', 'Parle normalement : aucun prénom ni bouton n’est nécessaire.');
+        setHint('Écoute filtrée active', 'Dis « Mairaiy » pour ouvrir le dialogue, puis parle naturellement.');
         return;
       }
       sendPhrase(phrase);
@@ -146,7 +146,7 @@
     if (!clean || processing || waitingVoice || !hasMeaningfulSpeech(clean)) return;
     phraseParts.push(clean);
     transcript.textContent = phraseParts.join(' ');
-    setHint('Mairaiy t’écoute', 'Termine ta phrase ; elle sera envoyée après le silence.');
+    setHint('Mairaiy t’écoute', 'Termine ta phrase ; elle vérifie ensuite si tu lui parlais vraiment.');
     render();
     schedulePhraseSend();
   }
@@ -162,7 +162,7 @@
     instance.onstart = () => {
       recognitionRunning = true;
       render();
-      setHint('Écoute continue active', 'Parle normalement : toutes tes phrases sont adressées à Mairaiy.');
+      setHint('Écoute filtrée active', 'Dis « Mairaiy » pour ouvrir le dialogue. Ensuite, les échanges naturels restent ouverts quelques secondes.');
     };
 
     instance.onresult = event => {
@@ -176,7 +176,7 @@
       }
       if (interim.trim() && !processing && !waitingVoice) {
         transcript.textContent = `${phraseParts.join(' ')} ${interim}`.trim();
-        setHint('Mairaiy t’écoute', 'Continue naturellement, sans prononcer son prénom.');
+        setHint('Mairaiy t’écoute', 'Elle distingue maintenant la conversation des sons du live.');
       }
     };
 
@@ -282,7 +282,7 @@
     stopRecognition();
     render();
     transcript.textContent = phrase;
-    setHint('Mairaiy prépare sa réponse', 'La phrase est reconnue ; elle génère directement sa réponse.');
+    setHint('Mairaiy vérifie la phrase', 'Les pubs, vidéos et sons ambiants sont éliminés avant la réponse.');
 
     requestController = new AbortController();
     const timeout = setTimeout(() => requestController.abort(), 35000);
@@ -297,6 +297,21 @@
       let data = {};
       try { data = JSON.parse(raw); } catch { data = { detail: raw }; }
       if (!response.ok) throw new Error(data.detail || 'Dialogue vocal impossible');
+
+      if (data.ignored) {
+        processing = false;
+        waitingVoice = false;
+        answer.textContent = '—';
+        clearPhrase();
+        render();
+        if (data.ignore_reason === 'ambient_broadcast') {
+          setHint('Son du live ignoré', 'Mairaiy a entendu quelque chose, mais l’a identifié comme pub, vidéo ou audio ambiant. Elle ne répond pas.');
+        } else {
+          setHint('Phrase non adressée à Mairaiy', 'Elle continue d’écouter sans interrompre le live. Dis « Mairaiy » pour ouvrir un échange.');
+        }
+        scheduleRestart(Math.max(200, Number(data.rearm_after_ms || 250)));
+        return;
+      }
 
       answer.textContent = data.answer || '—';
       processing = false;
@@ -351,7 +366,7 @@
         }
 
         if (delivered && playedLocally) {
-          setHint('Mairaiy a répondu', 'Voix Kokoro lue directement dans Aura Live.');
+          setHint('Mairaiy a répondu', 'Le dialogue reste ouvert : tu peux lui répondre naturellement.');
         } else if (delivered && localPlaybackFailed) {
           setHint(
             'Voix générée mais lecture bloquée',
@@ -363,7 +378,7 @@
           setHint(
             'Mairaiy a répondu',
             obsReady
-              ? 'Voix envoyée dans OBS · Monitor + Output actif.'
+              ? 'Voix envoyée dans OBS · le dialogue reste ouvert pour ta réponse.'
               : `L’écoute revient après sa voix, dans ${(delay / 1000).toFixed(1)} s.`,
           );
         } else {
@@ -391,8 +406,6 @@
       setHint('Navigateur non compatible', 'Ouvre cette page dans une version récente de Microsoft Edge ou Chrome.', true);
       return;
     }
-    // Ce geste utilisateur autorise aussi la lecture audio dans les politiques
-    // d'autoplay strictes d'Edge/Chrome.
     try {
       localAudio.load();
     } catch {}
@@ -404,14 +417,14 @@
     } else {
       stopRecognition();
       clearPhrase();
-      setHint('Écoute en pause', 'Clique une fois pour reprendre l’écoute continue.');
+      setHint('Écoute en pause', 'Clique une fois pour reprendre l’écoute filtrée.');
     }
     render();
   });
 
   handsFree.checked = true;
   handsFree.disabled = true;
-  handsFree.closest('.toggle')?.setAttribute('title', 'Toutes les phrases reconnues sont adressées à Mairaiy.');
+  handsFree.closest('.toggle')?.setAttribute('title', 'Écoute continue filtrée : dialogue avec Sansa oui, pubs et sons ambiants non.');
 
   window.addEventListener('focus', () => {
     if (enabled && !processing && !waitingVoice) startRecognition();
@@ -439,9 +452,9 @@
     enabled = false;
     setHint('Reconnaissance continue indisponible', 'Utilise Microsoft Edge ou Chrome récent.', true);
   } else if (enabled) {
-    setHint('Activation du micro', 'Edge peut demander une autorisation une seule fois.');
+    setHint('Activation du micro', 'L’écoute est continue mais filtrée. Dis « Mairaiy » pour ouvrir le dialogue.');
     setTimeout(startRecognition, 350);
   } else {
-    setHint('Écoute en pause', 'Clique une fois pour activer l’écoute continue.');
+    setHint('Écoute en pause', 'Clique une fois pour activer l’écoute filtrée.');
   }
 })();
