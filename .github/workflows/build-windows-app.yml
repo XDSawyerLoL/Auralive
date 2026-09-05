@@ -7,6 +7,7 @@ on:
       - main
       - feat/kokoro-primary-voice
       - fix/local-voice-status-and-twitch-setup
+      - fix/mairaiy-natural-reactions
     paths:
       - "app/**"
       - "config/**"
@@ -52,7 +53,7 @@ jobs:
             throw "BUILD-ID.txt est absent du package."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.5-Windows-KokoroPrimary-2026-09-05") {
+          if ($buildId -ne "AuraLive-2.5-Windows-NaturalMairaiy-2026-09-05") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\AuraLive\.env")) {
@@ -62,8 +63,11 @@ jobs:
             throw "L'ecran de configuration locale Twitch est absent du package."
           }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
-          if ($envContent -notmatch "AI_MODE=ollama" -or $envContent -notmatch "MAIRAIY_KOKORO_VOICE=ff_siwis") {
-            throw "Le .env livre n'est pas configure en Ollama + Kokoro ff_siwis."
+          if ($envContent -notmatch "AI_MODE=ollama" -or
+              $envContent -notmatch "AI_MODEL=gemma3:12b" -or
+              $envContent -notmatch "AI_AUTO_FAST_MODEL=false" -or
+              $envContent -notmatch "MAIRAIY_KOKORO_VOICE=ff_siwis") {
+            throw "Le .env livre n'est pas configure en Ollama qualite + Kokoro ff_siwis."
           }
           $model = Get-Item "dist\AuraLive\data\voices\kokoro\kokoro-v1.0.onnx" -ErrorAction Stop
           $voices = Get-Item "dist\AuraLive\data\voices\kokoro\voices-v1.0.bin" -ErrorAction Stop
@@ -122,8 +126,8 @@ jobs:
               throw "AuraLive-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "AuraLive-2.5-Windows-KokoroPrimary-2026-09-05") {
-              throw "Le binaire lance n'est pas le build KokoroPrimary attendu."
+            if ($startup -notmatch "AuraLive-2.5-Windows-NaturalMairaiy-2026-09-05") {
+              throw "Le binaire lance n'est pas le build NaturalMairaiy attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
               Get-Content $logPath
@@ -189,7 +193,7 @@ jobs:
               Get-Content $logPath
               throw "Le formatter Uvicorn default a plante apres le demarrage."
             }
-            Write-Host "Valide: Kokoro ff_siwis, aucun faux besoin Gemini, setup Twitch local, backend stable."
+            Write-Host "Valide: Natural Mairaiy, Kokoro ff_siwis, setup Twitch local, backend stable."
           } finally {
             if (-not $process.HasExited) {
               try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -200,7 +204,7 @@ jobs:
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-LocalVoiceSetupFix
+          name: AuraLive-Windows-NaturalMairaiy
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true
