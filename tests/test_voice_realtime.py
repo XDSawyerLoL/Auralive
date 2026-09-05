@@ -7,7 +7,10 @@ from types import SimpleNamespace
 from app.services.voice_realtime import (
     VoiceRealtimeService,
     _ANSWER_TIMEOUT_SECONDS,
+    _PRIVATE_VOICE_CONTEXT,
+    _addressing_decision,
     _compact_spoken_answer,
+    _looks_like_ambient_broadcast,
 )
 
 
@@ -66,6 +69,7 @@ class FakeAI:
 class FakeMemory:
     def __init__(self):
         self.context_called = False
+        self.remembered = []
 
     async def context(self, _viewer):
         self.context_called = True
@@ -78,8 +82,8 @@ class FakeMemory:
             {"role": "assistant", "content": "Oui, clairement."},
         ]
 
-    async def remember_turn(self, *_args):
-        return None
+    async def remember_turn(self, *args):
+        self.remembered.append(args)
 
 
 class FakeAudio:
@@ -212,11 +216,11 @@ def test_browser_transcript_produces_answer_then_voice_without_overlay() -> None
 def test_private_voice_uses_compact_quality_model_prompt() -> None:
     async def scenario() -> None:
         service, _voice_input, ai, _audio, _overlay, _obs, memory = build_service()
-        result = await service.talk_text("C'est pas si mal, mais y a du travail.")
+        result = await service.talk_text("Tu trouves ça comment ?")
 
         assert result["response_model"] == "gemma3:12b"
         assert result["fastpath"] is True
-        assert ai.last_message == "C'est pas si mal, mais y a du travail."
+        assert ai.last_message == "Tu trouves ça comment ?"
         assert ai.last_model == "gemma3:12b"
         assert ai.last_max_tokens <= 64
         assert ai.last_timeout <= 10
@@ -224,6 +228,7 @@ def test_private_voice_uses_compact_quality_model_prompt() -> None:
         assert len(ai.last_messages) <= 8
         system = ai.last_messages[0]["content"]
         assert "Ne transforme jamais une remarque en mission" in system
+        assert "N'invente jamais ce qu'une phrase ambiguë désigne" in system
         assert "montage" in system
         assert all("change le titre" not in row["content"] for row in ai.last_messages)
         assert memory.context_called is False
@@ -297,3 +302,88 @@ def test_optional_name_is_removed_from_prompt() -> None:
         await service.voice_task
 
     asyncio.run(scenario())
+
+
+def test_justplayer_ad_is_detected_as_ambient_broadcast() -> None:
+    phrase = "Publicité de Just player.fr."
+    assert _looks_like_ambient_broadcast(phrase) is True
+    accepted, reason = _addressing_decision(
+        phrase,
+        wake_detected=False,
+        conversation_active=False,
+    )
+    assert accepted is False
+    assert reason == "ambient_broadcast"
+
+
+def test_justplayer_ad_does_not_reach_ai_or_voice() -> None:
+    async def scenario() -> None:
+        service, voice_input, ai, audio, _overlay, _obs, memory = build_service()
+        result = await service.talk_text("Publicité de Just player.fr.")
+
+        assert result["ignored"] is True
+        assert result["ignore_reason"] == "ambient_broadcast"
+        assert result["answer"] == ""
+        assert result["voice_pending"] is False
+        assert ai.last_message == ""
+        assert audio.calls == 0
+        assert memory.remembered == []
+        assert service.voice_task is None
+        assert service.ignored_count == 1
+        assert voice_input.ignored_count == 1
+
+    asyncio.run(scenario())
+
+
+def test_direct_request_about_ad_is_not_filtered() -> None:
+    async def scenario() -> None:
+        service, _voice_input, ai, _audio, _overlay, _obs, _memory = build_service()
+        result = await service.talk_text("Tu peux me faire une publicité de JustPlayer.fr ?")
+
+        assert result["ignored"] is False
+        assert result["addressing_reason"] == "direct_address"
+        assert ai.last_message == "Tu peux me faire une publicité de JustPlayer.fr ?"
+        await service.voice_task
+
+    asyncio.run(scenario())
+
+
+def test_wake_word_opens_short_natural_followup_window() -> None:
+    async def scenario() -> None:
+        service, _voice_input, ai, _audio, _overlay, _obs, _memory = build_service()
+        first = await service.talk_text("Mairaiy, regarde ça")
+        assert first["ignored"] is False
+        assert first["wake_word_detected"] is True
+        await service.voice_task
+
+        second = await service.talk_text("C'est mieux comme ça.")
+        assert second["ignored"] is False
+        assert second["addressing_reason"] == "conversation_followup"
+        assert ai.last_message == "C'est mieux comme ça."
+        await service.voice_task
+
+    asyncio.run(scenario())
+
+
+def test_ambient_ad_is_still_filtered_during_open_conversation() -> None:
+    accepted, reason = _addressing_decision(
+        "Promotion disponible sur exemple.fr",
+        wake_detected=False,
+        conversation_active=True,
+    )
+    assert accepted is False
+    assert reason == "ambient_broadcast"
+
+
+def test_diagnostic_describes_filtered_conversation() -> None:
+    service, *_ = build_service()
+    diagnostic = service.diagnostic()
+    assert diagnostic["addressing"] == "filtered_conversation"
+    assert diagnostic["wake_word"] == "Mairaiy"
+    assert diagnostic["wake_word_required"] is False
+    assert diagnostic["conversation_window_seconds"] >= 20
+
+
+def test_private_prompt_requires_clarification_instead_of_invention() -> None:
+    assert "phrase ambiguë" in _PRIVATE_VOICE_CONTEXT
+    assert "clarification" in _PRIVATE_VOICE_CONTEXT
