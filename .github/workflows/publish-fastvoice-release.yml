@@ -1,4 +1,4 @@
-name: Publish Aura Live FastVoice Windows Release
+name: Publish Aura Live VoiceFilter Windows Release
 
 on:
   push:
@@ -43,7 +43,7 @@ jobs:
             throw "Auto-download Kokoro inactif."
           }
 
-      - name: Smoke test packaged executable
+      - name: Smoke test packaged executable and voice filter
         shell: pwsh
         env:
           AURA_PORT: "18787"
@@ -83,6 +83,19 @@ jobs:
             }
             $audio = Invoke-WebRequest ("http://127.0.0.1:18787" + $voice.audio_url) -UseBasicParsing -TimeoutSec 15
             if ($audio.RawContentLength -le 44) { throw "WAV Kokoro vide." }
+
+            $filtered = Invoke-RestMethod "http://127.0.0.1:18787/api/voice/text" `
+              -Method Post `
+              -ContentType "application/json" `
+              -Body '{"transcript":"Publicité de Just player.fr.","send_to_chat":false}' `
+              -TimeoutSec 15
+            if (-not $filtered.ignored -or $filtered.ignore_reason -ne "ambient_broadcast") {
+              $filtered | ConvertTo-Json -Depth 8 | Write-Host
+              throw "La publicité JustPlayer n'a pas été filtrée."
+            }
+            if ($filtered.answer -or $filtered.voice_pending) {
+              throw "Une publicité filtrée ne doit produire ni réponse ni voix."
+            }
           } finally {
             if (-not $process.HasExited) {
               try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -92,7 +105,7 @@ jobs:
       - name: Create ZIP
         shell: pwsh
         run: |
-          $zip = "AuraLive-Windows-FastVoiceOAuth-2026-09-05.zip"
+          $zip = "AuraLive-Windows-VoiceFilter-2026-09-05.zip"
           if (Test-Path $zip) { Remove-Item $zip -Force }
           Compress-Archive -Path "dist\AuraLive" -DestinationPath $zip -CompressionLevel Optimal
           $size = (Get-Item $zip).Length
@@ -104,17 +117,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "auralive-fastvoiceoauth-2026-09-05"
-          $zip = "AuraLive-Windows-FastVoiceOAuth-2026-09-05.zip"
+          $tag = "auralive-voicefilter-2026-09-05"
+          $zip = "AuraLive-Windows-VoiceFilter-2026-09-05.zip"
           $notes = @"
-          Aura Live Windows — FastVoiceOAuth
+          Aura Live Windows — VoiceFilter
 
           Version validee sur le vrai executable Windows :
           - OAuth Twitch dans le navigateur Windows normal
-          - Tester la voix sans OBS
-          - Voice Control raccourci pour reduire fortement la latence
-          - Kokoro local ff_siwis
-          - telechargement automatique des actifs Kokoro si necessaire
+          - Kokoro local ff_siwis et test vocal sans OBS
+          - écoute continue filtrée pour le live
+          - pubs, promotions, domaines et audio ambiant ignorés avant l'IA
+          - conversation naturelle maintenue après une adresse directe
+          - garde-fou anti-invention sur les phrases ambiguës
+          - régression validée : « Publicité de Just player.fr. » => aucune réponse, aucun TTS
 
           Build ID : AuraLive-2.5-Windows-FastVoiceOAuth-LITE-2026-09-05
           "@
@@ -125,6 +140,6 @@ jobs:
             gh release create $tag $zip `
               --repo "${{ github.repository }}" `
               --target "${{ github.sha }}" `
-              --title "Aura Live Windows — FastVoiceOAuth" `
+              --title "Aura Live Windows — VoiceFilter" `
               --notes $notes
           }

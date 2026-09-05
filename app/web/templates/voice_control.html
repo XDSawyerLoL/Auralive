@@ -24,10 +24,10 @@
     </header>
     <section class="card">
       <div class="mic-zone">
-        <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute continue">Activer<br>l'écoute</button>
-        <div id="mic-hint" class="hint"><b>Parle-lui normalement</b>Tu n’as plus besoin de dire « Mairaiy ». Chaque phrase reconnue lui est adressée directement.</div>
+        <button id="mic-button" class="mic" type="button" aria-label="Activer l'écoute filtrée">Activer<br>l'écoute</button>
+        <div id="mic-hint" class="hint"><b>Parle-lui normalement</b>Dis « Mairaiy » pour ouvrir un échange. Ensuite tu peux continuer naturellement : les pubs, vidéos et sons ambiants sont filtrés.</div>
         <div class="options">
-          <label class="toggle"><input id="hands-free" type="checkbox" checked disabled> Écoute directe</label>
+          <label class="toggle"><input id="hands-free" type="checkbox" checked disabled> Écoute filtrée</label>
           <label class="toggle"><input id="send-chat" type="checkbox"> Publier aussi sa réponse dans le chat Twitch</label>
         </div>
         <div class="runtime">
@@ -40,8 +40,8 @@
         <div class="bubble answer"><small>RÉPONSE</small><p id="answer">—</p></div>
       </div>
     </section>
-    <div class="footer">Le bouton active ou coupe l’écoute. Pendant qu’elle répond, le micro est suspendu pour éviter qu’elle s’entende elle-même, puis il redémarre automatiquement.</div>
+    <div class="footer">Le micro reste à l’écoute, mais Mairaiy ne répond que lorsqu’une phrase ressemble à un échange avec toi. Pendant qu’elle parle, l’écoute est suspendue pour éviter qu’elle s’entende elle-même.</div>
   </main>
-  <script src="/static/avatar/voice-control.js?v=2.4.2"></script>
+  <script src="/static/avatar/voice-control.js?v=2.5.3"></script>
 </body>
 </html>
