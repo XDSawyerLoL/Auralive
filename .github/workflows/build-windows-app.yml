@@ -6,6 +6,7 @@ on:
       - feature/windows-desktop-app
       - main
       - feat/kokoro-primary-voice
+      - fix/local-voice-status-and-twitch-setup
     paths:
       - "app/**"
       - "config/**"
@@ -57,6 +58,9 @@ jobs:
           if (-not (Test-Path "dist\AuraLive\.env")) {
             throw "La configuration locale .env est absente du package."
           }
+          if (-not (Test-Path "dist\AuraLive\_internal\app\web\templates\setup.html")) {
+            throw "L'ecran de configuration locale Twitch est absent du package."
+          }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
           if ($envContent -notmatch "AI_MODE=ollama" -or $envContent -notmatch "MAIRAIY_KOKORO_VOICE=ff_siwis") {
             throw "Le .env livre n'est pas configure en Ollama + Kokoro ff_siwis."
@@ -77,7 +81,7 @@ jobs:
             throw "Le package contient encore pythonnet/Python.Runtime.dll."
           }
 
-      - name: Smoke test AuraLive.exe startup and Kokoro
+      - name: Smoke test AuraLive.exe startup, Kokoro and setup UX
         shell: pwsh
         env:
           AURA_PORT: "18787"
@@ -158,6 +162,19 @@ jobs:
               Get-Content $logPath
               throw "Kokoro ff_siwis n'est pas pret dans le binaire Windows livre."
             }
+            if ($voiceResponse.gemini_required -ne $false) {
+              throw "Le panneau vocal indique encore que Gemini est requis."
+            }
+
+            $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
+            if ($setupStatus.gemini_required -ne $false -or $setupStatus.kokoro.ready -ne $true) {
+              $setupStatus | ConvertTo-Json -Depth 8 | Write-Host
+              throw "Le statut de configuration locale est incoherent."
+            }
+            $setupPage = Invoke-WebRequest "http://127.0.0.1:18787/auth/twitch/bot" -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 5
+            if ($setupPage.Content -notmatch "Configuration locale" -or $setupPage.Content -match "Renseigne TWITCH_CLIENT_ID") {
+              throw "L'absence d'identifiants Twitch affiche encore l'ancienne erreur brute."
+            }
 
             Start-Sleep -Seconds 8
             if ($process.HasExited) {
@@ -172,7 +189,7 @@ jobs:
               Get-Content $logPath
               throw "Le formatter Uvicorn default a plante apres le demarrage."
             }
-            Write-Host "KokoroPrimary valide: ff_siwis chargee, backend stable, aucun crash formatter."
+            Write-Host "Valide: Kokoro ff_siwis, aucun faux besoin Gemini, setup Twitch local, backend stable."
           } finally {
             if (-not $process.HasExited) {
               try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -183,7 +200,7 @@ jobs:
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-KokoroPrimary
+          name: AuraLive-Windows-LocalVoiceSetupFix
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true

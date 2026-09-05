@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 _ANSWER_TIMEOUT_SECONDS = 25
 _VOICE_TIMEOUT_SECONDS = 42
-_DELIVERED_VOICE_ENGINES = {"gemini-tts", "piper-local"}
+_DELIVERED_VOICE_ENGINES = {"kokoro-local", "gemini-tts", "piper-local"}
 
 
 class VoiceRealtimeService:
