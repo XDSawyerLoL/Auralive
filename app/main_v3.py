@@ -84,9 +84,23 @@ def _open_external_url(url: str) -> bool:
         return False
 
 
+_remove_route("/", "GET")
 _remove_route("/api/voice/status", "GET")
 _remove_route("/auth/twitch/{role}", "GET")
 _remove_route("/api/avatar/test", "POST")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def dashboard_v3() -> HTMLResponse:
+    """Charge le correctif de test vocal après le studio historique."""
+    path = BASE_DIR / "app" / "web" / "templates" / "index.html"
+    content = path.read_text(encoding="utf-8")
+    patch = '<script src="/static/avatar-test-fast.js?v=2.5.2"></script>'
+    if patch not in content:
+        content = content.replace("</body>", f"  {patch}\n</body>")
+    response = HTMLResponse(content)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
 
 
 @app.get("/api/voice/status")
