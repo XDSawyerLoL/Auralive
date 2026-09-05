@@ -32,6 +32,9 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     --collect-all "espeakng_loader" `
     --collect-all "soundfile" `
     --collect-all "onnxruntime" `
+    --collect-all "language_tags" `
+    --collect-all "csvw" `
+    --collect-all "segments" `
     --collect-submodules "phonemizer" `
     --collect-submodules "uvicorn" `
     --collect-submodules "aiohttp" `
