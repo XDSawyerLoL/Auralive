@@ -62,6 +62,8 @@ jobs:
           AI_MODE: "off"
           OBS_AUTO_CONNECT: "false"
         run: |
+          $logPath = "dist\AuraLive\AuraLive-startup.log"
+          if (Test-Path $logPath) { Remove-Item $logPath -Force }
           $process = Start-Process "dist\AuraLive\AuraLive.exe" -PassThru
           try {
             $deadline = (Get-Date).AddSeconds(45)
@@ -84,6 +86,14 @@ jobs:
             }
             Write-Host "AuraLive.exe a demarre et /health repond correctement."
 
+            if (-not (Test-Path $logPath)) {
+              throw "Le garde-fou stdout/stderr de l'EXE windowed ne s'est pas initialise."
+            }
+            if (Select-String -Path $logPath -Pattern "Unable to configure formatter" -Quiet) {
+              Get-Content $logPath
+              throw "Le formatter Uvicorn default a encore plante dans l'EXE Windows."
+            }
+
             # Regression test for Chromium process handoff: the launcher must remain
             # alive after the initial browser bootstrap PID has had time to detach.
             Start-Sleep -Seconds 8
@@ -94,7 +104,11 @@ jobs:
             if ($stable.StatusCode -ne 200 -or $stable.Content -notmatch "Aura Live") {
               throw "Le backend Aura Live n'est plus disponible apres l'ouverture de la fenetre."
             }
-            Write-Host "AuraLive.exe reste actif et /health repond encore apres 8 secondes."
+            if (Select-String -Path $logPath -Pattern "Unable to configure formatter" -Quiet) {
+              Get-Content $logPath
+              throw "Le formatter Uvicorn default a plante apres le demarrage."
+            }
+            Write-Host "AuraLive.exe reste actif, /health repond et aucun crash formatter n'est present."
           } finally {
             if (-not $process.HasExited) {
               taskkill /PID $process.Id /T /F | Out-Null
