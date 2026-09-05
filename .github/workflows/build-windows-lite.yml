@@ -101,12 +101,17 @@ jobs:
               throw "Le premier test vocal n'a pas utilise Kokoro local."
             }
             if (-not $voice.audio_url) { throw "Aucune URL audio generee." }
-            if (-not (Test-Path (Join-Path $tempKokoro "kokoro-v1.0.onnx"))) { throw "Modele Kokoro non telecharge." }
-            if (-not (Test-Path (Join-Path $tempKokoro "voices-v1.0.bin"))) { throw "Voix Kokoro non telechargees." }
+
+            $status = Invoke-RestMethod "http://127.0.0.1:18787/api/voice/status" -TimeoutSec 10
+            $kokoro = $status.audio.kokoro_voice
+            if ($kokoro.download_attempted -ne $true -or $kokoro.assets_present -ne $true -or $kokoro.ready -ne $true) {
+              $kokoro | ConvertTo-Json -Depth 8 | Write-Host
+              throw "Le premier lancement n'a pas telecharge et charge Kokoro correctement."
+            }
 
             $audio = Invoke-WebRequest ("http://127.0.0.1:18787" + $voice.audio_url) -UseBasicParsing -TimeoutSec 15
             if ($audio.RawContentLength -le 44) { throw "WAV Kokoro vide." }
-            Write-Host "Valide: build Lite, telechargement Kokoro automatique, WAV genere sans OBS."
+            Write-Host "Valide: build Lite, auto-download Kokoro, WAV genere sans OBS."
           } finally {
             if (-not $process.HasExited) {
               try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
