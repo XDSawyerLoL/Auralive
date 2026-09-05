@@ -26,6 +26,7 @@ def test_desktop_launcher_uses_chromium_app_mode() -> None:
     assert "chrome.exe" in desktop
     assert 'f"--app={url}"' in desktop
     assert "--disable-background-mode" in desktop
+    assert "--autoplay-policy=no-user-gesture-required" in desktop
 
 
 def test_desktop_disables_uvicorn_default_formatter_config() -> None:
@@ -46,7 +47,7 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
 def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     build = BUILD.read_text(encoding="utf-8")
     desktop = DESKTOP.read_text(encoding="utf-8")
-    build_id = "AuraLive-2.5-Windows-KokoroPrimary-2026-09-05"
+    build_id = "AuraLive-2.5-Windows-NaturalMairaiy-2026-09-05"
 
     assert "--console" in build
     assert "--hide-console hide-early" in build
@@ -58,7 +59,7 @@ def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     assert build_id in desktop
 
 
-def test_windows_package_bundles_kokoro_and_local_first_env() -> None:
+def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     build = BUILD.read_text(encoding="utf-8")
     env_example = ENV_EXAMPLE.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -73,6 +74,8 @@ def test_windows_package_bundles_kokoro_and_local_first_env() -> None:
     assert "voices-v1.0.bin" in build
     assert 'Copy-Item ".env.example" "dist\\AuraLive\\.env"' in build
     assert "AI_MODE=ollama" in env_example
+    assert "AI_MODEL=gemma3:12b" in env_example
+    assert "AI_AUTO_FAST_MODEL=false" in env_example
     assert "MAIRAIY_KOKORO_PRIMARY=true" in env_example
     assert "MAIRAIY_KOKORO_VOICE=ff_siwis" in env_example
     assert "TTS_VOICE=Aoede" in env_example

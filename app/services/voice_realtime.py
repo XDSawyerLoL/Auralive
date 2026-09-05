@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Any
 
@@ -12,6 +13,42 @@ logger = logging.getLogger(__name__)
 _ANSWER_TIMEOUT_SECONDS = 25
 _VOICE_TIMEOUT_SECONDS = 42
 _DELIVERED_VOICE_ENGINES = {"kokoro-local", "gemini-tts", "piper-local"}
+_PRIVATE_VOICE_CONTEXT = """
+[PRIVATE_VOICE_CONVERSATION]
+Tu parles directement et uniquement avec Sansa, à l'oral, comme une coanimatrice assise à côté de lui.
+La dernière phrase de Sansa est toujours prioritaire. Réagis à ce qu'il vient réellement de dire, pas à ce que tu imagines autour.
+Ne transforme jamais une remarque en mission ou en tâche de production.
+Ne propose jamais spontanément un titre de live, un montage, un planning, un CTA, une publication ou une action technique sauf si Sansa te le demande explicitement.
+N'invente jamais ce que tu vois à l'écran, le jeu en cours, l'état du live ou ce que fait Sansa si aucune donnée fiable ne te l'indique.
+Quand Sansa fait une remarque simple, réponds comme dans une vraie conversation: une réaction courte, une opinion ou une question naturelle suffit.
+Utilise je et tu. Ne parle pas au public avec vous sauf si Sansa te demande explicitement de t'adresser au chat.
+Évite les formules d'assistant comme « je m'y mets », « nous avons besoin de », « je vais te ramener des options » si aucune action n'a été demandée.
+Par défaut, réponds en une ou deux phrases naturelles. Développe seulement si Sansa demande une explication détaillée.
+""".strip()
+
+
+def _compact_spoken_answer(value: Any, limit: int = 360) -> str:
+    """Garde une réponse orale courte sans couper brutalement une phrase."""
+    text = " ".join(str(value or "").replace("\n", " ").split()).strip()
+    if not text:
+        return ""
+
+    # Pour le live, deux phrases suffisent presque toujours. Cela évite les
+    # monologues où un petit modèle part sur une mission que Sansa n'a jamais demandée.
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?…])\s+", text) if part.strip()]
+    if len(sentences) > 2:
+        text = " ".join(sentences[:2]).strip()
+
+    if len(text) <= limit:
+        return text
+
+    clipped = text[:limit].rstrip()
+    boundary = max(clipped.rfind("."), clipped.rfind("!"), clipped.rfind("?"), clipped.rfind("…"))
+    if boundary >= 80:
+        return clipped[: boundary + 1].strip()
+    if " " in clipped:
+        clipped = clipped.rsplit(" ", 1)[0]
+    return clipped.rstrip(" ,;:-") + "."
 
 
 class VoiceRealtimeService:
@@ -40,6 +77,7 @@ class VoiceRealtimeService:
         self.last_rearm_after_ms = 1200
         self.last_latency_ms = 0
         self.last_obs_audio: dict[str, Any] = {}
+        self.last_response_model = ""
 
     @property
     def busy(self) -> bool:
@@ -47,6 +85,49 @@ class VoiceRealtimeService:
             self.voice_input.lock.locked()
             or (self.voice_task and not self.voice_task.done())
         )
+
+    async def _private_reply(
+        self,
+        prompt: str,
+        context: str,
+        history: list[dict[str, str]],
+    ) -> str:
+        """Conversation privée: pas de pollution du chat, modèle qualité si local."""
+        ai = self.aura.ai
+        cohost = getattr(self.aura, "cohost", None)
+        # CohostService remplace aura.ai.reply pour ajouter le contexte de chaîne.
+        # Pour la conversation privée, on utilise volontairement la méthode d'origine.
+        reply = getattr(cohost, "_original_ai_reply", None)
+        if not callable(reply):
+            reply = ai.reply
+
+        settings = getattr(ai, "settings", None)
+        mode = str(getattr(settings, "ai_mode", "") or "").casefold()
+        quality_model = str(getattr(settings, "ai_model", "") or "").strip()
+        previous_runtime_model = str(getattr(ai, "runtime_model", "") or "")
+
+        if mode == "ollama" and quality_model:
+            # Les réactions directes privilégient la qualité. Les automatismes du
+            # live peuvent continuer à utiliser le modèle rapide après la réponse.
+            ai.runtime_model = quality_model
+            self.last_response_model = quality_model
+        else:
+            self.last_response_model = str(getattr(ai, "active_model", "") or quality_model)
+
+        private_context = (
+            f"{context}\n\n{_PRIVATE_VOICE_CONTEXT}" if context else _PRIVATE_VOICE_CONTEXT
+        )
+        try:
+            return await reply(
+                "Sansa",
+                prompt,
+                private_context,
+                [],  # Jamais le chat Twitch récent dans la conversation privée.
+                history,
+            )
+        finally:
+            if mode == "ollama":
+                ai.runtime_model = previous_runtime_model
 
     async def talk_text(
         self,
@@ -91,16 +172,7 @@ class VoiceRealtimeService:
 
             try:
                 answer = await asyncio.wait_for(
-                    self.aura.ai.reply(
-                        "Sansa",
-                        prompt,
-                        context
-                        + "\nSansa parle directement à Mairaiy depuis le panneau vocal privé. "
-                        + "Chaque phrase reconnue lui est adressée, même sans prononcer son prénom. "
-                        + "Réponds comme sa coanimatrice présente à côté de lui, naturellement et brièvement.",
-                        list(self.aura.recent_chat),
-                        history,
-                    ),
+                    self._private_reply(prompt, context, history),
                     timeout=_ANSWER_TIMEOUT_SECONDS,
                 )
             except asyncio.TimeoutError as exc:
@@ -110,7 +182,7 @@ class VoiceRealtimeService:
                 self.voice_input.last_error = self.last_error
                 raise RuntimeError(self.last_error) from exc
 
-            answer = " ".join(str(answer or "").split()).strip()[:480]
+            answer = _compact_spoken_answer(answer)
             if not answer:
                 self.last_stage = "error"
                 self.last_error = "Mairaiy n'a produit aucune réponse"
@@ -146,6 +218,7 @@ class VoiceRealtimeService:
             "voice_pending": True,
             "voice_delivered": False,
             "latency_ms": self.last_latency_ms,
+            "response_model": self.last_response_model,
             "rearm_after_ms": 0,
         }
 
@@ -270,6 +343,7 @@ class VoiceRealtimeService:
             "last_audio_duration_ms": self.last_audio_duration_ms,
             "last_rearm_after_ms": self.last_rearm_after_ms,
             "last_latency_ms": self.last_latency_ms,
+            "last_response_model": self.last_response_model,
             "obs_audio": self.last_obs_audio,
         }
 

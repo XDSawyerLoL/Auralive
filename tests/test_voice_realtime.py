@@ -3,21 +3,31 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from app.services.voice_realtime import VoiceRealtimeService
+from app.services.voice_realtime import VoiceRealtimeService, _compact_spoken_answer
 
 
 class FakeAI:
     def __init__(self):
         self.last_message = ""
+        self.last_context = ""
+        self.last_recent_chat = None
+        self.runtime_model = "phi4-mini"
+        self.settings = SimpleNamespace(ai_mode="ollama", ai_model="gemma3:12b")
 
-    async def reply(self, _name, message, *_args, **_kwargs):
+    @property
+    def active_model(self):
+        return self.runtime_model or self.settings.ai_model
+
+    async def reply(self, _name, message, context, recent_chat, *_args, **_kwargs):
         self.last_message = message
+        self.last_context = context
+        self.last_recent_chat = recent_chat
         return "Oui, je t'entends parfaitement."
 
 
 class FakeMemory:
     async def context(self, _viewer):
-        return ""
+        return "mémoire privée utile"
 
     async def conversation(self, _user_id, limit=12):
         return []
@@ -66,7 +76,7 @@ class FakeVoiceInput:
         self.ignored_count = 0
 
 
-def build_service(engine: str = "gemini-tts"):
+def build_service(engine: str = "gemini-tts", *, with_cohost: bool = False):
     audio = SimpleNamespace(
         generated_count=0,
         last_engine="",
@@ -78,9 +88,24 @@ def build_service(engine: str = "gemini-tts"):
     aura = SimpleNamespace(
         ai=ai,
         memory=FakeMemory(),
-        recent_chat=[],
+        recent_chat=["viewer: change le titre", "viewer: fais un montage"],
         avatar_audio=audio,
     )
+    if with_cohost:
+        async def original_reply(name, message, context, recent_chat, *_args, **_kwargs):
+            assert name == "Sansa"
+            ai.last_message = message
+            ai.last_context = context
+            ai.last_recent_chat = recent_chat
+            assert ai.runtime_model == "gemma3:12b"
+            return "Ça va, mais tu peux clairement faire mieux. Pas besoin d'en faire des tonnes."
+
+        async def wrapped_reply(*_args, **_kwargs):
+            raise AssertionError("Le wrapper cohost ne doit pas être utilisé en conversation privée")
+
+        aura.cohost = SimpleNamespace(_original_ai_reply=original_reply)
+        ai.reply = wrapped_reply
+
     aura.overlay = FakeOverlay(audio, engine)
 
     async def say(_text):
@@ -100,6 +125,7 @@ def test_browser_transcript_produces_answer_then_voice() -> None:
         assert result["voice_pending"] is True
         assert result["wake_word_required"] is False
         assert result["addressed_automatically"] is True
+        assert result["response_model"] == "gemma3:12b"
         assert service.voice_task is not None
         await service.voice_task
 
@@ -115,6 +141,33 @@ def test_browser_transcript_produces_answer_then_voice() -> None:
         assert voice_input.last_voice_delivered is True
 
     asyncio.run(scenario())
+
+
+def test_private_voice_bypasses_cohost_chat_pollution_and_uses_quality_model() -> None:
+    async def scenario() -> None:
+        service, _voice_input, ai = build_service(with_cohost=True)
+        result = await service.talk_text("C'est pas si mal, mais y a du travail.")
+
+        assert result["answer"] == "Ça va, mais tu peux clairement faire mieux. Pas besoin d'en faire des tonnes."
+        assert result["response_model"] == "gemma3:12b"
+        assert ai.last_message == "C'est pas si mal, mais y a du travail."
+        assert ai.last_recent_chat == []
+        assert "[PRIVATE_VOICE_CONVERSATION]" in ai.last_context
+        assert "Ne transforme jamais une remarque en mission" in ai.last_context
+        assert ai.runtime_model == "phi4-mini"
+        await service.voice_task
+
+    asyncio.run(scenario())
+
+
+def test_spoken_answer_is_limited_to_two_sentences_without_hard_cut() -> None:
+    value = (
+        "Oui, là je te suis. "
+        "C'est déjà mieux comme ça. "
+        "Ensuite je vais inventer un montage et un titre dont personne n'a parlé. "
+        "Et encore une quatrième phrase inutile."
+    )
+    assert _compact_spoken_answer(value) == "Oui, là je te suis. C'est déjà mieux comme ça."
 
 
 def test_fixed_local_voice_is_a_delivered_response() -> None:
@@ -162,6 +215,7 @@ def test_sentence_without_name_is_not_ignored() -> None:
         assert result["wake_word_detected"] is False
         assert result["answer"]
         assert ai.last_message == "Je parle simplement avec toi"
+        assert ai.last_recent_chat == []
         assert service.voice_task is not None
         await service.voice_task
 
