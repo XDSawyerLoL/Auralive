@@ -31,12 +31,25 @@ def test_desktop_disables_uvicorn_default_formatter_config() -> None:
     assert "log_config=None" in desktop
 
 
-def test_desktop_restores_windowed_stdio_before_uvicorn_import() -> None:
+def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
     desktop = DESKTOP.read_text(encoding="utf-8")
     assert "sys.stdout is None" in desktop
     assert "sys.stderr is None" in desktop
     assert "AuraLive-startup.log" in desktop
+    assert "stdout={'ok' if sys.stdout is not None else 'none'}" in desktop
+    assert "stderr={'ok' if sys.stderr is not None else 'none'}" in desktop
     assert desktop.index("_ensure_stdio()") < desktop.index("import uvicorn")
+
+
+def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
+    build = BUILD.read_text(encoding="utf-8")
+    assert '--console' in build
+    assert '--hide-console hide-early' in build
+    assert '--windowed' not in build
+    assert 'pyinstaller==6.22.2' in build
+    assert '--hidden-import "uvicorn.logging"' in build
+    assert 'BUILD-ID.txt' in build
+    assert 'AuraLive-2.5-Windows-ConsoleBoot-2026-09-05' in build
 
 
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:

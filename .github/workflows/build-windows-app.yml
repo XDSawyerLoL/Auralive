@@ -45,6 +45,13 @@ jobs:
           if (-not (Test-Path "dist\AuraLive\AuraLive.exe")) {
             throw "AuraLive.exe est absent du package."
           }
+          if (-not (Test-Path "dist\AuraLive\BUILD-ID.txt")) {
+            throw "BUILD-ID.txt est absent du package."
+          }
+          $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
+          if ($buildId -ne "AuraLive-2.5-Windows-ConsoleBoot-2026-09-05") {
+            throw "Identifiant de build inattendu: $buildId"
+          }
           $forbidden = Get-ChildItem "dist\AuraLive" -Recurse -ErrorAction SilentlyContinue | Where-Object {
             $_.Name -eq "Python.Runtime.dll" -or $_.FullName -match "[\\/]pythonnet[\\/]"
           }
@@ -84,18 +91,23 @@ jobs:
             if (-not $ready) {
               throw "AuraLive.exe n'a pas expose /health dans le delai imparti."
             }
-            Write-Host "AuraLive.exe a demarre et /health repond correctement."
 
             if (-not (Test-Path $logPath)) {
-              throw "Le garde-fou stdout/stderr de l'EXE windowed ne s'est pas initialise."
+              throw "AuraLive-startup.log n'a pas ete cree."
             }
-            if (Select-String -Path $logPath -Pattern "Unable to configure formatter" -Quiet) {
+            $startup = Get-Content $logPath -Raw
+            if ($startup -notmatch "AuraLive-2.5-Windows-ConsoleBoot-2026-09-05") {
+              throw "Le binaire lance n'est pas le build ConsoleBoot attendu."
+            }
+            if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
               Get-Content $logPath
-              throw "Le formatter Uvicorn default a encore plante dans l'EXE Windows."
+              throw "Le bootloader console ne fournit pas de vrais stdout/stderr."
+            }
+            if ($startup -match "Unable to configure formatter") {
+              Get-Content $logPath
+              throw "Le formatter Uvicorn default a encore plante."
             }
 
-            # Regression test for Chromium process handoff: the launcher must remain
-            # alive after the initial browser bootstrap PID has had time to detach.
             Start-Sleep -Seconds 8
             if ($process.HasExited) {
               throw "AuraLive.exe s'est ferme juste apres l'ouverture de Chromium (code $($process.ExitCode))."
@@ -104,15 +116,17 @@ jobs:
             if ($stable.StatusCode -ne 200 -or $stable.Content -notmatch "Aura Live") {
               throw "Le backend Aura Live n'est plus disponible apres l'ouverture de la fenetre."
             }
-            if (Select-String -Path $logPath -Pattern "Unable to configure formatter" -Quiet) {
+            $startup = Get-Content $logPath -Raw
+            if ($startup -match "Unable to configure formatter") {
               Get-Content $logPath
               throw "Le formatter Uvicorn default a plante apres le demarrage."
             }
-            Write-Host "AuraLive.exe reste actif, /health repond et aucun crash formatter n'est present."
+            Write-Host "ConsoleBoot valide: stdout/stderr OK, backend stable, aucun crash formatter."
           } finally {
             if (-not $process.HasExited) {
-              taskkill /PID $process.Id /T /F | Out-Null
+              try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
             }
+            $global:LASTEXITCODE = 0
           }
 
       - name: Upload Windows application
