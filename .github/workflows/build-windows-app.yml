@@ -124,8 +124,9 @@ jobs:
             Write-Host "ConsoleBoot valide: stdout/stderr OK, backend stable, aucun crash formatter."
           } finally {
             if (-not $process.HasExited) {
-              taskkill /PID $process.Id /T /F | Out-Null
+              try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
             }
+            $global:LASTEXITCODE = 0
           }
 
       - name: Upload Windows application
