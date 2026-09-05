@@ -8,6 +8,7 @@ on:
       - feat/kokoro-primary-voice
       - fix/local-voice-status-and-twitch-setup
       - fix/mairaiy-natural-reactions
+      - fix/oauth-voice-fastpath
     paths:
       - "app/**"
       - "config/**"
@@ -53,7 +54,7 @@ jobs:
             throw "BUILD-ID.txt est absent du package."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.5-Windows-NaturalMairaiy-2026-09-05") {
+          if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\AuraLive\.env")) {
@@ -61,6 +62,9 @@ jobs:
           }
           if (-not (Test-Path "dist\AuraLive\_internal\app\web\templates\setup.html")) {
             throw "L'ecran de configuration locale Twitch est absent du package."
+          }
+          if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\avatar-test-fast.js")) {
+            throw "Le test vocal autonome n'est pas embarque dans le package."
           }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
           if ($envContent -notmatch "AI_MODE=ollama" -or
@@ -85,7 +89,7 @@ jobs:
             throw "Le package contient encore pythonnet/Python.Runtime.dll."
           }
 
-      - name: Smoke test AuraLive.exe startup, Kokoro and setup UX
+      - name: Smoke test AuraLive.exe startup, standalone Kokoro voice and setup UX
         shell: pwsh
         env:
           AURA_PORT: "18787"
@@ -126,8 +130,8 @@ jobs:
               throw "AuraLive-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "AuraLive-2.5-Windows-NaturalMairaiy-2026-09-05") {
-              throw "Le binaire lance n'est pas le build NaturalMairaiy attendu."
+            if ($startup -notmatch "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
+              throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
               Get-Content $logPath
@@ -170,6 +174,33 @@ jobs:
               throw "Le panneau vocal indique encore que Gemini est requis."
             }
 
+            # Test reel du bouton vocal: aucune Browser Source OBS n'est ouverte ici.
+            $voiceTestBody = @{ text = "Bonjour Sansa, test vocal local." } | ConvertTo-Json
+            $voiceTest = Invoke-RestMethod `
+              -Uri "http://127.0.0.1:18787/api/avatar/test" `
+              -Method Post `
+              -ContentType "application/json" `
+              -Body $voiceTestBody `
+              -TimeoutSec 30
+            if ($voiceTest.ok -ne $true -or
+                $voiceTest.overlay_required -ne $false -or
+                $voiceTest.engine -ne "kokoro-local" -or
+                -not $voiceTest.audio_url) {
+              $voiceTest | ConvertTo-Json -Depth 6 | Write-Host
+              throw "Le test vocal autonome n'a pas produit Kokoro sans OBS."
+            }
+            $audioPath = Join-Path $env:TEMP "aura-live-smoke-voice.wav"
+            Invoke-WebRequest "http://127.0.0.1:18787$($voiceTest.audio_url)" -OutFile $audioPath -UseBasicParsing -TimeoutSec 10
+            if ((Get-Item $audioPath).Length -le 44) {
+              throw "Le test vocal autonome a produit un WAV vide."
+            }
+            Remove-Item $audioPath -Force -ErrorAction SilentlyContinue
+
+            $dashboard = Invoke-WebRequest "http://127.0.0.1:18787/" -UseBasicParsing -TimeoutSec 5
+            if ($dashboard.Content -notmatch "avatar-test-fast.js") {
+              throw "Le dashboard n'active pas le lecteur vocal autonome."
+            }
+
             $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
             if ($setupStatus.gemini_required -ne $false -or $setupStatus.kokoro.ready -ne $true) {
               $setupStatus | ConvertTo-Json -Depth 8 | Write-Host
@@ -193,7 +224,7 @@ jobs:
               Get-Content $logPath
               throw "Le formatter Uvicorn default a plante apres le demarrage."
             }
-            Write-Host "Valide: Natural Mairaiy, Kokoro ff_siwis, setup Twitch local, backend stable."
+            Write-Host "Valide: OAuth externe codepath, voix Kokoro sans OBS, dashboard audio autonome, backend stable."
           } finally {
             if (-not $process.HasExited) {
               try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
@@ -204,7 +235,7 @@ jobs:
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-NaturalMairaiy
+          name: AuraLive-Windows-FastVoiceOAuth
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true
