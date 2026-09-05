@@ -16,32 +16,37 @@ from pathlib import Path
 
 
 _stdio_sink = None
+BUILD_ID = "AuraLive-2.5-Windows-ConsoleBoot-2026-09-05"
+
+
+def _startup_log_path() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "AuraLive-startup.log"
+    return Path(tempfile.gettempdir()) / "AuraLive-startup.log"
 
 
 def _ensure_stdio() -> None:
-    """Restore text streams hidden by PyInstaller --windowed.
+    """Guarantee usable stdio and leave an on-disk startup diagnostic.
 
-    Uvicorn's default formatter calls ``sys.stdout.isatty()``. In a frozen
-    windowed executable, PyInstaller can set stdout/stderr to ``None`` which
-    makes any secondary Uvicorn/logging path fail with
-    ``Unable to configure formatter 'default'``. Restore both streams before
-    importing Uvicorn or Aura modules so the protection applies process-wide.
+    The packaged Windows app now uses PyInstaller's console bootloader with the
+    console hidden, so stdout/stderr remain real streams. The fallback below is
+    retained for safety and also creates a deterministic startup log beside the
+    executable so field failures can be identified unambiguously.
     """
 
     global _stdio_sink
-    if sys.stdout is not None and sys.stderr is not None:
-        return
-
-    candidates: list[Path] = []
-    if getattr(sys, "frozen", False):
-        candidates.append(Path(sys.executable).resolve().parent / "AuraLive-startup.log")
-    candidates.append(Path(tempfile.gettempdir()) / "AuraLive-startup.log")
+    candidates = [_startup_log_path(), Path(tempfile.gettempdir()) / "AuraLive-startup.log"]
 
     sink = None
     for path in candidates:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             sink = path.open("a", encoding="utf-8", errors="replace", buffering=1)
+            sink.write(
+                f"\n=== {BUILD_ID} pid={os.getpid()} frozen={bool(getattr(sys, 'frozen', False))} "
+                f"stdout={'ok' if sys.stdout is not None else 'none'} "
+                f"stderr={'ok' if sys.stderr is not None else 'none'} ===\n"
+            )
             break
         except OSError:
             continue
@@ -234,12 +239,7 @@ def _read_devtools_port(profile_root: Path) -> int | None:
 
 
 def _wait_for_app_window(profile_root: Path, process: subprocess.Popen[bytes]) -> None:
-    """Keep Aura alive for the actual Chromium profile, not only its launcher PID.
-
-    Edge/Chrome may hand the app window to a child process and let the process returned
-    by Popen exit immediately. Chromium exposes a local DevTools port in the dedicated
-    temporary profile, which remains alive for the lifetime of the real app window.
-    """
+    """Keep Aura alive for the actual Chromium profile, not only its launcher PID."""
 
     deadline = time.monotonic() + 15.0
     devtools_port: int | None = None
@@ -252,8 +252,6 @@ def _wait_for_app_window(profile_root: Path, process: subprocess.Popen[bytes]) -
         time.sleep(0.2)
 
     if devtools_port is None:
-        # Some managed Chromium installations can disable remote debugging. In that
-        # case never kill the backend merely because the bootstrap PID was delegated.
         logger.warning("Suivi Chromium avance indisponible; maintien du moteur Aura Live en mode securise.")
         while _looks_like_aura(_dashboard_url()):
             if _owns_server and _server_thread is not None and not _server_thread.is_alive():
@@ -272,6 +270,12 @@ def _wait_for_app_window(profile_root: Path, process: subprocess.Popen[bytes]) -
 
 def _show_error(message: str) -> None:
     logger.error(message)
+    try:
+        if _stdio_sink is not None:
+            _stdio_sink.write(f"ERROR: {message}\n")
+            _stdio_sink.flush()
+    except Exception:
+        pass
     if sys.platform == "win32":
         try:
             ctypes.windll.user32.MessageBoxW(0, message, "Aura Live - erreur", 0x10)
