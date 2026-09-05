@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080b12">
+  <title>Aura Live — Configuration locale</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#080b12;color:#f4f7fb}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -20%,#182440 0,#0b101b 34%,#070910 72%);display:grid;place-items:center;padding:28px}
+    main{width:min(760px,100%);background:rgba(16,22,35,.9);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:30px;box-shadow:0 28px 80px rgba(0,0,0,.45)}
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}.orb{width:34px;height:34px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#9de8ff 15%,#7c75ff 48%,#161a42 74%);box-shadow:0 0 28px rgba(115,123,255,.55)}
+    h1{font-size:28px;margin:0 0 8px}p{color:#aeb8c8;line-height:1.55;margin:0 0 18px}.ok{color:#9ff0d5}.muted{font-size:13px}.card{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.035);border-radius:18px;padding:20px;margin-top:16px}
+    .status{display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:12px}.dot{width:9px;height:9px;border-radius:50%;background:#ff9ab2}.status.ready .dot{background:#88efc9;box-shadow:0 0 14px rgba(136,239,201,.7)}
+    label{display:block;font-size:13px;color:#bec8d7;margin:14px 0 6px}input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#090d16;color:#fff;outline:none}input:focus{border-color:#818bff;box-shadow:0 0 0 3px rgba(129,139,255,.12)}
+    button,a.button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:12px 16px;font-weight:750;text-decoration:none;cursor:pointer;background:#eef2ff;color:#0a1020;margin-top:14px}a.secondary{background:rgba(255,255,255,.08);color:#eaf0ff;margin-left:8px}.actions{display:flex;gap:10px;flex-wrap:wrap}.actions a{margin-left:0}
+    #result{min-height:22px;margin-top:12px;font-size:14px}.error{color:#ff9ab2}.secret-note{font-size:12px;color:#8995a8;margin-top:8px}.voice{font-size:14px;color:#cbd6e5}
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand"><span class="orb"></span><strong>AURA LIVE</strong></div>
+  <h1>Configuration locale</h1>
+  <p>La voix de Mairaiy fonctionne localement avec Kokoro. Gemini n’est pas requis. Twitch est une connexion séparée à configurer une seule fois sur ce PC.</p>
+
+  <section class="card">
+    <div class="status" id="voice-status"><span class="dot"></span><span>Vérification de Kokoro…</span></div>
+    <div class="voice" id="voice-detail">Voix attendue : ff_siwis</div>
+  </section>
+
+  <section class="card">
+    <div class="status" id="twitch-status"><span class="dot"></span><span>Twitch non configuré</span></div>
+    <p class="muted">Aura Live a besoin du Client ID et du Client Secret de ton application Twitch pour connecter <b>mairaiy</b> et <b>SANSAHD</b>. Ces valeurs restent dans le fichier <code>.env</code> à côté de AuraLive.exe et ne sont jamais renvoyées par l’interface.</p>
+    <p class="muted">Dans la console Twitch Developer, l’URL de redirection doit être <code>http://localhost:8787/auth/callback</code>.</p>
+    <a class="button secondary" href="https://dev.twitch.tv/console/apps" target="_blank" rel="noreferrer">Ouvrir Twitch Developer</a>
+
+    <form id="twitch-form" autocomplete="off">
+      <label for="client-id">Twitch Client ID</label>
+      <input id="client-id" name="client_id" required maxlength="200" spellcheck="false">
+      <label for="client-secret">Twitch Client Secret</label>
+      <input id="client-secret" name="client_secret" type="password" required maxlength="300" spellcheck="false">
+      <div class="secret-note">Le secret est enregistré localement. Aura Live ne l’affiche jamais après sauvegarde.</div>
+      <button type="submit">Enregistrer Twitch</button>
+      <div id="result"></div>
+    </form>
+
+    <div class="actions" id="connect-actions" hidden>
+      <a class="button" href="/auth/twitch/bot">Connecter mairaiy</a>
+      <a class="button" href="/auth/twitch/broadcaster">Connecter SANSAHD</a>
+    </div>
+  </section>
+
+  <div class="actions">
+    <a class="button secondary" href="/">Retour à Aura Live</a>
+    <a class="button secondary" href="/voice-control">Ouvrir le vocal</a>
+  </div>
+</main>
+<script>
+(() => {
+  const voiceStatus = document.querySelector('#voice-status');
+  const voiceDetail = document.querySelector('#voice-detail');
+  const twitchStatus = document.querySelector('#twitch-status');
+  const form = document.querySelector('#twitch-form');
+  const result = document.querySelector('#result');
+  const actions = document.querySelector('#connect-actions');
+  const params = new URLSearchParams(location.search);
+  const requestedRole = ['bot','broadcaster'].includes(params.get('role')) ? params.get('role') : '';
+
+  async function refresh() {
+    try {
+      const response = await fetch('/api/setup/status', {cache:'no-store'});
+      const data = await response.json();
+      const kokoro = data.kokoro || {};
+      if (kokoro.ready) {
+        voiceStatus.classList.add('ready');
+        voiceStatus.querySelector('span:last-child').textContent = 'Kokoro local prêt';
+        voiceDetail.textContent = `Voix : ${kokoro.voice || 'ff_siwis'} · moteur local · aucun quota`;
+      } else {
+        voiceStatus.classList.remove('ready');
+        voiceStatus.querySelector('span:last-child').textContent = kokoro.last_error ? 'Kokoro indisponible' : 'Chargement de Kokoro…';
+        voiceDetail.textContent = kokoro.last_error || 'Voix attendue : ff_siwis';
+      }
+      if (data.twitch_configured) {
+        twitchStatus.classList.add('ready');
+        twitchStatus.querySelector('span:last-child').textContent = 'Application Twitch configurée';
+        form.hidden = true;
+        actions.hidden = false;
+      } else {
+        twitchStatus.classList.remove('ready');
+        twitchStatus.querySelector('span:last-child').textContent = 'Twitch à configurer';
+        form.hidden = false;
+        actions.hidden = true;
+      }
+    } catch (error) {
+      result.className = 'error';
+      result.textContent = 'Aura Live local est injoignable.';
+    }
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    result.className = '';
+    result.textContent = 'Enregistrement…';
+    const payload = {
+      client_id: document.querySelector('#client-id').value.trim(),
+      client_secret: document.querySelector('#client-secret').value.trim(),
+    };
+    try {
+      const response = await fetch('/api/setup/twitch', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Configuration Twitch impossible');
+      document.querySelector('#client-secret').value = '';
+      result.className = 'ok';
+      result.textContent = 'Configuration enregistrée localement.';
+      await refresh();
+      if (requestedRole) setTimeout(() => { location.href = `/auth/twitch/${requestedRole}`; }, 500);
+    } catch (error) {
+      result.className = 'error';
+      result.textContent = error.message || String(error);
+    }
+  });
+
+  refresh();
+  setInterval(refresh, 4000);
+})();
+</script>
+</body>
+</html>
