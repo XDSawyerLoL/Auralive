@@ -14,6 +14,50 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+
+_stdio_sink = None
+
+
+def _ensure_stdio() -> None:
+    """Restore text streams hidden by PyInstaller --windowed.
+
+    Uvicorn's default formatter calls ``sys.stdout.isatty()``. In a frozen
+    windowed executable, PyInstaller can set stdout/stderr to ``None`` which
+    makes any secondary Uvicorn/logging path fail with
+    ``Unable to configure formatter 'default'``. Restore both streams before
+    importing Uvicorn or Aura modules so the protection applies process-wide.
+    """
+
+    global _stdio_sink
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+
+    candidates: list[Path] = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / "AuraLive-startup.log")
+    candidates.append(Path(tempfile.gettempdir()) / "AuraLive-startup.log")
+
+    sink = None
+    for path in candidates:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            sink = path.open("a", encoding="utf-8", errors="replace", buffering=1)
+            break
+        except OSError:
+            continue
+
+    if sink is None:
+        sink = open(os.devnull, "w", encoding="utf-8")
+
+    _stdio_sink = sink
+    if sys.stdout is None:
+        sys.stdout = sink
+    if sys.stderr is None:
+        sys.stderr = sink
+
+
+_ensure_stdio()
+
 import uvicorn
 
 from app.config import settings
