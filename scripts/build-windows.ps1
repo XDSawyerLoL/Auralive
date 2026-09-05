@@ -50,7 +50,7 @@ Build: $BuildId
 2. Double-clique AuraLive.exe.
 3. Aura Live demarre son moteur local puis ouvre une fenetre d'application dediee via Microsoft Edge ou Google Chrome.
 
-Cette version utilise le bootloader console PyInstaller avec console masquee, et non plus le mode --windowed.
+Cette version utilise le bootloader console PyInstaller avec console masquee, et non plus l'ancien bootloader graphique sans flux standard.
 Cela conserve de vrais flux stdout/stderr pour Uvicorn et le logging Windows.
 
 Tes donnees sont conservees dans le dossier data place a cote de l'application.
