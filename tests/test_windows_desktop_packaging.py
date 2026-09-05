@@ -66,6 +66,9 @@ def test_windows_package_bundles_kokoro_and_local_first_env() -> None:
     assert '--collect-all "kokoro_onnx"' in build
     assert '--collect-all "misaki"' in build
     assert '--collect-all "espeakng_loader"' in build
+    assert '--collect-all "language_tags"' in build
+    assert '--collect-all "csvw"' in build
+    assert '--collect-all "segments"' in build
     assert "kokoro-v1.0.onnx" in build
     assert "voices-v1.0.bin" in build
     assert 'Copy-Item ".env.example" "dist\\AuraLive\\.env"' in build
