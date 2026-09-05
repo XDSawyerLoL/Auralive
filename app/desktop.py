@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 _stdio_sink = None
-BUILD_ID = "AuraLive-2.5-Windows-ConsoleBoot-2026-09-05"
+BUILD_ID = "AuraLive-2.5-Windows-KokoroPrimary-2026-09-05"
 
 
 def _startup_log_path() -> Path:

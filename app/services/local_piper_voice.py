@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from app.config import RUNTIME_DIR
+
 
 def _bool_env(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -22,6 +24,13 @@ def _float_env(name: str, default: float, minimum: float, maximum: float) -> flo
         return max(minimum, min(maximum, float(os.getenv(name, str(default)))))
     except (TypeError, ValueError):
         return default
+
+
+def _runtime_path(value: str) -> Path:
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (RUNTIME_DIR / candidate).resolve()
 
 
 def _wav_duration_ms(path: Path) -> int:
@@ -42,7 +51,7 @@ class LocalPiperVoice:
     def __init__(self, output_dir: Path):
         self.output_dir = Path(output_dir)
         configured_dir = str(os.getenv("MAIRAIY_LOCAL_VOICE_DIR", "data/voices/piper") or "data/voices/piper")
-        self.data_dir = Path(configured_dir).expanduser().resolve()
+        self.data_dir = _runtime_path(configured_dir)
         self.voice_name = str(os.getenv("MAIRAIY_LOCAL_VOICE", "fr_FR-siwis-medium") or "fr_FR-siwis-medium").strip()
         self.auto_download = _bool_env("MAIRAIY_LOCAL_VOICE_AUTO_DOWNLOAD", True)
         self.enabled = _bool_env("MAIRAIY_LOCAL_VOICE_ENABLED", True)
@@ -60,7 +69,7 @@ class LocalPiperVoice:
     def model_path(self) -> Path:
         candidate = Path(self.voice_name).expanduser()
         if candidate.suffix.casefold() == ".onnx":
-            return candidate.resolve()
+            return _runtime_path(str(candidate))
         return self.data_dir / f"{self.voice_name}.onnx"
 
     @property
