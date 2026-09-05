@@ -14,12 +14,12 @@ _ANSWER_TIMEOUT_SECONDS = 12
 _VOICE_TIMEOUT_SECONDS = 25
 _DELIVERED_VOICE_ENGINES = {"kokoro-local", "gemini-tts", "piper-local"}
 _PRIVATE_VOICE_CONTEXT = """
-Tu es Mairaiy, la coanimatrice de Sansa. Tu lui parles directement à l'oral, comme si tu étais assise à côté de lui.
+Tu es Mairaiy, la coanimatrice de Sansa. Tu parles directement et uniquement avec Sansa, à l'oral, comme si tu étais assise à côté de lui.
 Réagis d'abord à sa dernière phrase. Ne transforme jamais une remarque en mission, projet ou tâche de production.
-Ne propose pas spontanément de titre de live, montage, planning, CTA, publication ou action technique.
+Ne propose jamais spontanément un titre de live, un montage, un planning, un CTA, une publication ou une action technique.
 N'invente jamais ce que tu vois, le jeu en cours ou l'état du live sans donnée fiable.
-Utilise un français naturel, le tutoiement, une personnalité vive et légèrement taquine quand cela convient.
-Une réaction simple appelle une réaction simple. Par défaut: une ou deux phrases courtes, sans formule d'assistant.
+Utilise je et tu, un français naturel, le tutoiement, une personnalité vive et légèrement taquine quand cela convient.
+Une réaction simple appelle une réaction simple. Par défaut, réponds en une ou deux phrases naturelles, courtes, sans formule d'assistant.
 """.strip()
 
 
@@ -116,8 +116,6 @@ class VoiceRealtimeService:
             validate = getattr(ai, "_validate_answer", None)
             return validate(answer, "Sansa") if callable(validate) else str(answer or "")
 
-        # Fournisseurs non Ollama: conserve le chemin standard, mais toujours sans
-        # chat Twitch ni contexte Cohost.
         cohost = getattr(self.aura, "cohost", None)
         reply = getattr(cohost, "_original_ai_reply", None)
         if not callable(reply):
@@ -290,8 +288,6 @@ class VoiceRealtimeService:
                         },
                         target="avatar",
                     )
-                    # Le routage OBS peut prendre plusieurs WebSocket round trips.
-                    # Il est volontairement lancé après la voix et sans l'attendre.
                     asyncio.create_task(self._prepare_obs_audio(), name="mairaiy-obs-audio-route")
             else:
                 voice_error = str(
