@@ -8,6 +8,11 @@ def test_audio_and_vision_dependencies_are_declared():
     requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert "Pillow==" in requirements
     assert "piper-tts==" in requirements
+    assert "kokoro-onnx==0.6.1" in requirements
+    assert "misaki-fork==0.9.6" in requirements
+    assert "phonemizer-fork==3.3.2" in requirements
+    assert "espeakng-loader" in requirements
+    assert "soundfile==" in requirements
 
 
 def test_windows_launcher_repairs_dependencies_and_downloads_voice():
