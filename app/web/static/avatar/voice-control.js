@@ -44,7 +44,7 @@
       live_hors_ligne: 'live hors ligne',
       vision_desactivee: 'vision désactivée',
       obs_desactive: 'OBS désactivé',
-      gemini_non_configure: 'Gemini non configuré',
+      gemini_non_configure: 'vision IA optionnelle non configurée',
     };
     const blockers = (vision.blockers || []).map(item => labels[item] || item);
     return blockers.length ? `En attente · ${blockers.join(', ')}` : 'En attente';
@@ -66,7 +66,7 @@
 
     if (!Recognition) micRuntime.textContent = 'Reconnaissance continue indisponible';
     else if (processing) micRuntime.textContent = 'Génération de la réponse';
-    else if (waitingVoice) micRuntime.textContent = 'Voix Gemini en préparation';
+    else if (waitingVoice) micRuntime.textContent = 'Voix de Mairaiy en préparation';
     else if (hearing) micRuntime.textContent = 'Phrase reconnue · envoi automatique';
     else if (listening) micRuntime.textContent = 'Edge/Chrome · chaque phrase lui est adressée';
     else micRuntime.textContent = 'Micro en pause';
@@ -77,11 +77,28 @@
       const response = await fetch('/api/voice/status', { cache: 'no-store' });
       const data = await response.json();
       const visionActive = Boolean(data?.live_awareness?.vision?.active);
-      const voiceLocked = Boolean(data?.audio?.voice_identity?.locked);
-      statusNode.textContent = data.configured
-        ? `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'}${voiceLocked ? ' · VOIX VERROUILLÉE' : ''}`
-        : 'CONFIGURATION GEMINI MANQUANTE';
-      statusNode.style.color = data.configured ? '#a9f7df' : '#ff9ab2';
+      const audio = data?.audio || {};
+      const kokoro = audio?.kokoro_voice || {};
+      const identity = audio?.voice_identity || {};
+      const currentEngine = String(identity.current_engine || audio.last_engine || '');
+      const localVoiceReady = Boolean(kokoro.ready);
+      const fallbackReady = ['kokoro-local', 'gemini-tts', 'piper-local'].includes(currentEngine);
+      const voiceReady = localVoiceReady || fallbackReady;
+      const kokoroLoading = Boolean(kokoro.enabled && kokoro.assets_present && !kokoro.ready && !kokoro.last_error);
+
+      if (localVoiceReady) {
+        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · KOKORO LOCAL`;
+        statusNode.style.color = '#a9f7df';
+      } else if (kokoroLoading) {
+        statusNode.textContent = 'CHARGEMENT KOKORO LOCAL…';
+        statusNode.style.color = '#f7d98b';
+      } else if (voiceReady) {
+        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · VOIX DE SECOURS`;
+        statusNode.style.color = '#a9f7df';
+      } else {
+        statusNode.textContent = 'VOIX LOCALE INDISPONIBLE';
+        statusNode.style.color = '#ff9ab2';
+      }
       visionRuntime.textContent = visionLabel(data);
     } catch {
       statusNode.textContent = 'SERVEUR LOCAL INJOIGNABLE';
@@ -243,7 +260,7 @@
       waitingVoice = true;
       clearPhrase();
       render();
-      setHint('Réponse prête', 'Mairaiy prépare maintenant sa voix verrouillée.');
+      setHint('Réponse prête', 'Mairaiy prépare maintenant sa voix locale.');
       waitForVoiceCompletion();
     } catch (error) {
       processing = false;
@@ -282,7 +299,7 @@
         if (delivered) {
           setHint('Mairaiy a répondu', `L’écoute revient après sa voix, dans ${(delay / 1000).toFixed(1)} s.`);
         } else {
-          const reason = realtime.last_voice_error || 'La voix Gemini n’a pas été produite.';
+          const reason = realtime.last_voice_error || 'La voix de Mairaiy n’a pas été produite.';
           setHint('Réponse écrite prête, voix indisponible', reason, true);
         }
         render();
