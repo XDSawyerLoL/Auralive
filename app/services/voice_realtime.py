@@ -12,15 +12,88 @@ logger = logging.getLogger(__name__)
 
 _ANSWER_TIMEOUT_SECONDS = 12
 _VOICE_TIMEOUT_SECONDS = 25
+_CONVERSATION_WINDOW_SECONDS = 28
 _DELIVERED_VOICE_ENGINES = {"kokoro-local", "gemini-tts", "piper-local"}
 _PRIVATE_VOICE_CONTEXT = """
 Tu es Mairaiy, la coanimatrice de Sansa. Tu parles directement et uniquement avec Sansa, à l'oral, comme si tu étais assise à côté de lui.
 Réagis d'abord à sa dernière phrase. Ne transforme jamais une remarque en mission, projet ou tâche de production.
 Ne propose jamais spontanément un titre de live, un montage, un planning, un CTA, une publication ou une action technique.
 N'invente jamais ce que tu vois, le jeu en cours ou l'état du live sans donnée fiable.
+N'invente jamais ce qu'une phrase ambiguë désigne, sa durée, sa cause ou son contexte. Si le sens manque, pose une clarification très courte au lieu de supposer.
 Utilise je et tu, un français naturel, le tutoiement, une personnalité vive et légèrement taquine quand cela convient.
 Une réaction simple appelle une réaction simple. Par défaut, réponds en une ou deux phrases naturelles, courtes, sans formule d'assistant.
 """.strip()
+
+_DIRECT_ADDRESS_RE = re.compile(
+    r"(?:\b(?:tu|toi|ton|ta|tes|te|vous|votre|vos)\b|\bt['’]|"
+    r"^(?:dis-moi|reponds|réponds|regarde|ecoute|écoute|continue|arrete|arrête|attends|"
+    r"explique|raconte|aide-moi|donne-moi|fais-moi|peux-tu|peux tu|est-ce que|est ce que|"
+    r"t'en penses|t’en penses|qu'est-ce que|qu’est-ce que|pourquoi|comment)\b)",
+    flags=re.IGNORECASE,
+)
+_AMBIENT_MARKERS = (
+    "publicité",
+    "publicite",
+    "spot publicitaire",
+    "annonce commerciale",
+    "contenu sponsorisé",
+    "contenu sponsorise",
+    "sponsorisé",
+    "sponsorise",
+    "promotion",
+    "offre spéciale",
+    "offre speciale",
+    "rendez-vous sur",
+    "rendez vous sur",
+    "disponible sur",
+    "cliquez sur",
+    "abonnez-vous",
+    "abonnez vous",
+    "téléchargez",
+    "telechargez",
+    "just player",
+    "justplayer",
+)
+_DOMAIN_RE = re.compile(r"\b[a-z0-9][a-z0-9-]{1,62}(?:\.[a-z0-9-]{2,63})+\b", re.IGNORECASE)
+
+
+def _looks_like_direct_address(value: str) -> bool:
+    text = " ".join(str(value or "").split()).strip()
+    return bool(text and _DIRECT_ADDRESS_RE.search(text))
+
+
+def _looks_like_ambient_broadcast(value: str) -> bool:
+    text = " ".join(str(value or "").casefold().split()).strip()
+    if not text:
+        return False
+    if any(marker in text for marker in _AMBIENT_MARKERS):
+        return True
+    return bool(_DOMAIN_RE.search(text))
+
+
+def _addressing_decision(
+    text: str,
+    *,
+    wake_detected: bool,
+    conversation_active: bool,
+) -> tuple[bool, str]:
+    """Décide si la transcription ressemble à Sansa qui parle à Mairaiy.
+
+    Les pubs/TV/domaines sont rejetés par défaut, même pendant une conversation,
+    sauf si la phrase contient clairement une adresse directe (ex: « tu peux me
+    faire une publicité JustPlayer.fr ? »). Le prénom ouvre toujours le dialogue.
+    """
+    direct = _looks_like_direct_address(text)
+    ambient = _looks_like_ambient_broadcast(text)
+    if wake_detected:
+        return True, "wake_word"
+    if ambient and not direct:
+        return False, "ambient_broadcast"
+    if direct:
+        return True, "direct_address"
+    if conversation_active:
+        return True, "conversation_followup"
+    return False, "not_addressed"
 
 
 def _compact_spoken_answer(value: Any, limit: int = 360) -> str:
@@ -58,6 +131,8 @@ class VoiceRealtimeService:
         self.last_transcript = ""
         self.last_answer = ""
         self.last_error = ""
+        self.last_ignore_reason = ""
+        self.last_addressing_reason = ""
         self.last_stage = "idle"
         self.last_voice_delivered = False
         self.last_voice_error = ""
@@ -70,6 +145,7 @@ class VoiceRealtimeService:
         self.last_obs_audio: dict[str, Any] = {}
         self.last_response_model = ""
         self.last_fastpath = False
+        self.conversation_open_until = 0.0
 
     @property
     def busy(self) -> bool:
@@ -77,6 +153,13 @@ class VoiceRealtimeService:
             self.voice_input.lock.locked()
             or (self.voice_task and not self.voice_task.done())
         )
+
+    @property
+    def conversation_active(self) -> bool:
+        return time.monotonic() < self.conversation_open_until
+
+    def _open_conversation(self) -> None:
+        self.conversation_open_until = time.monotonic() + _CONVERSATION_WINDOW_SECONDS
 
     async def _private_reply(
         self,
@@ -144,10 +227,54 @@ class VoiceRealtimeService:
             raise RuntimeError("Mairaiy termine déjà une réponse")
 
         wake_detected, stripped = _wake_invocation(text)
-        prompt = stripped.strip() if wake_detected and stripped.strip() else text
+        accepted, addressing_reason = _addressing_decision(
+            text,
+            wake_detected=wake_detected,
+            conversation_active=self.conversation_active,
+        )
         self.last_transcript = text
         self.voice_input.last_transcript = text
         self.voice_input.last_wake_detected = wake_detected
+        self.last_addressing_reason = addressing_reason
+
+        if not accepted:
+            self.ignored_count += 1
+            self.voice_input.ignored_count += 1
+            self.last_ignore_reason = addressing_reason
+            self.last_answer = ""
+            self.last_error = ""
+            self.last_voice_delivered = False
+            self.last_voice_error = ""
+            self.last_voice_engine = ""
+            self.last_audio_url = ""
+            self.last_audio_duration_ms = 0
+            self.last_stage = "idle"
+            self.voice_input.last_answer = ""
+            self.voice_input.last_error = ""
+            self.voice_input.last_stage = "idle"
+            self.voice_input.last_voice_delivered = False
+            self.voice_input.last_voice_error = ""
+            self.last_latency_ms = round((time.monotonic() - started) * 1000)
+            self.voice_input.last_latency_ms = self.last_latency_ms
+            return {
+                "ok": True,
+                "ignored": True,
+                "ignore_reason": addressing_reason,
+                "wake_word_required": False,
+                "wake_word_detected": wake_detected,
+                "addressed_automatically": False,
+                "conversation_active": self.conversation_active,
+                "transcript": text,
+                "answer": "",
+                "voice_pending": False,
+                "voice_delivered": False,
+                "latency_ms": self.last_latency_ms,
+                "rearm_after_ms": 250,
+            }
+
+        self.last_ignore_reason = ""
+        self._open_conversation()
+        prompt = stripped.strip() if wake_detected and stripped.strip() else text
 
         async with self.voice_input.lock:
             self.last_error = ""
@@ -213,7 +340,10 @@ class VoiceRealtimeService:
             "ignored": False,
             "wake_word_required": False,
             "wake_word_detected": wake_detected,
-            "addressed_automatically": True,
+            "addressed_automatically": addressing_reason != "wake_word",
+            "addressing_reason": addressing_reason,
+            "conversation_active": True,
+            "conversation_window_seconds": _CONVERSATION_WINDOW_SECONDS,
             "transcript": text,
             "answer": answer,
             "voice_pending": True,
@@ -321,6 +451,7 @@ class VoiceRealtimeService:
         self.last_audio_duration_ms = duration
         self.last_rearm_after_ms = rearm
         self.last_stage = "idle"
+        self._open_conversation()
 
         self.voice_input.last_voice_delivered = delivered
         self.voice_input.last_voice_error = voice_error
@@ -340,9 +471,11 @@ class VoiceRealtimeService:
         return {
             "mode": "browser-speech-recognition",
             "continuous": True,
-            "wake_word": None,
+            "wake_word": "Mairaiy",
             "wake_word_required": False,
-            "addressing": "all_recognized_phrases",
+            "addressing": "filtered_conversation",
+            "conversation_active": self.conversation_active,
+            "conversation_window_seconds": _CONVERSATION_WINDOW_SECONDS,
             "busy": self.busy,
             "voice_task_running": bool(self.voice_task and not self.voice_task.done()),
             "stage": self.last_stage,
@@ -351,6 +484,8 @@ class VoiceRealtimeService:
             "last_transcript": self.last_transcript[:180],
             "last_answer": self.last_answer[:180],
             "last_error": self.last_error,
+            "last_ignore_reason": self.last_ignore_reason,
+            "last_addressing_reason": self.last_addressing_reason,
             "last_voice_delivered": self.last_voice_delivered,
             "last_voice_error": self.last_voice_error,
             "last_voice_engine": self.last_voice_engine,
