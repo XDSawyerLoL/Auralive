@@ -36,6 +36,8 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
     assert "sys.stdout is None" in desktop
     assert "sys.stderr is None" in desktop
     assert "AuraLive-startup.log" in desktop
+    assert "stdout={'ok' if sys.stdout is not None else 'none'}" in desktop
+    assert "stderr={'ok' if sys.stderr is not None else 'none'}" in desktop
     assert desktop.index("_ensure_stdio()") < desktop.index("import uvicorn")
 
 
