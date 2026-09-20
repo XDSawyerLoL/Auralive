@@ -411,13 +411,29 @@ async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse
 async def _ensure_native_source_editable() -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
         raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
-    native_state = await broadcast_status_v3()
-    if native_state.get("streaming") or native_state.get("recording"):
-        raise HTTPException(
-            status_code=409,
-            detail="Arrête le direct ou l'enregistrement avant de modifier les sources",
-        )
-    return native_state
+    return await broadcast_status_v3()
+
+
+@app.put("/api/broadcast/audio")
+async def broadcast_audio_mix_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour régler le mix audio")
+
+    def gain(name: str, default: float) -> float:
+        try:
+            return max(0.0, min(2.0, float(payload.get(name, default))))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=f"Valeur audio {name} invalide") from exc
+
+    state = await broadcast_status_v3()
+    engine = dict(state.get("engine") or {})
+    value = {
+        "mic_volume": gain("mic_volume", float(engine.get("mic_volume", 0.82) or 0.82)),
+        "aura_volume": gain("aura_volume", float(engine.get("desktop_volume", 0.72) or 0.72)),
+        "mic_muted": bool(payload.get("mic_muted", engine.get("mic_muted", False))),
+        "aura_muted": bool(payload.get("aura_muted", engine.get("desktop_muted", False))),
+    }
+    return await _broadcast_command("audio.update", json.dumps(value, separators=(",", ":")))
 
 
 @app.post("/api/broadcast/source")
@@ -471,13 +487,6 @@ async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, A
     scene = " ".join(str(payload.get("scene") or "").split()).strip()
     if not scene:
         raise HTTPException(status_code=422, detail="Nom de scène requis")
-    if str(settings.broadcast_engine or "obs").lower() == "native":
-        native_state = await broadcast_status_v3()
-        if native_state.get("streaming") or native_state.get("recording"):
-            raise HTTPException(
-                status_code=409,
-                detail="Le changement de scène natif en direct arrive avec le compositeur multi-source V0.2",
-            )
     return await _broadcast_command("scene.select", scene)
 
 
@@ -487,13 +496,6 @@ async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] 
         raise HTTPException(status_code=422, detail="Source invalide")
     if str(settings.broadcast_engine or "obs").lower() != "native":
         raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
-    native_state = await broadcast_status_v3()
-    if native_state.get("streaming") or native_state.get("recording"):
-        raise HTTPException(
-            status_code=409,
-            detail="Arrête le direct ou l'enregistrement avant de repositionner une source",
-        )
-
     def number(name: str, default: float) -> float:
         try:
             return float(payload.get(name, default))
@@ -521,12 +523,6 @@ async def broadcast_source_visibility_v3(source_id: int, payload: dict[str, Any]
         raise HTTPException(status_code=422, detail="Source invalide")
     if str(settings.broadcast_engine or "obs").lower() != "native":
         raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
-    native_state = await broadcast_status_v3()
-    if native_state.get("streaming") or native_state.get("recording"):
-        raise HTTPException(
-            status_code=409,
-            detail="Arrête le direct ou l'enregistrement avant de masquer une source",
-        )
     value = {"id": source_id, "visible": bool(payload.get("visible", True))}
     return await _broadcast_command("source.visibility", json.dumps(value, separators=(",", ":")))
 
