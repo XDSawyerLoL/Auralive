@@ -31,4 +31,4 @@ jobs:
         run: |
           node --check app/web/static/app.js
           node --check app/web/static/automation.js
-          node --check app/web/static/avatar-studio.js
+          node --check app/web/static/avatar-studio.js\n          node --check app/web/static/aura-studio.js
