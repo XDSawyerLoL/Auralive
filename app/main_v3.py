@@ -310,6 +310,96 @@ async def broadcast_preview_stop_v3() -> dict[str, Any]:
     return await _broadcast_command("preview.stop")
 
 
+@app.get("/api/broadcast/browser-source/{source_id}.mjpeg")
+async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse:
+    if source_id <= 0:
+        raise HTTPException(status_code=404, detail="Source inconnue")
+
+    async def frames():
+        boundary = b"--frame\r\n"
+        last_frame: bytes | None = None
+        while True:
+            try:
+                frame = await asyncio.to_thread(native_broadcast.browser_frame, source_id)
+                if frame and frame != last_frame:
+                    last_frame = frame
+                    yield (
+                        boundary
+                        + b"Content-Type: image/jpeg\r\n"
+                        + f"Content-Length: {len(frame)}\r\n\r\n".encode("ascii")
+                        + frame
+                        + b"\r\n"
+                    )
+                await asyncio.sleep(0.075)
+            except asyncio.CancelledError:
+                raise
+
+    return StreamingResponse(
+        frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+async def _ensure_native_source_editable() -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+    native_state = await broadcast_status_v3()
+    if native_state.get("streaming") or native_state.get("recording"):
+        raise HTTPException(
+            status_code=409,
+            detail="Arrête le direct ou l'enregistrement avant de modifier les sources",
+        )
+    return native_state
+
+
+@app.post("/api/broadcast/source")
+async def broadcast_source_add_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    state = await _ensure_native_source_editable()
+    if len(list(state.get("sources") or [])) >= 24:
+        raise HTTPException(status_code=422, detail="Maximum de 24 sources par scène")
+
+    kind = str(payload.get("kind") or "").strip().lower()
+    allowed = {"desktop", "window", "game", "webcam", "image", "text", "browser"}
+    if kind not in allowed:
+        raise HTTPException(status_code=422, detail="Type de source inconnu")
+
+    name = " ".join(str(payload.get("name") or "").split()).strip()[:120]
+    target = str(payload.get("target") or "").strip()[:1000]
+    if kind == "browser" and not target:
+        target = "/overlay/avatar"
+    if kind in {"window", "game", "webcam", "image"} and not target:
+        raise HTTPException(status_code=422, detail="Cette source exige une cible")
+
+    value = {"kind": kind, "name": name, "target": target}
+    return await _broadcast_command("source.add", json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
+@app.patch("/api/broadcast/source/{source_id}")
+async def broadcast_source_configure_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    await _ensure_native_source_editable()
+
+    value: dict[str, Any] = {"id": source_id}
+    if "name" in payload:
+        value["name"] = " ".join(str(payload.get("name") or "").split()).strip()[:120]
+    if "target" in payload:
+        value["target"] = str(payload.get("target") or "").strip()[:1000]
+    return await _broadcast_command("source.configure", json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
+@app.delete("/api/broadcast/source/{source_id}")
+async def broadcast_source_remove_v3(source_id: int) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    await _ensure_native_source_editable()
+    return await _broadcast_command("source.remove", json.dumps({"id": source_id}, separators=(",", ":")))
+
+
 @app.post("/api/broadcast/scene")
 async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     scene = " ".join(str(payload.get("scene") or "").split()).strip()
