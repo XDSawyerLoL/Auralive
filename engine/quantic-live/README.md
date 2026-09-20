@@ -53,7 +53,7 @@ target\release\quantic-live.exe
 
 Aura Native diffuse directement du PC vers l’endpoint RTMP choisi.
 
-La clé de stream doit rester locale. Le stockage historique dans la configuration JSON est en cours de remplacement par le coffre secret local Aura afin qu’elle ne soit plus persistée en clair.
+La clé de stream reste locale et n’est plus persistée dans `engine.json`. Aura Live la protège avec le coffre Windows DPAPI dans `data/native_broadcast/stream-key.dpapi`, lié au profil Windows local, puis l’injecte au moteur uniquement au lancement. Une ancienne clé trouvée en clair est migrée automatiquement puis effacée du JSON.
 
 ## Audio
 
@@ -75,9 +75,8 @@ Les trois niveaux sont réglables indépendamment depuis Aura Studio.
 - **Contrôle moteur** : fichiers commande/statut locaux
 - **Fallback** : OBS, activable manuellement
 
-## Prochain durcissement
+## Suite
 
-- secret RTMP dans le coffre local Aura/Quantic, hors JSON ;
 - transitions graphiques ;
 - replay buffer / clips ;
 - multistream.
