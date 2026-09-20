@@ -60,6 +60,7 @@
 - [x] Song Request YouTube
 - [x] Clips manuels et règles de clips automatiques
 - [x] Pilotage OBS WebSocket
+- [x] Aura Native Broadcast : moteur Rust local, RTMP, enregistrement et contrôle depuis Aura
 - [x] Générique de fin et récapitulatif du live
 - [x] Pings privés au streamer
 - [x] Overlays alertes, chat, objectifs, écran, musique, Streamathon, emotes, TopWords, concours, crédits et pings
