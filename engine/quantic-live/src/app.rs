@@ -100,8 +100,10 @@ impl QuanticLiveApp {
     fn audio_mix(&self) -> ffmpeg::AudioMix {
         ffmpeg::AudioMix {
             mic_volume: self.project.mic_volume,
+            system_volume: self.project.system_volume,
             aura_volume: self.project.desktop_volume,
             mic_muted: self.project.mic_muted,
+            system_muted: self.project.system_muted,
             aura_muted: self.project.desktop_muted,
         }
     }
@@ -489,11 +491,17 @@ impl QuanticLiveApp {
                         if let Some(value) = payload.get("mic_volume").and_then(|value| value.as_f64()) {
                             self.project.mic_volume = (value as f32).clamp(0.0, 2.0);
                         }
+                        if let Some(value) = payload.get("system_volume").and_then(|value| value.as_f64()) {
+                            self.project.system_volume = (value as f32).clamp(0.0, 2.0);
+                        }
                         if let Some(value) = payload.get("aura_volume").and_then(|value| value.as_f64()) {
                             self.project.desktop_volume = (value as f32).clamp(0.0, 2.0);
                         }
                         if let Some(value) = payload.get("mic_muted").and_then(|value| value.as_bool()) {
                             self.project.mic_muted = value;
+                        }
+                        if let Some(value) = payload.get("system_muted").and_then(|value| value.as_bool()) {
+                            self.project.system_muted = value;
                         }
                         if let Some(value) = payload.get("aura_muted").and_then(|value| value.as_bool()) {
                             self.project.desktop_muted = value;
@@ -550,8 +558,10 @@ impl QuanticLiveApp {
             sources,
             mic_volume: self.project.mic_volume,
             desktop_volume: self.project.desktop_volume,
+            system_volume: self.project.system_volume,
             mic_muted: self.project.mic_muted,
             desktop_muted: self.project.desktop_muted,
+            system_muted: self.project.system_muted,
             canvas_width: self.project.settings.width,
             canvas_height: self.project.settings.height,
             ffmpeg_ok: self.ffmpeg_ok,
