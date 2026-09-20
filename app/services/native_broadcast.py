@@ -269,10 +269,14 @@ class NativeBroadcastService:
                 continue
             desired[source_id] = self._browser_target_url(str(source.get("target") or "/overlay/avatar"))
 
+        to_stop: list[_BrowserSourceRenderer] = []
+        to_start: list[_BrowserSourceRenderer] = []
+        browser = self._browser_executable()
+
         with self._browser_lock:
             stale = [
                 source_id
-                for source_id, renderer in self._browser_renderers.items()
+                for source_id in self._browser_renderers
                 if source_id not in desired or self._browser_targets.get(source_id) != desired.get(source_id)
             ]
             for source_id in stale:
@@ -280,23 +284,26 @@ class NativeBroadcastService:
                 self._browser_targets.pop(source_id, None)
                 self._browser_frames.pop(source_id, None)
                 if renderer is not None:
-                    renderer.stop()
+                    to_stop.append(renderer)
 
-            browser = self._browser_executable()
-            if browser is None:
-                return
-            for source_id, target in desired.items():
-                if source_id in self._browser_renderers:
-                    continue
-                renderer = _BrowserSourceRenderer(
-                    source_id,
-                    target,
-                    browser,
-                    self._set_browser_frame,
-                )
-                self._browser_renderers[source_id] = renderer
-                self._browser_targets[source_id] = target
-                renderer.start()
+            if browser is not None:
+                for source_id, target in desired.items():
+                    if source_id in self._browser_renderers:
+                        continue
+                    renderer = _BrowserSourceRenderer(
+                        source_id,
+                        target,
+                        browser,
+                        self._set_browser_frame,
+                    )
+                    self._browser_renderers[source_id] = renderer
+                    self._browser_targets[source_id] = target
+                    to_start.append(renderer)
+
+        for renderer in to_stop:
+            renderer.stop()
+        for renderer in to_start:
+            renderer.start()
 
     def _stop_browser_sources(self) -> None:
         with self._browser_lock:
@@ -448,9 +455,10 @@ class NativeBroadcastService:
 
     def status(self) -> dict[str, Any]:
         engine_status = self._read_status()
-        self._sync_browser_sources(engine_status)
         executable = self.executable()
         process_running = self.process_running()
+        if process_running:
+            self._sync_browser_sources(engine_status)
         status_age = self._status_age_seconds()
         responsive = bool(engine_status.get("ok")) and status_age is not None and status_age < 3.0
 
