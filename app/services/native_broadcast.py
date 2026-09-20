@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from array import array
 import audioop
+import importlib.util
 import json
 import os
 import re
@@ -262,6 +263,8 @@ class NativeBroadcastService:
     def system_audio_status(self) -> dict[str, Any]:
         thread = self._system_audio_thread
         return {
+            "backend": "WASAPI / PyAudioWPatch",
+            "backend_present": importlib.util.find_spec("pyaudiowpatch") is not None,
             "available": self._system_audio_ready,
             "running": bool(thread is not None and thread.is_alive()),
             "device": self._system_audio_device,
