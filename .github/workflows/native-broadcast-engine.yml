@@ -3,7 +3,7 @@ name: Aura Native Broadcast engine
 on:
   push:
     branches:
-      - feature/aura-native-broadcast
+      - main
     paths:
       - "engine/quantic-live/**"
       - ".github/workflows/native-broadcast-engine.yml"
@@ -17,6 +17,10 @@ on:
       - "app/config.py"
       - ".github/workflows/native-broadcast-engine.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-engine:
