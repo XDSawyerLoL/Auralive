@@ -52,7 +52,7 @@
 - [x] Mur d'émoticônes
 - [x] Compteurs, objectifs et Streamathon
 
-## Médias, OBS et diffusion
+## Médias et diffusion
 
 - [x] Alertes multimédias configurables
 - [x] Médiathèque locale
@@ -95,3 +95,10 @@ Aura Live 1.2 fournit un noyau local très étendu. Une parité absolue avec un 
 - [x] Sources navigateur headless locales avec MJPEG + chroma-key
 - [x] Détection automatique fenêtres/jeux et webcams
 - [x] Ajout/configuration/suppression et drag & drop des sources dans Aura Studio
+
+- [x] Aura Native par défaut au démarrage, OBS conservé en compatibilité
+- [x] Windows Graphics Capture (`gfxcapture`) pour fenêtre/jeu avec fallback GDI
+- [x] FFmpeg Windows vérifié et embarqué dans le package
+- [x] Édition scène/source pendant Live/REC avec rebuild contrôlé
+- [x] Mix audio natif 3 voies : micro + son PC/jeu WASAPI + Aura/Mairaiy/alertes
+- [x] Live + REC simultanés sans concurrence sur les buffers PCM
