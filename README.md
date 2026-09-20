@@ -179,10 +179,23 @@ Chaque canal possède son volume et son mute dans le Studio. Le Live et le REC p
 
 Les sources navigateur sont rendues localement par Chromium/Edge headless. Mairaiy et les sons d’alertes ne dépendent donc plus du mixeur audio d’OBS.
 
+### Coffre RTMP local
+
+La clé de stream n’est plus persistée en clair dans `engine.json`. Depuis **⚙ Diffusion** dans Aura Studio :
+
+- l’URL RTMP reste dans la configuration non sensible ;
+- la clé est protégée localement par Windows DPAPI ;
+- le fichier chiffré est `data/native_broadcast/stream-key.dpapi` ;
+- la clé n’est jamais réaffichée dans l’interface ni renvoyée par les API de statut ;
+- une ancienne clé trouvée en clair est migrée automatiquement vers le coffre puis retirée du JSON ;
+- aucun compte Microsoft ou service cloud n’est requis : DPAPI est utilisé localement par le profil Windows.
+
 ### API locale de diffusion
 
 ```text
 GET  /api/broadcast/status
+GET  /api/broadcast/output
+PUT  /api/broadcast/output
 POST /api/broadcast/mode/obs
 POST /api/broadcast/mode/native
 POST /api/broadcast/engine/start
