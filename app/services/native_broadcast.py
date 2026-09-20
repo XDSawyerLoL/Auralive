@@ -214,6 +214,7 @@ class NativeBroadcastService:
         self._audio_lock = threading.RLock()
         self._audio_tracks: list[dict[str, Any]] = []
         self._audio_decode_threads: set[threading.Thread] = set()
+        self._audio_last_pull = 0.0
 
     def ffmpeg_executable(self) -> str:
         bundled = RUNTIME_DIR / "ffmpeg" / "ffmpeg.exe"
@@ -232,6 +233,8 @@ class NativeBroadcastService:
 
     def enqueue_overlay_audio(self, event: dict[str, Any]) -> None:
         if not isinstance(event, dict):
+            return
+        if time.monotonic() - self._audio_last_pull > 2.0:
             return
 
         volume = max(0.0, min(2.0, float(event.get("volume", 1.0) or 1.0)))
@@ -253,6 +256,7 @@ class NativeBroadcastService:
             thread.start()
 
     def native_audio_chunk(self, byte_count: int = 19200) -> bytes:
+        self._audio_last_pull = time.monotonic()
         byte_count = max(4, int(byte_count))
         byte_count -= byte_count % 4
         sample_count = byte_count // 2
