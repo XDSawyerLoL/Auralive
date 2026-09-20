@@ -951,6 +951,10 @@ class NativeBroadcastService:
                 }
 
             self.runtime_dir.mkdir(parents=True, exist_ok=True)
+            # Never let a restarted engine consume a stale command or report a
+            # stale responsive status from the previous process.
+            self.command_path.unlink(missing_ok=True)
+            self.status_path.unlink(missing_ok=True)
             env = os.environ.copy()
             env["AURA_NATIVE_CONTROL_FILE"] = str(self.command_path)
             env["AURA_NATIVE_STATUS_FILE"] = str(self.status_path)
