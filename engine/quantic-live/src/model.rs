@@ -26,11 +26,32 @@ impl SourceKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceTransform {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl Default for SourceTransform {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Source {
     pub id: u64,
     pub name: String,
     pub kind: SourceKind,
     pub visible: bool,
+    #[serde(default)]
+    pub transform: SourceTransform,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
