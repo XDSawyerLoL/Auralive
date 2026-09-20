@@ -170,6 +170,12 @@ async def broadcast_status_v3() -> dict[str, Any]:
             "streaming": bool(engine.get("streaming")),
             "recording": bool(engine.get("recording")),
             "preview": bool(engine.get("preview")),
+            "replay_buffering": bool(engine.get("replay_buffering")),
+            "replay_seconds": int(engine.get("replay_seconds") or 30),
+            "last_replay_file": str(engine.get("last_replay_file") or ""),
+            "transition": str(engine.get("transition") or "fade"),
+            "transition_ms": int(engine.get("transition_ms") or 350),
+            "multistream_outputs": int(engine.get("multistream_outputs") or 0),
             "scene": str(engine.get("scene") or ""),
             "scenes": list(engine.get("scenes") or []),
             "sources": list(engine.get("sources") or []),
@@ -300,6 +306,34 @@ async def broadcast_record_start_v3() -> dict[str, Any]:
 @app.post("/api/broadcast/record/stop")
 async def broadcast_record_stop_v3() -> dict[str, Any]:
     return await _broadcast_command("record.stop")
+
+
+@app.post("/api/broadcast/replay/start")
+async def broadcast_replay_start_v3(
+    payload: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+    payload = payload or {}
+    try:
+        seconds = max(10, min(300, int(payload.get("seconds", 30))))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Durée de replay invalide") from exc
+    return await _broadcast_command("replay.start", json.dumps({"seconds": seconds}, separators=(",", ":")))
+
+
+@app.post("/api/broadcast/replay/stop")
+async def broadcast_replay_stop_v3() -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+    return await _broadcast_command("replay.stop")
+
+
+@app.post("/api/broadcast/replay/save")
+async def broadcast_replay_save_v3() -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+    return await _broadcast_command("replay.save")
 
 
 @app.post("/api/broadcast/preview/start")
@@ -472,6 +506,7 @@ async def broadcast_output_settings_update_v3(
             rtmp_url,
             stream_key,
             clear_stream_key=clear_stream_key,
+            destinations=payload.get("destinations"),
         )
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -558,6 +593,63 @@ async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, A
     if not scene:
         raise HTTPException(status_code=422, detail="Nom de scène requis")
     return await _broadcast_command("scene.select", scene)
+
+
+@app.post("/api/broadcast/scenes")
+async def broadcast_scene_create_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    state = await _ensure_native_source_editable()
+    if len(list(state.get("scenes") or [])) >= 24:
+        raise HTTPException(status_code=422, detail="Maximum de 24 scènes")
+    name = " ".join(str(payload.get("name") or "").split()).strip()[:80]
+    if not name:
+        raise HTTPException(status_code=422, detail="Nom de scène requis")
+    if any(str(scene).lower() == name.lower() for scene in list(state.get("scenes") or [])):
+        raise HTTPException(status_code=409, detail="Une scène porte déjà ce nom")
+    return await _broadcast_command("scene.create", json.dumps({"name": name}, ensure_ascii=False, separators=(",", ":")))
+
+
+@app.patch("/api/broadcast/scenes/{scene_name}")
+async def broadcast_scene_rename_v3(scene_name: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    await _ensure_native_source_editable()
+    current = " ".join(str(scene_name or "").split()).strip()[:80]
+    name = " ".join(str(payload.get("name") or "").split()).strip()[:80]
+    if not current or not name:
+        raise HTTPException(status_code=422, detail="Nom de scène requis")
+    return await _broadcast_command(
+        "scene.rename",
+        json.dumps({"current": current, "name": name}, ensure_ascii=False, separators=(",", ":")),
+    )
+
+
+@app.delete("/api/broadcast/scenes/{scene_name}")
+async def broadcast_scene_remove_v3(scene_name: str) -> dict[str, Any]:
+    state = await _ensure_native_source_editable()
+    name = " ".join(str(scene_name or "").split()).strip()[:80]
+    if not name:
+        raise HTTPException(status_code=422, detail="Nom de scène requis")
+    if len(list(state.get("scenes") or [])) <= 1:
+        raise HTTPException(status_code=409, detail="Aura doit conserver au moins une scène")
+    return await _broadcast_command(
+        "scene.remove",
+        json.dumps({"name": name}, ensure_ascii=False, separators=(",", ":")),
+    )
+
+
+@app.put("/api/broadcast/transition")
+async def broadcast_transition_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Les transitions natives exigent Aura Native")
+    kind = str(payload.get("kind") or "fade").strip().lower()
+    if kind not in {"cut", "fade"}:
+        raise HTTPException(status_code=422, detail="Transition inconnue")
+    try:
+        duration_ms = max(80, min(3000, int(payload.get("duration_ms", 350))))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Durée de transition invalide") from exc
+    return await _broadcast_command(
+        "transition.update",
+        json.dumps({"kind": kind, "duration_ms": duration_ms}, separators=(",", ":")),
+    )
 
 
 @app.put("/api/broadcast/source/{source_id}/transform")

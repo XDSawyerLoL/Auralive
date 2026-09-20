@@ -1,8 +1,8 @@
-# Aura Live 1.2 — Complete Local Suite
+# Aura Live 2.7.1 — Native Streaming Suite
 
-Aura Live est le bot Twitch unique de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
+Aura Live est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
-Cette version ajoute une conversation réellement suivie et une présence visuelle/vocale dans OBS au centre de contrôle modulaire : Twitch, IA locale, OBS, économie communautaire, musique, jeux, modération, automatisations et intégrations externes.
+La version 2.7.1 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
 
 ## Modules inclus
 
@@ -141,7 +141,7 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 
 ## Aura Native Broadcast
 
-Aura Live utilise désormais **Aura Native Broadcast 0.3.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
+Aura Live utilise désormais **Aura Native Broadcast 0.4.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
 
 ```env
 AURA_BROADCAST_ENGINE=native
@@ -225,7 +225,7 @@ DELETE /api/broadcast/source/{source_id}
 data\aura_live.db
 ```
 
-3. Décompresse Aura Live 1.2 par-dessus le dossier existant.
+3. Décompresse Aura Live 2.7.1 par-dessus le dossier existant.
 4. Conserve ton `.env` et ton dossier `data`.
 5. Lance :
 
@@ -248,10 +248,14 @@ AI_MODE=ollama
 AI_BASE_URL=http://localhost:11434
 AI_MODEL=gemma3:12b
 AI_WARMUP_ENABLED=true
-OBS_ENABLED=true
+AURA_BROADCAST_ENGINE=native
+AURA_NATIVE_ENGINE_AUTOSTART=true
+
+# OBS reste facultatif, uniquement pour le mode de compatibilité.
+OBS_ENABLED=false
 OBS_HOST=127.0.0.1
 OBS_PORT=4455
-OBS_PASSWORD=TON_MOT_DE_PASSE
+OBS_PASSWORD=
 YOUTUBE_API_KEY=
 ```
 

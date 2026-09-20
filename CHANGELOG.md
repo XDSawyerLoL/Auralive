@@ -1,3 +1,22 @@
+# Aura Live 2.7.1 — Native Pro Suite
+
+## Diffusion native
+
+- Aura Native Broadcast passe en 0.4.0.
+- Gestion complète des scènes depuis Aura Studio : création, renommage, suppression et sélection.
+- Transitions Cut / Fondu configurables lors du changement de scène.
+- Replay buffer local réglable de 10 à 300 secondes avec sauvegarde instantanée en MKV.
+- Multistream jusqu’à trois destinations secondaires via un encodage unique FFmpeg `tee`.
+- Clés RTMP secondaires protégées par Windows DPAPI et jamais persistées en clair dans `engine.json`.
+- Guidage Live : Aura ouvre directement la configuration de diffusion lorsqu’aucune sortie n’est prête.
+
+## Distribution
+
+- Nouveau build Windows complet `AuraLive-2.7.1-Windows-Native-2026-09-20`.
+- Nouveau build Windows Lite `AuraLive-2.7.1-Windows-Native-LITE-2026-09-20`.
+- Nouvelle release indépendante `auralive-2.7.1-native`, sans modifier la release stable 2.7.
+- README et inventaire fonctionnel alignés sur Aura Native comme moteur par défaut ; OBS reste un mode de compatibilité.
+
 # Aura Live 1.2.0 — Neural Presence
 
 ## Conversation IA

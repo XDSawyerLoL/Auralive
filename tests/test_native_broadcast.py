@@ -22,6 +22,7 @@ def make_service(tmp_path):
     service.status_path = tmp_path / "status.json"
     service.config_path = tmp_path / "engine.json"
     service.stream_key_path = tmp_path / "stream-key.dpapi"
+    service.stream_destinations_path = tmp_path / "stream-destinations.dpapi"
     return service
 
 
@@ -155,3 +156,85 @@ def test_configure_output_keeps_engine_json_secret_empty(tmp_path, monkeypatch):
     assert result["stream_key_configured"] is True
     assert "vault-only-secret" not in json.dumps(result)
     assert "vault-only-secret" not in service.config_path.read_text(encoding="utf-8")
+
+
+
+def test_multistream_vault_redacts_secondary_stream_keys(tmp_path, monkeypatch):
+    service = make_service(tmp_path)
+    monkeypatch.setattr("app.services.native_broadcast.os.name", "nt")
+    monkeypatch.setattr(service, "_dpapi_protect", lambda payload: payload)
+    monkeypatch.setattr(service, "_dpapi_unprotect", lambda payload: payload)
+
+    service.configure_stream_destinations(
+        [
+            {
+                "id": "youtube",
+                "label": "YouTube",
+                "rtmp_url": "rtmps://a.rtmp.youtube.com/live2",
+                "stream_key": "secondary-super-secret",
+                "enabled": True,
+            }
+        ]
+    )
+
+    public = service.stream_destinations_public()
+    encrypted_payload = service.stream_destinations_path.read_bytes()
+
+    assert public == [
+        {
+            "id": "youtube",
+            "label": "YouTube",
+            "rtmp_url": "rtmps://a.rtmp.youtube.com/live2",
+            "enabled": True,
+            "stream_key_configured": True,
+        }
+    ]
+    assert "secondary-super-secret" not in json.dumps(public)
+    assert b"secondary-super-secret" in encrypted_payload
+
+
+def test_multistream_preserves_existing_secret_when_key_is_omitted(tmp_path, monkeypatch):
+    service = make_service(tmp_path)
+    monkeypatch.setattr("app.services.native_broadcast.os.name", "nt")
+    monkeypatch.setattr(service, "_dpapi_protect", lambda payload: payload)
+    monkeypatch.setattr(service, "_dpapi_unprotect", lambda payload: payload)
+
+    service.configure_stream_destinations(
+        [
+            {
+                "id": "youtube",
+                "label": "YouTube",
+                "rtmp_url": "rtmps://a.rtmp.youtube.com/live2",
+                "stream_key": "keep-me",
+                "enabled": True,
+            }
+        ]
+    )
+    service.configure_stream_destinations(
+        [
+            {
+                "id": "youtube",
+                "label": "YouTube",
+                "rtmp_url": "rtmps://a.rtmp.youtube.com/live2",
+                "stream_key": None,
+                "enabled": True,
+            }
+        ]
+    )
+
+    private = service._stream_destinations_private()
+    assert private[0]["stream_key"] == "keep-me"
+
+
+def test_native_command_allowlist_includes_pro_suite(tmp_path):
+    service = make_service(tmp_path)
+    for action in (
+        "replay.start",
+        "replay.stop",
+        "replay.save",
+        "scene.create",
+        "scene.rename",
+        "scene.remove",
+        "transition.update",
+    ):
+        service.command(action, auto_start=False)

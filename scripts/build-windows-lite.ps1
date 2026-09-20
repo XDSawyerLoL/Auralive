@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "AuraLive-2.7-Windows-Native-LITE-2026-09-20"
+$BuildId = "AuraLive-2.7.1-Windows-Native-LITE-2026-09-20"
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt

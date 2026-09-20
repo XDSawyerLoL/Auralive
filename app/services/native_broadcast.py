@@ -207,6 +207,7 @@ class NativeBroadcastService:
         self.config_path = self.runtime_dir / "engine.json"
         self.preview_path = self.runtime_dir / "preview.jpg"
         self.stream_key_path = self.runtime_dir / "stream-key.dpapi"
+        self.stream_destinations_path = self.runtime_dir / "stream-destinations.dpapi"
         self._process: subprocess.Popen[bytes] | None = None
         self._owns_process = False
         self._lock = threading.RLock()
@@ -263,6 +264,94 @@ class NativeBroadcastService:
     def clear_stream_secret(self) -> None:
         self.stream_key_path.unlink(missing_ok=True)
 
+    def _stream_destinations_private(self) -> list[dict[str, Any]]:
+        if os.name != "nt" or not self.stream_destinations_path.is_file():
+            return []
+        try:
+            decrypted = self._dpapi_unprotect(self.stream_destinations_path.read_bytes()).decode("utf-8")
+            rows = json.loads(decrypted)
+            return [dict(row) for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        except Exception:
+            return []
+
+    def stream_destinations_public(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": str(row.get("id") or ""),
+                "label": str(row.get("label") or "Destination"),
+                "rtmp_url": str(row.get("rtmp_url") or ""),
+                "enabled": bool(row.get("enabled", True)),
+                "stream_key_configured": bool(str(row.get("stream_key") or "").strip()),
+            }
+            for row in self._stream_destinations_private()
+        ]
+
+    def configure_stream_destinations(self, rows: list[dict[str, Any]] | None) -> None:
+        if rows is None:
+            return
+        if os.name != "nt":
+            raise RuntimeError("Le coffre multistream chiffré est disponible sous Windows")
+        if len(rows) > 3:
+            raise ValueError("Aura Live accepte jusqu’à 3 destinations secondaires")
+
+        existing = {
+            str(row.get("id") or ""): row
+            for row in self._stream_destinations_private()
+            if str(row.get("id") or "")
+        }
+        clean: list[dict[str, Any]] = []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            destination_id = re.sub(r"[^a-zA-Z0-9_-]", "", str(row.get("id") or f"dest-{index + 1}"))[:40]
+            if not destination_id:
+                destination_id = f"dest-{index + 1}"
+            label = " ".join(str(row.get("label") or f"Destination {index + 1}").split()).strip()[:80]
+            rtmp_url = str(row.get("rtmp_url") or "").strip()
+            enabled = bool(row.get("enabled", True))
+            if not (rtmp_url.startswith("rtmp://") or rtmp_url.startswith("rtmps://")):
+                raise ValueError(f"URL RTMP invalide pour {label}")
+            raw_key = row.get("stream_key")
+            previous = existing.get(destination_id) or {}
+            stream_key = (
+                str(raw_key).strip()
+                if raw_key is not None and str(raw_key).strip()
+                else str(previous.get("stream_key") or "").strip()
+            )
+            if bool(row.get("clear_stream_key", False)):
+                stream_key = ""
+            if enabled and not stream_key:
+                raise ValueError(f"Clé de stream manquante pour {label}")
+            clean.append(
+                {
+                    "id": destination_id,
+                    "label": label or f"Destination {index + 1}",
+                    "rtmp_url": rtmp_url,
+                    "stream_key": stream_key,
+                    "enabled": enabled,
+                }
+            )
+
+        if not clean:
+            self.stream_destinations_path.unlink(missing_ok=True)
+            return
+        encrypted = self._dpapi_protect(json.dumps(clean, ensure_ascii=False).encode("utf-8"))
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        temporary = self.stream_destinations_path.with_suffix(".tmp")
+        temporary.write_bytes(encrypted)
+        os.replace(temporary, self.stream_destinations_path)
+
+    def _stream_destination_targets(self) -> list[str]:
+        targets: list[str] = []
+        for row in self._stream_destinations_private():
+            if not bool(row.get("enabled", True)):
+                continue
+            url = str(row.get("rtmp_url") or "").strip()
+            key = str(row.get("stream_key") or "").strip()
+            if url and key:
+                targets.append(f"{url.rstrip('/')}/{key.lstrip('/')}")
+        return targets
+
     def output_configuration(self) -> dict[str, Any]:
         rtmp_url = "rtmp://live.twitch.tv/app"
         try:
@@ -277,6 +366,8 @@ class NativeBroadcastService:
         return {
             "rtmp_url": rtmp_url,
             "stream_key_configured": self.stream_secret_configured(),
+            "destinations": self.stream_destinations_public(),
+            "multistream_enabled": any(row.get("enabled") for row in self.stream_destinations_public()),
             "vault": "windows-dpapi" if os.name == "nt" else "environment-only",
         }
 
@@ -286,6 +377,7 @@ class NativeBroadcastService:
         stream_key: str | None = None,
         *,
         clear_stream_key: bool = False,
+        destinations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         rtmp_url = str(rtmp_url or "").strip()
         if not (rtmp_url.startswith("rtmp://") or rtmp_url.startswith("rtmps://")):
@@ -295,6 +387,7 @@ class NativeBroadcastService:
             self.clear_stream_secret()
         elif stream_key is not None and str(stream_key).strip():
             self.set_stream_secret(str(stream_key))
+        self.configure_stream_destinations(destinations)
 
         # On first use, start the native engine once so it creates a complete
         # secret-free configuration. Never create a partial ProjectState JSON.
@@ -968,6 +1061,11 @@ class NativeBroadcastService:
                 env["AURA_NATIVE_STREAM_KEY"] = stream_secret
             else:
                 env.pop("AURA_NATIVE_STREAM_KEY", None)
+            destinations = self._stream_destination_targets()
+            if destinations:
+                env["AURA_NATIVE_STREAM_DESTINATIONS"] = json.dumps(destinations, ensure_ascii=False)
+            else:
+                env.pop("AURA_NATIVE_STREAM_DESTINATIONS", None)
 
             creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self._process = subprocess.Popen(
@@ -1018,7 +1116,14 @@ class NativeBroadcastService:
             "record.stop",
             "preview.start",
             "preview.stop",
+            "replay.start",
+            "replay.stop",
+            "replay.save",
             "scene.select",
+            "scene.create",
+            "scene.rename",
+            "scene.remove",
+            "transition.update",
             "runtime.refresh",
             "source.transform",
             "source.visibility",
@@ -1046,6 +1151,9 @@ class NativeBroadcastService:
 
         reload_actions = {
             "scene.select",
+            "scene.create",
+            "scene.remove",
+            "replay.save",
             "source.transform",
             "source.visibility",
             "source.add",

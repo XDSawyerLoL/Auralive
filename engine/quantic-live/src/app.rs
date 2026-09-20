@@ -10,7 +10,7 @@ use eframe::egui::{self, TextureHandle};
 use crate::{
     control,
     ffmpeg,
-    model::{Encoder, ProjectState, Source, SourceKind, SourceTransform},
+    model::{Encoder, ProjectState, Source, SourceKind, SourceTransform, TransitionKind},
 };
 
 pub struct QuanticLiveApp {
@@ -20,6 +20,9 @@ pub struct QuanticLiveApp {
     pub(crate) stream_process: Option<Child>,
     pub(crate) record_process: Option<Child>,
     pub(crate) recording_file: Option<PathBuf>,
+    pub(crate) replay_process: Option<Child>,
+    pub(crate) replay_dir: Option<PathBuf>,
+    pub(crate) last_replay_file: Option<PathBuf>,
     pub(crate) status: String,
     pub(crate) settings_open: bool,
     pub(crate) add_source_open: bool,
@@ -46,6 +49,14 @@ impl QuanticLiveApp {
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
             .unwrap_or_default();
+        project.settings.stream_destinations = std::env::var("AURA_NATIVE_STREAM_DESTINATIONS")
+            .ok()
+            .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .collect();
         let ffmpeg_ok = ffmpeg::ffmpeg_available(&project.settings.ffmpeg_path);
         let detected_encoder = if ffmpeg_ok {
             ffmpeg::detect_encoder(&project.settings.ffmpeg_path)
@@ -59,6 +70,9 @@ impl QuanticLiveApp {
             stream_process: None,
             record_process: None,
             recording_file: None,
+            replay_process: None,
+            replay_dir: None,
+            last_replay_file: None,
             status: "Prêt".into(),
             settings_open: false,
             add_source_open: false,
@@ -125,6 +139,7 @@ impl QuanticLiveApp {
         let preview_was_active = self.preview.is_some();
         let stream_was_active = self.stream_process.is_some();
         let record_was_active = self.record_process.is_some();
+        let replay_was_active = self.replay_process.is_some();
 
         if let Some(mut preview) = self.preview.take() {
             preview.stop();
@@ -138,6 +153,11 @@ impl QuanticLiveApp {
         if let Some(mut child) = self.record_process.take() {
             ffmpeg::stop_gracefully(&mut child);
             self.recording_file = None;
+        }
+
+        if let Some(mut child) = self.replay_process.take() {
+            ffmpeg::stop_gracefully(&mut child);
+            self.replay_dir = None;
         }
 
         let Some(scene) = self.active_scene() else {
@@ -172,6 +192,16 @@ impl QuanticLiveApp {
                     self.recording_file = Some(file);
                 }
                 Err(err) => errors.push(format!("REC: {err}")),
+            }
+        }
+
+        if replay_was_active {
+            match ffmpeg::start_replay_buffer(&self.project.settings, &scene, audio) {
+                Ok((child, directory)) => {
+                    self.replay_process = Some(child);
+                    self.replay_dir = Some(directory);
+                }
+                Err(err) => errors.push(format!("replay: {err}")),
             }
         }
 
@@ -280,6 +310,61 @@ impl QuanticLiveApp {
         }
     }
 
+    pub(crate) fn toggle_replay_buffer(&mut self) {
+        if let Some(mut child) = self.replay_process.take() {
+            ffmpeg::stop_gracefully(&mut child);
+            self.replay_dir = None;
+            self.status = "Replay buffer arrêté".into();
+            return;
+        }
+
+        let Some(scene) = self.active_scene() else {
+            self.status = "Aucune scène active".into();
+            return;
+        };
+        let audio = self.audio_mix();
+        match ffmpeg::start_replay_buffer(&self.project.settings, &scene, audio) {
+            Ok((child, directory)) => {
+                self.replay_process = Some(child);
+                self.replay_dir = Some(directory);
+                self.status = format!("Replay buffer actif · {} s", self.project.settings.replay_seconds);
+            }
+            Err(err) => self.status = err.to_string(),
+        }
+    }
+
+    fn save_replay_clip(&mut self) {
+        let was_active = self.replay_process.is_some();
+        if let Some(mut child) = self.replay_process.take() {
+            ffmpeg::stop_gracefully(&mut child);
+        }
+        let Some(directory) = self.replay_dir.clone() else {
+            self.status = "Active d’abord le replay buffer.".into();
+            return;
+        };
+
+        match ffmpeg::save_replay_clip(&self.project.settings, &directory) {
+            Ok(path) => {
+                self.last_replay_file = Some(path.clone());
+                self.status = format!("Clip replay sauvegardé · {}", path.display());
+            }
+            Err(err) => self.status = err.to_string(),
+        }
+
+        if was_active {
+            if let Some(scene) = self.active_scene() {
+                let audio = self.audio_mix();
+                match ffmpeg::start_replay_buffer(&self.project.settings, &scene, audio) {
+                    Ok((child, directory)) => {
+                        self.replay_process = Some(child);
+                        self.replay_dir = Some(directory);
+                    }
+                    Err(err) => self.status = format!("{} · relance replay impossible: {err}", self.status),
+                }
+            }
+        }
+    }
+
     fn poll_children(&mut self) {
         let stream_finished = self
             .stream_process
@@ -299,6 +384,17 @@ impl QuanticLiveApp {
         if record_finished {
             self.record_process = None;
             self.status = "L’enregistrement s’est arrêté.".into();
+        }
+
+        let replay_finished = self
+            .replay_process
+            .as_mut()
+            .map(|child| matches!(child.try_wait(), Ok(Some(_))))
+            .unwrap_or(false);
+        if replay_finished {
+            self.replay_process = None;
+            self.replay_dir = None;
+            self.status = "Le replay buffer s’est arrêté.".into();
         }
     }
 
@@ -345,6 +441,19 @@ impl QuanticLiveApp {
             "record.stop" if self.record_process.is_some() => self.toggle_recording(),
             "preview.start" if self.preview.is_none() => self.toggle_preview(),
             "preview.stop" if self.preview.is_some() => self.toggle_preview(),
+            "replay.start" if self.replay_process.is_none() => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        if let Some(seconds) = payload.get("seconds").and_then(|value| value.as_u64()) {
+                            self.project.settings.replay_seconds = (seconds as u32).clamp(10, 300);
+                            let _ = self.persist_project();
+                        }
+                    }
+                }
+                self.toggle_replay_buffer();
+            }
+            "replay.stop" if self.replay_process.is_some() => self.toggle_replay_buffer(),
+            "replay.save" => self.save_replay_clip(),
             "scene.select" => {
                 if let Some(name) = command.value.as_deref() {
                     if let Some(index) = self
@@ -359,6 +468,78 @@ impl QuanticLiveApp {
                         self.rebuild_active_outputs("Scène changée");
                     } else {
                         self.status = format!("Scène introuvable · {name}");
+                    }
+                }
+            }
+            "scene.create" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let name = payload.get("name").and_then(|value| value.as_str()).unwrap_or("").trim();
+                        if !name.is_empty() && !self.project.scenes.iter().any(|scene| scene.name.eq_ignore_ascii_case(name)) {
+                            let id = self.project.scenes.iter().map(|scene| scene.id).max().unwrap_or(0) + 1;
+                            self.project.scenes.push(crate::model::Scene { id, name: name.to_owned(), sources: vec![] });
+                            self.project.selected_scene = self.project.scenes.len() - 1;
+                            self.status = format!("Scène créée · {name}");
+                            let _ = self.persist_project();
+                            self.rebuild_active_outputs("Scène créée");
+                        } else {
+                            self.status = "Nom de scène vide ou déjà utilisé".into();
+                        }
+                    }
+                }
+            }
+            "scene.rename" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let current = payload.get("current").and_then(|value| value.as_str()).unwrap_or("").trim();
+                        let name = payload.get("name").and_then(|value| value.as_str()).unwrap_or("").trim();
+                        let duplicate = self.project.scenes.iter().any(|scene| scene.name.eq_ignore_ascii_case(name) && !scene.name.eq_ignore_ascii_case(current));
+                        if !name.is_empty() && !duplicate {
+                            if let Some(scene) = self.project.scenes.iter_mut().find(|scene| scene.name.eq_ignore_ascii_case(current)) {
+                                scene.name = name.to_owned();
+                                self.status = format!("Scène renommée · {name}");
+                                let _ = self.persist_project();
+                            }
+                        } else {
+                            self.status = "Nom de scène vide ou déjà utilisé".into();
+                        }
+                    }
+                }
+            }
+            "scene.remove" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let name = payload.get("name").and_then(|value| value.as_str()).unwrap_or("").trim();
+                        if self.project.scenes.len() <= 1 {
+                            self.status = "Aura doit conserver au moins une scène".into();
+                        } else if let Some(index) = self.project.scenes.iter().position(|scene| scene.name.eq_ignore_ascii_case(name)) {
+                            self.project.scenes.remove(index);
+                            if self.project.selected_scene >= self.project.scenes.len() {
+                                self.project.selected_scene = self.project.scenes.len() - 1;
+                            } else if index < self.project.selected_scene {
+                                self.project.selected_scene -= 1;
+                            }
+                            let _ = self.persist_project();
+                            self.rebuild_active_outputs("Scène supprimée");
+                        }
+                    }
+                }
+            }
+            "transition.update" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        if let Some(kind) = payload.get("kind").and_then(|value| value.as_str()).and_then(TransitionKind::from_slug) {
+                            self.project.settings.transition = kind;
+                        }
+                        if let Some(duration) = payload.get("duration_ms").and_then(|value| value.as_u64()) {
+                            self.project.settings.transition_ms = (duration as u32).clamp(80, 3000);
+                        }
+                        let _ = self.persist_project();
+                        self.status = format!(
+                            "Transition · {} {} ms",
+                            self.project.settings.transition.label(),
+                            self.project.settings.transition_ms
+                        );
                     }
                 }
             }
@@ -561,11 +742,18 @@ impl QuanticLiveApp {
         control::write_status(&control::EngineStatus {
             ok: true,
             engine: "aura-native-broadcast",
-            version: "0.3.0",
+            version: "0.4.0",
             last_command_id: self.last_command_id,
             streaming: self.stream_process.is_some(),
             recording: self.record_process.is_some(),
             preview: self.preview.is_some(),
+            replay_buffering: self.replay_process.is_some(),
+            replay_seconds: self.project.settings.replay_seconds,
+            last_replay_file: self.last_replay_file.as_ref().map(|path| path.display().to_string()).unwrap_or_default(),
+            transition: self.project.settings.transition.label(),
+            transition_ms: self.project.settings.transition_ms,
+            multistream_outputs: self.project.settings.stream_destinations.len()
+                + if !self.project.settings.stream_key.trim().is_empty() { 1 } else { 0 },
             scene,
             scenes,
             sources,
@@ -613,6 +801,9 @@ impl Drop for QuanticLiveApp {
             ffmpeg::stop_gracefully(&mut child);
         }
         if let Some(mut child) = self.record_process.take() {
+            ffmpeg::stop_gracefully(&mut child);
+        }
+        if let Some(mut child) = self.replay_process.take() {
             ffmpeg::stop_gracefully(&mut child);
         }
         let _ = self.persist_project();

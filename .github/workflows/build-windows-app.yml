@@ -97,7 +97,7 @@ jobs:
             throw "Le FFmpeg livre ne contient pas gfxcapture."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7-Windows-Native-2026-09-20") {
+          if ($buildId -ne "AuraLive-2.7.1-Windows-Native-2026-09-20") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\AuraLive\.env")) {
@@ -179,7 +179,7 @@ jobs:
               throw "AuraLive-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "AuraLive-2.7-Windows-Native-2026-09-20") {
+            if ($startup -notmatch "AuraLive-2.7.1-Windows-Native-2026-09-20") {
               throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
@@ -265,7 +265,7 @@ jobs:
               try {
                 $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
                 if ($nativeStatus.responsive -eq $true -and
-                    $nativeStatus.engine.version -eq "0.3.0" -and
+                    $nativeStatus.engine.version -eq "0.4.0" -and
                     $nativeStatus.engine.ffmpeg_ok -eq $true -and
                     $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
                     $nativeStatus.system_audio.backend_present -eq $true) {
@@ -277,7 +277,7 @@ jobs:
             }
             if (-not $nativeReady) {
               try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Aura Native 0.3.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
+              throw "Aura Native 0.4.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
             }
 
             $vaultSecret = "AURA-CI-SECRET-NOT-REAL"
