@@ -45,6 +45,7 @@ pub struct EngineStatus<'a> {
     pub canvas_width: u32,
     pub canvas_height: u32,
     pub ffmpeg_ok: bool,
+    pub capture_backend: &'a str,
     pub encoder: &'a str,
     pub message: &'a str,
 }
