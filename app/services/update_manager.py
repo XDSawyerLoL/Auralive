@@ -48,8 +48,12 @@ def _download_bytes(url: str, timeout: float = 15.0) -> bytes:
 
 class UpdateManager:
     def __init__(self) -> None:
-        self.directory = Path(RUNTIME_DIR) / "updates"
-        self.directory.mkdir(parents=True, exist_ok=True)
+        local_app_data = os.getenv("LOCALAPPDATA") if os.name == "nt" else ""
+        self.directory = (
+            Path(local_app_data) / "AuraLive" / "updates"
+            if local_app_data
+            else Path(RUNTIME_DIR) / "updates"
+        )
         self._lock = threading.RLock()
         self._last: dict[str, Any] | None = None
 
@@ -65,7 +69,8 @@ class UpdateManager:
         sums_asset: dict[str, Any] | None = None
         for asset in assets:
             name = str(asset.get("name") or "")
-            if _INSTALLER_PATTERN.match(name):
+            installer_match = _INSTALLER_PATTERN.match(name)
+            if installer_match and installer_match.group(1) == version:
                 installer = asset
             elif name.casefold() == "sha256sums.txt":
                 sums_asset = asset
@@ -143,6 +148,7 @@ class UpdateManager:
                 raise RuntimeError("Installateur de mise à jour non reconnu.")
 
             expected = self._expected_sha256(info)
+            self.directory.mkdir(parents=True, exist_ok=True)
             target = self.directory / name
             partial = target.with_suffix(target.suffix + ".part")
             partial.unlink(missing_ok=True)
