@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 const pageTitles = {
-  dashboard: "Accueil", commands: "Mes commandes", announcements: "Mes annonces",
+  dashboard: "Studio", commands: "Mes commandes", announcements: "Mes annonces",
   notifications: "Notifications", protections: "Protections", community: "Communauté",
   loyalty: "Fidélité & niveaux", shop: "Boutique", rewards: "Points Twitch",
   giveaway: "Concours", queue: "Play with viewers", polls: "Sondages & prédictions",

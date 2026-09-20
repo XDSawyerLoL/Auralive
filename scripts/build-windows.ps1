@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05"
+$BuildId = "AuraLive-2.7-Windows-Native-2026-09-20"
 $KokoroModelUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
 $KokoroVoicesUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
 
@@ -31,6 +31,7 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     --collect-all "misaki" `
     --collect-all "espeakng_loader" `
     --collect-all "soundfile" `
+    --collect-all "pyaudiowpatch" `
     --collect-all "onnxruntime" `
     --collect-all "language_tags" `
     --collect-all "csvw" `

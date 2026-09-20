@@ -111,6 +111,12 @@ class Settings:
     obs_port: int = _int("OBS_PORT", _OBS_DISCOVERED_PORT)
     obs_password: str = os.getenv("OBS_PASSWORD") or _OBS_DISCOVERED_PASSWORD
 
+    # Backend de diffusion: "obs" conserve le comportement historique.
+    # "native" active Aura Native Broadcast, le moteur Rust local.
+    broadcast_engine: str = os.getenv("AURA_BROADCAST_ENGINE", "native").strip().lower()
+    native_engine_autostart: bool = _bool("AURA_NATIVE_ENGINE_AUTOSTART", True)
+    native_engine_exe: str = os.getenv("AURA_NATIVE_ENGINE_EXE", "").strip()
+
     youtube_api_key: str = os.getenv("YOUTUBE_API_KEY", "")
     media_dir: Path = _runtime_path("MEDIA_DIR", "data/media")
 

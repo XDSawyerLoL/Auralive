@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import webbrowser
@@ -9,10 +10,11 @@ from typing import Any
 
 import uvicorn
 from fastapi import Body, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.config import BASE_DIR, RUNTIME_DIR
 from app.main_v2 import app, aura, db, response_sync, settings, voice_input
+from app.services.native_broadcast import NativeBroadcastService
 from app.services.voice_identity_lock import install_voice_identity_lock
 from app.services.voice_realtime import install_voice_realtime
 
@@ -20,7 +22,46 @@ logger = logging.getLogger("aura-live-v3")
 
 install_voice_identity_lock(aura)
 voice_realtime = install_voice_realtime(aura, db, voice_input)
-app.version = "2.5.2-alpha"
+native_broadcast = NativeBroadcastService(settings)
+
+
+async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
+    if (
+        not native_broadcast.selected
+        or not native_broadcast.audio_bus_active()
+        or not isinstance(event, dict)
+    ):
+        return
+
+    event_type = str(event.get("type") or "").strip().lower()
+    wants_voice = (
+        event_type in {"tts", "avatar_voice", "aura_message", "avatar_test"}
+        and event.get("speak", True) is not False
+    )
+
+    if wants_voice and not str(event.get("audio_url") or "").strip():
+        text = " ".join(str(event.get("text") or event.get("message") or "").split()).strip()
+        if text:
+            try:
+                audio_url = await aura.avatar_audio.synthesize(
+                    text,
+                    voice=str(event.get("voice") or ""),
+                    rate=float(event.get("rate", 1.0) or 1.0),
+                    pitch=float(event.get("pitch", 1.0) or 1.0),
+                    volume=float(event.get("volume", 1.0) or 1.0),
+                    context="native-broadcast",
+                )
+                if audio_url:
+                    event["audio_url"] = audio_url
+                    event["audio_engine"] = str(aura.avatar_audio.last_engine or "")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Synthèse audio native non bloquante impossible: %s", exc)
+
+    native_broadcast.enqueue_overlay_audio(event)
+
+
+aura.overlay.subscribe(_native_overlay_audio_listener)
+app.version = "2.7.0-alpha"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -114,6 +155,446 @@ async def voice_control_status_v3() -> dict[str, Any]:
         "local_voice_mode": True,
         "gemini_required": False,
     }
+
+
+@app.get("/api/broadcast/status")
+async def broadcast_status_v3() -> dict[str, Any]:
+    native = await asyncio.to_thread(native_broadcast.status)
+    mode = str(settings.broadcast_engine or "obs").lower()
+
+    if mode != "obs":
+        engine = dict(native.get("engine") or {})
+        return {
+            **native,
+            "backend": "native",
+            "streaming": bool(engine.get("streaming")),
+            "recording": bool(engine.get("recording")),
+            "preview": bool(engine.get("preview")),
+            "scene": str(engine.get("scene") or ""),
+            "scenes": list(engine.get("scenes") or []),
+            "sources": list(engine.get("sources") or []),
+            "encoder": str(engine.get("encoder") or ""),
+            "ffmpeg_ok": bool(engine.get("ffmpeg_ok")),
+        }
+
+    obs_status: dict[str, Any] = {
+        "connected": False,
+        "streaming": False,
+        "recording": False,
+        "scene": "",
+    }
+    if settings.obs_enabled:
+        try:
+            stream = await aura.obs.call("GetStreamStatus")
+            record = await aura.obs.call("GetRecordStatus")
+            scene = await aura.obs.call("GetCurrentProgramScene")
+            scenes_payload = await aura.obs.call("GetSceneList")
+            obs_status = {
+                "connected": True,
+                "streaming": bool(stream.get("outputActive")),
+                "recording": bool(record.get("outputActive")),
+                "scene": str(scene.get("currentProgramSceneName") or ""),
+                "scenes": [
+                    str(item.get("sceneName") or "")
+                    for item in list(scenes_payload.get("scenes") or [])
+                    if str(item.get("sceneName") or "").strip()
+                ],
+            }
+        except Exception as exc:  # noqa: BLE001
+            obs_status["error"] = str(exc or exc.__class__.__name__)[:240]
+
+    return {
+        **native,
+        "backend": "obs",
+        "streaming": bool(obs_status.get("streaming")),
+        "recording": bool(obs_status.get("recording")),
+        "preview": False,
+        "scene": str(obs_status.get("scene") or ""),
+        "scenes": list(obs_status.get("scenes") or []),
+        "sources": [],
+        "obs": obs_status,
+    }
+
+
+@app.post("/api/broadcast/mode/{mode}")
+async def broadcast_mode_v3(mode: str) -> dict[str, Any]:
+    mode = str(mode or "").strip().lower()
+    if mode not in {"obs", "native"}:
+        raise HTTPException(status_code=422, detail="Le moteur doit être 'obs' ou 'native'")
+
+    _write_runtime_env({"AURA_BROADCAST_ENGINE": mode})
+    os.environ["AURA_BROADCAST_ENGINE"] = mode
+    settings.broadcast_engine = mode
+
+    if mode == "native":
+        return await asyncio.to_thread(native_broadcast.start)
+
+    await asyncio.to_thread(native_broadcast.stop)
+    return await asyncio.to_thread(native_broadcast.status)
+
+
+@app.post("/api/broadcast/engine/start")
+async def broadcast_engine_start_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.start)
+
+
+@app.post("/api/broadcast/engine/stop")
+async def broadcast_engine_stop_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.stop)
+
+
+async def _broadcast_command(action: str, value: str | None = None) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() == "obs":
+        if not settings.obs_enabled:
+            raise HTTPException(status_code=503, detail="OBS est désactivé ou non configuré")
+        try:
+            if action == "stream.start":
+                await aura.obs.call("StartStream")
+            elif action == "stream.stop":
+                await aura.obs.call("StopStream")
+            elif action == "record.start":
+                await aura.obs.call("StartRecord")
+            elif action == "record.stop":
+                await aura.obs.call("StopRecord")
+            elif action == "scene.select":
+                if not value:
+                    raise ValueError("Nom de scène requis")
+                await aura.obs.set_scene(value)
+            elif action in {"preview.start", "preview.stop", "runtime.refresh"}:
+                pass
+            elif action in {"source.transform", "source.visibility"}:
+                raise ValueError("L’édition visuelle des sources exige Aura Native Broadcast")
+            else:
+                raise ValueError(f"Commande de diffusion inconnue: {action}")
+            return await broadcast_status_v3()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Commande OBS %s impossible: %s", action, exc)
+            raise HTTPException(status_code=503, detail=str(exc) or exc.__class__.__name__) from exc
+
+    result = await asyncio.to_thread(native_broadcast.command, action, value)
+    if result.get("error") == "native_engine_missing":
+        raise HTTPException(
+            status_code=503,
+            detail="Aura Native Broadcast n'est pas encore compilé ou installé.",
+        )
+    return await broadcast_status_v3()
+
+
+@app.post("/api/broadcast/stream/start")
+async def broadcast_stream_start_v3() -> dict[str, Any]:
+    return await _broadcast_command("stream.start")
+
+
+@app.post("/api/broadcast/stream/stop")
+async def broadcast_stream_stop_v3() -> dict[str, Any]:
+    return await _broadcast_command("stream.stop")
+
+
+@app.post("/api/broadcast/record/start")
+async def broadcast_record_start_v3() -> dict[str, Any]:
+    return await _broadcast_command("record.start")
+
+
+@app.post("/api/broadcast/record/stop")
+async def broadcast_record_stop_v3() -> dict[str, Any]:
+    return await _broadcast_command("record.stop")
+
+
+@app.post("/api/broadcast/preview/start")
+async def broadcast_preview_start_v3() -> dict[str, Any]:
+    return await _broadcast_command("preview.start")
+
+
+@app.get("/api/broadcast/system-audio.pcm")
+async def broadcast_system_audio_pcm_v3() -> StreamingResponse:
+    async def pcm_stream():
+        while True:
+            try:
+                chunk = await asyncio.to_thread(native_broadcast.system_audio_chunk, 19200)
+                yield chunk
+                await asyncio.sleep(0.10)
+            except asyncio.CancelledError:
+                raise
+
+    return StreamingResponse(
+        pcm_stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+@app.get("/api/broadcast/audio.pcm")
+async def broadcast_native_audio_pcm_v3() -> StreamingResponse:
+    async def pcm_stream():
+        while True:
+            try:
+                chunk = await asyncio.to_thread(native_broadcast.native_audio_chunk, 19200)
+                yield chunk
+                await asyncio.sleep(0.10)
+            except asyncio.CancelledError:
+                raise
+
+    return StreamingResponse(
+        pcm_stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+@app.get("/api/broadcast/preview.mjpeg")
+async def broadcast_preview_mjpeg_v3() -> StreamingResponse:
+    async def frames():
+        boundary = b"--frame\r\n"
+        last_mtime = 0
+        while True:
+            try:
+                stat = native_broadcast.preview_path.stat()
+                mtime = stat.st_mtime_ns
+                if mtime != last_mtime:
+                    payload = await asyncio.to_thread(native_broadcast.preview_path.read_bytes)
+                    if payload.startswith(b"\xff\xd8") and payload.endswith(b"\xff\xd9"):
+                        last_mtime = mtime
+                        yield (
+                            boundary
+                            + b"Content-Type: image/jpeg\r\n"
+                            + f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
+                            + payload
+                            + b"\r\n"
+                        )
+                await asyncio.sleep(0.06)
+            except asyncio.CancelledError:
+                raise
+            except OSError:
+                await asyncio.sleep(0.10)
+
+    return StreamingResponse(
+        frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+@app.post("/api/broadcast/preview/stop")
+async def broadcast_preview_stop_v3() -> dict[str, Any]:
+    return await _broadcast_command("preview.stop")
+
+
+@app.get("/api/broadcast/discover")
+async def broadcast_discover_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.discover_sources)
+
+
+@app.post("/api/broadcast/pick-image")
+async def broadcast_pick_image_v3() -> dict[str, Any]:
+    path = await asyncio.to_thread(native_broadcast.pick_image)
+    return {"ok": bool(path), "path": path}
+
+
+@app.get("/api/broadcast/browser-source/{source_id}.mjpeg")
+async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse:
+    if source_id <= 0:
+        raise HTTPException(status_code=404, detail="Source inconnue")
+
+    async def frames():
+        boundary = b"--frame\r\n"
+        while True:
+            try:
+                frame = await asyncio.to_thread(native_broadcast.browser_frame, source_id)
+                if frame:
+                    yield (
+                        boundary
+                        + b"Content-Type: image/jpeg\r\n"
+                        + f"Content-Length: {len(frame)}\r\n\r\n".encode("ascii")
+                        + frame
+                        + b"\r\n"
+                    )
+                await asyncio.sleep(0.075)
+            except asyncio.CancelledError:
+                raise
+
+    return StreamingResponse(
+        frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+async def _ensure_native_source_editable() -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+    return await broadcast_status_v3()
+
+
+@app.get("/api/broadcast/output")
+async def broadcast_output_settings_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.output_configuration)
+
+
+@app.put("/api/broadcast/output")
+async def broadcast_output_settings_update_v3(
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "native").lower() != "native":
+        raise HTTPException(
+            status_code=409,
+            detail="Passe en mode Aura Native pour modifier la sortie de diffusion",
+        )
+
+    state = await broadcast_status_v3()
+    if state.get("streaming") or state.get("recording"):
+        raise HTTPException(
+            status_code=409,
+            detail="Arrête le direct et l'enregistrement avant de modifier la destination RTMP",
+        )
+
+    rtmp_url = str(payload.get("rtmp_url") or "").strip()
+    stream_key_raw = payload.get("stream_key")
+    stream_key = None if stream_key_raw is None else str(stream_key_raw).strip()
+    clear_stream_key = bool(payload.get("clear_stream_key", False))
+
+    try:
+        result = await asyncio.to_thread(
+            native_broadcast.configure_output,
+            rtmp_url,
+            stream_key,
+            clear_stream_key=clear_stream_key,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        **result,
+        "engine": (await broadcast_status_v3()).get("engine", {}),
+    }
+
+
+@app.put("/api/broadcast/audio")
+async def broadcast_audio_mix_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour régler le mix audio")
+
+    def gain(name: str, default: float) -> float:
+        try:
+            return max(0.0, min(2.0, float(payload.get(name, default))))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=f"Valeur audio {name} invalide") from exc
+
+    state = await broadcast_status_v3()
+    engine = dict(state.get("engine") or {})
+    value = {
+        "mic_volume": gain("mic_volume", float(engine.get("mic_volume", 0.82) or 0.82)),
+        "system_volume": gain("system_volume", float(engine.get("system_volume", 0.72) or 0.72)),
+        "aura_volume": gain("aura_volume", float(engine.get("desktop_volume", 0.72) or 0.72)),
+        "mic_muted": bool(payload.get("mic_muted", engine.get("mic_muted", False))),
+        "system_muted": bool(payload.get("system_muted", engine.get("system_muted", False))),
+        "aura_muted": bool(payload.get("aura_muted", engine.get("desktop_muted", False))),
+    }
+    return await _broadcast_command("audio.update", json.dumps(value, separators=(",", ":")))
+
+
+@app.post("/api/broadcast/source")
+async def broadcast_source_add_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    state = await _ensure_native_source_editable()
+    if len(list(state.get("sources") or [])) >= 24:
+        raise HTTPException(status_code=422, detail="Maximum de 24 sources par scène")
+
+    kind = str(payload.get("kind") or "").strip().lower()
+    allowed = {"desktop", "window", "game", "webcam", "image", "text", "browser"}
+    if kind not in allowed:
+        raise HTTPException(status_code=422, detail="Type de source inconnu")
+    if kind == "desktop" and any(str(source.get("kind") or "") == "Écran" for source in list(state.get("sources") or [])):
+        raise HTTPException(status_code=409, detail="Cette scène possède déjà une capture d'écran")
+
+    name = " ".join(str(payload.get("name") or "").split()).strip()[:120]
+    target = str(payload.get("target") or "").strip()[:1000]
+    if kind == "browser" and not target:
+        target = "/overlay/avatar"
+    if kind in {"window", "game", "webcam", "image"} and not target:
+        raise HTTPException(status_code=422, detail="Cette source exige une cible")
+
+    value = {"kind": kind, "name": name, "target": target}
+    return await _broadcast_command("source.add", json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
+@app.patch("/api/broadcast/source/{source_id}")
+async def broadcast_source_configure_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    await _ensure_native_source_editable()
+
+    value: dict[str, Any] = {"id": source_id}
+    if "name" in payload:
+        value["name"] = " ".join(str(payload.get("name") or "").split()).strip()[:120]
+    if "target" in payload:
+        value["target"] = str(payload.get("target") or "").strip()[:1000]
+    return await _broadcast_command("source.configure", json.dumps(value, ensure_ascii=False, separators=(",", ":")))
+
+
+@app.delete("/api/broadcast/source/{source_id}")
+async def broadcast_source_remove_v3(source_id: int) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    await _ensure_native_source_editable()
+    return await _broadcast_command("source.remove", json.dumps({"id": source_id}, separators=(",", ":")))
+
+
+@app.post("/api/broadcast/scene")
+async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    scene = " ".join(str(payload.get("scene") or "").split()).strip()
+    if not scene:
+        raise HTTPException(status_code=422, detail="Nom de scène requis")
+    return await _broadcast_command("scene.select", scene)
+
+
+@app.put("/api/broadcast/source/{source_id}/transform")
+async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+    def number(name: str, default: float) -> float:
+        try:
+            return float(payload.get(name, default))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=f"Valeur {name} invalide") from exc
+
+    transform = {
+        "id": source_id,
+        "x": max(0.0, min(1.0, number("x", 0.0))),
+        "y": max(0.0, min(1.0, number("y", 0.0))),
+        "width": max(0.05, min(1.0, number("width", 1.0))),
+        "height": max(0.05, min(1.0, number("height", 1.0))),
+    }
+    if transform["x"] + transform["width"] > 1.0:
+        transform["x"] = max(0.0, 1.0 - transform["width"])
+    if transform["y"] + transform["height"] > 1.0:
+        transform["y"] = max(0.0, 1.0 - transform["height"])
+
+    return await _broadcast_command("source.transform", json.dumps(transform, separators=(",", ":")))
+
+
+@app.put("/api/broadcast/source/{source_id}/visibility")
+async def broadcast_source_visibility_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+    value = {"id": source_id, "visible": bool(payload.get("visible", True))}
+    return await _broadcast_command("source.visibility", json.dumps(value, separators=(",", ":")))
 
 
 @app.post("/api/voice/text")
@@ -278,7 +759,13 @@ async def _prewarm_kokoro() -> None:
 @asynccontextmanager
 async def _v3_lifespan(application):
     async with _original_v3_lifespan(application):
+        aura.overlay.subscribe(_native_overlay_audio_listener)
         kokoro_warmup = asyncio.create_task(_prewarm_kokoro(), name="kokoro-voice-warmup")
+        if settings.broadcast_engine == "native" and settings.native_engine_autostart:
+            try:
+                await asyncio.to_thread(native_broadcast.start)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Démarrage Aura Native Broadcast non bloquant impossible: %s", exc)
         try:
             yield
         finally:
@@ -288,7 +775,9 @@ async def _v3_lifespan(application):
                     await kokoro_warmup
                 except asyncio.CancelledError:
                     pass
+            aura.overlay.unsubscribe(_native_overlay_audio_listener)
             await voice_realtime.close()
+            await asyncio.to_thread(native_broadcast.close)
 
 
 app.router.lifespan_context = _v3_lifespan

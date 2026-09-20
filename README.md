@@ -78,7 +78,7 @@ Commandes principales :
 - Approbation, refus et lecture manuelle depuis le panneau.
 - Lecture dans l’overlay principal.
 
-### Alertes, médias et OBS
+### Alertes, médias et overlays
 
 - Alertes par événement avec texte, couleur, durée, image/GIF/vidéo, son et volume.
 - Animations d’entrée et de sortie, disposition et tests en direct.
@@ -103,7 +103,7 @@ http://localhost:8787/overlay/avatar
 
 ### Avatar vocal Mairaiy
 
-La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni avec la version : pose au repos en silence, pose bouche ouverte pendant la voix, sous-titres et halo animé. Dans OBS, ajoute une source navigateur en 700 × 1050 et active **Contrôler l’audio via OBS** afin que la synthèse vocale soit envoyée au mixage du live. Les réglages se trouvent dans **Avatar & voix**.
+La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni avec la version : pose au repos en silence, pose bouche ouverte pendant la voix, sous-titres et halo animé. Avec Aura Native, ajoute simplement le preset **Mairaiy** dans le Studio : le rendu navigateur est capturé localement et sa voix est injectée directement dans le bus audio Aura. OBS reste disponible uniquement en mode de compatibilité. Les réglages se trouvent dans **Avatar & voix**.
 
 ### Modération et sécurité
 
@@ -138,6 +138,80 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 - Clips automatiques selon des règles d’événements.
 - Pings privés au streamer et page communautaire locale `http://localhost:8787/channel`.
 - Connecteurs testables et API locale pour StreamDeck/Loupedeck.
+
+## Aura Native Broadcast
+
+Aura Live utilise désormais **Aura Native Broadcast 0.3.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
+
+```env
+AURA_BROADCAST_ENGINE=native
+AURA_NATIVE_ENGINE_AUTOSTART=true
+```
+
+Le moteur Rust `AuraNativeBroadcast.exe` et un build FFmpeg vérifié sont embarqués directement dans le package Windows. Aura vérifie que FFmpeg fournit **Windows Graphics Capture (`gfxcapture`)** et utilise automatiquement ce backend pour les sources Fenêtre/Jeu, avec repli GDI lorsque nécessaire.
+
+Le moteur est piloté localement depuis Aura. Aucun port de contrôle supplémentaire n’est exposé.
+
+### Compositeur natif 0.3
+
+Le même compositeur FFmpeg alimente l’aperçu, l’enregistrement et le direct :
+
+- écran Windows ;
+- fenêtre et jeu via Windows Graphics Capture quand disponible ;
+- webcam DirectShow ;
+- image locale ;
+- texte ;
+- navigateur headless ;
+- Mairaiy (`/overlay/avatar`) ;
+- overlays Aura (`/overlay` et variantes).
+
+Le Studio permet d’ajouter, configurer, masquer, supprimer, déplacer et redimensionner ces sources. Les scènes et la géométrie restent modifiables pendant Live/REC : Aura reconstruit proprement le graphe puis réactive automatiquement les sorties actives.
+
+### Mix audio natif
+
+Aura dispose de trois canaux indépendants :
+
+- **Micro** ;
+- **Son PC / jeu** via WASAPI loopback ;
+- **Aura / Mairaiy / alertes** via le bus PCM local.
+
+Chaque canal possède son volume et son mute dans le Studio. Le Live et le REC partagent les mêmes tranches audio afin d’éviter toute perte ou double consommation lorsqu’ils sont actifs simultanément.
+
+Les sources navigateur sont rendues localement par Chromium/Edge headless. Mairaiy et les sons d’alertes ne dépendent donc plus du mixeur audio d’OBS.
+
+### Coffre RTMP local
+
+La clé de stream n’est plus persistée en clair dans `engine.json`. Depuis **⚙ Diffusion** dans Aura Studio :
+
+- l’URL RTMP reste dans la configuration non sensible ;
+- la clé est protégée localement par Windows DPAPI ;
+- le fichier chiffré est `data/native_broadcast/stream-key.dpapi` ;
+- la clé n’est jamais réaffichée dans l’interface ni renvoyée par les API de statut ;
+- une ancienne clé trouvée en clair est migrée automatiquement vers le coffre puis retirée du JSON ;
+- aucun compte Microsoft ou service cloud n’est requis : DPAPI est utilisé localement par le profil Windows.
+
+### API locale de diffusion
+
+```text
+GET  /api/broadcast/status
+GET  /api/broadcast/output
+PUT  /api/broadcast/output
+POST /api/broadcast/mode/obs
+POST /api/broadcast/mode/native
+POST /api/broadcast/engine/start
+POST /api/broadcast/engine/stop
+POST /api/broadcast/stream/start
+POST /api/broadcast/stream/stop
+POST /api/broadcast/record/start
+POST /api/broadcast/record/stop
+POST /api/broadcast/preview/start
+POST /api/broadcast/preview/stop
+POST /api/broadcast/scene
+PUT  /api/broadcast/audio
+POST /api/broadcast/source
+PATCH /api/broadcast/source/{source_id}
+DELETE /api/broadcast/source/{source_id}
+```
 
 ## Installation Windows
 

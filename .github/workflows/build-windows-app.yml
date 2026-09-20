@@ -9,10 +9,13 @@ on:
       - fix/local-voice-status-and-twitch-setup
       - fix/mairaiy-natural-reactions
       - fix/oauth-voice-fastpath
+      - feature/aura-native-broadcast
     paths:
       - "app/**"
+      - "engine/quantic-live/**"
       - "config/**"
       - "scripts/build-windows.ps1"
+      - "scripts/install-aura-ffmpeg.ps1"
       - "requirements*.txt"
       - ".env.example"
       - ".github/workflows/build-windows-app.yml"
@@ -24,9 +27,19 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/quantic-live
+
+      - name: Build Aura Native Broadcast engine
+        shell: pwsh
+        run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
 
       - uses: actions/setup-python@v5
         with:
@@ -44,6 +57,19 @@ jobs:
         shell: pwsh
         run: .\scripts\build-windows.ps1 -Python python
 
+      - name: Bundle FFmpeg with Windows Graphics Capture
+        shell: pwsh
+        run: .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\AuraLive\ffmpeg"
+
+      - name: Embed Aura Native Broadcast
+        shell: pwsh
+        run: |
+          $engine = "engine\quantic-live\target\release\quantic-live.exe"
+          if (-not (Test-Path $engine)) {
+            throw "Le moteur natif compile est introuvable: $engine"
+          }
+          Copy-Item $engine "dist\AuraLive\AuraNativeBroadcast.exe" -Force
+
       - name: Verify Windows package
         shell: pwsh
         run: |
@@ -53,8 +79,18 @@ jobs:
           if (-not (Test-Path "dist\AuraLive\BUILD-ID.txt")) {
             throw "BUILD-ID.txt est absent du package."
           }
+          if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) {
+            throw "AuraNativeBroadcast.exe est absent du package."
+          }
+          if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) {
+            throw "Le FFmpeg Aura embarque est absent du package."
+          }
+          $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          if ($filters -notmatch "\bgfxcapture\b") {
+            throw "Le FFmpeg livre ne contient pas gfxcapture."
+          }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
+          if ($buildId -ne "AuraLive-2.7-Windows-Native-2026-09-20") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\AuraLive\.env")) {
@@ -65,6 +101,12 @@ jobs:
           }
           if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\avatar-test-fast.js")) {
             throw "Le test vocal autonome n'est pas embarque dans le package."
+          }
+          if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\aura-studio.js")) {
+            throw "Le controleur Aura Studio n'est pas embarque dans le package."
+          }
+          if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\aura-studio.css")) {
+            throw "Le theme glossy Aura Studio n'est pas embarque dans le package."
           }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
           if ($envContent -notmatch "AI_MODE=ollama" -or
@@ -130,7 +172,7 @@ jobs:
               throw "AuraLive-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
+            if ($startup -notmatch "AuraLive-2.7-Windows-Native-2026-09-20") {
               throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
@@ -200,6 +242,82 @@ jobs:
             if ($dashboard.Content -notmatch "avatar-test-fast.js") {
               throw "Le dashboard n'active pas le lecteur vocal autonome."
             }
+            if ($dashboard.Content -notmatch "aura-studio.js" -or $dashboard.Content -notmatch "Aura Live Studio") {
+              throw "Le nouveau Studio glossy n'est pas charge par le dashboard."
+            }
+
+            $broadcastStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
+            if ($broadcastStatus.mode -ne "native" -or $broadcastStatus.engine_available -ne $true) {
+              $broadcastStatus | ConvertTo-Json -Depth 8 | Write-Host
+              throw "Aura Native doit etre le moteur livre par defaut."
+            }
+
+            $nativeDeadline = (Get-Date).AddSeconds(15)
+            $nativeReady = $false
+            while ((Get-Date) -lt $nativeDeadline) {
+              try {
+                $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
+                if ($nativeStatus.responsive -eq $true -and
+                    $nativeStatus.engine.version -eq "0.3.0" -and
+                    $nativeStatus.engine.ffmpeg_ok -eq $true -and
+                    $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
+                    $nativeStatus.system_audio.backend_present -eq $true) {
+                  $nativeReady = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 400
+            }
+            if (-not $nativeReady) {
+              try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
+              throw "Aura Native 0.3.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
+            }
+
+            $vaultSecret = "AURA-CI-SECRET-NOT-REAL"
+            $vaultBody = @{
+              rtmp_url = "rtmp://live.twitch.tv/app"
+              stream_key = $vaultSecret
+            } | ConvertTo-Json
+            $vault = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/output" -Method Put -ContentType "application/json" -Body $vaultBody -TimeoutSec 20
+            if ($vault.stream_key_configured -ne $true -or $vault.vault -ne "windows-dpapi") {
+              $vault | ConvertTo-Json -Depth 8 | Write-Host
+              throw "Le coffre RTMP DPAPI n'a pas enregistre la cle."
+            }
+
+            $vaultPath = "dist\AuraLive\data\native_broadcast\stream-key.dpapi"
+            $engineConfigPath = "dist\AuraLive\data\native_broadcast\engine.json"
+            if (-not (Test-Path $vaultPath)) {
+              throw "Le fichier chiffre DPAPI de la cle RTMP est absent."
+            }
+            if (-not (Test-Path $engineConfigPath)) {
+              throw "engine.json est absent apres configuration RTMP."
+            }
+            $engineConfigText = Get-Content $engineConfigPath -Raw
+            if ($engineConfigText -match [regex]::Escape($vaultSecret)) {
+              throw "La cle RTMP apparait en clair dans engine.json."
+            }
+            $engineConfig = $engineConfigText | ConvertFrom-Json
+            if ([string]$engineConfig.settings.stream_key -ne "") {
+              throw "Le champ stream_key persiste encore dans engine.json."
+            }
+
+            $clearVaultBody = @{
+              rtmp_url = "rtmp://live.twitch.tv/app"
+              clear_stream_key = $true
+            } | ConvertTo-Json
+            $clearedVault = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/output" -Method Put -ContentType "application/json" -Body $clearVaultBody -TimeoutSec 20
+            if ($clearedVault.stream_key_configured -ne $false -or (Test-Path $vaultPath)) {
+              throw "La suppression de la cle RTMP du coffre local a echoue."
+            }
+
+            $obsFallback = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/obs" -Method Post -TimeoutSec 15
+            if ($obsFallback.mode -ne "obs") {
+              throw "Le mode de compatibilite OBS ne peut pas etre active."
+            }
+            $nativeReturn = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/native" -Method Post -TimeoutSec 15
+            if ($nativeReturn.mode -ne "native") {
+              throw "Impossible de revenir a Aura Native apres le fallback OBS."
+            }
 
             $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
             if ($setupStatus.gemini_required -ne $false -or $setupStatus.kokoro.ready -ne $true) {
@@ -235,7 +353,7 @@ jobs:
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-FastVoiceOAuth
+          name: AuraLive-Windows-Native-2.7
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true

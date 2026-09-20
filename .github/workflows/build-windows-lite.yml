@@ -6,8 +6,10 @@ on:
       - main
     paths:
       - "app/**"
+      - "engine/quantic-live/**"
       - "config/**"
       - "scripts/build-windows-lite.ps1"
+      - "scripts/install-aura-ffmpeg.ps1"
       - "requirements*.txt"
       - ".env.example"
       - ".github/workflows/build-windows-lite.yml"
@@ -19,6 +21,16 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/quantic-live
+
+      - name: Build Aura Native Broadcast engine
+        shell: pwsh
+        run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
 
       - uses: actions/setup-python@v5
         with:
@@ -36,13 +48,30 @@ jobs:
         shell: pwsh
         run: .\scripts\build-windows-lite.ps1 -Python python
 
+      - name: Bundle FFmpeg with Windows Graphics Capture
+        shell: pwsh
+        run: .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\AuraLive\ffmpeg"
+
+      - name: Embed Aura Native Broadcast
+        shell: pwsh
+        run: |
+          $engine = "engine\quantic-live\target\release\quantic-live.exe"
+          if (-not (Test-Path $engine)) {
+            throw "Le moteur natif compile est introuvable: $engine"
+          }
+          Copy-Item $engine "dist\AuraLive\AuraNativeBroadcast.exe" -Force
+
       - name: Verify Lite package
         shell: pwsh
         run: |
           if (-not (Test-Path "dist\AuraLive\AuraLive.exe")) { throw "AuraLive.exe absent." }
           if (-not (Test-Path "dist\AuraLive\BUILD-ID.txt")) { throw "BUILD-ID.txt absent." }
+          if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent." }
+          if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent." }
+          $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-LITE-2026-09-05") {
+          if ($buildId -ne "AuraLive-2.7-Windows-Native-LITE-2026-09-20") {
             throw "Build ID inattendu: $buildId"
           }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
@@ -90,6 +119,28 @@ jobs:
             }
             if (-not $ready) { throw "AuraLive Lite n'a pas demarre." }
 
+            $nativeDeadline = (Get-Date).AddSeconds(15)
+            $nativeReady = $false
+            while ((Get-Date) -lt $nativeDeadline) {
+              try {
+                $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
+                if ($nativeStatus.mode -eq "native" -and
+                    $nativeStatus.responsive -eq $true -and
+                    $nativeStatus.engine.version -eq "0.3.0" -and
+                    $nativeStatus.engine.ffmpeg_ok -eq $true -and
+                    $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
+                    $nativeStatus.system_audio.backend_present -eq $true) {
+                  $nativeReady = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 400
+            }
+            if (-not $nativeReady) {
+              try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
+              throw "Aura Native 0.3.0 n'est pas operationnel dans le build Lite."
+            }
+
             $voice = Invoke-RestMethod "http://127.0.0.1:18787/api/avatar/test" `
               -Method Post `
               -ContentType "application/json" `
@@ -121,7 +172,7 @@ jobs:
       - name: Upload Windows Lite application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-FastVoiceOAuth-LITE
+          name: AuraLive-Windows-Native-2.7-LITE
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true

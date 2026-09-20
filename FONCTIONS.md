@@ -52,7 +52,7 @@
 - [x] Mur d'émoticônes
 - [x] Compteurs, objectifs et Streamathon
 
-## Médias, OBS et diffusion
+## Médias et diffusion
 
 - [x] Alertes multimédias configurables
 - [x] Médiathèque locale
@@ -60,6 +60,7 @@
 - [x] Song Request YouTube
 - [x] Clips manuels et règles de clips automatiques
 - [x] Pilotage OBS WebSocket
+- [x] Aura Native Broadcast : moteur Rust local, RTMP, enregistrement et contrôle depuis Aura
 - [x] Générique de fin et récapitulatif du live
 - [x] Pings privés au streamer
 - [x] Overlays alertes, chat, objectifs, écran, musique, Streamathon, emotes, TopWords, concours, crédits et pings
@@ -89,3 +90,16 @@
 ## Limite honnête
 
 Aura Live 1.2 fournit un noyau local très étendu. Une parité absolue avec un service cloud exploité depuis plusieurs années ne peut pas être déclarée sans tests réels en charge, hébergement permanent et identifiants des services externes. Les dépendances externes sont affichées comme telles dans la page « Couverture fonctionnelle » au lieu d'être présentées comme actives.
+
+- [x] Compositeur multi-source natif : écran, fenêtre/jeu, webcam, image, texte et navigateur/Mairaiy
+- [x] Sources navigateur headless locales avec MJPEG + chroma-key
+- [x] Détection automatique fenêtres/jeux et webcams
+- [x] Ajout/configuration/suppression et drag & drop des sources dans Aura Studio
+
+- [x] Aura Native par défaut au démarrage, OBS conservé en compatibilité
+- [x] Windows Graphics Capture (`gfxcapture`) pour fenêtre/jeu avec fallback GDI
+- [x] FFmpeg Windows vérifié et embarqué dans le package
+- [x] Édition scène/source pendant Live/REC avec rebuild contrôlé
+- [x] Mix audio natif 3 voies : micro + son PC/jeu WASAPI + Aura/Mairaiy/alertes
+- [x] Live + REC simultanés sans concurrence sur les buffers PCM
+- [x] Coffre RTMP local chiffré DPAPI, migration des anciennes clés et zéro secret dans engine.json

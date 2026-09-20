@@ -1,0 +1,20 @@
+[package]
+name = "quantic-live"
+version = "0.3.0"
+edition = "2024"
+description = "Native broadcast engine for Aura Live"
+license = "MIT"
+
+[dependencies]
+eframe = { version = "0.36.2", default-features = true }
+egui = "0.36.2"
+image = { version = "0.25.8", default-features = false, features = ["jpeg", "png"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

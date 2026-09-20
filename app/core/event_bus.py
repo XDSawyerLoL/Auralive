@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import inspect
+from typing import Any, Callable
 
 from fastapi import WebSocket
 
@@ -11,6 +12,7 @@ class OverlayBus:
         self.clients: set[WebSocket] = set()
         self.client_labels: dict[WebSocket, str] = {}
         self._lock = asyncio.Lock()
+        self._listeners: list[Callable[[dict[str, Any]], Any]] = []
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
@@ -24,6 +26,13 @@ class OverlayBus:
         async with self._lock:
             self.clients.discard(websocket)
             self.client_labels.pop(websocket, None)
+
+    def subscribe(self, listener: Callable[[dict[str, Any]], Any]) -> None:
+        if listener not in self._listeners:
+            self._listeners.append(listener)
+
+    def unsubscribe(self, listener: Callable[[dict[str, Any]], Any]) -> None:
+        self._listeners = [current for current in self._listeners if current is not listener]
 
     def count(self, label: str | None = None) -> int:
         if not label:
@@ -46,6 +55,15 @@ class OverlayBus:
     ) -> None:
         stale: list[WebSocket] = []
         normalized_target = str(target or "").strip().casefold()
+
+        for listener in list(self._listeners):
+            try:
+                result = listener(event)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                # Overlay delivery must not be broken by optional local listeners.
+                continue
         async with self._lock:
             if normalized_target:
                 targets = [
