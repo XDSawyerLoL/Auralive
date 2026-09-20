@@ -145,11 +145,6 @@
       notify("Passe en Aura Native pour gérer les sources", true);
       return;
     }
-    if (studio.status?.streaming || studio.status?.recording) {
-      notify("Arrête le direct ou l’enregistrement avant de modifier les sources", true);
-      return;
-    }
-
     const modal = $s("#studio-source-modal");
     if (!modal) return;
     await loadSourceDiscovery();
@@ -288,9 +283,9 @@
           <b>${escapeHtml(source.name)}</b>
           <small>${escapeHtml(source.kind)}${source.target ? " · " + escapeHtml(source.target) : ""}</small>
         </div>
-        <button class="studio-source-visibility ${source.visible ? "" : "off"}" type="button" data-source-toggle="${Number(source.id)}" data-source-visible="${source.visible ? "1" : "0"}" title="${source.visible ? "Masquer" : "Afficher"}" ${status.streaming || status.recording ? "disabled" : ""}>${source.visible ? "◉" : "○"}</button>
-        <button class="studio-source-configure" type="button" data-source-configure="${Number(source.id)}" title="Configurer" ${status.streaming || status.recording ? "disabled" : ""}>⚙</button>
-        <button class="studio-source-remove" type="button" data-source-remove="${Number(source.id)}" title="Supprimer" ${status.streaming || status.recording ? "disabled" : ""}>×</button>
+        <button class="studio-source-visibility ${source.visible ? "" : "off"}" type="button" data-source-toggle="${Number(source.id)}" data-source-visible="${source.visible ? "1" : "0"}" title="${source.visible ? "Masquer" : "Afficher"}">${source.visible ? "◉" : "○"}</button>
+        <button class="studio-source-configure" type="button" data-source-configure="${Number(source.id)}" title="Configurer">⚙</button>
+        <button class="studio-source-remove" type="button" data-source-remove="${Number(source.id)}" title="Supprimer">×</button>
       </div>
     `).join("");
     renderSourceHandles(status);
@@ -302,13 +297,13 @@
     if (!layer || !stage) return;
 
     const native = status.backend === "native";
-    const locked = Boolean(status.streaming || status.recording);
-    stage.classList.toggle("edit-locked", native && locked);
+    const liveReload = Boolean(status.streaming || status.recording);
+    stage.classList.remove("edit-locked");
 
     const hint = $s("#studio-edit-hint");
     if (hint) {
-      hint.textContent = locked
-        ? "Édition verrouillée pendant le direct ou l’enregistrement"
+      hint.textContent = liveReload
+        ? "Édition active · Aura actualise automatiquement les sorties"
         : "Déplacez une source · tirez le coin pour la redimensionner";
     }
 
@@ -326,7 +321,7 @@
       const height = Math.max(.05, Math.min(1, Number(transform.height ?? 1)));
       return `
         <div
-          class="studio-source-handle ${locked ? "locked" : ""}"
+          class="studio-source-handle"
           data-source-handle="${Number(source.id)}"
           style="left:${x*100}%;top:${y*100}%;width:${width*100}%;height:${height*100}%"
         >
@@ -383,7 +378,7 @@
     let edit = null;
 
     stage.addEventListener("pointerdown", event => {
-      if (studio.busy || studio.status?.backend !== "native" || studio.status?.streaming || studio.status?.recording) return;
+      if (studio.busy || studio.status?.backend !== "native") return;
       const handle = event.target.closest("[data-source-handle]");
       if (!handle) return;
 
@@ -467,23 +462,79 @@
   function renderAudio(status) {
     const engine = status.engine || {};
     const mic = $s("#studio-mic-meter");
-    const pc = $s("#studio-pc-meter");
+    const auraMeter = $s("#studio-pc-meter");
     const micDetail = $s("#studio-mic-detail");
-    const pcDetail = $s("#studio-pc-detail");
+    const auraDetail = $s("#studio-pc-detail");
+    const micVolume = $s("#studio-mic-volume");
+    const auraVolume = $s("#studio-aura-volume");
+    const micMute = $s("#studio-mic-mute");
+    const auraMute = $s("#studio-aura-mute");
 
     if (status.backend === "native") {
-      const micValue = Math.max(0, Math.min(1, Number(engine.mic_volume ?? .82)));
-      const pcValue = Math.max(0, Math.min(1, Number(engine.desktop_volume ?? .72)));
-      if (mic) mic.style.width = `${engine.mic_muted ? 0 : micValue * 100}%`;
-      if (pc) pc.style.width = `${engine.desktop_muted ? 0 : pcValue * 100}%`;
-      if (micDetail) micDetail.textContent = engine.mic_muted ? "Muet" : "Entrée native";
-      if (pcDetail) pcDetail.textContent = "Mixage complet V0.2";
+      const micValue = Math.max(0, Math.min(2, Number(engine.mic_volume ?? .82)));
+      const auraValue = Math.max(0, Math.min(2, Number(engine.desktop_volume ?? .72)));
+      if (mic) mic.style.width = `${engine.mic_muted ? 0 : Math.min(100, micValue * 100)}%`;
+      if (auraMeter) auraMeter.style.width = `${engine.desktop_muted ? 0 : Math.min(100, auraValue * 100)}%`;
+      if (micDetail) micDetail.textContent = engine.mic_muted ? "Muet" : `${Math.round(micValue * 100)} %`;
+      if (auraDetail) auraDetail.textContent = engine.desktop_muted ? "Muet" : `${Math.round(auraValue * 100)} % · bus Aura`;
+      if (micVolume && document.activeElement !== micVolume) micVolume.value = String(Math.round(micValue * 100));
+      if (auraVolume && document.activeElement !== auraVolume) auraVolume.value = String(Math.round(auraValue * 100));
+      if (micMute) {
+        micMute.classList.toggle("muted", Boolean(engine.mic_muted));
+        micMute.textContent = engine.mic_muted ? "○" : "◉";
+      }
+      if (auraMute) {
+        auraMute.classList.toggle("muted", Boolean(engine.desktop_muted));
+        auraMute.textContent = engine.desktop_muted ? "○" : "◉";
+      }
     } else {
       if (mic) mic.style.width = "62%";
-      if (pc) pc.style.width = "48%";
+      if (auraMeter) auraMeter.style.width = "48%";
       if (micDetail) micDetail.textContent = "Géré par OBS";
-      if (pcDetail) pcDetail.textContent = "Géré par OBS";
+      if (auraDetail) auraDetail.textContent = "Géré par OBS";
     }
+  }
+
+  async function updateAudioMix(overrides = {}) {
+    if (studio.status?.backend !== "native") return;
+    const engine = studio.status?.engine || {};
+    const payload = {
+      mic_volume: Number($s("#studio-mic-volume")?.value || Math.round(Number(engine.mic_volume ?? .82) * 100)) / 100,
+      aura_volume: Number($s("#studio-aura-volume")?.value || Math.round(Number(engine.desktop_volume ?? .72) * 100)) / 100,
+      mic_muted: Boolean(engine.mic_muted),
+      aura_muted: Boolean(engine.desktop_muted),
+      ...overrides,
+    };
+    setBusy(true);
+    try {
+      const result = await request("/api/broadcast/audio", {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      renderBroadcast(result);
+      notify("Mix audio Aura actualisé");
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  function bindAudioMixer() {
+    const micVolume = $s("#studio-mic-volume");
+    const auraVolume = $s("#studio-aura-volume");
+    const micMute = $s("#studio-mic-mute");
+    const auraMute = $s("#studio-aura-mute");
+
+    if (micVolume) micVolume.addEventListener("change", () => updateAudioMix());
+    if (auraVolume) auraVolume.addEventListener("change", () => updateAudioMix());
+    if (micMute) micMute.addEventListener("click", () => {
+      updateAudioMix({mic_muted: !Boolean(studio.status?.engine?.mic_muted)});
+    });
+    if (auraMute) auraMute.addEventListener("click", () => {
+      updateAudioMix({aura_muted: !Boolean(studio.status?.engine?.desktop_muted)});
+    });
   }
 
   function renderBroadcast(status) {
@@ -535,7 +586,7 @@
     if (stageCopy) {
       stageCopy.textContent = native
         ? (preview
-            ? "L’aperçu vidéo est produit par Aura Native Broadcast. La prochaine étape est son affichage directement dans ce panneau."
+            ? "Aperçu composite natif actif. Les scènes, sources et positions sont modifiables directement ici."
             : "Cliquez sur Aperçu pour vérifier la capture avant de lancer le direct.")
         : (status.obs?.connected
             ? "Aura pilote OBS derrière cette interface. Vous gardez les mêmes commandes pendant la transition vers le moteur natif."
@@ -543,7 +594,8 @@
     }
     if (stageStatus) {
       const encoder = status.encoder || status.engine?.encoder || (native ? "Détection en cours" : "Encodeur OBS");
-      stageStatus.innerHTML = `<i></i><span>${escapeHtml(status.scene || "Aucune scène")} · ${escapeHtml(encoder)}</span>`;
+      const capture = status.engine?.capture_backend || "";
+      stageStatus.innerHTML = `<i></i><span>${escapeHtml(status.scene || "Aucune scène")} · ${escapeHtml(encoder)}${capture ? " · " + escapeHtml(capture) : ""}</span>`;
     }
 
     const previewButton = $s('[data-studio-action="preview"]');
@@ -766,6 +818,7 @@
     bindControls();
     bindSourceEditor();
     bindSourceModal();
+    bindAudioMixer();
     refreshBroadcast(false);
     refreshActivity();
 
