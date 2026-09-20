@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import BASE_DIR, RUNTIME_DIR
 from app.main_v2 import app, aura, db, response_sync, settings, voice_input
+from app.services.native_broadcast import NativeBroadcastService
 from app.services.voice_identity_lock import install_voice_identity_lock
 from app.services.voice_realtime import install_voice_realtime
 
@@ -20,7 +21,8 @@ logger = logging.getLogger("aura-live-v3")
 
 install_voice_identity_lock(aura)
 voice_realtime = install_voice_realtime(aura, db, voice_input)
-app.version = "2.5.2-alpha"
+native_broadcast = NativeBroadcastService(settings)
+app.version = "2.6.0-alpha"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -114,6 +116,86 @@ async def voice_control_status_v3() -> dict[str, Any]:
         "local_voice_mode": True,
         "gemini_required": False,
     }
+
+
+@app.get("/api/broadcast/status")
+async def broadcast_status_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.status)
+
+
+@app.post("/api/broadcast/mode/{mode}")
+async def broadcast_mode_v3(mode: str) -> dict[str, Any]:
+    mode = str(mode or "").strip().lower()
+    if mode not in {"obs", "native"}:
+        raise HTTPException(status_code=422, detail="Le moteur doit être 'obs' ou 'native'")
+
+    _write_runtime_env({"AURA_BROADCAST_ENGINE": mode})
+    os.environ["AURA_BROADCAST_ENGINE"] = mode
+    settings.broadcast_engine = mode
+
+    if mode == "native":
+        return await asyncio.to_thread(native_broadcast.start)
+
+    await asyncio.to_thread(native_broadcast.stop)
+    return await asyncio.to_thread(native_broadcast.status)
+
+
+@app.post("/api/broadcast/engine/start")
+async def broadcast_engine_start_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.start)
+
+
+@app.post("/api/broadcast/engine/stop")
+async def broadcast_engine_stop_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.stop)
+
+
+async def _broadcast_command(action: str, value: str | None = None) -> dict[str, Any]:
+    result = await asyncio.to_thread(native_broadcast.command, action, value)
+    if result.get("error") == "native_engine_missing":
+        raise HTTPException(
+            status_code=503,
+            detail="Aura Native Broadcast n'est pas encore compilé ou installé.",
+        )
+    return result
+
+
+@app.post("/api/broadcast/stream/start")
+async def broadcast_stream_start_v3() -> dict[str, Any]:
+    return await _broadcast_command("stream.start")
+
+
+@app.post("/api/broadcast/stream/stop")
+async def broadcast_stream_stop_v3() -> dict[str, Any]:
+    return await _broadcast_command("stream.stop")
+
+
+@app.post("/api/broadcast/record/start")
+async def broadcast_record_start_v3() -> dict[str, Any]:
+    return await _broadcast_command("record.start")
+
+
+@app.post("/api/broadcast/record/stop")
+async def broadcast_record_stop_v3() -> dict[str, Any]:
+    return await _broadcast_command("record.stop")
+
+
+@app.post("/api/broadcast/preview/start")
+async def broadcast_preview_start_v3() -> dict[str, Any]:
+    return await _broadcast_command("preview.start")
+
+
+@app.post("/api/broadcast/preview/stop")
+async def broadcast_preview_stop_v3() -> dict[str, Any]:
+    return await _broadcast_command("preview.stop")
+
+
+@app.post("/api/broadcast/scene")
+async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    scene = " ".join(str(payload.get("scene") or "").split()).strip()
+    if not scene:
+        raise HTTPException(status_code=422, detail="Nom de scène requis")
+    return await _broadcast_command("scene.select", scene)
 
 
 @app.post("/api/voice/text")
@@ -279,6 +361,11 @@ async def _prewarm_kokoro() -> None:
 async def _v3_lifespan(application):
     async with _original_v3_lifespan(application):
         kokoro_warmup = asyncio.create_task(_prewarm_kokoro(), name="kokoro-voice-warmup")
+        if settings.broadcast_engine == "native" and settings.native_engine_autostart:
+            try:
+                await asyncio.to_thread(native_broadcast.start)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Démarrage Aura Native Broadcast non bloquant impossible: %s", exc)
         try:
             yield
         finally:
@@ -289,6 +376,7 @@ async def _v3_lifespan(application):
                 except asyncio.CancelledError:
                     pass
             await voice_realtime.close()
+            await asyncio.to_thread(native_broadcast.close)
 
 
 app.router.lifespan_context = _v3_lifespan
