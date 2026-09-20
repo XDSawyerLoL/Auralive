@@ -464,7 +464,7 @@ pub fn start_recording(settings: &Settings, scene: &Scene, audio: AudioMix) -> R
     std::fs::create_dir_all(directory).context("Impossible de créer le dossier d’enregistrement")?;
     let file = directory.join(format!(
         "aura-live-{}.mkv",
-        Local::now().format("%Y-%m-%d_%H-%M-%S")
+        Local::now().format("%Y-%m-%d_%H-%M-%S-%3f")
     ));
 
     let pipeline = build_video_pipeline(settings, scene);
