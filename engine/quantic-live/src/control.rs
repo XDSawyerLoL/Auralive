@@ -6,6 +6,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::model::SourceTransform;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ControlCommand {
     pub id: u64,
@@ -20,6 +22,7 @@ pub struct SourceStatus {
     pub name: String,
     pub kind: String,
     pub visible: bool,
+    pub transform: SourceTransform,
 }
 
 #[derive(Debug, Serialize)]
