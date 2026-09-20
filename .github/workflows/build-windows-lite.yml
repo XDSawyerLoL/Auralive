@@ -142,7 +142,7 @@ jobs:
             }
             if (-not $nativeReady) {
               try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Aura Native 0.4.1 n'est pas operationnel dans le build Lite."
+              throw "Quantic Studio Core 0.4.1 n'est pas operationnel dans le build Lite."
             }
 
             $voice = Invoke-RestMethod "http://127.0.0.1:18787/api/avatar/test" `
