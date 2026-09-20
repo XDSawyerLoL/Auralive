@@ -140,6 +140,10 @@ impl Default for Settings {
     }
 }
 
+fn default_system_volume() -> f32 {
+    0.72
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectState {
     pub scenes: Vec<Scene>,
@@ -147,8 +151,12 @@ pub struct ProjectState {
     pub settings: Settings,
     pub mic_volume: f32,
     pub desktop_volume: f32,
+    #[serde(default = "default_system_volume")]
+    pub system_volume: f32,
     pub mic_muted: bool,
     pub desktop_muted: bool,
+    #[serde(default)]
+    pub system_muted: bool,
 }
 
 impl Default for ProjectState {
@@ -176,8 +184,10 @@ impl Default for ProjectState {
             settings: Settings::default(),
             mic_volume: 0.82,
             desktop_volume: 0.72,
+            system_volume: 0.72,
             mic_muted: false,
             desktop_muted: false,
+            system_muted: false,
         }
     }
 }
