@@ -15,6 +15,24 @@ use crate::{
     model::{Encoder, Scene, Settings, Source, SourceKind, SourceTransform},
 };
 
+#[derive(Debug, Clone, Copy)]
+pub struct AudioMix {
+    pub mic_volume: f32,
+    pub aura_volume: f32,
+    pub mic_muted: bool,
+    pub aura_muted: bool,
+}
+
+impl AudioMix {
+    fn mic_gain(self) -> f32 {
+        if self.mic_muted { 0.0 } else { self.mic_volume.clamp(0.0, 2.0) }
+    }
+
+    fn aura_gain(self) -> f32 {
+        if self.aura_muted { 0.0 } else { self.aura_volume.clamp(0.0, 2.0) }
+    }
+}
+
 pub fn ffmpeg_available(path: &str) -> bool {
     Command::new(path)
         .arg("-version")
@@ -23,6 +41,30 @@ pub fn ffmpeg_available(path: &str) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+pub fn filter_available(path: &str, filter: &str) -> bool {
+    let Ok(output) = Command::new(path)
+        .args(["-hide_banner", "-filters"])
+        .output()
+    else {
+        return false;
+    };
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.lines().any(|line| {
+        let mut fields = line.split_whitespace();
+        let _flags = fields.next();
+        fields.next() == Some(filter)
+    })
+}
+
+pub fn capture_backend_label(path: &str) -> &'static str {
+    if filter_available(path, "gfxcapture") {
+        "Windows Graphics Capture"
+    } else {
+        "GDI fallback"
+    }
 }
 
 pub fn detect_encoder(path: &str) -> Encoder {
@@ -185,6 +227,39 @@ fn normalize_filter(input_index: usize, source_index: usize, settings: &Settings
     )
 }
 
+fn regex_escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() * 2);
+    for ch in value.chars() {
+        if matches!(ch, '\\' | '.' | '^' | '$' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn filter_string_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\'', "\\'")
+        .replace(':', "\\:")
+        .replace(',', "\\,")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+}
+
+fn gfxcapture_filter(source_index: usize, settings: &Settings, source: &Source) -> String {
+    let (width, height, _, _) = source_geometry(settings, &source.transform);
+    let exact_title = format!("(?i)^{}$", regex_escape(source.target.trim()));
+    let title = filter_string_escape(&exact_title);
+
+    format!(
+        "gfxcapture=window_title='{title}':capture_cursor=1:capture_border=0:display_border=0:max_framerate={},hwdownload,format=bgra,setpts=PTS-STARTPTS,fps={},scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[src{source_index}]",
+        settings.fps,
+        settings.fps,
+    )
+}
+
 fn escape_drawtext(value: &str) -> String {
     value
         .replace('\\', "\\\\")
@@ -210,6 +285,7 @@ fn build_video_pipeline(settings: &Settings, scene: &Scene) -> VideoPipeline {
         "-i".into(), format!("color=c=black:s={}x{}:r={}", settings.width, settings.height, settings.fps),
     ];
 
+    let modern_capture = filter_available(&settings.ffmpeg_path, "gfxcapture");
     let mut filters = vec!["[0:v]format=rgba,setpts=PTS-STARTPTS[base0]".to_owned()];
     let mut base_index = 0usize;
     let mut input_index = 1usize;
@@ -237,15 +313,20 @@ fn build_video_pipeline(settings: &Settings, scene: &Scene) -> VideoPipeline {
             continue;
         }
 
-        push_video_input(&mut args, settings, source);
-        filters.push(normalize_filter(input_index, source_index, settings, source));
+        if modern_capture && matches!(source.kind, SourceKind::Window | SourceKind::Game) {
+            filters.push(gfxcapture_filter(source_index, settings, source));
+        } else {
+            push_video_input(&mut args, settings, source);
+            filters.push(normalize_filter(input_index, source_index, settings, source));
+            input_index += 1;
+        }
+
         let next_base = base_index + 1;
         filters.push(format!(
             "[base{base_index}][src{source_index}]overlay=x={x}:y={y}:eof_action=pass:shortest=0:format=auto[base{next_base}]"
         ));
         base_index = next_base;
         source_index += 1;
-        input_index += 1;
     }
 
     filters.push(format!("[base{base_index}]format=yuv420p[vout]"));
@@ -258,7 +339,7 @@ fn build_video_pipeline(settings: &Settings, scene: &Scene) -> VideoPipeline {
     }
 }
 
-fn append_audio_input(args: &mut Vec<String>, settings: &Settings, input_index: usize) {
+fn append_mic_input(args: &mut Vec<String>, settings: &Settings) {
     if !settings.audio_device.trim().is_empty() {
         args.extend([
             "-thread_queue_size".into(), "512".into(),
@@ -271,8 +352,24 @@ fn append_audio_input(args: &mut Vec<String>, settings: &Settings, input_index: 
             "-i".into(), "anullsrc=channel_layout=stereo:sample_rate=48000".into(),
         ]);
     }
+}
 
-    let _ = input_index;
+fn append_aura_audio_input(args: &mut Vec<String>) {
+    args.extend([
+        "-thread_queue_size".into(), "512".into(),
+        "-f".into(), "s16le".into(),
+        "-ar".into(), "48000".into(),
+        "-ac".into(), "2".into(),
+        "-i".into(), format!("{}/api/broadcast/audio.pcm", control::local_base_url()),
+    ]);
+}
+
+fn mixed_filter(video_filter: &str, mic_index: usize, aura_index: usize, audio: AudioMix) -> String {
+    format!(
+        "{video_filter};[{mic_index}:a]volume={:.3}[mic];[{aura_index}:a]volume={:.3}[aura];[mic][aura]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,aresample=async=1:first_pts=0[aout]",
+        audio.mic_gain(),
+        audio.aura_gain(),
+    )
 }
 
 fn append_output_encoding(args: &mut Vec<String>, settings: &Settings) {
@@ -284,15 +381,15 @@ fn append_output_encoding(args: &mut Vec<String>, settings: &Settings) {
     args.extend(encoder_args(settings.encoder, settings));
     args.extend([
         "-c:a".into(), "aac".into(),
-        "-b:a".into(), "160k".into(),
+        "-b:a".into(), "192k".into(),
         "-ar".into(), "48000".into(),
         "-ac".into(), "2".into(),
     ]);
 }
 
-pub fn start_stream(settings: &Settings, scene: &Scene) -> Result<Child> {
+pub fn start_stream(settings: &Settings, scene: &Scene, audio: AudioMix) -> Result<Child> {
     if !cfg!(target_os = "windows") {
-        return Err(anyhow!("Le compositeur Aura Native V0.2 est actuellement ciblé Windows."));
+        return Err(anyhow!("Le compositeur Aura Native est actuellement ciblé Windows."));
     }
     if settings.stream_key.trim().is_empty() {
         return Err(anyhow!("Ajoute une clé de stream avant de lancer le direct."));
@@ -308,13 +405,15 @@ pub fn start_stream(settings: &Settings, scene: &Scene) -> Result<Child> {
     );
 
     let pipeline = build_video_pipeline(settings, scene);
-    let audio_index = pipeline.next_input_index;
+    let mic_index = pipeline.next_input_index;
+    let aura_index = mic_index + 1;
     let mut args = pipeline.args;
-    append_audio_input(&mut args, settings, audio_index);
+    append_mic_input(&mut args, settings);
+    append_aura_audio_input(&mut args);
     args.extend([
-        "-filter_complex".into(), pipeline.filter_complex,
+        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, aura_index, audio),
         "-map".into(), pipeline.output_label.into(),
-        "-map".into(), format!("{audio_index}:a:0"),
+        "-map".into(), "[aout]".into(),
     ]);
     append_output_encoding(&mut args, settings);
     args.extend(["-f".into(), "flv".into(), destination]);
@@ -328,9 +427,9 @@ pub fn start_stream(settings: &Settings, scene: &Scene) -> Result<Child> {
         .context("Impossible de lancer le compositeur FFmpeg pour le direct")
 }
 
-pub fn start_recording(settings: &Settings, scene: &Scene) -> Result<(Child, PathBuf)> {
+pub fn start_recording(settings: &Settings, scene: &Scene, audio: AudioMix) -> Result<(Child, PathBuf)> {
     if !cfg!(target_os = "windows") {
-        return Err(anyhow!("Le compositeur Aura Native V0.2 est actuellement ciblé Windows."));
+        return Err(anyhow!("Le compositeur Aura Native est actuellement ciblé Windows."));
     }
     if !ffmpeg_available(&settings.ffmpeg_path) {
         return Err(anyhow!("FFmpeg est introuvable : vérifie son chemin dans Réglages."));
@@ -344,13 +443,15 @@ pub fn start_recording(settings: &Settings, scene: &Scene) -> Result<(Child, Pat
     ));
 
     let pipeline = build_video_pipeline(settings, scene);
-    let audio_index = pipeline.next_input_index;
+    let mic_index = pipeline.next_input_index;
+    let aura_index = mic_index + 1;
     let mut args = pipeline.args;
-    append_audio_input(&mut args, settings, audio_index);
+    append_mic_input(&mut args, settings);
+    append_aura_audio_input(&mut args);
     args.extend([
-        "-filter_complex".into(), pipeline.filter_complex,
+        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, aura_index, audio),
         "-map".into(), pipeline.output_label.into(),
-        "-map".into(), format!("{audio_index}:a:0"),
+        "-map".into(), "[aout]".into(),
     ]);
     append_output_encoding(&mut args, settings);
     args.extend([
@@ -398,7 +499,7 @@ pub struct PreviewEngine {
 impl PreviewEngine {
     pub fn start(settings: &Settings, scene: &Scene, preview_file: Option<PathBuf>) -> Result<Self> {
         if !cfg!(target_os = "windows") {
-            return Err(anyhow!("L’aperçu Aura Native V0.2 est ciblé Windows."));
+            return Err(anyhow!("L’aperçu Aura Native est ciblé Windows."));
         }
         if !ffmpeg_available(&settings.ffmpeg_path) {
             return Err(anyhow!("FFmpeg est introuvable."));
