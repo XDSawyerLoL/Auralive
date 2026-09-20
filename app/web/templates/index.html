@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/power.css?v=1.2.0">
   <link rel="stylesheet" href="/static/complete.css?v=1.2.0">
   <link rel="stylesheet" href="/static/neural.css?v=1.2.0">
-  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.3">
+  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.4">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -49,7 +49,7 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">
-        <img class="quantic-studio-brand-mark" src="/static/quantic-studio-mark.svg?v=2.7.3" alt="">
+        <img class="quantic-studio-brand-mark" src="/static/quantic-studio-mark.svg?v=2.7.4" alt="">
         <div><strong>QUANTIC STUDIO</strong><small>Broadcast · Record · Create</small></div>
         <button class="sidebar-collapse" id="sidebar-collapse" aria-label="Réduire le menu">‹</button>
       </div>
@@ -129,7 +129,7 @@
         </div>
       </nav>
 
-      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Quantic Studio 2.7.3</small></div></footer>
+      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Quantic Studio 2.7.4</small></div></footer>
     </aside>
 
     <main class="main-area">
@@ -150,7 +150,7 @@
           <div class="studio-dashboard">
             <header class="studio-commandbar">
               <div class="studio-title">
-                <div class="studio-logo"><img src="/static/quantic-studio-mark.svg?v=2.7.3" alt=""></div>
+                <div class="studio-logo"><img src="/static/quantic-studio-mark.svg?v=2.7.4" alt=""></div>
                 <div>
                   <b>Quantic Studio</b>
                   <small>Votre live, vos scènes et Aura dans un seul espace.</small>
@@ -158,7 +158,7 @@
               </div>
               <div class="studio-command-actions">
                 <div class="studio-engine-choice" aria-label="Moteur de diffusion">
-                  <button type="button" data-studio-engine="native">Aura Native</button>
+                  <button type="button" data-studio-engine="native">Moteur Quantic</button>
                   <button type="button" data-studio-engine="obs">OBS</button>
                 </div>
                 <button type="button" class="studio-output-settings" data-studio-output-settings title="Destination et clé de diffusion">⚙ Diffusion</button>
@@ -203,7 +203,7 @@
                     <div class="studio-live-state" id="dashboard-live-state"><span></span>Hors ligne</div>
                   </div>
                   <div class="studio-stage" id="studio-stage">
-                    <img id="studio-native-preview" class="studio-native-preview" alt="Aperçu vidéo Aura Native">
+                    <img id="studio-native-preview" class="studio-native-preview" alt="Aperçu vidéo Quantic Studio">
                     <div id="studio-source-handles" class="studio-source-handles" aria-label="Édition visuelle des sources"></div>
                     <div class="stage-aura" id="studio-stage-placeholder">
                       <div class="stage-orb"></div>
@@ -490,7 +490,7 @@
           <div class="settings-columns">
             <article class="panel-card update-center-card">
               <div class="card-head"><div><small>MISES À JOUR</small><h3>Quantic Studio Windows</h3></div><span class="state-badge ok">OFFICIEL</span></div>
-              <div class="update-version-grid"><div><span>Version installée</span><b id="update-current-version">2.7.3</b></div><div><span>Dernière release</span><b id="update-latest-version">—</b></div></div>
+              <div class="update-version-grid"><div><span>Version installée</span><b id="update-current-version">2.7.4</b></div><div><span>Dernière release</span><b id="update-latest-version">—</b></div></div>
               <p id="update-state" class="update-state" data-kind="idle">Vérification non effectuée.</p>
               <div class="module-card-actions"><button class="secondary-button" id="update-check" type="button">Vérifier</button><button class="primary-button" id="update-install" type="button" data-available="false" disabled>Installer la mise à jour</button></div>
               <small class="update-security-note">Téléchargement depuis la release GitHub officielle uniquement, avec contrôle SHA-256 avant lancement.</small>
@@ -517,7 +517,7 @@
   <div class="studio-source-modal" id="studio-output-modal" hidden>
     <div class="studio-source-dialog studio-output-dialog">
       <button class="studio-source-modal-close" type="button" data-studio-output-close>×</button>
-      <span class="modal-kicker">AURA NATIVE</span>
+      <span class="modal-kicker">STUDIO NATIF</span>
       <h2>Réglages diffusion</h2>
       <p class="studio-source-intro">Choisis la destination RTMP. La clé est chiffrée localement et n’est jamais réaffichée.</p>
 
@@ -556,7 +556,7 @@
   <div class="studio-source-modal" id="studio-scene-modal" hidden>
     <div class="studio-source-dialog studio-scene-dialog">
       <button class="studio-source-modal-close" type="button" data-studio-scene-close>×</button>
-      <span class="modal-kicker">AURA NATIVE</span>
+      <span class="modal-kicker">STUDIO NATIF</span>
       <h2 id="studio-scene-modal-title">Nouvelle scène</h2>
       <p class="studio-source-intro">Crée une scène ou modifie celle qui est active. Aura garde au moins une scène.</p>
       <form id="studio-scene-form" class="studio-source-form">
@@ -575,7 +575,7 @@
   <div class="studio-source-modal" id="studio-source-modal" hidden>
     <div class="studio-source-dialog">
       <button class="studio-source-modal-close" type="button" data-studio-source-close>×</button>
-      <span class="modal-kicker">AURA NATIVE</span>
+      <span class="modal-kicker">STUDIO NATIF</span>
       <h2 id="studio-source-modal-title">Ajouter une source</h2>
       <p class="studio-source-intro">Choisis ce que tu veux montrer. Aura prépare le compositeur automatiquement.</p>
 
@@ -617,7 +617,7 @@
   <script src="/static/power.js?v=1.2.0"></script>
   <script src="/static/complete.js?v=1.2.0"></script>
   <script src="/static/avatar-studio.js?v=1.2.0"></script>
-  <script src="/static/aura-studio.js?v=2.7.3"></script>
-  <script src="/static/update-center.js?v=2.7.3"></script>
+  <script src="/static/aura-studio.js?v=2.7.4"></script>
+  <script src="/static/update-center.js?v=2.7.4"></script>
 </body>
 </html>

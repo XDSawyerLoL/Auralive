@@ -62,7 +62,7 @@ async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
 
 
 aura.overlay.subscribe(_native_overlay_audio_listener)
-app.version = "2.7.3"
+app.version = "2.7.4"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -270,7 +270,7 @@ async def _broadcast_command(action: str, value: str | None = None) -> dict[str,
             elif action in {"preview.start", "preview.stop", "runtime.refresh"}:
                 pass
             elif action in {"source.transform", "source.visibility"}:
-                raise ValueError("L’édition visuelle des sources exige Aura Native Broadcast")
+                raise ValueError("L’édition visuelle des sources exige Quantic Studio Core")
             else:
                 raise ValueError(f"Commande de diffusion inconnue: {action}")
             return await broadcast_status_v3()
@@ -284,7 +284,7 @@ async def _broadcast_command(action: str, value: str | None = None) -> dict[str,
     if result.get("error") == "native_engine_missing":
         raise HTTPException(
             status_code=503,
-            detail="Aura Native Broadcast n'est pas encore compilé ou installé.",
+            detail="Quantic Studio Core n'est pas encore compilé ou installé.",
         )
     return await broadcast_status_v3()
 
@@ -314,7 +314,7 @@ async def broadcast_replay_start_v3(
     payload: dict[str, Any] | None = Body(default=None),
 ) -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+        raise HTTPException(status_code=409, detail="Le replay buffer exige Moteur Quantic")
     payload = payload or {}
     try:
         seconds = max(10, min(300, int(payload.get("seconds", 30))))
@@ -326,14 +326,14 @@ async def broadcast_replay_start_v3(
 @app.post("/api/broadcast/replay/stop")
 async def broadcast_replay_stop_v3() -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+        raise HTTPException(status_code=409, detail="Le replay buffer exige Moteur Quantic")
     return await _broadcast_command("replay.stop")
 
 
 @app.post("/api/broadcast/replay/save")
 async def broadcast_replay_save_v3() -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+        raise HTTPException(status_code=409, detail="Le replay buffer exige Moteur Quantic")
     return await _broadcast_command("replay.save")
 
 
@@ -470,7 +470,7 @@ async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse
 
 async def _ensure_native_source_editable() -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+        raise HTTPException(status_code=409, detail="Passe en mode Moteur Quantic pour éditer les sources")
     return await broadcast_status_v3()
 
 
@@ -486,7 +486,7 @@ async def broadcast_output_settings_update_v3(
     if str(settings.broadcast_engine or "native").lower() != "native":
         raise HTTPException(
             status_code=409,
-            detail="Passe en mode Aura Native pour modifier la sortie de diffusion",
+            detail="Passe en mode Moteur Quantic pour modifier la sortie de diffusion",
         )
 
     state = await broadcast_status_v3()
@@ -521,7 +521,7 @@ async def broadcast_output_settings_update_v3(
 @app.put("/api/broadcast/audio")
 async def broadcast_audio_mix_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour régler le mix audio")
+        raise HTTPException(status_code=409, detail="Passe en mode Moteur Quantic pour régler le mix audio")
 
     def gain(name: str, default: float) -> float:
         try:
@@ -639,7 +639,7 @@ async def broadcast_scene_remove_v3(scene_name: str) -> dict[str, Any]:
 @app.put("/api/broadcast/transition")
 async def broadcast_transition_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Les transitions natives exigent Aura Native")
+        raise HTTPException(status_code=409, detail="Les transitions natives exigent Moteur Quantic")
     kind = str(payload.get("kind") or "fade").strip().lower()
     if kind not in {"cut", "fade"}:
         raise HTTPException(status_code=422, detail="Transition inconnue")
@@ -658,7 +658,7 @@ async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] 
     if source_id <= 0:
         raise HTTPException(status_code=422, detail="Source invalide")
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+        raise HTTPException(status_code=409, detail="Passe en mode Moteur Quantic pour éditer les sources")
     def number(name: str, default: float) -> float:
         try:
             return float(payload.get(name, default))
@@ -685,7 +685,7 @@ async def broadcast_source_visibility_v3(source_id: int, payload: dict[str, Any]
     if source_id <= 0:
         raise HTTPException(status_code=422, detail="Source invalide")
     if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+        raise HTTPException(status_code=409, detail="Passe en mode Moteur Quantic pour éditer les sources")
     value = {"id": source_id, "visible": bool(payload.get("visible", True))}
     return await _broadcast_command("source.visibility", json.dumps(value, separators=(",", ":")))
 
@@ -887,7 +887,7 @@ async def _v3_lifespan(application):
             try:
                 await asyncio.to_thread(native_broadcast.start)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Démarrage Aura Native Broadcast non bloquant impossible: %s", exc)
+                logger.warning("Démarrage Quantic Studio Core non bloquant impossible: %s", exc)
         try:
             yield
         finally:

@@ -193,7 +193,7 @@ class _BrowserSourceRenderer:
 
 
 class NativeBroadcastService:
-    """Local controller for Aura Live's Rust broadcast engine.
+    """Local controller for Quantic Studio's background broadcast core.
 
     Communication deliberately stays on the local filesystem. No socket is
     exposed and no stream key is returned through diagnostics.
@@ -292,7 +292,7 @@ class NativeBroadcastService:
         if os.name != "nt":
             raise RuntimeError("Le coffre multistream chiffré est disponible sous Windows")
         if len(rows) > 3:
-            raise ValueError("Aura Live accepte jusqu’à 3 destinations secondaires")
+            raise ValueError("Quantic Studio accepte jusqu’à 3 destinations secondaires")
 
         existing = {
             str(row.get("id") or ""): row
@@ -394,7 +394,7 @@ class NativeBroadcastService:
         if not self.config_path.is_file():
             started = self.start()
             if not started.get("process_running"):
-                raise RuntimeError("Impossible de démarrer Aura Native pour initialiser la sortie")
+                raise RuntimeError("Impossible de démarrer Quantic Studio Core pour initialiser la sortie")
             deadline = time.monotonic() + 3.0
             while time.monotonic() < deadline and not self.config_path.is_file():
                 time.sleep(0.05)
@@ -411,13 +411,13 @@ class NativeBroadcastService:
         except Exception as exc:
             if was_running:
                 self.start()
-            raise RuntimeError("Configuration Aura Native illisible") from exc
+            raise RuntimeError("Configuration Quantic Studio Core illisible") from exc
 
         settings = config.get("settings")
         if not isinstance(settings, dict):
             if was_running:
                 self.start()
-            raise RuntimeError("Configuration Aura Native incomplète")
+            raise RuntimeError("Configuration Quantic Studio Core incomplète")
         settings["rtmp_url"] = rtmp_url
         # Never persist the stream key in the engine JSON.
         settings["stream_key"] = ""
@@ -468,7 +468,7 @@ class NativeBroadcastService:
 
         ok = crypt32.CryptProtectData(
             ctypes.byref(input_blob),
-            ctypes.c_wchar_p("Aura Native RTMP"),
+            ctypes.c_wchar_p("Quantic Studio Core RTMP"),
             ctypes.byref(entropy_blob),
             None,
             None,
@@ -847,7 +847,7 @@ class NativeBroadcastService:
             return [
                 str(value)
                 for value in values
-                if str(value).strip() and "Aura Live" not in str(value)
+                if str(value).strip() and "Quantic Studio" not in str(value) and "Aura Live" not in str(value)
             ][:100]
         except Exception:
             return []
@@ -1009,6 +1009,9 @@ class NativeBroadcastService:
 
         candidates.extend(
             [
+                RUNTIME_DIR / "QuanticStudioCore.exe",
+                # Legacy fallbacks are read-only compatibility paths for old
+                # portable packages. New Quantic Studio builds never ship them.
                 RUNTIME_DIR / "AuraNativeBroadcast.exe",
                 RUNTIME_DIR / "Quantic-Live.exe",
                 BASE_DIR / "engine" / "quantic-live" / "target" / "release" / "quantic-live.exe",
@@ -1040,7 +1043,7 @@ class NativeBroadcastService:
                     **self.status(),
                     "ok": False,
                     "error": "native_engine_missing",
-                    "message": "Le moteur Aura Native Broadcast n'est pas encore compilé ou installé.",
+                    "message": "Le moteur Quantic Studio Core n'est pas encore compilé ou installé.",
                 }
 
             self.runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -1054,6 +1057,7 @@ class NativeBroadcastService:
             env["AURA_NATIVE_CONFIG_FILE"] = str(self.config_path)
             env["AURA_NATIVE_PREVIEW_FILE"] = str(self.preview_path)
             env["AURA_NATIVE_HEADLESS"] = "1"
+            env["QUANTIC_STUDIO_CORE_UI"] = "0"
             env["AURA_LOCAL_BASE_URL"] = self.local_base_url()
             env["AURA_NATIVE_FFMPEG"] = self.ffmpeg_executable()
             stream_secret = self.stream_secret()

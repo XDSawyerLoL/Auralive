@@ -10,6 +10,21 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(target_os = "windows")]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 use crate::{
     control,
     model::{Encoder, Scene, Settings, Source, SourceKind, SourceTransform, TransitionKind},
@@ -40,7 +55,7 @@ impl AudioMix {
 }
 
 pub fn ffmpeg_available(path: &str) -> bool {
-    Command::new(path)
+    hidden_command(path)
         .arg("-version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -50,7 +65,7 @@ pub fn ffmpeg_available(path: &str) -> bool {
 }
 
 pub fn filter_available(path: &str, filter: &str) -> bool {
-    let Ok(output) = Command::new(path)
+    let Ok(output) = hidden_command(path)
         .args(["-hide_banner", "-filters"])
         .output()
     else {
@@ -74,7 +89,7 @@ pub fn capture_backend_label(path: &str) -> &'static str {
 }
 
 pub fn detect_encoder(path: &str) -> Encoder {
-    let output = Command::new(path)
+    let output = hidden_command(path)
         .args(["-hide_banner", "-encoders"])
         .output();
 
@@ -472,7 +487,7 @@ pub fn start_stream(settings: &Settings, scene: &Scene, audio: AudioMix) -> Resu
         args.extend(["-f".into(), "tee".into(), tee]);
     }
 
-    Command::new(&settings.ffmpeg_path)
+    hidden_command(&settings.ffmpeg_path)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -515,7 +530,7 @@ pub fn start_recording(settings: &Settings, scene: &Scene, audio: AudioMix) -> R
         file.to_string_lossy().into_owned(),
     ]);
 
-    let child = Command::new(&settings.ffmpeg_path)
+    let child = hidden_command(&settings.ffmpeg_path)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -571,7 +586,7 @@ pub fn start_replay_buffer(settings: &Settings, scene: &Scene, audio: AudioMix) 
         pattern.to_string_lossy().into_owned(),
     ]);
 
-    let child = Command::new(&settings.ffmpeg_path)
+    let child = hidden_command(&settings.ffmpeg_path)
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -624,7 +639,7 @@ pub fn save_replay_clip(settings: &Settings, directory: &Path) -> Result<PathBuf
         "-c".to_owned(), "copy".to_owned(),
         output.to_string_lossy().into_owned(),
     ];
-    let status = Command::new(&settings.ffmpeg_path)
+    let status = hidden_command(&settings.ffmpeg_path)
         .args(concat_args)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -685,7 +700,7 @@ impl PreviewEngine {
             "pipe:1".into(),
         ]);
 
-        let mut child = Command::new(&settings.ffmpeg_path)
+        let mut child = hidden_command(&settings.ffmpeg_path)
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

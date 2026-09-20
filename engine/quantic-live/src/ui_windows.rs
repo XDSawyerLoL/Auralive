@@ -12,7 +12,7 @@ impl QuanticLiveApp {
             return;
         }
         let mut open = self.settings_open;
-        egui::Window::new("Réglages Aura Native Broadcast")
+        egui::Window::new("Réglages Quantic Studio Core")
             .open(&mut open)
             .resizable(true)
             .default_width(560.0)
@@ -52,7 +52,7 @@ impl QuanticLiveApp {
                 ui.text_edit_singleline(&mut self.project.settings.rtmp_url);
                 ui.label("Clé de stream (session uniquement)");
                 ui.add(egui::TextEdit::singleline(&mut self.project.settings.stream_key).password(true));
-                ui.small("Aura Live stocke la clé dans son coffre local chiffré. Cette fenêtre ne la persiste jamais dans engine.json.");
+                ui.small("Quantic Studio stocke la clé dans son coffre local chiffré. Cette fenêtre ne la persiste jamais dans engine.json.");
 
                 ui.separator();
                 ui.heading("Audio");

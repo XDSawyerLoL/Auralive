@@ -1,8 +1,8 @@
 [package]
 name = "quantic-live"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
-description = "Native broadcast engine for Aura Live"
+description = "Headless native broadcast core for Quantic Studio"
 license = "MIT"
 
 [dependencies]

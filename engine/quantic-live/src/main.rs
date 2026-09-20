@@ -13,11 +13,18 @@ use eframe::egui;
 use crate::app::QuanticLiveApp;
 
 fn main() -> eframe::Result<()> {
-    let headless = std::env::var("AURA_NATIVE_HEADLESS")
+    // Quantic Studio owns the visible interface. The native engine is a
+    // background core by default and only exposes its diagnostic UI when
+    // explicitly requested by a developer.
+    let diagnostic_ui = std::env::var("QUANTIC_STUDIO_CORE_UI")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
+    let forced_headless = std::env::var("AURA_NATIVE_HEADLESS")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let headless = forced_headless || !diagnostic_ui;
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("Aura Live — Native Broadcast")
+        .with_title("Quantic Studio Core")
         .with_inner_size([1440.0, 900.0])
         .with_min_inner_size([1120.0, 680.0]);
     if headless {
@@ -30,7 +37,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "Aura Live — Native Broadcast",
+        "Quantic Studio Core",
         options,
         Box::new(|cc| Ok(Box::new(QuanticLiveApp::new(cc)))),
     )
