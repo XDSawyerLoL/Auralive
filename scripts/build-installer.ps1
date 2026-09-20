@@ -3,7 +3,7 @@ param(
     [string]$SourceDir = "dist\\QuanticStudio"
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"\n\nif (-not (Test-Path "build-assets\\quantic-studio.ico")) {\n    python scripts\\generate-studio-icon.py\n    if ($LASTEXITCODE -ne 0) { throw "Impossible de generer l icone Quantic Studio." }\n}
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
