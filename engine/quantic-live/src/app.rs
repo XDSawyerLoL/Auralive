@@ -322,6 +322,97 @@ impl QuanticLiveApp {
                     }
                 }
             }
+            "source.add" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let kind_name = payload.get("kind").and_then(|value| value.as_str()).unwrap_or("");
+                        if let Some(kind) = SourceKind::from_slug(kind_name) {
+                            if let Some(scene) = self.project.scenes.get_mut(self.project.selected_scene) {
+                                let id = scene.sources.iter().map(|source| source.id).max().unwrap_or(0) + 1;
+                                let name = payload
+                                    .get("name")
+                                    .and_then(|value| value.as_str())
+                                    .map(str::trim)
+                                    .filter(|value| !value.is_empty())
+                                    .map(str::to_owned)
+                                    .unwrap_or_else(|| format!("{} {}", kind.label(), id));
+                                let target = payload
+                                    .get("target")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or("")
+                                    .trim()
+                                    .to_owned();
+                                let transform = if kind == SourceKind::Desktop {
+                                    SourceTransform::default()
+                                } else {
+                                    SourceTransform {
+                                        x: 0.65,
+                                        y: 0.65,
+                                        width: 0.30,
+                                        height: 0.30,
+                                    }
+                                };
+                                scene.sources.push(Source {
+                                    id,
+                                    name,
+                                    kind,
+                                    visible: true,
+                                    transform,
+                                    target,
+                                });
+                                self.status = format!("Source ajoutée · {}", scene.sources.last().map(|source| source.name.as_str()).unwrap_or(""));
+                            }
+                        }
+                    }
+                    let _ = self.persist_project();
+                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
+                        self.restart_preview();
+                    }
+                }
+            }
+            "source.configure" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let source_id = payload.get("id").and_then(|value| value.as_u64()).unwrap_or(0);
+                        if let Some(scene) = self.project.scenes.get_mut(self.project.selected_scene) {
+                            if let Some(source) = scene.sources.iter_mut().find(|source| source.id == source_id) {
+                                if let Some(name) = payload.get("name").and_then(|value| value.as_str()) {
+                                    let name = name.trim();
+                                    if !name.is_empty() {
+                                        source.name = name.to_owned();
+                                    }
+                                }
+                                if let Some(target) = payload.get("target").and_then(|value| value.as_str()) {
+                                    source.target = target.trim().to_owned();
+                                }
+                                self.status = format!("Source configurée · {}", source.name);
+                            }
+                        }
+                    }
+                    let _ = self.persist_project();
+                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
+                        self.restart_preview();
+                    }
+                }
+            }
+            "source.remove" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let source_id = payload.get("id").and_then(|value| value.as_u64()).unwrap_or(0);
+                        if let Some(scene) = self.project.scenes.get_mut(self.project.selected_scene) {
+                            let before = scene.sources.len();
+                            scene.sources.retain(|source| source.id != source_id);
+                            if scene.sources.len() != before {
+                                self.status = format!("Source supprimée · {source_id}");
+                            }
+                        }
+                    }
+                    let _ = self.persist_project();
+                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
+                        self.restart_preview();
+                    }
+                }
+            }
             "runtime.refresh" => {
                 self.refresh_runtime_status();
                 self.status = "État du moteur actualisé".into();
