@@ -56,6 +56,10 @@ fn status_path() -> Option<PathBuf> {
     env_path("AURA_NATIVE_STATUS_FILE")
 }
 
+pub fn preview_path() -> Option<PathBuf> {
+    env_path("AURA_NATIVE_PREVIEW_FILE")
+}
+
 fn env_path(name: &str) -> Option<PathBuf> {
     env::var_os(name)
         .filter(|value| !value.is_empty())
