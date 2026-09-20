@@ -23,7 +23,41 @@ logger = logging.getLogger("aura-live-v3")
 install_voice_identity_lock(aura)
 voice_realtime = install_voice_realtime(aura, db, voice_input)
 native_broadcast = NativeBroadcastService(settings)
-app.version = "2.6.0-alpha"
+
+
+async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
+    if not native_broadcast.selected or not isinstance(event, dict):
+        return
+
+    event_type = str(event.get("type") or "").strip().lower()
+    wants_voice = (
+        event_type in {"tts", "avatar_voice", "aura_message", "avatar_test"}
+        and event.get("speak", True) is not False
+    )
+
+    if wants_voice and not str(event.get("audio_url") or "").strip():
+        text = " ".join(str(event.get("text") or event.get("message") or "").split()).strip()
+        if text:
+            try:
+                audio_url = await aura.avatar_audio.synthesize(
+                    text,
+                    voice=str(event.get("voice") or ""),
+                    rate=float(event.get("rate", 1.0) or 1.0),
+                    pitch=float(event.get("pitch", 1.0) or 1.0),
+                    volume=float(event.get("volume", 1.0) or 1.0),
+                    context="native-broadcast",
+                )
+                if audio_url:
+                    event["audio_url"] = audio_url
+                    event["audio_engine"] = str(aura.avatar_audio.last_engine or "")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Synthèse audio native non bloquante impossible: %s", exc)
+
+    native_broadcast.enqueue_overlay_audio(event)
+
+
+aura.overlay.subscribe(_native_overlay_audio_listener)
+app.version = "2.7.0-alpha"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -267,6 +301,27 @@ async def broadcast_record_stop_v3() -> dict[str, Any]:
 @app.post("/api/broadcast/preview/start")
 async def broadcast_preview_start_v3() -> dict[str, Any]:
     return await _broadcast_command("preview.start")
+
+
+@app.get("/api/broadcast/audio.pcm")
+async def broadcast_native_audio_pcm_v3() -> StreamingResponse:
+    async def pcm_stream():
+        while True:
+            try:
+                chunk = await asyncio.to_thread(native_broadcast.native_audio_chunk, 19200)
+                yield chunk
+                await asyncio.sleep(0.10)
+            except asyncio.CancelledError:
+                raise
+
+    return StreamingResponse(
+        pcm_stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.get("/api/broadcast/preview.mjpeg")
@@ -653,6 +708,7 @@ async def _v3_lifespan(application):
                     await kokoro_warmup
                 except asyncio.CancelledError:
                     pass
+            aura.overlay.unsubscribe(_native_overlay_audio_listener)
             await voice_realtime.close()
             await asyncio.to_thread(native_broadcast.close)
 
