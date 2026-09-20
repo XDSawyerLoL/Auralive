@@ -66,6 +66,15 @@ pub fn preview_path() -> Option<PathBuf> {
     env_path("AURA_NATIVE_PREVIEW_FILE")
 }
 
+pub fn local_base_url() -> String {
+    env::var("AURA_LOCAL_BASE_URL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "http://127.0.0.1:18787".to_owned())
+        .trim_end_matches('/')
+        .to_owned()
+}
+
 fn env_path(name: &str) -> Option<PathBuf> {
     env::var_os(name)
         .filter(|value| !value.is_empty())
