@@ -415,6 +415,9 @@ class NativeBroadcastService:
             "runtime.refresh",
             "source.transform",
             "source.visibility",
+            "source.add",
+            "source.configure",
+            "source.remove",
         }
         if action not in allowed:
             raise ValueError(f"Commande native inconnue: {action}")
