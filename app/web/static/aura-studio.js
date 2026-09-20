@@ -131,7 +131,7 @@
     if (help) help.textContent = config.help || "";
     if (browse) browse.hidden = !config.browse;
     fillSourceTargetList(kind);
-    $s("[data-source-kind]").forEach(button => {
+    $$s("[data-source-kind]").forEach(button => {
       button.classList.toggle(
         "active",
         button.dataset.sourceKind === kind
@@ -170,7 +170,7 @@
       if (submit) submit.textContent = "Enregistrer";
       if (remove) remove.hidden = false;
       applySourceKind(kind, String(source.target || ""));
-      $s("[data-source-kind]").forEach(button => button.disabled = true);
+      $$s("[data-source-kind]").forEach(button => button.disabled = true);
     } else {
       if (sourceId) sourceId.value = "";
       if (name) name.value = "";
@@ -178,7 +178,7 @@
       if (title) title.textContent = "Ajouter une source";
       if (submit) submit.textContent = "Ajouter au studio";
       if (remove) remove.hidden = true;
-      $s("[data-source-kind]").forEach(button => button.disabled = false);
+      $$s("[data-source-kind]").forEach(button => button.disabled = false);
       applySourceKind("desktop");
     }
 
@@ -499,7 +499,7 @@
       stage.style.aspectRatio = `${canvasWidth} / ${canvasHeight}`;
     }
 
-    $s("[data-studio-engine]").forEach(button => {
+    $$s("[data-studio-engine]").forEach(button => {
       button.classList.toggle("active", button.dataset.studioEngine === status.backend);
     });
 
@@ -683,7 +683,7 @@
     const form = $s("#studio-source-form");
     if (form) form.addEventListener("submit", saveSourceFromModal);
 
-    $s("[data-source-kind]").forEach(button => button.addEventListener("click", () => {
+    $$s("[data-source-kind]").forEach(button => button.addEventListener("click", () => {
       if (button.disabled) return;
       const preset = String(button.dataset.sourcePreset || "");
       applySourceKind(String(button.dataset.sourceKind || "desktop"), preset);
@@ -702,7 +702,7 @@
       removeSource(Number($s("#studio-source-id")?.value || 0));
     });
 
-    $s("[data-studio-source-close]").forEach(button => button.addEventListener("click", closeSourceModal));
+    $$s("[data-studio-source-close]").forEach(button => button.addEventListener("click", closeSourceModal));
 
     const modal = $s("#studio-source-modal");
     if (modal) modal.addEventListener("click", event => {
