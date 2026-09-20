@@ -292,7 +292,7 @@ class NativeBroadcastService:
         if os.name != "nt":
             raise RuntimeError("Le coffre multistream chiffré est disponible sous Windows")
         if len(rows) > 3:
-            raise ValueError("Aura Live accepte jusqu’à 3 destinations secondaires")
+            raise ValueError("Quantic Studio accepte jusqu’à 3 destinations secondaires")
 
         existing = {
             str(row.get("id") or ""): row
@@ -468,7 +468,7 @@ class NativeBroadcastService:
 
         ok = crypt32.CryptProtectData(
             ctypes.byref(input_blob),
-            ctypes.c_wchar_p("Aura Native RTMP"),
+            ctypes.c_wchar_p("Quantic Studio RTMP"),
             ctypes.byref(entropy_blob),
             None,
             None,
@@ -1040,7 +1040,7 @@ class NativeBroadcastService:
                     **self.status(),
                     "ok": False,
                     "error": "native_engine_missing",
-                    "message": "Le moteur Aura Native Broadcast n'est pas encore compilé ou installé.",
+                    "message": "Le moteur Quantic Studio Core n'est pas encore compilé ou installé.",
                 }
 
             self.runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -1182,7 +1182,7 @@ class NativeBroadcastService:
 
         return {
             "ok": True,
-            "mode": str(getattr(self.settings, "broadcast_engine", "obs") or "obs").lower(),
+            "mode": "native",
             "selected": self.selected,
             "engine_available": executable is not None,
             "process_running": process_running,
@@ -1190,7 +1190,7 @@ class NativeBroadcastService:
             "executable": str(executable) if executable else "",
             "status_age_seconds": round(status_age, 3) if status_age is not None else None,
             "engine": engine_status,
-            "obs_fallback_enabled": bool(getattr(self.settings, "obs_enabled", False)),
+            "obs_fallback_enabled": False,
             "preview_frame_available": self.preview_path.is_file(),
             "audio_tracks_active": len(self._audio_tracks),
             "system_audio": self.system_audio_status(),
