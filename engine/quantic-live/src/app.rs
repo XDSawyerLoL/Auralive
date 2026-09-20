@@ -121,6 +121,9 @@ impl QuanticLiveApp {
         if let Some(mut preview) = self.preview.take() {
             preview.stop();
             self.preview_texture = None;
+            if let Some(path) = control::preview_path() {
+                let _ = fs::remove_file(path);
+            }
             self.status = "Aperçu arrêté".into();
             return;
         }
@@ -255,6 +258,10 @@ impl QuanticLiveApp {
                     {
                         self.project.selected_scene = index;
                         self.status = format!("Scène active · {}", self.project.scenes[index].name);
+                        let _ = self.persist_project();
+                        if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
+                            self.restart_preview();
+                        }
                     } else {
                         self.status = format!("Scène introuvable · {name}");
                     }
