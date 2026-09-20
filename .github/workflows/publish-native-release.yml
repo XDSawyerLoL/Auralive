@@ -6,13 +6,18 @@ on:
       - main
     paths:
       - ".github/workflows/publish-native-release.yml"
+      - "installer/**"
+      - "scripts/build-installer.ps1"
+      - "scripts/generate-studio-icon.py"
+      - "build-assets/**"
+      - "tests/test_windows_desktop_packaging.py"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: publish-aura-live-native-release-${{ github.ref }}
+  group: publish-quantic-studio-native-release-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
