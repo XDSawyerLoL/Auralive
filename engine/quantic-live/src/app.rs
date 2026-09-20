@@ -41,6 +41,11 @@ impl QuanticLiveApp {
                 project.settings.ffmpeg_path = path.to_owned();
             }
         }
+        project.settings.stream_key = std::env::var("AURA_NATIVE_STREAM_KEY")
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_default();
         let ffmpeg_ok = ffmpeg::ffmpeg_available(&project.settings.ffmpeg_path);
         let detected_encoder = if ffmpeg_ok {
             ffmpeg::detect_encoder(&project.settings.ffmpeg_path)
@@ -78,7 +83,11 @@ impl QuanticLiveApp {
     fn persist_project(&self) -> bool {
         let config_path = control::config_path();
         control::ensure_parent(&config_path);
-        serde_json::to_string_pretty(&self.project)
+        let mut persisted = self.project.clone();
+        // The RTMP secret is injected by Aura Live at process start and must
+        // never be written back to engine.json.
+        persisted.settings.stream_key.clear();
+        serde_json::to_string_pretty(&persisted)
             .ok()
             .and_then(|json| fs::write(&config_path, json).ok())
             .is_some()
@@ -602,11 +611,7 @@ impl Drop for QuanticLiveApp {
         if let Some(mut child) = self.record_process.take() {
             ffmpeg::stop_gracefully(&mut child);
         }
-        if let Ok(json) = serde_json::to_string_pretty(&self.project) {
-            let config_path = control::config_path();
-            control::ensure_parent(&config_path);
-            let _ = fs::write(config_path, json);
-        }
+        let _ = self.persist_project();
     }
 }
 
