@@ -369,6 +369,8 @@ impl QuanticLiveApp {
             desktop_volume: self.project.desktop_volume,
             mic_muted: self.project.mic_muted,
             desktop_muted: self.project.desktop_muted,
+            canvas_width: self.project.settings.width,
+            canvas_height: self.project.settings.height,
             ffmpeg_ok: self.ffmpeg_ok,
             encoder,
             message: &self.status,
