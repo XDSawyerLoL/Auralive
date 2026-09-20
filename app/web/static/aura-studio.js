@@ -51,6 +51,53 @@
     return "OBS";
   }
 
+  function liveReadiness(status) {
+    const native = status?.backend === "native";
+    const engineReady = native
+      ? Boolean(status?.engine_available && (status?.responsive || status?.process_running))
+      : Boolean(status?.obs?.connected);
+    const outputReady = native ? Boolean(status?.output?.stream_key_configured) : engineReady;
+    const sceneReady = Boolean(String(status?.scene || "").trim());
+    return {
+      engineReady,
+      outputReady,
+      sceneReady,
+      ready: engineReady && outputReady && sceneReady,
+    };
+  }
+
+  function renderLiveReadiness(status) {
+    const readiness = liveReadiness(status);
+    const native = status?.backend === "native";
+    const values = {
+      engine: {
+        ready: readiness.engineReady,
+        label: readiness.engineReady ? (native ? "Moteur prêt" : "OBS prêt") : (native ? "Moteur à vérifier" : "OBS hors ligne"),
+      },
+      output: {
+        ready: readiness.outputReady,
+        label: native
+          ? (readiness.outputReady ? "Diffusion prête" : "Clé de stream requise")
+          : (readiness.outputReady ? "Sortie gérée par OBS" : "Sortie indisponible"),
+      },
+      scene: {
+        ready: readiness.sceneReady,
+        label: readiness.sceneReady ? "Scène prête" : "Scène à choisir",
+      },
+    };
+
+    for (const [key, value] of Object.entries(values)) {
+      const node = $s(`[data-studio-ready="${key}"]`);
+      if (!node) continue;
+      node.classList.toggle("ready", value.ready);
+      node.classList.toggle("warn", !value.ready);
+      const dot = node.querySelector("i")?.outerHTML || "<i></i>";
+      node.innerHTML = `${dot}${escapeHtml(value.label)}`;
+    }
+
+    return readiness;
+  }
+
   function setBusy(value) {
     studio.busy = value;
     $$s("[data-studio-action], [data-studio-engine], [data-studio-scene]").forEach(button => {
@@ -752,10 +799,18 @@
       recordButton.classList.toggle("active", recording);
     }
 
+    const readiness = renderLiveReadiness(status);
     const liveButton = $s('[data-studio-action="live"]');
     if (liveButton) {
-      liveButton.textContent = streaming ? "■ Couper le direct" : "▶ Lancer le live";
+      const needsOutput = native && !streaming && !readiness.outputReady;
+      liveButton.textContent = streaming
+        ? "■ Couper le direct"
+        : (needsOutput ? "⚙ Configurer le live" : "▶ Lancer le live");
       liveButton.classList.toggle("active", streaming);
+      liveButton.classList.toggle("needs-setup", needsOutput);
+      liveButton.title = needsOutput
+        ? "Ajoutez votre destination et votre clé de stream avant de lancer le direct"
+        : (readiness.ready ? "Tout est prêt pour lancer le direct" : "Aura vérifiera les éléments manquants au lancement");
     }
 
     setNativePreview(status);
@@ -792,6 +847,18 @@
 
   async function sendAction(kind) {
     if (studio.busy || !studio.status) return;
+
+    if (
+      kind === "live"
+      && !studio.status.streaming
+      && studio.status.backend === "native"
+      && !studio.status.output?.stream_key_configured
+    ) {
+      openOutputModal();
+      notify("Configure la destination et la clé de stream avant de lancer le direct");
+      return;
+    }
+
     let endpoint = "";
     if (kind === "live") endpoint = studio.status.streaming ? "/api/broadcast/stream/stop" : "/api/broadcast/stream/start";
     if (kind === "record") endpoint = studio.status.recording ? "/api/broadcast/record/stop" : "/api/broadcast/record/start";

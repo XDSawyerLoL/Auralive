@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/styles.css?v=1.2.0">
   <link rel="stylesheet" href="/static/power.css?v=1.2.0">
   <link rel="stylesheet" href="/static/complete.css?v=1.2.0">
-  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.0">
+  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.1">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -233,10 +233,17 @@
                       </div>
                     </div>
                   </div>
-                  <div class="studio-main-actions">
-                    <button class="studio-control" type="button" data-studio-action="preview">◉ Aperçu</button>
-                    <button class="studio-control record" type="button" data-studio-action="record">● Enregistrer</button>
-                    <button class="studio-control live" type="button" data-studio-action="live">▶ Lancer le live</button>
+                  <div class="studio-live-controls">
+                    <div class="studio-live-readiness" id="studio-live-readiness" aria-live="polite">
+                      <span data-studio-ready="engine"><i></i>Moteur</span>
+                      <span data-studio-ready="output"><i></i>Diffusion</span>
+                      <span data-studio-ready="scene"><i></i>Scène</span>
+                    </div>
+                    <div class="studio-main-actions">
+                      <button class="studio-control" type="button" data-studio-action="preview">◉ Aperçu</button>
+                      <button class="studio-control record" type="button" data-studio-action="record">● Enregistrer</button>
+                      <button class="studio-control live" type="button" data-studio-action="live">▶ Lancer le live</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -564,6 +571,6 @@
   <script src="/static/app.js?v=1.2.0"></script>
   <script src="/static/power.js?v=1.2.0"></script>
   <script src="/static/complete.js?v=1.2.0"></script>
-  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.7.0"></script>
+  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.7.1"></script>
 </body>
 </html>
