@@ -1,8 +1,8 @@
-# Aura Live 2.7.1 — Native Streaming Suite
+# Aura Live 2.7.2 — Native Streaming Suite
 
 Aura Live est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
-La version 2.7.1 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
+La version 2.7.2 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
 
 ## Modules inclus
 
@@ -152,7 +152,7 @@ Le moteur Rust `AuraNativeBroadcast.exe` et un build FFmpeg vérifié sont embar
 
 Le moteur est piloté localement depuis Aura. Aucun port de contrôle supplémentaire n’est exposé.
 
-### Compositeur natif 0.3
+### Compositeur natif 0.4
 
 Le même compositeur FFmpeg alimente l’aperçu, l’enregistrement et le direct :
 
@@ -215,27 +215,29 @@ DELETE /api/broadcast/source/{source_id}
 
 ## Installation Windows
 
-### Mise à niveau
+### Installation recommandée
 
-1. Ferme Aura avec `Ctrl+C`.
-2. Sauvegarde :
+Télécharge **`AuraLive-Setup-2.7.2.exe`** depuis la release officielle et lance-le. L'installation est faite dans le profil Windows courant et ne demande pas de droits administrateur.
 
-```text
-.env
-data\aura_live.db
-```
+L'installateur :
+- conserve le fichier `.env` existant ;
+- conserve le dossier `data` et les données runtime ;
+- crée les raccourcis Windows ;
+- ferme proprement Aura Live lors d'une mise à niveau puis relance l'application.
 
-3. Décompresse Aura Live 2.7.1 par-dessus le dossier existant.
-4. Conserve ton `.env` et ton dossier `data`.
-5. Lance :
+Les ZIP Full et Lite restent disponibles pour l'usage portable.
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\reparer-installation.ps1
-.\aura.bat
-```
+### Mises à jour intégrées
 
-6. Ouvre `http://localhost:8787` et recharge avec `Ctrl+F5`.
+Dans **Mon compte & services → Mises à jour**, Aura Live peut vérifier la dernière release officielle, télécharger l'installateur correspondant et contrôler son empreinte SHA-256 avant de le lancer.
+
+L'updater n'accepte que les assets `AuraLive-Setup-X.Y.Z.exe` publiés sur le dépôt officiel `XDSawyerLoL/Auralive`.
+
+### Signature Windows
+
+Le pipeline CI prend en charge la signature Authenticode de `AuraLive.exe`, `AuraNativeBroadcast.exe` et de l'installateur lorsque les secrets `AURA_WINDOWS_SIGNING_PFX_BASE64` et `AURA_WINDOWS_SIGNING_PFX_PASSWORD` contiennent un certificat de signature de code valide.
+
+Sans certificat configuré, la release reste vérifiable par SHA-256 mais Windows peut afficher un avertissement de réputation.
 
 Les migrations SQLite ajoutent les nouvelles tables sans supprimer les viewers, commandes, Écumes ou réglages existants.
 

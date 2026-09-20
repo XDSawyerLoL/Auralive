@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/styles.css?v=1.2.0">
   <link rel="stylesheet" href="/static/power.css?v=1.2.0">
   <link rel="stylesheet" href="/static/complete.css?v=1.2.0">
-  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.1">
+  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.2">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -128,7 +128,7 @@
         </div>
       </nav>
 
-      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Aura Live 2.7</small></div></footer>
+      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Aura Live 2.7.2</small></div></footer>
     </aside>
 
     <main class="main-area">
@@ -486,7 +486,16 @@
         <section class="page" data-page-panel="connections">
           <div class="page-heading"><div><span>CONNEXIONS</span><h1>Mon compte & services</h1><p>Vérifie l’identité qui parle, le diffuseur, OBS et les autorisations.</p></div></div>
           <div id="account-grid" class="account-grid"></div>
-          <article class="panel-card"><div class="card-head"><div><small>CONFIGURATION LOCALE</small><h3>Informations utiles</h3></div></div><div class="config-list"><div><span>Panneau Aura</span><code>http://localhost:8787</code></div><div><span>Compte bot attendu</span><code>mairaiy</code></div><div><span>Chaîne attendue</span><code>sansahd</code></div><div><span>Port OBS</span><code>4455</code></div></div></article>
+          <div class="settings-columns">
+            <article class="panel-card update-center-card">
+              <div class="card-head"><div><small>MISES À JOUR</small><h3>Aura Live Windows</h3></div><span class="state-badge ok">OFFICIEL</span></div>
+              <div class="update-version-grid"><div><span>Version installée</span><b id="update-current-version">2.7.2</b></div><div><span>Dernière release</span><b id="update-latest-version">—</b></div></div>
+              <p id="update-state" class="update-state" data-kind="idle">Vérification non effectuée.</p>
+              <div class="module-card-actions"><button class="secondary-button" id="update-check" type="button">Vérifier</button><button class="primary-button" id="update-install" type="button" data-available="false" disabled>Installer la mise à jour</button></div>
+              <small class="update-security-note">Téléchargement depuis la release GitHub officielle uniquement, avec contrôle SHA-256 avant lancement.</small>
+            </article>
+            <article class="panel-card"><div class="card-head"><div><small>CONFIGURATION LOCALE</small><h3>Informations utiles</h3></div></div><div class="config-list"><div><span>Panneau Aura</span><code>http://localhost:8787</code></div><div><span>Compte bot attendu</span><code>mairaiy</code></div><div><span>Chaîne attendue</span><code>sansahd</code></div><div><span>Port OBS</span><code>4455</code></div></div></article>
+          </div>
         </section>
       </div>
     </main>
@@ -606,6 +615,7 @@
   <script src="/static/app.js?v=1.2.0"></script>
   <script src="/static/power.js?v=1.2.0"></script>
   <script src="/static/complete.js?v=1.2.0"></script>
-  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.7.1"></script>
+  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.7.2"></script>
+  <script src="/static/update-center.js?v=2.7.2"></script>
 </body>
 </html>

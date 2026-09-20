@@ -1488,3 +1488,59 @@ body {
     text-align: left;
   }
 }
+
+
+/* Aura Live 2.7.2 — centre de mise à jour */
+.update-center-card {
+  position: relative;
+  overflow: hidden;
+}
+.update-center-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -70px -90px auto;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(137, 93, 255, .13), transparent 66%);
+  pointer-events: none;
+}
+.update-version-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+.update-version-grid > div {
+  padding: 11px 12px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+}
+.update-version-grid span,
+.update-security-note {
+  color: #8f98aa;
+  font-size: 10px;
+}
+.update-version-grid b {
+  display: block;
+  margin-top: 4px;
+  color: #eef1f7;
+  font-size: 15px;
+}
+.update-state {
+  min-height: 20px;
+  margin: 8px 0 12px;
+  color: #aeb5c7;
+  font-size: 11px;
+}
+.update-state[data-kind="ready"],
+.update-state[data-kind="ok"] { color: #9ee8c9; }
+.update-state[data-kind="warn"] { color: #f3d18a; }
+.update-state[data-kind="error"] { color: #ff9bab; }
+.update-state[data-kind="working"] { color: #cdbbff; }
+.update-security-note {
+  display: block;
+  margin-top: 10px;
+  line-height: 1.5;
+}
