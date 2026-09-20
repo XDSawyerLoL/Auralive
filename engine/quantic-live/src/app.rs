@@ -90,7 +90,7 @@ impl QuanticLiveApp {
             return;
         }
 
-        match ffmpeg::PreviewEngine::start(&self.project.settings) {
+        match ffmpeg::PreviewEngine::start(&self.project.settings, control::preview_path()) {
             Ok(preview) => {
                 self.preview = Some(preview);
                 self.status = "Aperçu actif".into();
