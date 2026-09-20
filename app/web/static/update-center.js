@@ -84,5 +84,18 @@
     }
   });
 
-  loadStatus();
+  async function autoCheck() {
+    const key = "aura-live-update-last-check";
+    const interval = 12 * 60 * 60 * 1000;
+    const last = Number(window.localStorage?.getItem(key) || 0);
+    if (Date.now() - last < interval) return;
+    try {
+      render(await call("/api/update/check"));
+      window.localStorage?.setItem(key, String(Date.now()));
+    } catch (_) {
+      // La vérification automatique ne doit jamais gêner le démarrage du Studio.
+    }
+  }
+
+  loadStatus().finally(autoCheck);
 })();
