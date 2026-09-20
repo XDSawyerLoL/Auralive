@@ -7,6 +7,9 @@ BUILD = ROOT / "scripts" / "build-windows.ps1"
 REQUIREMENTS = ROOT / "requirements-desktop.txt"
 ENV_EXAMPLE = ROOT / ".env.example"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-windows-app.yml"
+INSTALLER = ROOT / "installer" / "AuraLive.iss"
+UPDATER = ROOT / "app" / "services" / "update_manager.py"
+UPDATE_UI = ROOT / "app" / "web" / "static" / "update-center.js"
 
 
 def test_desktop_launcher_does_not_depend_on_pythonnet_or_pywebview() -> None:
@@ -92,3 +95,35 @@ def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
     assert "DevToolsActivePort" in desktop
     assert "_wait_for_app_window" in desktop
     assert "browser_process.wait()" not in desktop
+
+
+
+def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
+    installer = INSTALLER.read_text(encoding="utf-8")
+    assert "PrivilegesRequired=lowest" in installer
+    assert "DefaultDirName={localappdata}\\Programs\\Aura Live" in installer
+    assert "uninsneveruninstall" in installer
+    assert 'Excludes: ".env,data\\*,AuraLive-startup.log"' in installer
+    assert 'Source: "{#SourceDir}\\.env"' in installer
+    assert "CloseApplications=yes" in installer
+    assert "RestartApplications=yes" in installer
+
+
+def test_windows_ci_builds_installer_and_supports_authenticode() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "build-installer.ps1" in workflow
+    assert "AuraLive-Setup-2.7.2.exe" in workflow
+    assert "sign-windows.ps1" in workflow
+    assert "AURA_WINDOWS_SIGNING_PFX_BASE64" in workflow
+    assert "AURA_WINDOWS_SIGNING_PFX_PASSWORD" in workflow
+
+
+def test_updater_is_release_scoped_and_sha256_verified() -> None:
+    updater = UPDATER.read_text(encoding="utf-8")
+    ui = UPDATE_UI.read_text(encoding="utf-8")
+    assert 'REPOSITORY = "XDSawyerLoL/Auralive"' in updater
+    assert "releases/latest" in updater
+    assert "sha256" in updater.casefold()
+    assert "actual != expected" in updater
+    assert "AuraLive-Setup-" in updater
+    assert "/api/update/install" in ui
