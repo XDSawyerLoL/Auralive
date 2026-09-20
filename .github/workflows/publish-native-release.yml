@@ -1,4 +1,4 @@
-name: Publish Aura Live 2.7.1 Native Release
+name: Publish Aura Live 2.7.2 Native Release
 
 on:
   push:
@@ -50,7 +50,14 @@ jobs:
           if (Test-Path "release") { Remove-Item "release" -Recurse -Force }
           New-Item -ItemType Directory -Force "release" | Out-Null
 
-      - name: Build full Aura Live 2.7.1 Native
+      - name: Sign native engine when certificate is configured
+        shell: pwsh
+        env:
+          AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
+          AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: .\scripts\sign-windows.ps1 -Path @("engine\quantic-live\target\release\quantic-live.exe")
+
+      - name: Build full Aura Live 2.7.2 Native
         shell: pwsh
         run: |
           .\scripts\build-windows.ps1 -Python python
@@ -61,7 +68,7 @@ jobs:
           if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent du package complet." }
           if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package complet." }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7.1-Windows-Native-2026-09-20") {
+          if ($buildId -ne "AuraLive-2.7.2-Windows-Native-2026-09-20") {
             throw "Build ID complet inattendu: $buildId"
           }
           $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
@@ -73,11 +80,38 @@ jobs:
             throw "Les assets Kokoro complets sont incomplets."
           }
 
-          $zip = "release\AuraLive-Windows-Native-2.7.1.zip"
+          .\scripts\sign-windows.ps1 -Path @(
+            "dist\AuraLive\AuraLive.exe",
+            "dist\AuraLive\AuraNativeBroadcast.exe"
+          )
+
+          $zip = "release\AuraLive-Windows-Native-2.7.2.zip"
           Compress-Archive -Path "dist\AuraLive" -DestinationPath $zip -CompressionLevel Optimal
           if ((Get-Item $zip).Length -lt 1000000) { throw "Archive complète anormalement petite." }
 
-      - name: Build Lite Aura Live 2.7.1 Native
+      - name: Ensure Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --yes --no-progress
+          }
+
+      - name: Build Aura Live 2.7.2 installer
+        shell: pwsh
+        run: .\scripts\build-installer.ps1 -Version "2.7.2" -SourceDir "dist\AuraLive"
+
+      - name: Sign installer when certificate is configured
+        shell: pwsh
+        env:
+          AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
+          AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: .\scripts\sign-windows.ps1 -Path @("release\AuraLive-Setup-2.7.2.exe")
+
+      - name: Build Lite Aura Live 2.7.2 Native
         shell: pwsh
         run: |
           if (Test-Path "dist\AuraLive") { Remove-Item "dist\AuraLive" -Recurse -Force }
@@ -89,7 +123,7 @@ jobs:
           if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent du package Lite." }
           if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package Lite." }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7.1-Windows-Native-LITE-2026-09-20") {
+          if ($buildId -ne "AuraLive-2.7.2-Windows-Native-LITE-2026-09-20") {
             throw "Build ID Lite inattendu: $buildId"
           }
           $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
@@ -105,7 +139,12 @@ jobs:
             throw "Le pack de voix Kokoro ne doit pas être embarqué dans le Lite."
           }
 
-          $zip = "release\AuraLive-Windows-Native-2.7.1-LITE.zip"
+          .\scripts\sign-windows.ps1 -Path @(
+            "dist\AuraLive\AuraLive.exe",
+            "dist\AuraLive\AuraNativeBroadcast.exe"
+          )
+
+          $zip = "release\AuraLive-Windows-Native-2.7.2-LITE.zip"
           Compress-Archive -Path "dist\AuraLive" -DestinationPath $zip -CompressionLevel Optimal
           if ((Get-Item $zip).Length -lt 1000000) { throw "Archive Lite anormalement petite." }
 
@@ -122,7 +161,7 @@ jobs:
       - name: Generate SHA-256 checksums
         shell: pwsh
         run: |
-          $lines = Get-ChildItem "release" -Filter "*.zip" | Sort-Object Name | ForEach-Object {
+          $lines = Get-ChildItem "release" -File | Where-Object { $_.Extension -in @(".zip", ".exe") } | Sort-Object Name | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)"
           }
@@ -134,13 +173,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "auralive-2.7.1-native"
-          $full = "release\AuraLive-Windows-Native-2.7.1.zip"
-          $lite = "release\AuraLive-Windows-Native-2.7.1-LITE.zip"
+          $tag = "auralive-2.7.2-native"
+          $full = "release\AuraLive-Windows-Native-2.7.2.zip"
+          $lite = "release\AuraLive-Windows-Native-2.7.2-LITE.zip"
           $engine = "release\Aura-Native-Broadcast-Windows-x64.zip"
+          $installer = "release\AuraLive-Setup-2.7.2.exe"
           $sums = "release\SHA256SUMS.txt"
           $notes = @"
-          # Aura Live 2.7.1 Native
+          # Aura Live 2.7.2 Native
 
           Aura Live devient un studio de streaming Windows autonome avec **Aura Native Broadcast 0.4** comme moteur par défaut. OBS reste disponible uniquement comme mode de compatibilité manuel.
 
@@ -161,25 +201,28 @@ jobs:
           - CI Windows et moteur natif validés sur la branche principale.
 
           ## Fichiers
-          - **AuraLive-Windows-Native-2.7.1.zip** : package complet avec assets Kokoro embarqués.
-          - **AuraLive-Windows-Native-2.7.1-LITE.zip** : package allégé ; Kokoro se télécharge au premier usage.
+          - **AuraLive-Windows-Native-2.7.2.zip** : package complet avec assets Kokoro embarqués.
+          - **AuraLive-Windows-Native-2.7.2-LITE.zip** : package allégé ; Kokoro se télécharge au premier usage.
+          - **AuraLive-Setup-2.7.2.exe** : installateur Windows recommandé, données utilisateur conservées lors des mises à jour.
           - **Aura-Native-Broadcast-Windows-x64.zip** : moteur natif autonome.
-          - **SHA256SUMS.txt** : empreintes SHA-256 des trois archives.
+          - **SHA256SUMS.txt** : empreintes SHA-256 des archives et de l’installateur.
+          - Mise à jour intégrée : Aura vérifie la release officielle et contrôle le SHA-256 avant exécution.
+          - Signature Authenticode appliquée automatiquement lorsque le certificat de signature est configuré dans les secrets CI.
 
-          Build complet : `AuraLive-2.7.1-Windows-Native-2026-09-20`
-          Build Lite : `AuraLive-2.7.1-Windows-Native-LITE-2026-09-20`
+          Build complet : `AuraLive-2.7.2-Windows-Native-2026-09-20`
+          Build Lite : `AuraLive-2.7.2-Windows-Native-LITE-2026-09-20`
           Moteur natif : 0.4.0
           "@
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $full $lite $engine $sums --clobber --repo "${{ github.repository }}"
-            gh release edit $tag --repo "${{ github.repository }}" --title "Aura Live 2.7.1 Native" --notes $notes --latest
+            gh release upload $tag $full $lite $engine $installer $sums --clobber --repo "${{ github.repository }}"
+            gh release edit $tag --repo "${{ github.repository }}" --title "Aura Live 2.7.2 Native" --notes $notes --latest
           } else {
-            gh release create $tag $full $lite $engine $sums `
+            gh release create $tag $full $lite $engine $installer $sums `
               --repo "${{ github.repository }}" `
               --target "${{ github.sha }}" `
-              --title "Aura Live 2.7.1 Native" `
+              --title "Aura Live 2.7.2 Native" `
               --notes $notes `
               --latest
           }
