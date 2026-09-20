@@ -18,14 +18,20 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct AudioMix {
     pub mic_volume: f32,
+    pub system_volume: f32,
     pub aura_volume: f32,
     pub mic_muted: bool,
+    pub system_muted: bool,
     pub aura_muted: bool,
 }
 
 impl AudioMix {
     fn mic_gain(self) -> f32 {
         if self.mic_muted { 0.0 } else { self.mic_volume.clamp(0.0, 2.0) }
+    }
+
+    fn system_gain(self) -> f32 {
+        if self.system_muted { 0.0 } else { self.system_volume.clamp(0.0, 2.0) }
     }
 
     fn aura_gain(self) -> f32 {
@@ -354,6 +360,16 @@ fn append_mic_input(args: &mut Vec<String>, settings: &Settings) {
     }
 }
 
+fn append_system_audio_input(args: &mut Vec<String>) {
+    args.extend([
+        "-thread_queue_size".into(), "512".into(),
+        "-f".into(), "s16le".into(),
+        "-ar".into(), "48000".into(),
+        "-ac".into(), "2".into(),
+        "-i".into(), format!("{}/api/broadcast/system-audio.pcm", control::local_base_url()),
+    ]);
+}
+
 fn append_aura_audio_input(args: &mut Vec<String>) {
     args.extend([
         "-thread_queue_size".into(), "512".into(),
@@ -364,10 +380,17 @@ fn append_aura_audio_input(args: &mut Vec<String>) {
     ]);
 }
 
-fn mixed_filter(video_filter: &str, mic_index: usize, aura_index: usize, audio: AudioMix) -> String {
+fn mixed_filter(
+    video_filter: &str,
+    mic_index: usize,
+    system_index: usize,
+    aura_index: usize,
+    audio: AudioMix,
+) -> String {
     format!(
-        "{video_filter};[{mic_index}:a]volume={:.3}[mic];[{aura_index}:a]volume={:.3}[aura];[mic][aura]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,aresample=async=1:first_pts=0[aout]",
+        "{video_filter};[{mic_index}:a]volume={:.3}[mic];[{system_index}:a]volume={:.3}[system];[{aura_index}:a]volume={:.3}[aura];[mic][system][aura]amix=inputs=3:duration=longest:dropout_transition=0:normalize=0,aresample=async=1:first_pts=0[aout]",
         audio.mic_gain(),
+        audio.system_gain(),
         audio.aura_gain(),
     )
 }
@@ -406,12 +429,14 @@ pub fn start_stream(settings: &Settings, scene: &Scene, audio: AudioMix) -> Resu
 
     let pipeline = build_video_pipeline(settings, scene);
     let mic_index = pipeline.next_input_index;
-    let aura_index = mic_index + 1;
+    let system_index = mic_index + 1;
+    let aura_index = system_index + 1;
     let mut args = pipeline.args;
     append_mic_input(&mut args, settings);
+    append_system_audio_input(&mut args);
     append_aura_audio_input(&mut args);
     args.extend([
-        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, aura_index, audio),
+        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, system_index, aura_index, audio),
         "-map".into(), pipeline.output_label.into(),
         "-map".into(), "[aout]".into(),
     ]);
@@ -444,12 +469,14 @@ pub fn start_recording(settings: &Settings, scene: &Scene, audio: AudioMix) -> R
 
     let pipeline = build_video_pipeline(settings, scene);
     let mic_index = pipeline.next_input_index;
-    let aura_index = mic_index + 1;
+    let system_index = mic_index + 1;
+    let aura_index = system_index + 1;
     let mut args = pipeline.args;
     append_mic_input(&mut args, settings);
+    append_system_audio_input(&mut args);
     append_aura_audio_input(&mut args);
     args.extend([
-        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, aura_index, audio),
+        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, system_index, aura_index, audio),
         "-map".into(), pipeline.output_label.into(),
         "-map".into(), "[aout]".into(),
     ]);
