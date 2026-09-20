@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#111a2d">
-  <title>Aura Live — Studio</title>
+  <title>Quantic Studio</title>
   <link rel="stylesheet" href="/static/styles.css?v=1.2.0">
   <link rel="stylesheet" href="/static/power.css?v=1.2.0">
   <link rel="stylesheet" href="/static/complete.css?v=1.2.0">
-  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.2">
+  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.7.3">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -48,8 +48,8 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">
-        <div class="brand-orb"><span></span></div>
-        <div><strong>AURA LIVE</strong><small>Streaming Studio</small></div>
+        <img class="quantic-studio-brand-mark" src="/static/quantic-studio-mark.svg?v=2.7.3" alt="">
+        <div><strong>QUANTIC STUDIO</strong><small>Broadcast · Record · Create</small></div>
         <button class="sidebar-collapse" id="sidebar-collapse" aria-label="Réduire le menu">‹</button>
       </div>
 
@@ -128,13 +128,13 @@
         </div>
       </nav>
 
-      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Aura Live 2.7.2</small></div></footer>
+      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Quantic Studio 2.7.3</small></div></footer>
     </aside>
 
     <main class="main-area">
       <header class="topbar">
         <button class="mobile-menu" id="mobile-menu">☰</button>
-        <div class="breadcrumbs"><span>Aura Live</span><b>/</b><strong id="page-title">Studio</strong></div>
+        <div class="breadcrumbs"><span>Quantic Studio</span><b>/</b><strong id="page-title">Studio</strong></div>
         <div class="topbar-actions">
           <div class="system-pill" id="top-system-pill"><span></span><b>Connexion</b></div>
           <button class="round-button" id="refresh-all" title="Actualiser"><svg><use href="#i-refresh"/></svg></button>
@@ -151,7 +151,7 @@
               <div class="studio-title">
                 <div class="studio-logo">◈</div>
                 <div>
-                  <b>Aura Live Studio</b>
+                  <b>Quantic Studio</b>
                   <small>Votre live, vos scènes et Aura dans un seul espace.</small>
                 </div>
               </div>
@@ -425,7 +425,7 @@
         <section class="page" data-page-panel="avatar">
           <div class="page-heading"><div><span>PRÉSENCE À L’ÉCRAN</span><h1>Avatar & voix de Mairaiy</h1><p>Une source navigateur transparente qui parle avec les réponses d’Aura et passe automatiquement de l’image au repos à l’image parlante.</p></div><button class="primary-button" id="avatar-test-button"><svg><use href="#i-volume"/></svg>Tester la voix</button></div>
           <div class="avatar-studio-grid">
-            <article class="avatar-preview-panel"><div class="avatar-preview-stage"><div class="preview-energy"><i></i><i></i></div><img class="preview-avatar preview-avatar-idle" src="/static/avatar/mairaiy-idle.png?v=1.2.0" alt="Mairaiy au repos"><img class="preview-avatar preview-avatar-speaking" src="/static/avatar/mairaiy-speaking.png?v=1.2.0" alt="Mairaiy en train de parler"><div class="preview-identity"><span></span><b>MAIRAIY</b><small>AURA LIVE</small></div><div class="preview-caption"><small>AURA</small><p>Je suis prête à apparaître et parler dans OBS.</p></div></div></article>
+            <article class="avatar-preview-panel"><div class="avatar-preview-stage"><div class="preview-energy"><i></i><i></i></div><img class="preview-avatar preview-avatar-idle" src="/static/avatar/mairaiy-idle.png?v=1.2.0" alt="Mairaiy au repos"><img class="preview-avatar preview-avatar-speaking" src="/static/avatar/mairaiy-speaking.png?v=1.2.0" alt="Mairaiy en train de parler"><div class="preview-identity"><span></span><b>MAIRAIY</b><small>QUANTIC STUDIO</small></div><div class="preview-caption"><small>AURA</small><p>Je suis prête à apparaître et parler dans OBS.</p></div></div></article>
             <article class="panel-card avatar-settings-card"><div class="card-head"><div><small>SOURCE OBS</small><h3>Configuration</h3></div></div><div class="copy-field"><input readonly value="http://localhost:8787/overlay/avatar"><button data-copy-url="/overlay/avatar"><svg><use href="#i-copy"/></svg></button><a href="/overlay/avatar" target="_blank"><svg><use href="#i-external"/></svg></a></div><form id="avatar-settings-form"><label class="switch-row"><div><b>Avatar vocal actif</b><span>Lit uniquement les réponses finales d’Aura.</span></div><label class="switch"><input id="avatar-enabled" type="checkbox" checked><span></span></label></label><label>Nom de voix Windows / navigateur<input id="avatar-voice" placeholder="Laisser vide pour la meilleure voix française"></label><div class="form-row"><label>Vitesse<input id="avatar-rate" type="number" min="0.5" max="2" step="0.05" value="1"></label><label>Hauteur<input id="avatar-pitch" type="number" min="0.5" max="2" step="0.05" value="1"></label></div><label>Volume<input id="avatar-volume" type="range" min="0" max="1" step="0.05" value="1"></label><label class="switch-row"><div><b>Sous-titres</b><span>Affiche la phrase prononcée sous le personnage.</span></div><label class="switch"><input id="avatar-subtitles" type="checkbox" checked><span></span></label></label><button class="primary-button wide" type="submit">Enregistrer</button></form><div class="info-box"><b>Dans OBS :</b> ajoute une Source navigateur 700 × 1050, colle le lien, puis active « Contrôler l’audio via OBS ». La voix sera alors envoyée au mixage du live.</div></article>
           </div>
         </section>
@@ -488,8 +488,8 @@
           <div id="account-grid" class="account-grid"></div>
           <div class="settings-columns">
             <article class="panel-card update-center-card">
-              <div class="card-head"><div><small>MISES À JOUR</small><h3>Aura Live Windows</h3></div><span class="state-badge ok">OFFICIEL</span></div>
-              <div class="update-version-grid"><div><span>Version installée</span><b id="update-current-version">2.7.2</b></div><div><span>Dernière release</span><b id="update-latest-version">—</b></div></div>
+              <div class="card-head"><div><small>MISES À JOUR</small><h3>Quantic Studio Windows</h3></div><span class="state-badge ok">OFFICIEL</span></div>
+              <div class="update-version-grid"><div><span>Version installée</span><b id="update-current-version">2.7.3</b></div><div><span>Dernière release</span><b id="update-latest-version">—</b></div></div>
               <p id="update-state" class="update-state" data-kind="idle">Vérification non effectuée.</p>
               <div class="module-card-actions"><button class="secondary-button" id="update-check" type="button">Vérifier</button><button class="primary-button" id="update-install" type="button" data-available="false" disabled>Installer la mise à jour</button></div>
               <small class="update-security-note">Téléchargement depuis la release GitHub officielle uniquement, avec contrôle SHA-256 avant lancement.</small>
@@ -615,7 +615,7 @@
   <script src="/static/app.js?v=1.2.0"></script>
   <script src="/static/power.js?v=1.2.0"></script>
   <script src="/static/complete.js?v=1.2.0"></script>
-  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.7.2"></script>
-  <script src="/static/update-center.js?v=2.7.2"></script>
+  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.7.3"></script>
+  <script src="/static/update-center.js?v=2.7.3"></script>
 </body>
 </html>
