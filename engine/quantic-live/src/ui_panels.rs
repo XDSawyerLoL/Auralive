@@ -15,9 +15,9 @@ impl QuanticLiveApp {
                 ui.horizontal_centered(|ui| {
                     ui.add_space(10.0);
                     ui.label(RichText::new("◈").size(28.0).color(Color32::from_rgb(183, 148, 255)));
-                    ui.label(RichText::new("AURA LIVE").strong().size(18.0));
+                    ui.label(RichText::new("QUANTIC STUDIO").strong().size(18.0));
                     ui.add_space(12.0);
-                    badge(ui, "0.3 NATIVE");
+                    badge(ui, "0.4.1 CORE");
                     let spacer = (ui.available_width() - 485.0).max(0.0);
                     ui.add_space(spacer);
                     if ui.button("Réglages").clicked() {
