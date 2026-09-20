@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from array import array
+import audioop
 import json
 import os
 import re
@@ -215,6 +216,13 @@ class NativeBroadcastService:
         self._audio_tracks: list[dict[str, Any]] = []
         self._audio_decode_threads: set[threading.Thread] = set()
         self._audio_last_pull = 0.0
+        self._system_audio_buffer = bytearray()
+        self._system_audio_thread: threading.Thread | None = None
+        self._system_audio_stop = threading.Event()
+        self._system_audio_last_pull = 0.0
+        self._system_audio_ready = False
+        self._system_audio_device = ""
+        self._system_audio_error = ""
 
     def ffmpeg_executable(self) -> str:
         bundled = RUNTIME_DIR / "ffmpeg" / "ffmpeg.exe"
@@ -233,6 +241,122 @@ class NativeBroadcastService:
 
     def audio_bus_active(self) -> bool:
         return time.monotonic() - self._audio_last_pull <= 2.0
+
+    def system_audio_chunk(self, byte_count: int = 19200) -> bytes:
+        self._system_audio_last_pull = time.monotonic()
+        self._ensure_system_audio_capture()
+
+        byte_count = max(4, int(byte_count))
+        byte_count -= byte_count % 4
+        with self._audio_lock:
+            available = min(byte_count, len(self._system_audio_buffer))
+            available -= available % 4
+            chunk = bytes(self._system_audio_buffer[:available])
+            if available:
+                del self._system_audio_buffer[:available]
+
+        if len(chunk) < byte_count:
+            chunk += b"\x00" * (byte_count - len(chunk))
+        return chunk
+
+    def system_audio_status(self) -> dict[str, Any]:
+        thread = self._system_audio_thread
+        return {
+            "available": self._system_audio_ready,
+            "running": bool(thread is not None and thread.is_alive()),
+            "device": self._system_audio_device,
+            "error": self._system_audio_error,
+        }
+
+    def _ensure_system_audio_capture(self) -> None:
+        if os.name != "nt":
+            self._system_audio_error = "WASAPI loopback est disponible uniquement sous Windows"
+            return
+        thread = self._system_audio_thread
+        if thread is not None and thread.is_alive():
+            return
+
+        self._system_audio_stop.clear()
+        self._system_audio_thread = threading.Thread(
+            target=self._system_audio_capture_loop,
+            name="AuraSystemAudioLoopback",
+            daemon=True,
+        )
+        self._system_audio_thread.start()
+
+    def _system_audio_capture_loop(self) -> None:
+        self._system_audio_ready = False
+        self._system_audio_error = ""
+        self._system_audio_device = ""
+        try:
+            import pyaudiowpatch as pyaudio
+
+            with pyaudio.PyAudio() as audio:
+                device = audio.get_default_wasapi_loopback()
+                device_index = int(device["index"])
+                input_rate = int(float(device.get("defaultSampleRate") or 48000))
+                channels = 2 if int(device.get("maxInputChannels") or 0) >= 2 else 1
+                self._system_audio_device = str(device.get("name") or "Sortie Windows")
+                rate_state = None
+
+                def callback(in_data, frame_count, time_info, status_flags):
+                    nonlocal rate_state
+                    if self._system_audio_stop.is_set():
+                        return (in_data, pyaudio.paComplete)
+                    try:
+                        payload = bytes(in_data or b"")
+                        if input_rate != 48000 and payload:
+                            payload, rate_state = audioop.ratecv(
+                                payload,
+                                2,
+                                channels,
+                                input_rate,
+                                48000,
+                                rate_state,
+                            )
+                        if channels == 1 and payload:
+                            payload = audioop.tostereo(payload, 2, 1.0, 1.0)
+                        if payload:
+                            with self._audio_lock:
+                                self._system_audio_buffer.extend(payload)
+                                max_bytes = 48000 * 2 * 2 * 4
+                                if len(self._system_audio_buffer) > max_bytes:
+                                    del self._system_audio_buffer[:-max_bytes]
+                    except Exception:
+                        pass
+                    return (in_data, pyaudio.paContinue)
+
+                with audio.open(
+                    format=pyaudio.paInt16,
+                    channels=channels,
+                    rate=input_rate,
+                    frames_per_buffer=1024,
+                    input=True,
+                    input_device_index=device_index,
+                    stream_callback=callback,
+                ) as stream:
+                    self._system_audio_ready = True
+                    while (
+                        not self._system_audio_stop.wait(0.20)
+                        and time.monotonic() - self._system_audio_last_pull <= 3.0
+                    ):
+                        if not stream.is_active():
+                            break
+        except Exception as exc:
+            self._system_audio_error = str(exc or exc.__class__.__name__)[:240]
+        finally:
+            self._system_audio_ready = False
+            self._system_audio_thread = None
+
+    def _stop_system_audio_capture(self) -> None:
+        self._system_audio_stop.set()
+        thread = self._system_audio_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=2)
+        self._system_audio_thread = None
+        self._system_audio_ready = False
+        with self._audio_lock:
+            self._system_audio_buffer.clear()
 
     def enqueue_overlay_audio(self, event: dict[str, Any]) -> None:
         if not isinstance(event, dict):
@@ -649,6 +773,7 @@ class NativeBroadcastService:
             self._owns_process = False
 
         self._stop_browser_sources()
+        self._stop_system_audio_capture()
         return self.status()
 
     def close(self) -> None:
@@ -729,6 +854,7 @@ class NativeBroadcastService:
             "obs_fallback_enabled": bool(getattr(self.settings, "obs_enabled", False)),
             "preview_frame_available": self.preview_path.is_file(),
             "audio_tracks_active": len(self._audio_tracks),
+            "system_audio": self.system_audio_status(),
         }
 
     def _read_status(self) -> dict[str, Any]:
