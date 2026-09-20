@@ -283,7 +283,8 @@ jobs:
                 if ($nativeStatus.responsive -eq $true -and
                     $nativeStatus.engine.version -eq "0.3.0" -and
                     $nativeStatus.engine.ffmpeg_ok -eq $true -and
-                    $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture") {
+                    $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
+                    $nativeStatus.system_audio.backend_present -eq $true) {
                   $nativeReady = $true
                   break
                 }
