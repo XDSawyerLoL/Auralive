@@ -296,27 +296,41 @@ class NativeBroadcastService:
         elif stream_key is not None and str(stream_key).strip():
             self.set_stream_secret(str(stream_key))
 
+        # On first use, start the native engine once so it creates a complete
+        # secret-free configuration. Never create a partial ProjectState JSON.
+        if not self.config_path.is_file():
+            started = self.start()
+            if not started.get("process_running"):
+                raise RuntimeError("Impossible de démarrer Aura Native pour initialiser la sortie")
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline and not self.config_path.is_file():
+                time.sleep(0.05)
+
+        was_running = self.process_running()
+        if was_running:
+            self.stop()
+
         config: dict[str, Any] = {}
         try:
             loaded = json.loads(self.config_path.read_text(encoding="utf-8"))
             if isinstance(loaded, dict):
                 config = loaded
-        except Exception:
-            pass
+        except Exception as exc:
+            if was_running:
+                self.start()
+            raise RuntimeError("Configuration Aura Native illisible") from exc
 
         settings = config.get("settings")
         if not isinstance(settings, dict):
-            settings = {}
-            config["settings"] = settings
+            if was_running:
+                self.start()
+            raise RuntimeError("Configuration Aura Native incomplète")
         settings["rtmp_url"] = rtmp_url
         # Never persist the stream key in the engine JSON.
         settings["stream_key"] = ""
-        if config:
-            self._atomic_json(self.config_path, config)
+        self._atomic_json(self.config_path, config)
 
-        was_running = self.process_running()
         if was_running:
-            self.stop()
             self.start()
         return self.output_configuration()
 
