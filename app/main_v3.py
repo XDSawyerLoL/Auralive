@@ -62,7 +62,7 @@ async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
 
 
 aura.overlay.subscribe(_native_overlay_audio_listener)
-app.version = "2.7.2"
+app.version = "2.7.3"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -83,7 +83,7 @@ def _write_runtime_env(values: dict[str, str]) -> None:
     try:
         lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
     except OSError as exc:
-        raise RuntimeError("Impossible de lire la configuration locale Aura Live") from exc
+        raise RuntimeError("Impossible de lire la configuration locale Quantic Studio") from exc
 
     remaining = dict(values)
     output: list[str] = []
@@ -101,7 +101,7 @@ def _write_runtime_env(values: dict[str, str]) -> None:
     if remaining:
         if output and output[-1].strip():
             output.append("")
-        output.append("# Configuration enregistree depuis Aura Live")
+        output.append("# Configuration enregistree depuis Quantic Studio")
         for key, value in remaining.items():
             output.append(f"{key}={value}")
 
@@ -111,7 +111,7 @@ def _write_runtime_env(values: dict[str, str]) -> None:
         os.replace(temporary, env_path)
     except OSError as exc:
         temporary.unlink(missing_ok=True)
-        raise RuntimeError("Impossible d'enregistrer la configuration locale Aura Live") from exc
+        raise RuntimeError("Impossible d'enregistrer la configuration locale Quantic Studio") from exc
 
 
 def _open_external_url(url: str) -> bool:
@@ -855,7 +855,7 @@ async def twitch_auth_v3(role: str, request: Request) -> HTMLResponse:
         "<body style=\"font-family:Segoe UI,sans-serif;background:#080b12;color:#eef3ff;padding:40px\">"
         f"<h1>Connexion {account} ouverte</h1>"
         "<p>Twitch s'est ouvert dans ton navigateur Windows normal. Termine l'autorisation là-bas.</p>"
-        "<p>Cette fenêtre Aura Live peut rester ouverte.</p></body>"
+        "<p>Cette fenêtre Quantic Studio peut rester ouverte.</p></body>"
     )
 
 
