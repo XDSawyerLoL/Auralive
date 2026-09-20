@@ -7,6 +7,7 @@
     busy: false,
     statusTimer: null,
     activityTimer: null,
+    sourceDiscovery: {windows: [], webcams: []},
   };
 
   const $s = (selector, root = document) => root.querySelector(selector);
@@ -70,6 +71,188 @@
     return map[kind] || "◇";
   }
 
+  function sourceKindSlug(label) {
+    const map = {
+      "Écran": "desktop",
+      "Fenêtre": "window",
+      "Jeu": "game",
+      "Webcam": "webcam",
+      "Image": "image",
+      "Texte": "text",
+      "Navigateur": "browser",
+    };
+    return map[String(label || "")] || "desktop";
+  }
+
+  const sourceKindConfig = {
+    desktop: {name:"Écran", placeholder:"", help:"Capture l’écran principal.", target:false},
+    game: {name:"Jeu", placeholder:"Choisir le jeu ou sa fenêtre", help:"Aura détecte les fenêtres ouvertes. Le mode fenêtré ou sans bordure est recommandé.", target:true, list:"windows"},
+    window: {name:"Fenêtre", placeholder:"Choisir une application", help:"Sélectionne une fenêtre détectée.", target:true, list:"windows"},
+    webcam: {name:"Webcam", placeholder:"Choisir une caméra", help:"Aura détecte les caméras DirectShow disponibles.", target:true, list:"webcams"},
+    image: {name:"Image", placeholder:"Choisir un fichier image", help:"PNG, JPG, WEBP, BMP ou GIF.", target:true, browse:true},
+    text: {name:"Texte", placeholder:"Écris le texte à afficher", help:"Le texte sera rendu directement par FFmpeg.", target:true},
+    browser: {name:"Overlay", placeholder:"/overlay/avatar", help:"Overlay Aura local ou page web.", target:true},
+  };
+
+  async function loadSourceDiscovery() {
+    try {
+      const data = await request("/api/broadcast/discover");
+      studio.sourceDiscovery = {
+        windows: Array.isArray(data.windows) ? data.windows : [],
+        webcams: Array.isArray(data.webcams) ? data.webcams : [],
+      };
+    } catch {
+      studio.sourceDiscovery = {windows: [], webcams: []};
+    }
+  }
+
+  function fillSourceTargetList(kind) {
+    const list = $s("#studio-source-target-list");
+    if (!list) return;
+    const config = sourceKindConfig[kind] || sourceKindConfig.desktop;
+    const values = config.list ? (studio.sourceDiscovery[config.list] || []) : [];
+    list.innerHTML = values.map(value => `<option value="${escapeHtml(value)}"></option>`).join("");
+  }
+
+  function applySourceKind(kind, preset = "") {
+    const config = sourceKindConfig[kind] || sourceKindConfig.desktop;
+    const kindInput = $s("#studio-source-kind");
+    const targetRow = $s("#studio-source-target-row");
+    const target = $s("#studio-source-target");
+    const help = $s("#studio-source-target-help");
+    const browse = $s("#studio-source-browse");
+    if (kindInput) kindInput.value = kind;
+    if (targetRow) targetRow.hidden = !config.target;
+    if (target) {
+      target.placeholder = config.placeholder || "";
+      if (preset) target.value = preset;
+      if (!config.target) target.value = "";
+    }
+    if (help) help.textContent = config.help || "";
+    if (browse) browse.hidden = !config.browse;
+    fillSourceTargetList(kind);
+    $s("[data-source-kind]").forEach(button => {
+      button.classList.toggle(
+        "active",
+        button.dataset.sourceKind === kind
+          && (!preset || button.dataset.sourcePreset === preset)
+      );
+    });
+  }
+
+  async function openSourceModal(source = null) {
+    if (studio.status?.backend !== "native") {
+      notify("Passe en Aura Native pour gérer les sources", true);
+      return;
+    }
+    if (studio.status?.streaming || studio.status?.recording) {
+      notify("Arrête le direct ou l’enregistrement avant de modifier les sources", true);
+      return;
+    }
+
+    const modal = $s("#studio-source-modal");
+    if (!modal) return;
+    await loadSourceDiscovery();
+
+    const sourceId = $s("#studio-source-id");
+    const name = $s("#studio-source-name");
+    const target = $s("#studio-source-target");
+    const title = $s("#studio-source-modal-title");
+    const submit = $s("#studio-source-form button[type='submit']");
+    const remove = $s("#studio-source-delete");
+
+    if (source) {
+      const kind = sourceKindSlug(source.kind);
+      if (sourceId) sourceId.value = String(source.id || "");
+      if (name) name.value = String(source.name || "");
+      if (target) target.value = String(source.target || "");
+      if (title) title.textContent = "Configurer la source";
+      if (submit) submit.textContent = "Enregistrer";
+      if (remove) remove.hidden = false;
+      applySourceKind(kind, String(source.target || ""));
+      $s("[data-source-kind]").forEach(button => button.disabled = true);
+    } else {
+      if (sourceId) sourceId.value = "";
+      if (name) name.value = "";
+      if (target) target.value = "";
+      if (title) title.textContent = "Ajouter une source";
+      if (submit) submit.textContent = "Ajouter au studio";
+      if (remove) remove.hidden = true;
+      $s("[data-source-kind]").forEach(button => button.disabled = false);
+      applySourceKind("desktop");
+    }
+
+    modal.hidden = false;
+  }
+
+  function closeSourceModal() {
+    const modal = $s("#studio-source-modal");
+    if (modal) modal.hidden = true;
+  }
+
+  async function saveSourceFromModal(event) {
+    event.preventDefault();
+    const id = Number($s("#studio-source-id")?.value || 0);
+    const kind = String($s("#studio-source-kind")?.value || "desktop");
+    const name = String($s("#studio-source-name")?.value || "").trim();
+    const target = String($s("#studio-source-target")?.value || "").trim();
+    const config = sourceKindConfig[kind] || sourceKindConfig.desktop;
+
+    if (config.target && !target && !["browser", "text"].includes(kind)) {
+      notify("Choisis une source avant de continuer", true);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const result = id
+        ? await request(`/api/broadcast/source/${id}`, {
+            method: "PATCH",
+            body: JSON.stringify({name, target}),
+          })
+        : await request("/api/broadcast/source", {
+            method: "POST",
+            body: JSON.stringify({kind, name, target}),
+          });
+      renderBroadcast(result);
+      closeSourceModal();
+      notify(id ? "Source mise à jour" : "Source ajoutée au studio");
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  async function removeSource(sourceId) {
+    if (!sourceId || !window.confirm("Supprimer cette source de la scène ?")) return;
+    setBusy(true);
+    try {
+      const result = await request(`/api/broadcast/source/${sourceId}`, {method: "DELETE"});
+      renderBroadcast(result);
+      closeSourceModal();
+      notify("Source supprimée");
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  async function pickSourceImage() {
+    try {
+      const result = await request("/api/broadcast/pick-image", {method: "POST"});
+      if (result.path) {
+        const target = $s("#studio-source-target");
+        if (target) target.value = result.path;
+      }
+    } catch (error) {
+      notify(error.message, true);
+    }
+  }
+
   function renderScenes(status) {
     const holder = $s("#studio-scene-list");
     if (!holder) return;
@@ -101,8 +284,13 @@
     holder.innerHTML = sources.map(source => `
       <div class="studio-source">
         <span class="source-icon">${sourceIcon(source.kind)}</span>
-        <div><b>${escapeHtml(source.name)}</b><small>${escapeHtml(source.kind)}</small></div>
+        <div>
+          <b>${escapeHtml(source.name)}</b>
+          <small>${escapeHtml(source.kind)}${source.target ? " · " + escapeHtml(source.target) : ""}</small>
+        </div>
         <button class="studio-source-visibility ${source.visible ? "" : "off"}" type="button" data-source-toggle="${Number(source.id)}" data-source-visible="${source.visible ? "1" : "0"}" title="${source.visible ? "Masquer" : "Afficher"}" ${status.streaming || status.recording ? "disabled" : ""}>${source.visible ? "◉" : "○"}</button>
+        <button class="studio-source-configure" type="button" data-source-configure="${Number(source.id)}" title="Configurer" ${status.streaming || status.recording ? "disabled" : ""}>⚙</button>
+        <button class="studio-source-remove" type="button" data-source-remove="${Number(source.id)}" title="Supprimer" ${status.streaming || status.recording ? "disabled" : ""}>×</button>
       </div>
     `).join("");
     renderSourceHandles(status);
@@ -491,8 +679,56 @@
     }));
   }
 
+  function bindSourceModal() {
+    const form = $s("#studio-source-form");
+    if (form) form.addEventListener("submit", saveSourceFromModal);
+
+    $s("[data-source-kind]").forEach(button => button.addEventListener("click", () => {
+      if (button.disabled) return;
+      const preset = String(button.dataset.sourcePreset || "");
+      applySourceKind(String(button.dataset.sourceKind || "desktop"), preset);
+      const name = $s("#studio-source-name");
+      if (name && !name.value.trim()) {
+        const label = button.querySelector("span")?.textContent || "";
+        name.value = label;
+      }
+    }));
+
+    const browse = $s("#studio-source-browse");
+    if (browse) browse.addEventListener("click", pickSourceImage);
+
+    const remove = $s("#studio-source-delete");
+    if (remove) remove.addEventListener("click", () => {
+      removeSource(Number($s("#studio-source-id")?.value || 0));
+    });
+
+    $s("[data-studio-source-close]").forEach(button => button.addEventListener("click", closeSourceModal));
+
+    const modal = $s("#studio-source-modal");
+    if (modal) modal.addEventListener("click", event => {
+      if (event.target === modal) closeSourceModal();
+    });
+  }
+
   function bindControls() {
     document.addEventListener("click", event => {
+      const addSource = event.target.closest("[data-studio-source-add]");
+      if (addSource) {
+        openSourceModal();
+        return;
+      }
+      const configure = event.target.closest("[data-source-configure]");
+      if (configure) {
+        const sourceId = Number(configure.dataset.sourceConfigure);
+        const source = (studio.status?.sources || []).find(item => Number(item.id) === sourceId);
+        if (source) openSourceModal(source);
+        return;
+      }
+      const remove = event.target.closest("[data-source-remove]");
+      if (remove) {
+        removeSource(Number(remove.dataset.sourceRemove));
+        return;
+      }
       const engine = event.target.closest("[data-studio-engine]");
       if (engine) {
         selectEngine(engine.dataset.studioEngine);
@@ -529,6 +765,7 @@
     bindTabs();
     bindControls();
     bindSourceEditor();
+    bindSourceModal();
     refreshBroadcast(false);
     refreshActivity();
 
