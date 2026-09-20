@@ -439,6 +439,49 @@ async def _ensure_native_source_editable() -> dict[str, Any]:
     return await broadcast_status_v3()
 
 
+@app.get("/api/broadcast/output")
+async def broadcast_output_settings_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.output_configuration)
+
+
+@app.put("/api/broadcast/output")
+async def broadcast_output_settings_update_v3(
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "native").lower() != "native":
+        raise HTTPException(
+            status_code=409,
+            detail="Passe en mode Aura Native pour modifier la sortie de diffusion",
+        )
+
+    state = await broadcast_status_v3()
+    if state.get("streaming") or state.get("recording"):
+        raise HTTPException(
+            status_code=409,
+            detail="Arrête le direct et l'enregistrement avant de modifier la destination RTMP",
+        )
+
+    rtmp_url = str(payload.get("rtmp_url") or "").strip()
+    stream_key_raw = payload.get("stream_key")
+    stream_key = None if stream_key_raw is None else str(stream_key_raw).strip()
+    clear_stream_key = bool(payload.get("clear_stream_key", False))
+
+    try:
+        result = await asyncio.to_thread(
+            native_broadcast.configure_output,
+            rtmp_url,
+            stream_key,
+            clear_stream_key=clear_stream_key,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return {
+        **result,
+        "engine": (await broadcast_status_v3()).get("engine", {}),
+    }
+
+
 @app.put("/api/broadcast/audio")
 async def broadcast_audio_mix_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
