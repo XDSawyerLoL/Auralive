@@ -1,6 +1,6 @@
 param(
-    [string]$Version = "2.7.2",
-    [string]$SourceDir = "dist\\AuraLive"
+    [string]$Version = "2.7.3",
+    [string]$SourceDir = "dist\\QuanticStudio"
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,14 +18,14 @@ if (-not $iscc) {
 }
 if (-not $iscc) { throw "Inno Setup 6 est introuvable. Installe Inno Setup ou ajoute ISCC.exe au PATH." }
 
-if (-not (Test-Path "$SourceDir\\AuraLive.exe")) { throw "Le package Aura Live est absent : $SourceDir\\AuraLive.exe" }
+if (-not (Test-Path "$SourceDir\\QuanticStudio.exe")) { throw "Le package Quantic Studio est absent : $SourceDir\\QuanticStudio.exe" }
 $ResolvedSourceDir = (Resolve-Path $SourceDir).Path
 
 New-Item -ItemType Directory -Force "release" | Out-Null
-& $iscc "/DMyAppVersion=$Version" "/DSourceDir=$ResolvedSourceDir" "installer\\AuraLive.iss"
-if ($LASTEXITCODE -ne 0) { throw "La construction de l installateur Aura Live a echoue." }
+& $iscc "/DMyAppVersion=$Version" "/DSourceDir=$ResolvedSourceDir" "installer\\QuanticStudio.iss"
+if ($LASTEXITCODE -ne 0) { throw "La construction de l installateur Quantic Studio a echoue." }
 
-$installer = "release\\AuraLive-Setup-$Version.exe"
+$installer = "release\\QuanticStudio-Setup-$Version.exe"
 if (-not (Test-Path $installer)) { throw "Installateur absent : $installer" }
 if ((Get-Item $installer).Length -lt 1000000) { throw "Installateur anormalement petit." }
 Write-Host "Installateur pret : $installer" -ForegroundColor Green
