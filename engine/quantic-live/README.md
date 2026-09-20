@@ -1,4 +1,4 @@
-# Aura Native Broadcast — 0.3.0
+# Aura Native Broadcast — 0.4.0
 
 Moteur de diffusion desktop natif intégré à Aura Live.
 
@@ -14,7 +14,10 @@ Moteur de diffusion desktop natif intégré à Aura Live.
 - overlays Aura et Mairaiy ;
 - aperçu natif ;
 - enregistrement MKV ;
-- diffusion RTMP ;
+- diffusion RTMP et **multistream** (jusqu’à 3 destinations secondaires) ;
+- **replay buffer** configurable et sauvegarde instantanée de clips ;
+- transitions **Cut / Fondu** configurables ;
+- création, renommage et suppression de scènes depuis Aura Studio ;
 - détection NVIDIA NVENC / AMD AMF / Intel Quick Sync / x264 ;
 - édition de scène/source pendant Live/REC avec rebuild contrôlé ;
 - mix audio 3 voies : micro + son système WASAPI + Aura/Mairaiy/alertes ;
@@ -53,7 +56,7 @@ target\release\quantic-live.exe
 
 Aura Native diffuse directement du PC vers l’endpoint RTMP choisi.
 
-La clé de stream reste locale et n’est plus persistée dans `engine.json`. Aura Live la protège avec le coffre Windows DPAPI dans `data/native_broadcast/stream-key.dpapi`, lié au profil Windows local, puis l’injecte au moteur uniquement au lancement. Une ancienne clé trouvée en clair est migrée automatiquement puis effacée du JSON.
+La clé principale et les clés multistream restent locales et ne sont jamais persistées dans `engine.json`. Aura Live les protège avec Windows DPAPI dans `data/native_broadcast/`, lié au profil Windows local, puis les injecte au moteur uniquement au lancement. Une ancienne clé trouvée en clair est migrée automatiquement puis effacée du JSON.
 
 ## Audio
 
@@ -75,8 +78,11 @@ Les trois niveaux sont réglables indépendamment depuis Aura Studio.
 - **Contrôle moteur** : fichiers commande/statut locaux
 - **Fallback** : OBS, activable manuellement
 
-## Suite
+## Native 0.4
 
-- transitions graphiques ;
-- replay buffer / clips ;
-- multistream.
+- Cut ou fondu configurable lors du changement de scène ;
+- replay buffer de 10 à 300 secondes, segmenté localement ;
+- sauvegarde d’un replay en MKV sans interrompre le direct ;
+- multistream via un seul encodage FFmpeg et le muxer `tee` ;
+- destinations secondaires chiffrées par DPAPI ;
+- gestion complète des scènes depuis le Studio.
