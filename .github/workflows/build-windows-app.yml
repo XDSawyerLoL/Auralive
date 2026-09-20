@@ -26,7 +26,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +56,33 @@ jobs:
         shell: pwsh
         run: .\scripts\build-windows.ps1 -Python python
 
+      - name: Bundle FFmpeg with Windows Graphics Capture
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-19-13-11/ffmpeg-master-latest-win64-gpl-shared.zip"
+          $expectedSha256 = "063834fb799882edb6b4a477a353c1d41cc8a67508dd11b32be1fa2534154689"
+          $zip = Join-Path $env:RUNNER_TEMP "aura-ffmpeg.zip"
+          $extract = Join-Path $env:RUNNER_TEMP "aura-ffmpeg"
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expectedSha256) {
+            throw "FFmpeg SHA256 inattendu: $actual"
+          }
+          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+          Expand-Archive -Path $zip -DestinationPath $extract -Force
+          $ffmpegExe = Get-ChildItem $extract -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+          if (-not $ffmpegExe) {
+            throw "ffmpeg.exe absent de l'archive verifiee."
+          }
+          $dest = "dist\AuraLive\ffmpeg"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Copy-Item (Join-Path $ffmpegExe.Directory.FullName "*") $dest -Recurse -Force
+          $filters = & "$dest\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          if ($filters -notmatch "\bgfxcapture\b") {
+            throw "Le FFmpeg embarque ne contient pas Windows Graphics Capture (gfxcapture)."
+          }
+          Write-Host "FFmpeg Aura verifie: gfxcapture present."
+
       - name: Embed Aura Native Broadcast
         shell: pwsh
         run: |
@@ -76,6 +103,13 @@ jobs:
           }
           if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) {
             throw "AuraNativeBroadcast.exe est absent du package."
+          }
+          if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) {
+            throw "Le FFmpeg Aura embarque est absent du package."
+          }
+          $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          if ($filters -notmatch "\bgfxcapture\b") {
+            throw "Le FFmpeg livre ne contient pas gfxcapture."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
           if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
