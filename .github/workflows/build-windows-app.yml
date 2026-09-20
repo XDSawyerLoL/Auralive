@@ -283,7 +283,7 @@ jobs:
             $broadcastStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
             if ($broadcastStatus.mode -ne "native" -or $broadcastStatus.engine_available -ne $true) {
               $broadcastStatus | ConvertTo-Json -Depth 8 | Write-Host
-              throw "Aura Native doit etre le moteur livre par defaut."
+              throw "Quantic Studio Core doit etre le moteur livre par defaut."
             }
 
             $nativeDeadline = (Get-Date).AddSeconds(15)
@@ -304,7 +304,7 @@ jobs:
             }
             if (-not $nativeReady) {
               try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Aura Native 0.4.1 n'a pas demarre avec FFmpeg gfxcapture embarque."
+              throw "Quantic Studio Core 0.4.1 n'a pas demarre avec FFmpeg gfxcapture embarque."
             }
 
             $vaultSecret = "AURA-CI-SECRET-NOT-REAL"
@@ -350,7 +350,7 @@ jobs:
             }
             $nativeReturn = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/native" -Method Post -TimeoutSec 15
             if ($nativeReturn.mode -ne "native") {
-              throw "Impossible de revenir a Aura Native apres le fallback OBS."
+              throw "Impossible de revenir a Quantic Studio Core apres le fallback OBS."
             }
 
             $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
