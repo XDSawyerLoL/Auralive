@@ -8,11 +8,10 @@ use std::{
 use eframe::egui::{self, TextureHandle};
 
 use crate::{
+    control,
     ffmpeg,
     model::{Encoder, ProjectState, Source, SourceKind},
 };
-
-const CONFIG_FILE: &str = "quantic-live.json";
 
 pub struct QuanticLiveApp {
     pub(crate) project: ProjectState,
@@ -27,6 +26,9 @@ pub struct QuanticLiveApp {
     pub(crate) ffmpeg_ok: bool,
     pub(crate) detected_encoder: Encoder,
     last_texture_update: Instant,
+    last_control_poll: Instant,
+    last_status_write: Instant,
+    last_command_id: u64,
 }
 
 impl QuanticLiveApp {
@@ -52,14 +54,19 @@ impl QuanticLiveApp {
             ffmpeg_ok,
             detected_encoder,
             last_texture_update: Instant::now(),
+            last_control_poll: Instant::now(),
+            last_status_write: Instant::now(),
+            last_command_id: 0,
         }
     }
 
     pub(crate) fn save(&mut self) {
         self.refresh_runtime_status();
+        let config_path = control::config_path();
+        control::ensure_parent(&config_path);
         match serde_json::to_string_pretty(&self.project)
             .ok()
-            .and_then(|json| fs::write(CONFIG_FILE, json).ok())
+            .and_then(|json| fs::write(&config_path, json).ok())
         {
             Some(_) => self.status = "Configuration sauvegardée".into(),
             None => self.status = "Impossible de sauvegarder la configuration".into(),
@@ -177,6 +184,75 @@ impl QuanticLiveApp {
         }
     }
 
+    fn poll_external_control(&mut self) {
+        if self.last_control_poll.elapsed() < Duration::from_millis(100) {
+            return;
+        }
+        self.last_control_poll = Instant::now();
+
+        let Some(command) = control::read_command(self.last_command_id) else {
+            return;
+        };
+        self.last_command_id = command.id;
+
+        match command.action.as_str() {
+            "stream.start" if self.stream_process.is_none() => self.toggle_stream(),
+            "stream.stop" if self.stream_process.is_some() => self.toggle_stream(),
+            "record.start" if self.record_process.is_none() => self.toggle_recording(),
+            "record.stop" if self.record_process.is_some() => self.toggle_recording(),
+            "preview.start" if self.preview.is_none() => self.toggle_preview(),
+            "preview.stop" if self.preview.is_some() => self.toggle_preview(),
+            "scene.select" => {
+                if let Some(name) = command.value.as_deref() {
+                    if let Some(index) = self
+                        .project
+                        .scenes
+                        .iter()
+                        .position(|scene| scene.name.eq_ignore_ascii_case(name))
+                    {
+                        self.project.selected_scene = index;
+                        self.status = format!("Scène active · {}", self.project.scenes[index].name);
+                    } else {
+                        self.status = format!("Scène introuvable · {name}");
+                    }
+                }
+            }
+            "runtime.refresh" => {
+                self.refresh_runtime_status();
+                self.status = "État du moteur actualisé".into();
+            }
+            _ => {}
+        }
+    }
+
+    fn write_external_status(&mut self) {
+        if self.last_status_write.elapsed() < Duration::from_millis(250) {
+            return;
+        }
+        self.last_status_write = Instant::now();
+
+        let scene = self
+            .project
+            .scenes
+            .get(self.project.selected_scene)
+            .map(|scene| scene.name.as_str())
+            .unwrap_or("");
+        let encoder = self.detected_encoder.label();
+        control::write_status(&control::EngineStatus {
+            ok: true,
+            engine: "aura-native-broadcast",
+            version: "0.1.0",
+            last_command_id: self.last_command_id,
+            streaming: self.stream_process.is_some(),
+            recording: self.record_process.is_some(),
+            preview: self.preview.is_some(),
+            scene,
+            ffmpeg_ok: self.ffmpeg_ok,
+            encoder,
+            message: &self.status,
+        });
+    }
+
     pub(crate) fn add_source(&mut self, kind: SourceKind) {
         let Some(scene) = self.project.scenes.get_mut(self.project.selected_scene) else { return };
         let id = scene.sources.iter().map(|s| s.id).max().unwrap_or(0) + 1;
@@ -202,7 +278,9 @@ impl Drop for QuanticLiveApp {
             ffmpeg::stop_gracefully(&mut child);
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.project) {
-            let _ = fs::write(CONFIG_FILE, json);
+            let config_path = control::config_path();
+            control::ensure_parent(&config_path);
+            let _ = fs::write(config_path, json);
         }
     }
 }
@@ -212,6 +290,8 @@ impl eframe::App for QuanticLiveApp {
         let ctx = ui.ctx().clone();
         self.poll_children();
         self.update_preview(&ctx);
+        self.poll_external_control();
+        self.write_external_status();
         ctx.request_repaint_after(Duration::from_millis(33));
 
         self.top_bar(ui);
@@ -224,7 +304,7 @@ impl eframe::App for QuanticLiveApp {
 }
 
 fn load_project() -> Option<ProjectState> {
-    fs::read_to_string(CONFIG_FILE)
+    fs::read_to_string(control::config_path())
         .ok()
         .and_then(|data| serde_json::from_str(&data).ok())
 }
