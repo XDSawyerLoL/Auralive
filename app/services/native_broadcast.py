@@ -998,7 +998,7 @@ class NativeBroadcastService:
 
     @property
     def selected(self) -> bool:
-        return str(getattr(self.settings, "broadcast_engine", "obs") or "obs").lower() == "native"
+        return True
 
     def executable(self) -> Path | None:
         configured = str(getattr(self.settings, "native_engine_exe", "") or "").strip()
