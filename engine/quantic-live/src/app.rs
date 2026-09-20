@@ -34,7 +34,13 @@ pub struct QuanticLiveApp {
 impl QuanticLiveApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::ui_helpers::configure_style(&cc.egui_ctx);
-        let project = load_project().unwrap_or_default();
+        let mut project = load_project().unwrap_or_default();
+        if let Ok(path) = std::env::var("AURA_NATIVE_FFMPEG") {
+            let path = path.trim();
+            if !path.is_empty() {
+                project.settings.ffmpeg_path = path.to_owned();
+            }
+        }
         let ffmpeg_ok = ffmpeg::ffmpeg_available(&project.settings.ffmpeg_path);
         let detected_encoder = if ffmpeg_ok {
             ffmpeg::detect_encoder(&project.settings.ffmpeg_path)
@@ -89,6 +95,76 @@ impl QuanticLiveApp {
 
     fn active_scene(&self) -> Option<crate::model::Scene> {
         self.project.scenes.get(self.project.selected_scene).cloned()
+    }
+
+    fn audio_mix(&self) -> ffmpeg::AudioMix {
+        ffmpeg::AudioMix {
+            mic_volume: self.project.mic_volume,
+            aura_volume: self.project.desktop_volume,
+            mic_muted: self.project.mic_muted,
+            aura_muted: self.project.desktop_muted,
+        }
+    }
+
+    fn rebuild_active_outputs(&mut self, reason: &str) {
+        let preview_was_active = self.preview.is_some();
+        let stream_was_active = self.stream_process.is_some();
+        let record_was_active = self.record_process.is_some();
+
+        if let Some(mut preview) = self.preview.take() {
+            preview.stop();
+        }
+        self.preview_texture = None;
+
+        if let Some(mut child) = self.stream_process.take() {
+            ffmpeg::stop_gracefully(&mut child);
+        }
+
+        if let Some(mut child) = self.record_process.take() {
+            ffmpeg::stop_gracefully(&mut child);
+            self.recording_file = None;
+        }
+
+        let Some(scene) = self.active_scene() else {
+            self.status = "Aucune scène active".into();
+            return;
+        };
+        let audio = self.audio_mix();
+        let mut errors: Vec<String> = Vec::new();
+
+        if preview_was_active {
+            match ffmpeg::PreviewEngine::start(
+                &self.project.settings,
+                &scene,
+                control::preview_path(),
+            ) {
+                Ok(preview) => self.preview = Some(preview),
+                Err(err) => errors.push(format!("aperçu: {err}")),
+            }
+        }
+
+        if stream_was_active {
+            match ffmpeg::start_stream(&self.project.settings, &scene, audio) {
+                Ok(child) => self.stream_process = Some(child),
+                Err(err) => errors.push(format!("direct: {err}")),
+            }
+        }
+
+        if record_was_active {
+            match ffmpeg::start_recording(&self.project.settings, &scene, audio) {
+                Ok((child, file)) => {
+                    self.record_process = Some(child);
+                    self.recording_file = Some(file);
+                }
+                Err(err) => errors.push(format!("REC: {err}")),
+            }
+        }
+
+        self.status = if errors.is_empty() {
+            format!("{reason} · sorties Aura actualisées")
+        } else {
+            format!("{reason} · {}", errors.join(" · "))
+        };
     }
 
     fn restart_preview(&mut self) {
@@ -152,7 +228,8 @@ impl QuanticLiveApp {
             self.status = "Aucune scène active".into();
             return;
         };
-        match ffmpeg::start_stream(&self.project.settings, &scene) {
+        let audio = self.audio_mix();
+        match ffmpeg::start_stream(&self.project.settings, &scene, audio) {
             Ok(child) => {
                 self.stream_process = Some(child);
                 self.status = "EN DIRECT · compositeur Aura Native".into();
@@ -177,7 +254,8 @@ impl QuanticLiveApp {
             self.status = "Aucune scène active".into();
             return;
         };
-        match ffmpeg::start_recording(&self.project.settings, &scene) {
+        let audio = self.audio_mix();
+        match ffmpeg::start_recording(&self.project.settings, &scene, audio) {
             Ok((child, file)) => {
                 self.record_process = Some(child);
                 self.recording_file = Some(file);
@@ -263,9 +341,7 @@ impl QuanticLiveApp {
                         self.project.selected_scene = index;
                         self.status = format!("Scène active · {}", self.project.scenes[index].name);
                         let _ = self.persist_project();
-                        if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
-                            self.restart_preview();
-                        }
+                        self.rebuild_active_outputs("Scène changée");
                     } else {
                         self.status = format!("Scène introuvable · {name}");
                     }
@@ -299,9 +375,7 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
-                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
-                        self.restart_preview();
-                    }
+                    self.rebuild_active_outputs("Compositeur modifié");
                 }
             }
             "source.visibility" => {
@@ -321,9 +395,7 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
-                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
-                        self.restart_preview();
-                    }
+                    self.rebuild_active_outputs("Compositeur modifié");
                 }
             }
             "source.add" => {
@@ -369,9 +441,7 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
-                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
-                        self.restart_preview();
-                    }
+                    self.rebuild_active_outputs("Compositeur modifié");
                 }
             }
             "source.configure" => {
@@ -394,9 +464,7 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
-                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
-                        self.restart_preview();
-                    }
+                    self.rebuild_active_outputs("Compositeur modifié");
                 }
             }
             "source.remove" => {
@@ -412,9 +480,27 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
-                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
-                        self.restart_preview();
+                    self.rebuild_active_outputs("Compositeur modifié");
+                }
+            }
+            "audio.update" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        if let Some(value) = payload.get("mic_volume").and_then(|value| value.as_f64()) {
+                            self.project.mic_volume = (value as f32).clamp(0.0, 2.0);
+                        }
+                        if let Some(value) = payload.get("aura_volume").and_then(|value| value.as_f64()) {
+                            self.project.desktop_volume = (value as f32).clamp(0.0, 2.0);
+                        }
+                        if let Some(value) = payload.get("mic_muted").and_then(|value| value.as_bool()) {
+                            self.project.mic_muted = value;
+                        }
+                        if let Some(value) = payload.get("aura_muted").and_then(|value| value.as_bool()) {
+                            self.project.desktop_muted = value;
+                        }
                     }
+                    let _ = self.persist_project();
+                    self.rebuild_active_outputs("Mix audio modifié");
                 }
             }
             "runtime.refresh" => {
