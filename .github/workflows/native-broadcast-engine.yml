@@ -1,0 +1,47 @@
+name: Aura Native Broadcast engine
+
+on:
+  push:
+    branches:
+      - feature/aura-native-broadcast
+    paths:
+      - "engine/quantic-live/**"
+      - ".github/workflows/native-broadcast-engine.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "engine/quantic-live/**"
+      - "app/services/native_broadcast.py"
+      - "app/main_v3.py"
+      - "app/config.py"
+      - ".github/workflows/native-broadcast-engine.yml"
+  workflow_dispatch:
+
+jobs:
+  build-engine:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: engine/quantic-live
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/quantic-live
+      - name: Build release
+        run: cargo build --release
+      - name: Package native engine
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/release/quantic-live.exe dist/AuraNativeBroadcast.exe
+          Copy-Item README.md dist/README-Native-Broadcast.md
+          Compress-Archive -Path dist/* -DestinationPath Aura-Native-Broadcast-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aura-Native-Broadcast-Windows-x64
+          path: engine/quantic-live/Aura-Native-Broadcast-Windows-x64.zip
+          if-no-files-found: error
