@@ -6,7 +6,7 @@ const pageTitles = {
   notifications: "Notifications", protections: "Protections", community: "Communauté",
   loyalty: "Fidélité & niveaux", shop: "Boutique", rewards: "Points Twitch",
   giveaway: "Concours", queue: "Play with viewers", polls: "Sondages & prédictions",
-  tts: "Text-to-Speech", counters: "Compteurs", overlays: "Widgets & OBS",
+  tts: "Text-to-Speech", counters: "Compteurs", overlays: "Widgets & overlays",
   goals: "Objectifs", ai: "Aura IA", avatar: "Avatar & voix", connections: "Mon compte",
   gamesplus: "Jeux & animations", knowledge: "FAQ & permissions", audience: "Audience",
   livefinish: "Fin de live & IA", "advanced-overlays": "Widgets avancés",
@@ -33,12 +33,28 @@ function formatDate(value) {
 function initials(name) { return String(name || "?").split(/\s+/).slice(0,2).map(v => v[0]).join("").toUpperCase(); }
 
 async function api(url, options = {}) {
-  const response = await fetch(url, {headers: {"Content-Type": "application/json"}, ...options});
-  let payload = null;
-  const text = await response.text();
-  try { payload = text ? JSON.parse(text) : {}; } catch { payload = {detail: text}; }
-  if (!response.ok) throw new Error(payload.detail || payload.message || `Erreur ${response.status}`);
-  return payload;
+  const controller = new AbortController();
+  const timeoutMs = Number(options.timeoutMs || 15000);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const requestOptions = {...options};
+  delete requestOptions.timeoutMs;
+  try {
+    const response = await fetch(url, {
+      headers: {"Content-Type": "application/json"},
+      ...requestOptions,
+      signal: controller.signal,
+    });
+    let payload = null;
+    const text = await response.text();
+    try { payload = text ? JSON.parse(text) : {}; } catch { payload = {detail: text}; }
+    if (!response.ok) throw new Error(payload.detail || payload.message || `Erreur ${response.status}`);
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("La commande a expiré. Réessaie dans quelques secondes.");
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function toast(message, error = false) {
@@ -131,8 +147,7 @@ function renderHealth() {
     ["Chaîne SANSAHD", s.accounts?.broadcaster?.matches_expected, s.accounts?.broadcaster?.display_name || "Non connectée"],
     ["Chat mairaiy", s.eventsub_chat_connected, s.eventsub_chat_connected ? "Temps réel" : "Hors ligne"],
     ["Événements chaîne", s.eventsub_channel_connected, s.eventsub_channel_connected ? "Temps réel" : "Hors ligne"],
-    ["Ollama / IA", s.ai_enabled, s.ai_enabled ? s.ai_mode : "Désactivée"],
-    ["OBS WebSocket", s.obs_enabled, s.obs_enabled ? "Configuré" : "Désactivé"]
+    ["Ollama / IA", s.ai_enabled, s.ai_enabled ? s.ai_mode : "Désactivée"]
   ];
   $("#health-list").innerHTML = rows.map(([label, ok, detail]) => `<div class="health-item ${ok ? "ok" : ""}"><span></span>${escapeHtml(label)}<b>${escapeHtml(detail)}</b></div>`).join("");
 }
@@ -155,17 +170,13 @@ function renderAccounts() {
   const cards = [
     {role:"bot", title:"Compte qui parle", icon:"i-spark", expected:"mairaiy", data:accounts.bot || {}, auth:"/auth/twitch/bot"},
     {role:"broadcaster", title:"Chaîne diffusée", icon:"i-user", expected:"sansahd", data:accounts.broadcaster || {}, auth:"/auth/twitch/broadcaster"},
-    {role:"obs", title:"OBS Studio", icon:"i-monitor", expected:"Port 4455", data:{connected:s.obs_enabled, matches_expected:s.obs_enabled, display_name:s.obs_enabled ? "WebSocket configuré" : "Désactivé"}}
   ];
   $("#account-grid").innerHTML = cards.map(card => {
     const ok = card.data.matches_expected;
     const login = card.data.display_name || card.data.login || "Non connecté";
-    const actions = card.role === "obs"
-      ? `<button class="secondary-button" id="account-obs-test">Tester OBS</button>`
-      : `<a class="primary-button" href="${card.auth}">${ok ? "Reconnecter" : "Connecter"}</a>${card.data.connected ? `<button class="secondary-button" data-disconnect="${card.role}">Déconnecter</button>` : ""}`;
+    const actions = `<a class="primary-button" href="${card.auth}">${ok ? "Reconnecter" : "Connecter"}</a>${card.data.connected ? `<button class="secondary-button" data-disconnect="${card.role}">Déconnecter</button>` : ""}`;
     return `<article class="account-card"><div class="account-card-head"><div class="account-icon">${icon(card.icon)}</div><div><h3>${card.title}</h3><p>Attendu : ${escapeHtml(card.expected)}</p></div></div><div class="account-status ${ok ? "ok" : ""}"><span></span><b>${escapeHtml(login)}</b></div><div class="account-actions">${actions}</div></article>`;
   }).join("");
-  $("#account-obs-test")?.addEventListener("click", testOBS);
 }
 
 function renderOverview() {
@@ -335,11 +346,6 @@ async function refreshAll() {
   } catch (error) { toast(error.message, true); }
 }
 
-async function testOBS() {
-  try { const result = await api("/api/obs/test", {method:"POST"}); if ($("#obs-output")) $("#obs-output").textContent = JSON.stringify(result.data, null, 2); toast("OBS WebSocket répond correctement"); }
-  catch (error) { if ($("#obs-output")) $("#obs-output").textContent = error.message; toast(error.message, true); }
-}
-
 function resetCommandForm() {
   $("#command-form").reset(); $("#command-id").value = ""; $("#command-cooldown").value = 10; $("#command-enabled").checked = true; $("#command-modal-title").textContent = "Nouvelle commande";
 }
@@ -466,7 +472,7 @@ function setupActions() {
     const delGoal=event.target.closest("[data-delete-goal]"); if(delGoal&&confirm("Supprimer cet objectif ?")){await api(`/api/goals/${delGoal.dataset.deleteGoal}`,{method:"DELETE"});await loadGoals();toast("Objectif supprimé");return;}
     const counter=event.target.closest("[data-counter]"); if(counter){const route=Number(counter.dataset.delta)>0?"increment":"decrement";await api(`/api/counters/${counter.dataset.counter}/${route}`,{method:"POST"});await loadCounters();return;}
     const reset=event.target.closest("[data-counter-reset]"); if(reset){await api(`/api/counters/${reset.dataset.counterReset}`,{method:"PUT",body:JSON.stringify({value:0})});await loadCounters();return;}
-    const copy=event.target.closest("[data-copy-url]"); if(copy){const url=`${location.origin}${copy.dataset.copyUrl}`;try{await navigator.clipboard.writeText(url);}catch{const temp=document.createElement("textarea");temp.value=url;document.body.append(temp);temp.select();document.execCommand("copy");temp.remove();}toast("Lien OBS copié");return;}
+    const copy=event.target.closest("[data-copy-url]"); if(copy){const url=`${location.origin}${copy.dataset.copyUrl}`;try{await navigator.clipboard.writeText(url);}catch{const temp=document.createElement("textarea");temp.value=url;document.body.append(temp);temp.select();document.execCommand("copy");temp.remove();}toast("Lien copié");return;}
     const overlayTest=event.target.closest("[data-overlay-test]"); if(overlayTest){await api("/api/overlay/test",{method:"POST",body:JSON.stringify({type:"raid",viewer:"Les Pirates",message:"Marée montante : 42 personnes débarquent.",count:42})});toast("Test envoyé");return;}
     const disconnect=event.target.closest("[data-disconnect]"); if(disconnect){await api(`/api/twitch/accounts/${disconnect.dataset.disconnect}`,{method:"DELETE"});await loadStatus();toast("Compte déconnecté");return;}
     const resolve=event.target.closest("[data-resolve-prediction]"); if(resolve){await api(`/api/prediction/${resolve.dataset.resolvePrediction}/resolve`,{method:"POST",body:JSON.stringify({status:"RESOLVED",winning_outcome_id:resolve.dataset.outcome})});toast("Prédiction résolue");await loadPrediction();return;}
@@ -480,7 +486,6 @@ function setupActions() {
   $("#queue-clear").addEventListener("click",async()=>{if(confirm("Vider toute la file ?")){await api("/api/queue",{method:"DELETE"});await loadQueue();toast("File vidée");}});
   $("#poll-close").addEventListener("click",async()=>{try{await api("/api/poll/close",{method:"POST"});toast("Sondage clôturé");await loadPoll();}catch(error){toast(error.message,true);}});
   $("#tts-next").addEventListener("click",async()=>{await api("/api/tts/next",{method:"POST"});await loadTTS();});
-  $("#obs-test").addEventListener("click",testOBS);
   $("#refresh-all").addEventListener("click",refreshAll);
   $$("[data-interaction-tab]").forEach(button=>button.addEventListener("click",()=>{$$("[data-interaction-tab]").forEach(v=>v.classList.toggle("active",v===button));$$('[data-interaction-panel]').forEach(panel=>panel.classList.toggle("active",panel.dataset.interactionPanel===button.dataset.interactionTab));}));
 }
