@@ -50,7 +50,7 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
 def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     build = BUILD.read_text(encoding="utf-8")
     desktop = DESKTOP.read_text(encoding="utf-8")
-    build_id = "QuanticStudio-2.7.3-Windows-Native-2026-09-20"
+    build_id = "QuanticStudio-2.7.4-Windows-Native-2026-09-20"
 
     assert "--console" in build
     assert "--hide-console hide-early" in build
@@ -88,7 +88,7 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert "Kokoro ff_siwis n'est pas pret" in workflow
     assert "api/avatar/test" in workflow
     assert "overlay_required" in workflow
-    assert "QuanticStudio-Windows-Native-2.7.3" in workflow
+    assert "QuanticStudio-Windows-Native-2.7.4" in workflow
 
 
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
@@ -119,7 +119,7 @@ def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
 def test_windows_ci_builds_installer_and_supports_authenticode() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "build-installer.ps1" in workflow
-    assert "QuanticStudio-Setup-2.7.3.exe" in workflow
+    assert "QuanticStudio-Setup-2.7.4.exe" in workflow
     assert "sign-windows.ps1" in workflow
     assert "AURA_WINDOWS_SIGNING_PFX_BASE64" in workflow
     assert "AURA_WINDOWS_SIGNING_PFX_PASSWORD" in workflow
