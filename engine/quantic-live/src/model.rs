@@ -12,6 +12,31 @@ pub enum SourceKind {
 }
 
 impl SourceKind {
+    pub fn slug(&self) -> &'static str {
+        match self {
+            Self::Desktop => "desktop",
+            Self::Window => "window",
+            Self::Game => "game",
+            Self::Webcam => "webcam",
+            Self::Image => "image",
+            Self::Text => "text",
+            Self::Browser => "browser",
+        }
+    }
+
+    pub fn from_slug(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "desktop" | "screen" => Some(Self::Desktop),
+            "window" => Some(Self::Window),
+            "game" => Some(Self::Game),
+            "webcam" | "camera" => Some(Self::Webcam),
+            "image" => Some(Self::Image),
+            "text" => Some(Self::Text),
+            "browser" | "overlay" => Some(Self::Browser),
+            _ => None,
+        }
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             Self::Desktop => "Écran",
@@ -52,6 +77,8 @@ pub struct Source {
     pub visible: bool,
     #[serde(default)]
     pub transform: SourceTransform,
+    #[serde(default)]
+    pub target: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,6 +164,7 @@ impl Default for ProjectState {
                         kind: SourceKind::Desktop,
                         visible: true,
                         transform: SourceTransform::default(),
+                        target: String::new(),
                     }],
                 },
                 Scene { id: 2, name: "Discussion".into(), sources: vec![] },
