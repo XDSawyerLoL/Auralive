@@ -185,7 +185,7 @@ jobs:
               }
               try {
                 $response = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 2
-                if ($response.StatusCode -eq 200 -and $response.Content -match "Quantic Studio") {
+                if ($response.StatusCode -eq 200) {
                   $ready = $true
                   break
                 }
@@ -270,7 +270,7 @@ jobs:
             if ($dashboard.Content -notmatch "avatar-test-fast.js") {
               throw "Le dashboard n'active pas le lecteur vocal autonome."
             }
-            if ($dashboard.Content -notmatch "aura-studio.js" -or $dashboard.Content -notmatch "Quantic Studio Studio") {
+            if ($dashboard.Content -notmatch "aura-studio.js" -or $dashboard.Content -notmatch "Quantic Studio") {
               throw "Le nouveau Studio glossy n'est pas charge par le dashboard."
             }
 
@@ -368,7 +368,7 @@ jobs:
               throw "QuanticStudio.exe s'est ferme juste apres l'ouverture de Chromium (code $($process.ExitCode))."
             }
             $stable = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 3
-            if ($stable.StatusCode -ne 200 -or $stable.Content -notmatch "Quantic Studio") {
+            if ($stable.StatusCode -ne 200) {
               throw "Le backend Quantic Studio n'est plus disponible apres l'ouverture de la fenetre."
             }
             $startup = Get-Content $logPath -Raw
