@@ -106,16 +106,22 @@ pub struct ProjectState {
 impl Default for ProjectState {
     fn default() -> Self {
         Self {
-            scenes: vec![Scene {
-                id: 1,
-                name: "Live".into(),
-                sources: vec![Source {
+            scenes: vec![
+                Scene {
                     id: 1,
-                    name: "Écran principal".into(),
-                    kind: SourceKind::Desktop,
-                    visible: true,
-                }],
-            }],
+                    name: "Live".into(),
+                    sources: vec![Source {
+                        id: 1,
+                        name: "Écran principal".into(),
+                        kind: SourceKind::Desktop,
+                        visible: true,
+                    }],
+                },
+                Scene { id: 2, name: "Discussion".into(), sources: vec![] },
+                Scene { id: 3, name: "Jeu".into(), sources: vec![] },
+                Scene { id: 4, name: "Pause".into(), sources: vec![] },
+                Scene { id: 5, name: "Fin".into(), sources: vec![] },
+            ],
             selected_scene: 0,
             settings: Settings::default(),
             mic_volume: 0.82,
