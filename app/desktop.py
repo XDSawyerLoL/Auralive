@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 _stdio_sink = None
-BUILD_ID = "AuraLive-2.7.1-Windows-Native-2026-09-20"
+BUILD_ID = "AuraLive-2.7.2-Windows-Native-2026-09-20"
 
 
 def _startup_log_path() -> Path:
@@ -87,7 +87,7 @@ def _dashboard_url() -> str:
 
 
 def _request_text(url: str, timeout: float = 0.8) -> tuple[int, str]:
-    request = urllib.request.Request(url, headers={"User-Agent": "AuraLiveDesktop/2.5"})
+    request = urllib.request.Request(url, headers={"User-Agent": "AuraLiveDesktop/2.7.2"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read(96_000).decode("utf-8", errors="ignore")
         return int(getattr(response, "status", 200)), body
