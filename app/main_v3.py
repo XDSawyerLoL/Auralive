@@ -120,7 +120,61 @@ async def voice_control_status_v3() -> dict[str, Any]:
 
 @app.get("/api/broadcast/status")
 async def broadcast_status_v3() -> dict[str, Any]:
-    return await asyncio.to_thread(native_broadcast.status)
+    native = await asyncio.to_thread(native_broadcast.status)
+    mode = str(settings.broadcast_engine or "obs").lower()
+
+    if mode != "obs":
+        engine = dict(native.get("engine") or {})
+        return {
+            **native,
+            "backend": "native",
+            "streaming": bool(engine.get("streaming")),
+            "recording": bool(engine.get("recording")),
+            "preview": bool(engine.get("preview")),
+            "scene": str(engine.get("scene") or ""),
+            "scenes": list(engine.get("scenes") or []),
+            "sources": list(engine.get("sources") or []),
+            "encoder": str(engine.get("encoder") or ""),
+            "ffmpeg_ok": bool(engine.get("ffmpeg_ok")),
+        }
+
+    obs_status: dict[str, Any] = {
+        "connected": False,
+        "streaming": False,
+        "recording": False,
+        "scene": "",
+    }
+    if settings.obs_enabled:
+        try:
+            stream = await aura.obs.call("GetStreamStatus")
+            record = await aura.obs.call("GetRecordStatus")
+            scene = await aura.obs.call("GetCurrentProgramScene")
+            scenes_payload = await aura.obs.call("GetSceneList")
+            obs_status = {
+                "connected": True,
+                "streaming": bool(stream.get("outputActive")),
+                "recording": bool(record.get("outputActive")),
+                "scene": str(scene.get("currentProgramSceneName") or ""),
+                "scenes": [
+                    str(item.get("sceneName") or "")
+                    for item in list(scenes_payload.get("scenes") or [])
+                    if str(item.get("sceneName") or "").strip()
+                ],
+            }
+        except Exception as exc:  # noqa: BLE001
+            obs_status["error"] = str(exc or exc.__class__.__name__)[:240]
+
+    return {
+        **native,
+        "backend": "obs",
+        "streaming": bool(obs_status.get("streaming")),
+        "recording": bool(obs_status.get("recording")),
+        "preview": False,
+        "scene": str(obs_status.get("scene") or ""),
+        "scenes": list(obs_status.get("scenes") or []),
+        "sources": [],
+        "obs": obs_status,
+    }
 
 
 @app.post("/api/broadcast/mode/{mode}")
@@ -151,13 +205,40 @@ async def broadcast_engine_stop_v3() -> dict[str, Any]:
 
 
 async def _broadcast_command(action: str, value: str | None = None) -> dict[str, Any]:
+    if str(settings.broadcast_engine or "obs").lower() == "obs":
+        if not settings.obs_enabled:
+            raise HTTPException(status_code=503, detail="OBS est désactivé ou non configuré")
+        try:
+            if action == "stream.start":
+                await aura.obs.call("StartStream")
+            elif action == "stream.stop":
+                await aura.obs.call("StopStream")
+            elif action == "record.start":
+                await aura.obs.call("StartRecord")
+            elif action == "record.stop":
+                await aura.obs.call("StopRecord")
+            elif action == "scene.select":
+                if not value:
+                    raise ValueError("Nom de scène requis")
+                await aura.obs.set_scene(value)
+            elif action in {"preview.start", "preview.stop", "runtime.refresh"}:
+                pass
+            else:
+                raise ValueError(f"Commande de diffusion inconnue: {action}")
+            return await broadcast_status_v3()
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Commande OBS %s impossible: %s", action, exc)
+            raise HTTPException(status_code=503, detail=str(exc) or exc.__class__.__name__) from exc
+
     result = await asyncio.to_thread(native_broadcast.command, action, value)
     if result.get("error") == "native_engine_missing":
         raise HTTPException(
             status_code=503,
             detail="Aura Native Broadcast n'est pas encore compilé ou installé.",
         )
-    return result
+    return await broadcast_status_v3()
 
 
 @app.post("/api/broadcast/stream/start")
