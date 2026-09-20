@@ -90,7 +90,7 @@ jobs:
             throw "Le FFmpeg livre ne contient pas gfxcapture."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
+          if ($buildId -ne "AuraLive-2.7-Windows-Native-2026-09-20") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\AuraLive\.env")) {
@@ -172,7 +172,7 @@ jobs:
               throw "AuraLive-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
+            if ($startup -notmatch "AuraLive-2.7-Windows-Native-2026-09-20") {
               throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
