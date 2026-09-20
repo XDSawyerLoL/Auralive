@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import webbrowser
@@ -223,6 +224,8 @@ async def _broadcast_command(action: str, value: str | None = None) -> dict[str,
                 await aura.obs.set_scene(value)
             elif action in {"preview.start", "preview.stop", "runtime.refresh"}:
                 pass
+            elif action in {"source.transform", "source.visibility"}:
+                raise ValueError("L’édition visuelle des sources exige Aura Native Broadcast")
             else:
                 raise ValueError(f"Commande de diffusion inconnue: {action}")
             return await broadcast_status_v3()
@@ -313,6 +316,44 @@ async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, A
     if not scene:
         raise HTTPException(status_code=422, detail="Nom de scène requis")
     return await _broadcast_command("scene.select", scene)
+
+
+@app.put("/api/broadcast/source/{source_id}/transform")
+async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+
+    def number(name: str, default: float) -> float:
+        try:
+            return float(payload.get(name, default))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=f"Valeur {name} invalide") from exc
+
+    transform = {
+        "id": source_id,
+        "x": max(0.0, min(1.0, number("x", 0.0))),
+        "y": max(0.0, min(1.0, number("y", 0.0))),
+        "width": max(0.05, min(1.0, number("width", 1.0))),
+        "height": max(0.05, min(1.0, number("height", 1.0))),
+    }
+    if transform["x"] + transform["width"] > 1.0:
+        transform["x"] = max(0.0, 1.0 - transform["width"])
+    if transform["y"] + transform["height"] > 1.0:
+        transform["y"] = max(0.0, 1.0 - transform["height"])
+
+    return await _broadcast_command("source.transform", json.dumps(transform, separators=(",", ":")))
+
+
+@app.put("/api/broadcast/source/{source_id}/visibility")
+async def broadcast_source_visibility_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    if source_id <= 0:
+        raise HTTPException(status_code=422, detail="Source invalide")
+    if str(settings.broadcast_engine or "obs").lower() != "native":
+        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+    value = {"id": source_id, "visible": bool(payload.get("visible", True))}
+    return await _broadcast_command("source.visibility", json.dumps(value, separators=(",", ":")))
 
 
 @app.post("/api/voice/text")
