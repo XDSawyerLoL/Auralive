@@ -349,6 +349,7 @@ impl QuanticLiveApp {
                         kind: source.kind.label().to_owned(),
                         visible: source.visible,
                         transform: source.transform.clone(),
+                        target: source.target.clone(),
                     })
                     .collect()
             })
@@ -391,6 +392,7 @@ impl QuanticLiveApp {
                 width: 0.30,
                 height: 0.30,
             },
+            target: String::new(),
         });
         self.add_source_open = false;
     }
