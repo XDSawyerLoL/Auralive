@@ -21,7 +21,8 @@ if (Test-Path "dist\QuanticStudio") { Remove-Item -Recurse -Force "dist\QuanticS
     --console `
     --hide-console hide-early `
     --onedir `
-    --name "QuanticStudio" `\n    --icon "build-assets\\quantic-studio.ico" `
+    --name "QuanticStudio" `
+    --icon "build-assets\\quantic-studio.ico" `
     --paths "." `
     --hidden-import "uvicorn.logging" `
     --collect-all "piper" `
