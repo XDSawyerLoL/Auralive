@@ -307,6 +307,27 @@ async def broadcast_preview_start_v3() -> dict[str, Any]:
     return await _broadcast_command("preview.start")
 
 
+@app.get("/api/broadcast/system-audio.pcm")
+async def broadcast_system_audio_pcm_v3() -> StreamingResponse:
+    async def pcm_stream():
+        while True:
+            try:
+                chunk = await asyncio.to_thread(native_broadcast.system_audio_chunk, 19200)
+                yield chunk
+                await asyncio.sleep(0.10)
+            except asyncio.CancelledError:
+                raise
+
+    return StreamingResponse(
+        pcm_stream(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
+
+
 @app.get("/api/broadcast/audio.pcm")
 async def broadcast_native_audio_pcm_v3() -> StreamingResponse:
     async def pcm_stream():
