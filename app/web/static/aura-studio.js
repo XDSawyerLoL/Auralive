@@ -266,7 +266,7 @@
     const holder = $s("#studio-source-list");
     if (!holder) return;
     if (status.backend === "obs") {
-      holder.innerHTML = '<div class="studio-empty">Les sources restent gérées dans OBS pendant le mode de compatibilité.</div>';
+      holder.innerHTML = '<div class="studio-empty">En mode de compatibilité, les sources restent gérées dans OBS.</div>';
       renderSourceHandles(status);
       return;
     }
@@ -618,7 +618,7 @@
             ? "Aperçu composite natif actif. Les scènes, sources et positions sont modifiables directement ici."
             : "Cliquez sur Aperçu pour vérifier la capture avant de lancer le direct.")
         : (status.obs?.connected
-            ? "Aura pilote OBS derrière cette interface. Vous gardez les mêmes commandes pendant la transition vers le moteur natif."
+            ? "Mode de compatibilité OBS actif. Aura continue de piloter OBS avec les mêmes commandes."
             : "OBS est sélectionné mais la connexion WebSocket n’est pas disponible.");
     }
     if (stageStatus) {
@@ -633,7 +633,7 @@
       previewButton.classList.toggle("active", preview);
       previewButton.dataset.studioDisabled = native ? "false" : "true";
       previewButton.disabled = studio.busy || !native;
-      previewButton.title = native ? "Ouvrir ou fermer l’aperçu natif" : "L’aperçu OBS reste dans OBS pendant la transition";
+      previewButton.title = native ? "Ouvrir ou fermer l’aperçu natif" : "L’aperçu du mode de compatibilité reste affiché dans OBS";
     }
 
     const recordButton = $s('[data-studio-action="record"]');
