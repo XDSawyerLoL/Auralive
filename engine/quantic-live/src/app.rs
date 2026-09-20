@@ -87,6 +87,35 @@ impl QuanticLiveApp {
         };
     }
 
+    fn active_desktop_transform(&self) -> Option<SourceTransform> {
+        self.project
+            .scenes
+            .get(self.project.selected_scene)?
+            .sources
+            .iter()
+            .find(|source| source.visible && source.kind == SourceKind::Desktop)
+            .map(|source| source.transform.clone())
+    }
+
+    fn restart_preview(&mut self) {
+        if let Some(mut preview) = self.preview.take() {
+            preview.stop();
+        }
+        self.preview_texture = None;
+        let transform = self.active_desktop_transform();
+        match ffmpeg::PreviewEngine::start(
+            &self.project.settings,
+            transform.as_ref(),
+            control::preview_path(),
+        ) {
+            Ok(preview) => {
+                self.preview = Some(preview);
+                self.status = "Aperçu actualisé".into();
+            }
+            Err(err) => self.status = err.to_string(),
+        }
+    }
+
     pub(crate) fn toggle_preview(&mut self) {
         if let Some(mut preview) = self.preview.take() {
             preview.stop();
@@ -95,7 +124,12 @@ impl QuanticLiveApp {
             return;
         }
 
-        match ffmpeg::PreviewEngine::start(&self.project.settings, control::preview_path()) {
+        let transform = self.active_desktop_transform();
+        match ffmpeg::PreviewEngine::start(
+            &self.project.settings,
+            transform.as_ref(),
+            control::preview_path(),
+        ) {
             Ok(preview) => {
                 self.preview = Some(preview);
                 self.status = "Aperçu actif".into();
@@ -111,7 +145,8 @@ impl QuanticLiveApp {
             return;
         }
 
-        match ffmpeg::start_stream(&self.project.settings) {
+        let transform = self.active_desktop_transform();
+        match ffmpeg::start_stream(&self.project.settings, transform.as_ref()) {
             Ok(child) => {
                 self.stream_process = Some(child);
                 self.status = "EN DIRECT".into();
@@ -132,7 +167,8 @@ impl QuanticLiveApp {
             return;
         }
 
-        match ffmpeg::start_recording(&self.project.settings) {
+        let transform = self.active_desktop_transform();
+        match ffmpeg::start_recording(&self.project.settings, transform.as_ref()) {
             Ok((child, file)) => {
                 self.record_process = Some(child);
                 self.recording_file = Some(file);
@@ -250,6 +286,9 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
+                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
+                        self.restart_preview();
+                    }
                 }
             }
             "source.visibility" => {
@@ -269,6 +308,9 @@ impl QuanticLiveApp {
                         }
                     }
                     let _ = self.persist_project();
+                    if self.preview.is_some() && self.stream_process.is_none() && self.record_process.is_none() {
+                        self.restart_preview();
+                    }
                 }
             }
             "runtime.refresh" => {
