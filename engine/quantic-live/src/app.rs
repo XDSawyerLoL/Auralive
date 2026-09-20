@@ -741,8 +741,8 @@ impl QuanticLiveApp {
         let capture_backend = ffmpeg::capture_backend_label(&self.project.settings.ffmpeg_path);
         control::write_status(&control::EngineStatus {
             ok: true,
-            engine: "aura-native-broadcast",
-            version: "0.4.0",
+            engine: "quantic-studio-core",
+            version: env!("CARGO_PKG_VERSION"),
             last_command_id: self.last_command_id,
             streaming: self.stream_process.is_some(),
             recording: self.record_process.is_some(),
