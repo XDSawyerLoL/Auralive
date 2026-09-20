@@ -172,7 +172,7 @@ jobs:
       - name: Upload Windows Lite application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-FastVoiceOAuth-LITE
+          name: AuraLive-Windows-Native-2.7-LITE
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true
