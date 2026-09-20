@@ -304,8 +304,14 @@
     const recording = Boolean(status.recording);
     const preview = Boolean(status.preview);
     const native = status.backend === "native";
+    const stage = $s("#studio-stage");
+    const canvasWidth = Number(status.engine?.canvas_width || 16);
+    const canvasHeight = Number(status.engine?.canvas_height || 9);
+    if (stage && canvasWidth > 0 && canvasHeight > 0) {
+      stage.style.aspectRatio = `${canvasWidth} / ${canvasHeight}`;
+    }
 
-    $$s("[data-studio-engine]").forEach(button => {
+    $s("[data-studio-engine]").forEach(button => {
       button.classList.toggle("active", button.dataset.studioEngine === status.backend);
     });
 
