@@ -9,8 +9,10 @@ on:
       - fix/local-voice-status-and-twitch-setup
       - fix/mairaiy-natural-reactions
       - fix/oauth-voice-fastpath
+      - feature/aura-native-broadcast
     paths:
       - "app/**"
+      - "engine/quantic-live/**"
       - "config/**"
       - "scripts/build-windows.ps1"
       - "requirements*.txt"
@@ -28,6 +30,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/quantic-live
+
+      - name: Build Aura Native Broadcast engine
+        shell: pwsh
+        run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -44,6 +56,15 @@ jobs:
         shell: pwsh
         run: .\scripts\build-windows.ps1 -Python python
 
+      - name: Embed Aura Native Broadcast
+        shell: pwsh
+        run: |
+          $engine = "engine\quantic-live\target\release\quantic-live.exe"
+          if (-not (Test-Path $engine)) {
+            throw "Le moteur natif compile est introuvable: $engine"
+          }
+          Copy-Item $engine "dist\AuraLive\AuraNativeBroadcast.exe" -Force
+
       - name: Verify Windows package
         shell: pwsh
         run: |
@@ -52,6 +73,9 @@ jobs:
           }
           if (-not (Test-Path "dist\AuraLive\BUILD-ID.txt")) {
             throw "BUILD-ID.txt est absent du package."
+          }
+          if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) {
+            throw "AuraNativeBroadcast.exe est absent du package."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
           if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-2026-09-05") {
@@ -199,6 +223,12 @@ jobs:
             $dashboard = Invoke-WebRequest "http://127.0.0.1:18787/" -UseBasicParsing -TimeoutSec 5
             if ($dashboard.Content -notmatch "avatar-test-fast.js") {
               throw "Le dashboard n'active pas le lecteur vocal autonome."
+            }
+
+            $broadcastStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
+            if ($broadcastStatus.mode -ne "obs" -or $broadcastStatus.engine_available -ne $true) {
+              $broadcastStatus | ConvertTo-Json -Depth 8 | Write-Host
+              throw "Aura ne detecte pas le moteur natif embarque tout en conservant OBS par defaut."
             }
 
             $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
