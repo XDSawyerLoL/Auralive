@@ -148,7 +148,7 @@ AURA_BROADCAST_ENGINE=native
 AURA_NATIVE_ENGINE_AUTOSTART=true
 ```
 
-Le moteur Rust `AuraNativeBroadcast.exe` et un build FFmpeg vérifié sont embarqués directement dans le package Windows. Aura vérifie que FFmpeg fournit **Windows Graphics Capture (`gfxcapture`)** et utilise automatiquement ce backend pour les sources Fenêtre/Jeu, avec repli GDI lorsque nécessaire.
+Le moteur Rust `QuanticStudioCore.exe` et un build FFmpeg vérifié sont embarqués directement dans le package Windows. Aura vérifie que FFmpeg fournit **Windows Graphics Capture (`gfxcapture`)** et utilise automatiquement ce backend pour les sources Fenêtre/Jeu, avec repli GDI lorsque nécessaire.
 
 Le moteur est piloté localement depuis Aura. Aucun port de contrôle supplémentaire n’est exposé.
 
@@ -235,7 +235,7 @@ L'updater n'accepte que les assets `QuanticStudio-Setup-X.Y.Z.exe` publiés sur 
 
 ### Signature Windows
 
-Le pipeline CI prend en charge la signature Authenticode de `QuanticStudio.exe`, `AuraNativeBroadcast.exe` et de l'installateur lorsque les secrets `AURA_WINDOWS_SIGNING_PFX_BASE64` et `AURA_WINDOWS_SIGNING_PFX_PASSWORD` contiennent un certificat de signature de code valide.
+Le pipeline CI prend en charge la signature Authenticode de `QuanticStudio.exe`, `QuanticStudioCore.exe` et de l'installateur lorsque les secrets `AURA_WINDOWS_SIGNING_PFX_BASE64` et `AURA_WINDOWS_SIGNING_PFX_PASSWORD` contiennent un certificat de signature de code valide.
 
 Sans certificat configuré, la release reste vérifiable par SHA-256 mais Windows peut afficher un avertissement de réputation.
 
