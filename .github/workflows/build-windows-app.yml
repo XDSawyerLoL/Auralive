@@ -265,7 +265,7 @@ jobs:
               try {
                 $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
                 if ($nativeStatus.responsive -eq $true -and
-                    $nativeStatus.engine.version -eq "0.3.0" -and
+                    $nativeStatus.engine.version -eq "0.4.0" -and
                     $nativeStatus.engine.ffmpeg_ok -eq $true -and
                     $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
                     $nativeStatus.system_audio.backend_present -eq $true) {
@@ -277,7 +277,7 @@ jobs:
             }
             if (-not $nativeReady) {
               try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Aura Native 0.3.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
+              throw "Aura Native 0.4.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
             }
 
             $vaultSecret = "AURA-CI-SECRET-NOT-REAL"
