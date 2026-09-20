@@ -23,6 +23,7 @@ pub struct SourceStatus {
     pub kind: String,
     pub visible: bool,
     pub transform: SourceTransform,
+    pub target: String,
 }
 
 #[derive(Debug, Serialize)]
