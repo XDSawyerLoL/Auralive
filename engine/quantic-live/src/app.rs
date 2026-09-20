@@ -752,7 +752,8 @@ impl QuanticLiveApp {
             last_replay_file: self.last_replay_file.as_ref().map(|path| path.display().to_string()).unwrap_or_default(),
             transition: self.project.settings.transition.label(),
             transition_ms: self.project.settings.transition_ms,
-            multistream_outputs: self.project.settings.stream_destinations.len() + usize::from(!self.project.settings.stream_key.trim().is_empty()),
+            multistream_outputs: self.project.settings.stream_destinations.len()
+                + if !self.project.settings.stream_key.trim().is_empty() { 1 } else { 0 },
             scene,
             scenes,
             sources,
