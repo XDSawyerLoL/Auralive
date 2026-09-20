@@ -24,7 +24,7 @@ OutputBaseFilename=AuraLive-Setup-{#MyAppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-CloseApplications=force
+CloseApplications=yes
 RestartApplications=yes
 SetupLogging=yes
 UninstallDisplayIcon={app}\\AuraLive.exe
@@ -53,4 +53,4 @@ Name: "{group}\\Aura Live"; Filename: "{app}\\AuraLive.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\\Aura Live"; Filename: "{app}\\AuraLive.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\\AuraLive.exe"; Description: "Lancer Aura Live"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\\AuraLive.exe"; Description: "Lancer Aura Live"; WorkingDir: "{app}"; Flags: nowait postinstall
