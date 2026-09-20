@@ -231,10 +231,13 @@ class NativeBroadcastService:
 
         return "ffmpeg"
 
+    def audio_bus_active(self) -> bool:
+        return time.monotonic() - self._audio_last_pull <= 2.0
+
     def enqueue_overlay_audio(self, event: dict[str, Any]) -> None:
         if not isinstance(event, dict):
             return
-        if time.monotonic() - self._audio_last_pull > 2.0:
+        if not self.audio_bus_active():
             return
 
         volume = max(0.0, min(2.0, float(event.get("volume", 1.0) or 1.0)))
