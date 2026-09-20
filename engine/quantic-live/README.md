@@ -1,6 +1,6 @@
-# Quantic Live — V0.1
+# Aura Native Broadcast — V0.1
 
-Studio de streaming desktop natif pour l'écosystème Quantic Sillage.
+Studio de streaming desktop natif pour l'écosystème Aura Live.
 
 ## Ce qui fonctionne dans cette V0.1
 
@@ -49,7 +49,7 @@ La clé est stockée localement dans `quantic-live.json` dans cette V0.1. Une V0
 
 ## Audio
 
-Si le champ périphérique audio est vide, Quantic Live crée une piste silencieuse afin de garder un flux RTMP standard.
+Si le champ périphérique audio est vide, Aura Native Broadcast crée une piste silencieuse afin de garder un flux RTMP standard.
 Pour le micro, indiquer le nom DirectShow exact du périphérique.
 
 ```powershell
@@ -67,4 +67,4 @@ ffmpeg -list_devices true -f dshow -i dummy
 
 ## Sécurité
 
-Aucun secret n'est envoyé à Quantic Sillage. Le streaming va directement du PC vers l'endpoint RTMP choisi.
+Aucun secret n'est envoyé à Aura Live. Le streaming va directement du PC vers l'endpoint RTMP choisi.
