@@ -26,7 +26,11 @@ native_broadcast = NativeBroadcastService(settings)
 
 
 async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
-    if not native_broadcast.selected or not isinstance(event, dict):
+    if (
+        not native_broadcast.selected
+        or not native_broadcast.audio_bus_active()
+        or not isinstance(event, dict)
+    ):
         return
 
     event_type = str(event.get("type") or "").strip().lower()
@@ -689,6 +693,7 @@ async def _prewarm_kokoro() -> None:
 @asynccontextmanager
 async def _v3_lifespan(application):
     async with _original_v3_lifespan(application):
+        aura.overlay.subscribe(_native_overlay_audio_listener)
         kokoro_warmup = asyncio.create_task(_prewarm_kokoro(), name="kokoro-voice-warmup")
         if settings.broadcast_engine == "native" and settings.native_engine_autostart:
             try:
