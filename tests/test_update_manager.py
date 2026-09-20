@@ -4,8 +4,8 @@ from app.services.update_manager import CURRENT_VERSION, UpdateManager, _version
 
 
 def test_update_version_parser_is_semantic() -> None:
-    assert CURRENT_VERSION == "2.7.3"
-    assert _version_tuple("quantic-studio-v2.7.3") == (2, 7, 3)
+    assert CURRENT_VERSION == "2.7.4"
+    assert _version_tuple("quantic-studio-v2.7.4") == (2, 7, 4)
     assert _version_tuple("bad-tag") == (0, 0, 0)
 
 
