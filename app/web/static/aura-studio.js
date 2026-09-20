@@ -8,22 +8,40 @@
     statusTimer: null,
     activityTimer: null,
     sourceDiscovery: {windows: [], webcams: []},
+    refreshInFlight: false,
+    actionLocks: new Set(),
+    lastActionAt: 0,
   };
 
   const $s = (selector, root = document) => root.querySelector(selector);
   const $$s = (selector, root = document) => [...root.querySelectorAll(selector)];
 
   async function request(url, options = {}) {
-    const response = await fetch(url, {
-      headers: {"Content-Type": "application/json"},
-      ...options,
-    });
-    const text = await response.text();
-    let payload = {};
-    try { payload = text ? JSON.parse(text) : {}; }
-    catch { payload = {detail: text}; }
-    if (!response.ok) throw new Error(payload.detail || payload.message || `Erreur ${response.status}`);
-    return payload;
+    const timeoutMs = Number(options.timeoutMs || 18000);
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    const requestOptions = {...options};
+    delete requestOptions.timeoutMs;
+    try {
+      const response = await fetch(url, {
+        headers: {"Content-Type": "application/json"},
+        ...requestOptions,
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      let payload = {};
+      try { payload = text ? JSON.parse(text) : {}; }
+      catch { payload = {detail: text}; }
+      if (!response.ok) throw new Error(payload.detail || payload.message || `Erreur ${response.status}`);
+      return payload;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw new Error("Le moteur met trop de temps à répondre. La commande a été interrompue proprement.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+    }
   }
 
   function notify(message, error = false) {
@@ -46,19 +64,15 @@
     })[ch]);
   }
 
-  function engineLabel(status) {
-    if (status?.backend === "native") return "Aura Native";
-    return "OBS";
+  function engineLabel() {
+    return "Quantic Studio Core";
   }
 
   function liveReadiness(status) {
-    const native = status?.backend === "native";
-    const engineReady = native
-      ? Boolean(status?.engine_available && (status?.responsive || status?.process_running))
-      : Boolean(status?.obs?.connected);
+    const engineReady = Boolean(status?.engine_available && (status?.responsive || status?.process_running));
     const secondaryReady = Array.isArray(status?.output?.destinations)
       && status.output.destinations.some(row => row?.enabled && row?.stream_key_configured);
-    const outputReady = native ? Boolean(status?.output?.stream_key_configured || secondaryReady) : engineReady;
+    const outputReady = Boolean(status?.output?.stream_key_configured || secondaryReady);
     const sceneReady = Boolean(String(status?.scene || "").trim());
     return {
       engineReady,
@@ -70,17 +84,14 @@
 
   function renderLiveReadiness(status) {
     const readiness = liveReadiness(status);
-    const native = status?.backend === "native";
     const values = {
       engine: {
         ready: readiness.engineReady,
-        label: readiness.engineReady ? (native ? "Moteur prêt" : "OBS prêt") : (native ? "Moteur à vérifier" : "OBS hors ligne"),
+        label: readiness.engineReady ? "Moteur prêt" : "Moteur à vérifier",
       },
       output: {
         ready: readiness.outputReady,
-        label: native
-          ? (readiness.outputReady ? "Diffusion prête" : "Clé de stream requise")
-          : (readiness.outputReady ? "Sortie gérée par OBS" : "Sortie indisponible"),
+        label: readiness.outputReady ? "Diffusion prête" : "Clé de stream requise",
       },
       scene: {
         ready: readiness.sceneReady,
@@ -102,9 +113,25 @@
 
   function setBusy(value) {
     studio.busy = value;
-    $$s("[data-studio-action], [data-studio-engine], [data-studio-scene]").forEach(button => {
+    $s(".studio-dashboard")?.classList.toggle("is-busy", value);
+    $s("[data-studio-action], [data-studio-scene], [data-studio-scene-edit], [data-source-toggle], [data-source-configure], [data-source-remove], [data-studio-output-settings], [data-studio-scene-manage], [data-studio-source-add], #studio-mic-mute, #studio-system-mute, #studio-aura-mute").forEach(button => {
       button.disabled = value || button.dataset.studioDisabled === "true";
+      button.setAttribute("aria-busy", value ? "true" : "false");
     });
+  }
+
+  function actionFeedback(message, kind = "idle") {
+    const node = $s("#studio-action-feedback");
+    if (!node) return;
+    node.textContent = message;
+    node.dataset.kind = kind;
+  }
+
+  function setActionPending(kind, pending) {
+    const button = $s(`[data-studio-action="${kind}"]`);
+    if (!button) return;
+    button.classList.toggle("pending", pending);
+    button.setAttribute("aria-busy", pending ? "true" : "false");
   }
 
   function sourceIcon(kind) {
@@ -190,11 +217,7 @@
   }
 
   async function openSourceModal(source = null) {
-    if (studio.status?.backend !== "native") {
-      notify("Passe en Aura Native pour gérer les sources", true);
-      return;
-    }
-    const modal = $s("#studio-source-modal");
+        const modal = $s("#studio-source-modal");
     if (!modal) return;
     await loadSourceDiscovery();
 
@@ -357,11 +380,7 @@
   }
 
   function openOutputModal() {
-    if (studio.status?.backend !== "native") {
-      notify("Passe en Aura Native pour régler la destination", true);
-      return;
-    }
-    const modal = $s("#studio-output-modal");
+        const modal = $s("#studio-output-modal");
     if (!modal) return;
 
     const output = studio.status?.output || {};
@@ -488,11 +507,7 @@
   }
 
   function openSceneModal(sceneName = "") {
-    if (studio.status?.backend !== "native") {
-      notify("Passe en Aura Native pour gérer les scènes", true);
-      return;
-    }
-    const modal = $s("#studio-scene-modal");
+        const modal = $s("#studio-scene-modal");
     if (!modal) return;
     const current = $s("#studio-scene-current");
     const name = $s("#studio-scene-name");
@@ -558,8 +573,7 @@
   }
 
   async function saveTransition() {
-    if (studio.status?.backend !== "native") return;
-    const kind = String($s("#studio-transition-kind")?.value || "fade");
+        const kind = String($s("#studio-transition-kind")?.value || "fade");
     const durationMs = Number($s("#studio-transition-duration")?.value || 350);
     try {
       const result = await request("/api/broadcast/transition", {
@@ -599,11 +613,6 @@
   function renderSources(status) {
     const holder = $s("#studio-source-list");
     if (!holder) return;
-    if (status.backend === "obs") {
-      holder.innerHTML = '<div class="studio-empty">En mode de compatibilité, les sources restent gérées dans OBS.</div>';
-      renderSourceHandles(status);
-      return;
-    }
     const sources = Array.isArray(status.sources) ? status.sources : [];
     if (!sources.length) {
       holder.innerHTML = '<div class="studio-empty">Cette scène ne contient pas encore de source native.</div>';
@@ -630,7 +639,7 @@
     const stage = $s("#studio-stage");
     if (!layer || !stage) return;
 
-    const native = status.backend === "native";
+    const native = true;
     const liveReload = Boolean(status.streaming || status.recording);
     stage.classList.remove("edit-locked");
 
@@ -671,7 +680,7 @@
     const stage = $s("#studio-stage");
     if (!image || !stage) return;
 
-    const active = status.backend === "native" && Boolean(status.preview);
+    const active = Boolean(status.preview);
     stage.classList.toggle("preview-active", active);
 
     if (active) {
@@ -851,8 +860,7 @@
   }
 
   async function updateAudioMix(overrides = {}) {
-    if (studio.status?.backend !== "native") return;
-    const engine = studio.status?.engine || {};
+        const engine = studio.status?.engine || {};
     const payload = {
       mic_volume: Number($s("#studio-mic-volume")?.value || Math.round(Number(engine.mic_volume ?? .82) * 100)) / 100,
       system_volume: Number($s("#studio-system-volume")?.value || Math.round(Number(engine.system_volume ?? .72) * 100)) / 100,
@@ -1032,12 +1040,20 @@
   }
 
   async function refreshBroadcast(silent = true) {
+    if (studio.refreshInFlight) return studio.status;
+    studio.refreshInFlight = true;
     try {
-      renderBroadcast(await request("/api/broadcast/status"));
+      const status = await request("/api/broadcast/status", {timeoutMs: 7000});
+      renderBroadcast(status);
+      return status;
     } catch (error) {
       if (!silent) notify(error.message, true);
       const health = $s("#studio-broadcast-health span");
       if (health) health.textContent = "Moteur indisponible";
+      actionFeedback("Moteur indisponible — réessaie dans quelques secondes.", "error");
+      return studio.status;
+    } finally {
+      studio.refreshInFlight = false;
     }
   }
 
@@ -1058,20 +1074,25 @@
   }
 
   async function sendAction(kind) {
-    if (studio.busy || !studio.status) return;
+    if (!studio.status || studio.actionLocks.has(kind)) return;
 
-    if (
-      kind === "live"
-      && !studio.status.streaming
-      && studio.status.backend === "native"
-      && !studio.status.output?.stream_key_configured
-    ) {
+    const now = Date.now();
+    if (now - studio.lastActionAt < 350) return;
+    studio.lastActionAt = now;
+
+    if (kind === "live" && !studio.status.streaming && !liveReadiness(studio.status).outputReady) {
       openOutputModal();
-      notify("Configure la destination et la clé de stream avant de lancer le direct");
+      actionFeedback("Configure d’abord la destination de diffusion.", "warn");
       return;
     }
 
     let endpoint = "";
+    const starting = {
+      live: !studio.status.streaming,
+      record: !studio.status.recording,
+      preview: !studio.status.preview,
+      replay: !studio.status.replay_buffering,
+    };
     if (kind === "live") endpoint = studio.status.streaming ? "/api/broadcast/stream/stop" : "/api/broadcast/stream/start";
     if (kind === "record") endpoint = studio.status.recording ? "/api/broadcast/record/stop" : "/api/broadcast/record/start";
     if (kind === "preview") endpoint = studio.status.preview ? "/api/broadcast/preview/stop" : "/api/broadcast/preview/start";
@@ -1079,25 +1100,41 @@
     if (kind === "clip") endpoint = "/api/broadcast/replay/save";
     if (!endpoint) return;
 
+    studio.actionLocks.add(kind);
+    setActionPending(kind, true);
     setBusy(true);
+    const pendingMessages = {
+      live: starting.live ? "Démarrage du direct…" : "Arrêt du direct…",
+      record: starting.record ? "Démarrage de l’enregistrement…" : "Arrêt de l’enregistrement…",
+      preview: starting.preview ? "Ouverture de l’aperçu…" : "Fermeture de l’aperçu…",
+      replay: starting.replay ? "Activation du replay…" : "Arrêt du replay…",
+      clip: "Sauvegarde du clip…",
+    };
+    actionFeedback(pendingMessages[kind] || "Commande en cours…", "working");
+
     try {
-      const requestOptions = {method: "POST"};
+      const requestOptions = {method: "POST", timeoutMs: 16000};
       if (kind === "replay" && !studio.status.replay_buffering) {
         requestOptions.body = JSON.stringify({seconds: Number(studio.status.replay_seconds || 30)});
       }
       const result = await request(endpoint, requestOptions);
       renderBroadcast(result);
       const messages = {
-        live: result.streaming ? "Le direct est lancé" : "Le direct est arrêté",
-        record: result.recording ? "Enregistrement démarré" : "Enregistrement arrêté",
-        preview: result.preview ? "Aperçu natif lancé" : "Aperçu natif arrêté",
-        replay: result.replay_buffering ? "Replay buffer actif" : "Replay buffer arrêté",
-        clip: result.last_replay_file ? "Clip replay sauvegardé" : "Clip replay demandé",
+        live: result.streaming ? "Direct lancé." : "Direct arrêté.",
+        record: result.recording ? "Enregistrement démarré." : "Enregistrement arrêté.",
+        preview: result.preview ? "Aperçu actif." : "Aperçu fermé.",
+        replay: result.replay_buffering ? "Replay actif." : "Replay arrêté.",
+        clip: result.last_replay_file ? "Clip sauvegardé." : "Clip demandé.",
       };
+      actionFeedback(messages[kind], "ok");
       notify(messages[kind]);
     } catch (error) {
+      actionFeedback(error.message || "La commande a échoué.", "error");
       notify(error.message, true);
+      await refreshBroadcast(true);
     } finally {
+      studio.actionLocks.delete(kind);
+      setActionPending(kind, false);
       setBusy(false);
       if (studio.status) renderBroadcast(studio.status);
     }
@@ -1227,11 +1264,6 @@
         removeSource(Number(remove.dataset.sourceRemove));
         return;
       }
-      const engine = event.target.closest("[data-studio-engine]");
-      if (engine) {
-        selectEngine(engine.dataset.studioEngine);
-        return;
-      }
       const action = event.target.closest("[data-studio-action]");
       if (action) {
         sendAction(action.dataset.studioAction);
@@ -1271,8 +1303,8 @@
     refreshActivity();
 
     studio.statusTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && !studio.busy) refreshBroadcast(true);
-    }, 2200);
+      if (document.visibilityState === "visible" && !studio.busy && !studio.refreshInFlight) refreshBroadcast(true);
+    }, 3000);
     studio.activityTimer = window.setInterval(() => {
       if (document.visibilityState === "visible") refreshActivity();
     }, 6500);
