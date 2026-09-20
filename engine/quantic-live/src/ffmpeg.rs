@@ -159,7 +159,7 @@ fn push_video_input(args: &mut Vec<String>, settings: &Settings, source: &Source
         SourceKind::Browser => {
             args.extend([
                 "-thread_queue_size".into(), "512".into(),
-                "-f".into(), "mjpeg".into(),
+                "-f".into(), "mpjpeg".into(),
                 "-i".into(), format!(
                     "{}/api/broadcast/browser-source/{}.mjpeg",
                     control::local_base_url(),
