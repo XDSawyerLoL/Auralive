@@ -1,8 +1,8 @@
-# Aura Live 2.7.2 — Native Streaming Suite
+# Quantic Studio 2.7.3 — Native Broadcast Suite
 
-Aura Live est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
+Quantic Studio est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
-La version 2.7.2 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
+La version 2.7.3 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
 
 ## Modules inclus
 
@@ -141,7 +141,7 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 
 ## Aura Native Broadcast
 
-Aura Live utilise désormais **Aura Native Broadcast 0.4.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
+Quantic Studio utilise désormais **Aura Native Broadcast 0.4.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
 
 ```env
 AURA_BROADCAST_ENGINE=native
@@ -217,25 +217,25 @@ DELETE /api/broadcast/source/{source_id}
 
 ### Installation recommandée
 
-Télécharge **`AuraLive-Setup-2.7.2.exe`** depuis la release officielle et lance-le. L'installation est faite dans le profil Windows courant et ne demande pas de droits administrateur.
+Télécharge **`QuanticStudio-Setup-2.7.3.exe`** depuis la release officielle et lance-le. L'installation est faite dans le profil Windows courant et ne demande pas de droits administrateur.
 
 L'installateur :
 - conserve le fichier `.env` existant ;
 - conserve le dossier `data` et les données runtime ;
 - crée les raccourcis Windows ;
-- ferme proprement Aura Live lors d'une mise à niveau puis relance l'application.
+- ferme proprement Quantic Studio lors d'une mise à niveau puis relance l'application.
 
 Les ZIP Full et Lite restent disponibles pour l'usage portable.
 
 ### Mises à jour intégrées
 
-Dans **Mon compte & services → Mises à jour**, Aura Live peut vérifier la dernière release officielle, télécharger l'installateur correspondant et contrôler son empreinte SHA-256 avant de le lancer.
+Dans **Mon compte & services → Mises à jour**, Quantic Studio peut vérifier la dernière release officielle, télécharger l'installateur correspondant et contrôler son empreinte SHA-256 avant de le lancer.
 
-L'updater n'accepte que les assets `AuraLive-Setup-X.Y.Z.exe` publiés sur le dépôt officiel `XDSawyerLoL/Auralive`.
+L'updater n'accepte que les assets `QuanticStudio-Setup-X.Y.Z.exe` publiés sur le dépôt officiel `XDSawyerLoL/Auralive`.
 
 ### Signature Windows
 
-Le pipeline CI prend en charge la signature Authenticode de `AuraLive.exe`, `AuraNativeBroadcast.exe` et de l'installateur lorsque les secrets `AURA_WINDOWS_SIGNING_PFX_BASE64` et `AURA_WINDOWS_SIGNING_PFX_PASSWORD` contiennent un certificat de signature de code valide.
+Le pipeline CI prend en charge la signature Authenticode de `QuanticStudio.exe`, `AuraNativeBroadcast.exe` et de l'installateur lorsque les secrets `AURA_WINDOWS_SIGNING_PFX_BASE64` et `AURA_WINDOWS_SIGNING_PFX_PASSWORD` contiennent un certificat de signature de code valide.
 
 Sans certificat configuré, la release reste vérifiable par SHA-256 mais Windows peut afficher un avertissement de réputation.
 
