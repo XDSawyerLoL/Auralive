@@ -310,6 +310,17 @@ async def broadcast_preview_stop_v3() -> dict[str, Any]:
     return await _broadcast_command("preview.stop")
 
 
+@app.get("/api/broadcast/discover")
+async def broadcast_discover_v3() -> dict[str, Any]:
+    return await asyncio.to_thread(native_broadcast.discover_sources)
+
+
+@app.post("/api/broadcast/pick-image")
+async def broadcast_pick_image_v3() -> dict[str, Any]:
+    path = await asyncio.to_thread(native_broadcast.pick_image)
+    return {"ok": bool(path), "path": path}
+
+
 @app.get("/api/broadcast/browser-source/{source_id}.mjpeg")
 async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse:
     if source_id <= 0:
