@@ -414,6 +414,141 @@ body {
   place-items: center;
 }
 
+.studio-native-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity .2s ease;
+  background: #020308;
+  z-index: 1;
+}
+
+.studio-native-preview.active {
+  opacity: 1;
+}
+
+.studio-stage.preview-active .stage-aura {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.studio-stage.preview-active::after {
+  opacity: .18;
+}
+
+.studio-source-handles {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.studio-source-handle {
+  position: absolute;
+  min-width: 42px;
+  min-height: 32px;
+  border: 1px solid rgba(190,159,255,.9);
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 1px rgba(111,87,203,.28),
+    0 0 28px rgba(113,78,213,.12);
+  background: rgba(111,78,196,.05);
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+.studio-source-handle.locked {
+  cursor: not-allowed;
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.025);
+}
+
+.studio-source-handle:active {
+  cursor: grabbing;
+}
+
+.studio-source-handle-label {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  max-width: calc(100% - 34px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 4px 7px;
+  border-radius: 8px;
+  color: #fff;
+  background: rgba(11,12,20,.72);
+  border: 1px solid rgba(255,255,255,.08);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.studio-source-resize {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #f4efff;
+  border-radius: 5px;
+  background: #9b74ff;
+  box-shadow: 0 0 14px rgba(155,116,255,.45);
+  cursor: nwse-resize;
+  pointer-events: auto;
+}
+
+.studio-edit-hint {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 30px);
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: #c5cad8;
+  background: rgba(8,10,17,.72);
+  border: 1px solid rgba(255,255,255,.08);
+  font-size: 10px;
+  font-weight: 700;
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+
+.studio-stage.preview-active:hover .studio-edit-hint {
+  opacity: 1;
+}
+
+.studio-stage.edit-locked .studio-edit-hint {
+  opacity: 1;
+  color: #ffc6cf;
+  border-color: rgba(255,100,124,.18);
+}
+
+.studio-source-visibility {
+  border: 0;
+  border-radius: 8px;
+  min-width: 30px;
+  height: 28px;
+  background: rgba(255,255,255,.045);
+  color: #cbd0dc;
+  cursor: pointer;
+}
+
+.studio-source-visibility.off {
+  opacity: .45;
+}
+
 .studio-stage::after {
   content: "";
   position: absolute;
