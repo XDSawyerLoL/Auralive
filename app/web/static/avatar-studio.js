@@ -83,7 +83,7 @@
         <button class="modal-close" id="cohost-close">×</button>
         <span class="modal-kicker">COANIMATION AUTONOME</span>
         <h2>Mairaiy connaît la chaîne et prend des initiatives</h2>
-        <p>Les informations enregistrées ici alimentent ses réponses, ses interventions, les CTA naturels et l’analyse du programme OBS.</p>
+        <p>Les informations enregistrées ici alimentent ses réponses, ses interventions, les CTA naturels et l’analyse du programme Quantic Studio.</p>
         <div class="settings-columns">
           <section>
             <h3>Ce qu’elle sait</h3>
@@ -96,7 +96,7 @@
           <section>
             <h3>Initiative</h3>
             <label class="toggle-row"><span><b>Interventions autonomes</b><small>Rebondit sur le chat sans attendre d’être appelée.</small></span><input id="cohost-initiative" type="checkbox"></label>
-            <label class="toggle-row"><span><b>Compréhension du programme OBS</b><small>Analyse seulement ce qui est réellement diffusé, jamais le bureau privé.</small></span><input id="cohost-screen" type="checkbox"></label>
+            <label class="toggle-row"><span><b>Compréhension du programme Quantic Studio</b><small>Analyse seulement ce qui est réellement diffusé, jamais le bureau privé.</small></span><input id="cohost-screen" type="checkbox"></label>
             <div class="form-row">
               <label>Intervalle minimum (min)<input id="cohost-interval" type="number" min="2" max="60"></label>
               <label>Maximum par heure<input id="cohost-max-hour" type="number" min="0" max="10"></label>
@@ -110,7 +110,7 @@
         </div>
         <div class="info-box" id="cohost-runtime">Chargement du contexte…</div>
         <div class="button-row">
-          <button class="secondary-button" id="cohost-test-screen" type="button">Analyser l’écran OBS</button>
+          <button class="secondary-button" id="cohost-test-screen" type="button">Analyser le programme</button>
           <button class="secondary-button" id="cohost-test-initiative" type="button">Prévisualiser une initiative</button>
           <button class="secondary-button" id="cohost-test-cta" type="button">Prévisualiser JustPlayer</button>
           <button class="primary-button" id="cohost-save" type="button">Enregistrer l’assistante</button>
@@ -128,7 +128,7 @@
     $('#cohost-save')?.addEventListener('click',saveCohost);
     $('#cohost-test-screen')?.addEventListener('click',async()=>{
       try{
-        $('#cohost-preview').textContent='Analyse du programme OBS…';
+        $('#cohost-preview').textContent='Analyse du programme Quantic Studio…';
         const result=await api('/api/cohost/screen/analyze',{method:'POST'});
         $('#cohost-preview').textContent=result.summary||result.error||'Aucun changement notable détecté.';
         await renderCohostRuntime();
@@ -259,7 +259,7 @@
         await api('/api/avatar/test',{method:'POST',body:JSON.stringify({text:'Excellente nouvelle : l’explosion a parfaitement éliminé toute l’équipe. Sansa compris, évidemment.'})});
         const status=await runtime();
         if(!status?.avatar_overlay_connected){
-          throw new Error('La source /overlay/avatar n’est pas connectée. Ouvre-la dans OBS ou dans un onglet, puis relance le test.');
+          throw new Error('La source Mairaiy n’est pas active. Ajoute-la dans Quantic Studio via Sources → + → Mairaiy, puis relance le test.');
         }
         const audio=status?.audio||{};
         if(audio.last_error){
