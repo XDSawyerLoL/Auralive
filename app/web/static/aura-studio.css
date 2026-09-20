@@ -1569,3 +1569,117 @@ body {
   height:100%;
   display:block;
 }
+
+
+/* Quantic Studio 2.7.4 — stabilité et lisibilité des contrôles */
+.studio-native-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:34px;
+  padding:0 11px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:11px;
+  color:#d9deea;
+  background:rgba(255,255,255,.035);
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+.studio-native-badge i{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--studio-green);
+  box-shadow:0 0 14px rgba(73,220,164,.52);
+}
+
+.studio-control-guide{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:7px;
+  margin-bottom:8px;
+  color:#7f8798;
+  font-size:9px;
+  font-weight:700;
+}
+.studio-control-guide span{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+}
+.studio-control-guide span b{
+  display:grid;
+  place-items:center;
+  width:18px;
+  height:18px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:50%;
+  color:#cfd4df;
+  background:rgba(255,255,255,.035);
+  font-size:9px;
+}
+.studio-control-guide>i{
+  width:16px;
+  height:1px;
+  background:rgba(255,255,255,.08);
+}
+
+.studio-action-feedback{
+  min-height:18px;
+  margin-top:7px;
+  text-align:right;
+  color:#8e97aa;
+  font-size:10px;
+  font-weight:600;
+}
+.studio-action-feedback[data-kind="working"]{color:#d1bcff}
+.studio-action-feedback[data-kind="ok"]{color:#94e7c4}
+.studio-action-feedback[data-kind="warn"]{color:#efc878}
+.studio-action-feedback[data-kind="error"]{color:#ff9caf}
+
+.studio-control.pending{
+  position:relative;
+  overflow:hidden;
+  cursor:wait;
+}
+.studio-control.pending::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(110deg,transparent 25%,rgba(255,255,255,.08) 45%,transparent 65%);
+  transform:translateX(-100%);
+  animation:quanticStudioPending 1.05s linear infinite;
+}
+@keyframes quanticStudioPending{
+  to{transform:translateX(100%)}
+}
+
+.studio-dashboard.is-busy .studio-control:not(.pending),
+.studio-dashboard.is-busy .studio-mini-action,
+.studio-dashboard.is-busy .studio-source-configure,
+.studio-dashboard.is-busy .studio-source-remove,
+.studio-dashboard.is-busy .studio-source-visibility{
+  opacity:.52;
+}
+
+.studio-control:disabled{
+  cursor:not-allowed;
+  filter:saturate(.55);
+  opacity:.46;
+}
+.studio-control.live.needs-setup{
+  border-color:rgba(239,200,120,.25);
+  background:rgba(239,200,120,.075);
+  color:#f3d899;
+}
+.studio-control.live.active{
+  box-shadow:0 0 24px rgba(255,78,107,.13);
+}
+
+@media(max-width:760px){
+  .studio-native-badge{justify-content:center;width:100%}
+  .studio-control-guide{justify-content:center;flex-wrap:wrap}
+  .studio-action-feedback{text-align:center}
+}
