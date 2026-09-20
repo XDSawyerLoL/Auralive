@@ -10,7 +10,7 @@ use eframe::egui::{self, TextureHandle};
 use crate::{
     control,
     ffmpeg,
-    model::{Encoder, ProjectState, Source, SourceKind},
+    model::{Encoder, ProjectState, Source, SourceKind, SourceTransform},
 };
 
 pub struct QuanticLiveApp {
@@ -217,6 +217,55 @@ impl QuanticLiveApp {
                     }
                 }
             }
+            "source.transform" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let source_id = payload.get("id").and_then(|value| value.as_u64()).unwrap_or(0);
+                        if let Some(scene) = self.project.scenes.get_mut(self.project.selected_scene) {
+                            if let Some(source) = scene.sources.iter_mut().find(|source| source.id == source_id) {
+                                let clamp = |value: f32| value.clamp(0.0, 1.0);
+                                let x = payload.get("x").and_then(|value| value.as_f64()).unwrap_or(source.transform.x as f64) as f32;
+                                let y = payload.get("y").and_then(|value| value.as_f64()).unwrap_or(source.transform.y as f64) as f32;
+                                let width = payload.get("width").and_then(|value| value.as_f64()).unwrap_or(source.transform.width as f64) as f32;
+                                let height = payload.get("height").and_then(|value| value.as_f64()).unwrap_or(source.transform.height as f64) as f32;
+                                source.transform = SourceTransform {
+                                    x: clamp(x),
+                                    y: clamp(y),
+                                    width: width.clamp(0.05, 1.0),
+                                    height: height.clamp(0.05, 1.0),
+                                };
+                                if source.transform.x + source.transform.width > 1.0 {
+                                    source.transform.x = (1.0 - source.transform.width).max(0.0);
+                                }
+                                if source.transform.y + source.transform.height > 1.0 {
+                                    source.transform.y = (1.0 - source.transform.height).max(0.0);
+                                }
+                                self.status = format!("Source positionnée · {}", source.name);
+                                self.save();
+                            }
+                        }
+                    }
+                }
+            }
+            "source.visibility" => {
+                if let Some(value) = command.value.as_deref() {
+                    if let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+                        let source_id = payload.get("id").and_then(|value| value.as_u64()).unwrap_or(0);
+                        let visible = payload.get("visible").and_then(|value| value.as_bool()).unwrap_or(true);
+                        if let Some(scene) = self.project.scenes.get_mut(self.project.selected_scene) {
+                            if let Some(source) = scene.sources.iter_mut().find(|source| source.id == source_id) {
+                                source.visible = visible;
+                                self.status = if visible {
+                                    format!("Source affichée · {}", source.name)
+                                } else {
+                                    format!("Source masquée · {}", source.name)
+                                };
+                                self.save();
+                            }
+                        }
+                    }
+                }
+            }
             "runtime.refresh" => {
                 self.refresh_runtime_status();
                 self.status = "État du moteur actualisé".into();
@@ -243,6 +292,7 @@ impl QuanticLiveApp {
                         name: source.name.clone(),
                         kind: source.kind.label().to_owned(),
                         visible: source.visible,
+                        transform: source.transform.clone(),
                     })
                     .collect()
             })
@@ -277,6 +327,12 @@ impl QuanticLiveApp {
             name: format!("{} {}", kind.label(), id),
             kind,
             visible: true,
+            transform: SourceTransform {
+                x: 0.65,
+                y: 0.65,
+                width: 0.30,
+                height: 0.30,
+            },
         });
         self.add_source_open = false;
     }
