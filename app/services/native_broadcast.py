@@ -375,7 +375,7 @@ class NativeBroadcastService:
 
         ok = crypt32.CryptProtectData(
             ctypes.byref(input_blob),
-            "Aura Native RTMP",
+            ctypes.c_wchar_p("Aura Native RTMP"),
             ctypes.byref(entropy_blob),
             None,
             None,
@@ -388,7 +388,7 @@ class NativeBroadcastService:
         try:
             return ctypes.string_at(output_blob.pbData, output_blob.cbData)
         finally:
-            kernel32.LocalFree(output_blob.pbData)
+            kernel32.LocalFree(ctypes.cast(output_blob.pbData, ctypes.c_void_p))
 
     @staticmethod
     def _dpapi_unprotect(data: bytes) -> bytes:
@@ -425,7 +425,7 @@ class NativeBroadcastService:
         try:
             return ctypes.string_at(output_blob.pbData, output_blob.cbData)
         finally:
-            kernel32.LocalFree(output_blob.pbData)
+            kernel32.LocalFree(ctypes.cast(output_blob.pbData, ctypes.c_void_p))
 
     def ffmpeg_executable(self) -> str:
         bundled = RUNTIME_DIR / "ffmpeg" / "ffmpeg.exe"
