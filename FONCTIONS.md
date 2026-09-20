@@ -90,3 +90,8 @@
 ## Limite honnête
 
 Aura Live 1.2 fournit un noyau local très étendu. Une parité absolue avec un service cloud exploité depuis plusieurs années ne peut pas être déclarée sans tests réels en charge, hébergement permanent et identifiants des services externes. Les dépendances externes sont affichées comme telles dans la page « Couverture fonctionnelle » au lieu d'être présentées comme actives.
+
+- [x] Compositeur multi-source natif : écran, fenêtre/jeu, webcam, image, texte et navigateur/Mairaiy
+- [x] Sources navigateur headless locales avec MJPEG + chroma-key
+- [x] Détection automatique fenêtres/jeux et webcams
+- [x] Ajout/configuration/suppression et drag & drop des sources dans Aura Studio
