@@ -13,7 +13,7 @@
   }
 
   function render(payload) {
-    current.textContent = payload.current_version || "2.7.3";
+    current.textContent = payload.current_version || "2.7.4";
     latest.textContent = payload.latest_version || "—";
     const available = Boolean(payload.update_available && payload.installer_available);
     installButton.dataset.available = available ? "true" : "false";
