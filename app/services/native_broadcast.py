@@ -83,6 +83,7 @@ class NativeBroadcastService:
             env["AURA_NATIVE_STATUS_FILE"] = str(self.status_path)
             env["AURA_NATIVE_CONFIG_FILE"] = str(self.config_path)
             env["AURA_NATIVE_PREVIEW_FILE"] = str(self.preview_path)
+            env["AURA_NATIVE_HEADLESS"] = "1"
 
             creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self._process = subprocess.Popen(
@@ -133,6 +134,8 @@ class NativeBroadcastService:
             "preview.stop",
             "scene.select",
             "runtime.refresh",
+            "source.transform",
+            "source.visibility",
         }
         if action not in allowed:
             raise ValueError(f"Commande native inconnue: {action}")
