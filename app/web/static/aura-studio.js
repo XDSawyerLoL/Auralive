@@ -461,36 +461,57 @@
 
   function renderAudio(status) {
     const engine = status.engine || {};
-    const mic = $s("#studio-mic-meter");
+    const micMeter = $s("#studio-mic-meter");
+    const systemMeter = $s("#studio-system-meter");
     const auraMeter = $s("#studio-pc-meter");
     const micDetail = $s("#studio-mic-detail");
+    const systemDetail = $s("#studio-system-detail");
     const auraDetail = $s("#studio-pc-detail");
     const micVolume = $s("#studio-mic-volume");
+    const systemVolume = $s("#studio-system-volume");
     const auraVolume = $s("#studio-aura-volume");
     const micMute = $s("#studio-mic-mute");
+    const systemMute = $s("#studio-system-mute");
     const auraMute = $s("#studio-aura-mute");
 
     if (status.backend === "native") {
       const micValue = Math.max(0, Math.min(2, Number(engine.mic_volume ?? .82)));
+      const systemValue = Math.max(0, Math.min(2, Number(engine.system_volume ?? .72)));
       const auraValue = Math.max(0, Math.min(2, Number(engine.desktop_volume ?? .72)));
-      if (mic) mic.style.width = `${engine.mic_muted ? 0 : Math.min(100, micValue * 100)}%`;
+      const systemAudio = status.system_audio || {};
+
+      if (micMeter) micMeter.style.width = `${engine.mic_muted ? 0 : Math.min(100, micValue * 100)}%`;
+      if (systemMeter) systemMeter.style.width = `${engine.system_muted ? 0 : Math.min(100, systemValue * 100)}%`;
       if (auraMeter) auraMeter.style.width = `${engine.desktop_muted ? 0 : Math.min(100, auraValue * 100)}%`;
+
       if (micDetail) micDetail.textContent = engine.mic_muted ? "Muet" : `${Math.round(micValue * 100)} %`;
-      if (auraDetail) auraDetail.textContent = engine.desktop_muted ? "Muet" : `${Math.round(auraValue * 100)} % · bus Aura`;
-      if (micVolume && document.activeElement !== micVolume) micVolume.value = String(Math.round(micValue * 100));
-      if (auraVolume && document.activeElement !== auraVolume) auraVolume.value = String(Math.round(auraValue * 100));
-      if (micMute) {
-        micMute.classList.toggle("muted", Boolean(engine.mic_muted));
-        micMute.textContent = engine.mic_muted ? "○" : "◉";
+      if (systemDetail) {
+        if (engine.system_muted) systemDetail.textContent = "Muet";
+        else if (systemAudio.available || systemAudio.running) systemDetail.textContent = `${Math.round(systemValue * 100)} % · ${systemAudio.device || "WASAPI"}`;
+        else if (systemAudio.error) systemDetail.textContent = "WASAPI indisponible";
+        else systemDetail.textContent = `${Math.round(systemValue * 100)} % · prêt`;
       }
-      if (auraMute) {
-        auraMute.classList.toggle("muted", Boolean(engine.desktop_muted));
-        auraMute.textContent = engine.desktop_muted ? "○" : "◉";
+      if (auraDetail) auraDetail.textContent = engine.desktop_muted ? "Muet" : `${Math.round(auraValue * 100)} % · bus Aura`;
+
+      if (micVolume && document.activeElement !== micVolume) micVolume.value = String(Math.round(micValue * 100));
+      if (systemVolume && document.activeElement !== systemVolume) systemVolume.value = String(Math.round(systemValue * 100));
+      if (auraVolume && document.activeElement !== auraVolume) auraVolume.value = String(Math.round(auraValue * 100));
+
+      for (const [button, muted] of [
+        [micMute, Boolean(engine.mic_muted)],
+        [systemMute, Boolean(engine.system_muted)],
+        [auraMute, Boolean(engine.desktop_muted)],
+      ]) {
+        if (!button) continue;
+        button.classList.toggle("muted", muted);
+        button.textContent = muted ? "○" : "◉";
       }
     } else {
-      if (mic) mic.style.width = "62%";
+      if (micMeter) micMeter.style.width = "62%";
+      if (systemMeter) systemMeter.style.width = "48%";
       if (auraMeter) auraMeter.style.width = "48%";
       if (micDetail) micDetail.textContent = "Géré par OBS";
+      if (systemDetail) systemDetail.textContent = "Géré par OBS";
       if (auraDetail) auraDetail.textContent = "Géré par OBS";
     }
   }
@@ -500,8 +521,10 @@
     const engine = studio.status?.engine || {};
     const payload = {
       mic_volume: Number($s("#studio-mic-volume")?.value || Math.round(Number(engine.mic_volume ?? .82) * 100)) / 100,
+      system_volume: Number($s("#studio-system-volume")?.value || Math.round(Number(engine.system_volume ?? .72) * 100)) / 100,
       aura_volume: Number($s("#studio-aura-volume")?.value || Math.round(Number(engine.desktop_volume ?? .72) * 100)) / 100,
       mic_muted: Boolean(engine.mic_muted),
+      system_muted: Boolean(engine.system_muted),
       aura_muted: Boolean(engine.desktop_muted),
       ...overrides,
     };
@@ -523,14 +546,20 @@
 
   function bindAudioMixer() {
     const micVolume = $s("#studio-mic-volume");
+    const systemVolume = $s("#studio-system-volume");
     const auraVolume = $s("#studio-aura-volume");
     const micMute = $s("#studio-mic-mute");
+    const systemMute = $s("#studio-system-mute");
     const auraMute = $s("#studio-aura-mute");
 
     if (micVolume) micVolume.addEventListener("change", () => updateAudioMix());
+    if (systemVolume) systemVolume.addEventListener("change", () => updateAudioMix());
     if (auraVolume) auraVolume.addEventListener("change", () => updateAudioMix());
     if (micMute) micMute.addEventListener("click", () => {
       updateAudioMix({mic_muted: !Boolean(studio.status?.engine?.mic_muted)});
+    });
+    if (systemMute) systemMute.addEventListener("click", () => {
+      updateAudioMix({system_muted: !Boolean(studio.status?.engine?.system_muted)});
     });
     if (auraMute) auraMute.addEventListener("click", () => {
       updateAudioMix({aura_muted: !Boolean(studio.status?.engine?.desktop_muted)});
