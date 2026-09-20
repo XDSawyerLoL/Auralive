@@ -89,7 +89,7 @@
     game: {name:"Jeu", placeholder:"Choisir le jeu ou sa fenêtre", help:"Aura détecte les fenêtres ouvertes. Le mode fenêtré ou sans bordure est recommandé.", target:true, list:"windows"},
     window: {name:"Fenêtre", placeholder:"Choisir une application", help:"Sélectionne une fenêtre détectée.", target:true, list:"windows"},
     webcam: {name:"Webcam", placeholder:"Choisir une caméra", help:"Aura détecte les caméras DirectShow disponibles.", target:true, list:"webcams"},
-    image: {name:"Image", placeholder:"Choisir un fichier image", help:"PNG, JPG, WEBP, BMP ou GIF.", target:true, browse:true},
+    image: {name:"Image", placeholder:"Choisir un fichier image", help:"PNG, JPG, WEBP ou BMP.", target:true, browse:true},
     text: {name:"Texte", placeholder:"Écris le texte à afficher", help:"Le texte sera rendu directement par FFmpeg.", target:true},
     browser: {name:"Overlay", placeholder:"/overlay/avatar", help:"Overlay Aura local ou page web.", target:true},
   };
