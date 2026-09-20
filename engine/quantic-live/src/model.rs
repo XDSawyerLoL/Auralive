@@ -136,6 +136,7 @@ impl Default for ProjectState {
                         name: "Écran principal".into(),
                         kind: SourceKind::Desktop,
                         visible: true,
+                        transform: SourceTransform::default(),
                     }],
                 },
                 Scene { id: 2, name: "Discussion".into(), sources: vec![] },
