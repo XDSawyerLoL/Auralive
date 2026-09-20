@@ -12,7 +12,7 @@ impl QuanticLiveApp {
             return;
         }
         let mut open = self.settings_open;
-        egui::Window::new("Réglages Quantic Live")
+        egui::Window::new("Réglages Aura Native Broadcast")
             .open(&mut open)
             .resizable(true)
             .default_width(560.0)
