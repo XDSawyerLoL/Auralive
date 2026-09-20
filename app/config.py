@@ -65,9 +65,11 @@ def _local_obs_websocket_config() -> dict[str, object]:
     return {}
 
 
-_OBS_LOCAL = _local_obs_websocket_config()
-_OBS_DISCOVERED_PORT = int(_OBS_LOCAL.get("server_port") or 4455)
-_OBS_DISCOVERED_PASSWORD = str(_OBS_LOCAL.get("server_password") or "")
+# Quantic Studio 2.7.4 est natif uniquement. L'ancien auto-discovery OBS
+# reste dans l'historique du projet mais n'est plus exécuté au démarrage.
+_OBS_LOCAL: dict[str, object] = {}
+_OBS_DISCOVERED_PORT = 4455
+_OBS_DISCOVERED_PASSWORD = ""
 
 
 @dataclass(slots=True)
@@ -105,15 +107,15 @@ class Settings:
     ai_temperature: float = _float("AI_TEMPERATURE", 0.78)
     ai_warmup_enabled: bool = _bool("AI_WARMUP_ENABLED", True)
 
-    obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
-    obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
+    obs_auto_connect: bool = False
+    obs_enabled: bool = False
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")
     obs_port: int = _int("OBS_PORT", _OBS_DISCOVERED_PORT)
     obs_password: str = os.getenv("OBS_PASSWORD") or _OBS_DISCOVERED_PASSWORD
 
-    # Backend de diffusion: "obs" conserve le comportement historique.
-    # "native" active Aura Native Broadcast, le moteur Rust local.
-    broadcast_engine: str = os.getenv("AURA_BROADCAST_ENGINE", "native").strip().lower()
+    # Quantic Studio utilise exclusivement son moteur natif.
+    # Les anciennes variables AURA_BROADCAST_ENGINE/OBS_* sont ignorées.
+    broadcast_engine: str = "native"
     native_engine_autostart: bool = _bool("AURA_NATIVE_ENGINE_AUTOSTART", True)
     native_engine_exe: str = os.getenv("AURA_NATIVE_ENGINE_EXE", "").strip()
 
