@@ -1,3 +1,27 @@
+# Aura Live 2.7.2 — Windows Product Finish
+
+## Distribution Windows
+
+- Installateur officiel `AuraLive-Setup-2.7.2.exe` basé sur Inno Setup.
+- Installation utilisateur sans élévation administrative obligatoire.
+- Conservation de `.env` et des données runtime pendant les mises à jour.
+- Raccourcis Windows et relance de l'application après mise à niveau.
+- ZIP Full/Lite conservés pour l'usage portable.
+
+## Mise à jour intégrée
+
+- Centre de mise à jour dans « Mon compte & services ».
+- Vérification de la dernière release GitHub officielle.
+- Téléchargement limité à l'installateur correspondant exactement à la version publiée.
+- Vérification SHA-256 avant exécution.
+- Cache de mise à jour stocké hors du dossier d'installation.
+
+## Signature
+
+- Pipeline Authenticode pour AuraLive.exe, AuraNativeBroadcast.exe et l'installateur.
+- Signature activée automatiquement lorsque le certificat PFX est configuré dans les secrets CI.
+- Empreintes SHA-256 publiées dans tous les cas.
+
 # Aura Live 2.7.1 — Native Pro Suite
 
 ## Diffusion native
