@@ -1,4 +1,4 @@
-# Quantic Studio 2.7.3 — Native Broadcast Suite
+# Quantic Studio 2.7.4 — Native Broadcast Suite
 
 Quantic Studio est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
@@ -103,7 +103,7 @@ http://localhost:8787/overlay/avatar
 
 ### Avatar vocal Mairaiy
 
-La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni avec la version : pose au repos en silence, pose bouche ouverte pendant la voix, sous-titres et halo animé. Avec Aura Native, ajoute simplement le preset **Mairaiy** dans le Studio : le rendu navigateur est capturé localement et sa voix est injectée directement dans le bus audio Aura. OBS reste disponible uniquement en mode de compatibilité. Les réglages se trouvent dans **Avatar & voix**.
+La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni avec la version : pose au repos en silence, pose bouche ouverte pendant la voix, sous-titres et halo animé. Avec Moteur Quantic, ajoute simplement le preset **Mairaiy** dans le Studio : le rendu navigateur est capturé localement et sa voix est injectée directement dans le bus audio Aura. OBS reste disponible uniquement en mode de compatibilité. Les réglages se trouvent dans **Avatar & voix**.
 
 ### Modération et sécurité
 
@@ -139,9 +139,9 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 - Pings privés au streamer et page communautaire locale `http://localhost:8787/channel`.
 - Connecteurs testables et API locale pour StreamDeck/Loupedeck.
 
-## Aura Native Broadcast
+## Quantic Studio Core
 
-Quantic Studio utilise désormais **Aura Native Broadcast 0.4.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
+Quantic Studio utilise désormais **Quantic Studio Core 0.4.1** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
 
 ```env
 AURA_BROADCAST_ENGINE=native
@@ -217,7 +217,7 @@ DELETE /api/broadcast/source/{source_id}
 
 ### Installation recommandée
 
-Télécharge **`QuanticStudio-Setup-2.7.3.exe`** depuis la release officielle et lance-le. L'installation est faite dans le profil Windows courant et ne demande pas de droits administrateur.
+Télécharge **`QuanticStudio-Setup-2.7.4.exe`** depuis la release officielle et lance-le. L'installation est faite dans le profil Windows courant et ne demande pas de droits administrateur.
 
 L'installateur :
 - conserve le fichier `.env` existant ;
