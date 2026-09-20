@@ -89,20 +89,191 @@
     if (!holder) return;
     if (status.backend === "obs") {
       holder.innerHTML = '<div class="studio-empty">Les sources restent gérées dans OBS pendant le mode de compatibilité.</div>';
+      renderSourceHandles(status);
       return;
     }
     const sources = Array.isArray(status.sources) ? status.sources : [];
     if (!sources.length) {
       holder.innerHTML = '<div class="studio-empty">Cette scène ne contient pas encore de source native.</div>';
+      renderSourceHandles(status);
       return;
     }
     holder.innerHTML = sources.map(source => `
       <div class="studio-source">
         <span class="source-icon">${sourceIcon(source.kind)}</span>
         <div><b>${escapeHtml(source.name)}</b><small>${escapeHtml(source.kind)}</small></div>
-        <span class="studio-source-state">${source.visible ? "ACTIF" : "MASQUÉ"}</span>
+        <button class="studio-source-visibility ${source.visible ? "" : "off"}" type="button" data-source-toggle="${Number(source.id)}" data-source-visible="${source.visible ? "1" : "0"}" title="${source.visible ? "Masquer" : "Afficher"}">${source.visible ? "◉" : "○"}</button>
       </div>
     `).join("");
+    renderSourceHandles(status);
+  }
+
+  function renderSourceHandles(status) {
+    const layer = $s("#studio-source-handles");
+    const stage = $s("#studio-stage");
+    if (!layer || !stage) return;
+
+    const native = status.backend === "native";
+    const locked = Boolean(status.streaming || status.recording);
+    stage.classList.toggle("edit-locked", native && locked);
+
+    const hint = $s("#studio-edit-hint");
+    if (hint) {
+      hint.textContent = locked
+        ? "Édition verrouillée pendant le direct ou l’enregistrement"
+        : "Déplacez une source · tirez le coin pour la redimensionner";
+    }
+
+    if (!native || !status.preview) {
+      layer.innerHTML = "";
+      return;
+    }
+
+    const sources = (Array.isArray(status.sources) ? status.sources : []).filter(source => source.visible);
+    layer.innerHTML = sources.map(source => {
+      const transform = source.transform || {x:0,y:0,width:1,height:1};
+      const x = Math.max(0, Math.min(1, Number(transform.x ?? 0)));
+      const y = Math.max(0, Math.min(1, Number(transform.y ?? 0)));
+      const width = Math.max(.05, Math.min(1, Number(transform.width ?? 1)));
+      const height = Math.max(.05, Math.min(1, Number(transform.height ?? 1)));
+      return `
+        <div
+          class="studio-source-handle ${locked ? "locked" : ""}"
+          data-source-handle="${Number(source.id)}"
+          style="left:${x*100}%;top:${y*100}%;width:${width*100}%;height:${height*100}%"
+        >
+          <span class="studio-source-handle-label">${escapeHtml(source.name)}</span>
+          <span class="studio-source-resize" data-source-resize="${Number(source.id)}"></span>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function setNativePreview(status) {
+    const image = $s("#studio-native-preview");
+    const stage = $s("#studio-stage");
+    if (!image || !stage) return;
+
+    const active = status.backend === "native" && Boolean(status.preview);
+    stage.classList.toggle("preview-active", active);
+
+    if (active) {
+      if (!image.dataset.connected) {
+        image.src = `/api/broadcast/preview.mjpeg?v=${Date.now()}`;
+        image.dataset.connected = "1";
+      }
+      image.classList.add("active");
+    } else {
+      image.classList.remove("active");
+      if (image.dataset.connected) {
+        image.removeAttribute("src");
+        delete image.dataset.connected;
+      }
+    }
+  }
+
+  async function updateSourceTransform(sourceId, transform) {
+    const result = await request(`/api/broadcast/source/${sourceId}/transform`, {
+      method: "PUT",
+      body: JSON.stringify(transform),
+    });
+    renderBroadcast(result);
+  }
+
+  async function toggleSourceVisibility(sourceId, visible) {
+    const result = await request(`/api/broadcast/source/${sourceId}/visibility`, {
+      method: "PUT",
+      body: JSON.stringify({visible}),
+    });
+    renderBroadcast(result);
+  }
+
+  function bindSourceEditor() {
+    const stage = $s("#studio-stage");
+    if (!stage) return;
+
+    let edit = null;
+
+    stage.addEventListener("pointerdown", event => {
+      if (studio.busy || studio.status?.backend !== "native" || studio.status?.streaming || studio.status?.recording) return;
+      const handle = event.target.closest("[data-source-handle]");
+      if (!handle) return;
+
+      const rect = stage.getBoundingClientRect();
+      const isResize = Boolean(event.target.closest("[data-source-resize]"));
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const left = parseFloat(handle.style.left) / 100;
+      const top = parseFloat(handle.style.top) / 100;
+      const width = parseFloat(handle.style.width) / 100;
+      const height = parseFloat(handle.style.height) / 100;
+
+      edit = {
+        pointerId: event.pointerId,
+        sourceId: Number(handle.dataset.sourceHandle),
+        handle,
+        rect,
+        isResize,
+        startX,
+        startY,
+        left,
+        top,
+        width,
+        height,
+      };
+      handle.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+
+    stage.addEventListener("pointermove", event => {
+      if (!edit || event.pointerId !== edit.pointerId) return;
+      const dx = (event.clientX - edit.startX) / Math.max(1, edit.rect.width);
+      const dy = (event.clientY - edit.startY) / Math.max(1, edit.rect.height);
+
+      let x = edit.left;
+      let y = edit.top;
+      let width = edit.width;
+      let height = edit.height;
+
+      if (edit.isResize) {
+        width = Math.max(.05, Math.min(1 - x, edit.width + dx));
+        height = Math.max(.05, Math.min(1 - y, edit.height + dy));
+      } else {
+        x = Math.max(0, Math.min(1 - width, edit.left + dx));
+        y = Math.max(0, Math.min(1 - height, edit.top + dy));
+      }
+
+      edit.handle.style.left = `${x * 100}%`;
+      edit.handle.style.top = `${y * 100}%`;
+      edit.handle.style.width = `${width * 100}%`;
+      edit.handle.style.height = `${height * 100}%`;
+    });
+
+    const finish = async event => {
+      if (!edit || event.pointerId !== edit.pointerId) return;
+      const current = edit;
+      edit = null;
+      const transform = {
+        x: parseFloat(current.handle.style.left) / 100,
+        y: parseFloat(current.handle.style.top) / 100,
+        width: parseFloat(current.handle.style.width) / 100,
+        height: parseFloat(current.handle.style.height) / 100,
+      };
+      setBusy(true);
+      try {
+        await updateSourceTransform(current.sourceId, transform);
+        notify("Position de la source enregistrée");
+      } catch (error) {
+        notify(error.message, true);
+        await refreshBroadcast(true);
+      } finally {
+        setBusy(false);
+        if (studio.status) renderBroadcast(studio.status);
+      }
+    };
+
+    stage.addEventListener("pointerup", finish);
+    stage.addEventListener("pointercancel", finish);
   }
 
   function renderAudio(status) {
@@ -202,6 +373,7 @@
       liveButton.classList.toggle("active", streaming);
     }
 
+    setNativePreview(status);
     renderScenes(status);
     renderSources(status);
     renderAudio(status);
@@ -325,6 +497,20 @@
         sendAction(action.dataset.studioAction);
         return;
       }
+      const visibility = event.target.closest("[data-source-toggle]");
+      if (visibility) {
+        const sourceId = Number(visibility.dataset.sourceToggle);
+        const visible = visibility.dataset.sourceVisible !== "1";
+        setBusy(true);
+        toggleSourceVisibility(sourceId, visible)
+          .then(() => notify(visible ? "Source affichée" : "Source masquée"))
+          .catch(error => notify(error.message, true))
+          .finally(() => {
+            setBusy(false);
+            if (studio.status) renderBroadcast(studio.status);
+          });
+        return;
+      }
       const scene = event.target.closest("[data-studio-scene]");
       if (scene) {
         selectScene(scene.dataset.studioScene);
@@ -336,6 +522,7 @@
     if (!$s(".studio-dashboard")) return;
     bindTabs();
     bindControls();
+    bindSourceEditor();
     refreshBroadcast(false);
     refreshActivity();
 
