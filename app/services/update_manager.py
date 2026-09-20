@@ -17,7 +17,7 @@ CURRENT_VERSION = "2.7.3"
 REPOSITORY = "XDSawyerLoL/Auralive"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 USER_AGENT = f"QuanticStudioUpdater/{CURRENT_VERSION}"
-_INSTALLER_PATTERN = re.compile(r"^AuraLive-Setup-(\d+\.\d+\.\d+)\.exe$", re.IGNORECASE)
+_INSTALLER_PATTERN = re.compile(r"^QuanticStudio-Setup-(\d+\.\d+\.\d+)\.exe$", re.IGNORECASE)
 
 
 def _version_tuple(value: str) -> tuple[int, int, int]:
