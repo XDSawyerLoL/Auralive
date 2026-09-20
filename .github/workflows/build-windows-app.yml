@@ -316,7 +316,7 @@ jobs:
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-FastVoiceOAuth
+          name: AuraLive-Windows-Native-2.7
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true
