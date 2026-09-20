@@ -10,6 +10,10 @@ WORKFLOW = ROOT / ".github" / "workflows" / "build-windows-app.yml"
 INSTALLER = ROOT / "installer" / "QuanticStudio.iss"
 UPDATER = ROOT / "app" / "services" / "update_manager.py"
 UPDATE_UI = ROOT / "app" / "web" / "static" / "update-center.js"
+CORE_MAIN = ROOT / "engine" / "quantic-live" / "src" / "main.rs"
+CORE_FFMPEG = ROOT / "engine" / "quantic-live" / "src" / "ffmpeg.rs"
+NATIVE_SERVICE = ROOT / "app" / "services" / "native_broadcast.py"
+STUDIO_HTML = ROOT / "app" / "web" / "templates" / "index.html"
 
 
 def test_desktop_launcher_does_not_depend_on_pythonnet_or_pywebview() -> None:
@@ -134,3 +138,28 @@ def test_updater_is_release_scoped_and_sha256_verified() -> None:
     assert "actual != expected" in updater
     assert "QuanticStudio-Setup-" in updater
     assert "/api/update/install" in ui
+
+
+
+def test_native_core_is_background_only_in_normal_quantic_studio() -> None:
+    core = CORE_MAIN.read_text(encoding="utf-8")
+    service = NATIVE_SERVICE.read_text(encoding="utf-8")
+    studio = STUDIO_HTML.read_text(encoding="utf-8")
+
+    assert 'let headless = forced_headless || !diagnostic_ui;' in core
+    assert 'QUANTIC_STUDIO_CORE_UI' in core
+    assert 'Quantic Studio Core' in core
+    assert 'Aura Live — Native Broadcast' not in core
+    assert 'env["AURA_NATIVE_HEADLESS"] = "1"' in service
+    assert 'env["QUANTIC_STUDIO_CORE_UI"] = "0"' in service
+    assert 'data-studio-engine="native">Moteur Quantic</button>' in studio
+    assert '>Aura Native</button>' not in studio
+
+
+def test_ffmpeg_children_never_open_console_windows() -> None:
+    ffmpeg = CORE_FFMPEG.read_text(encoding="utf-8")
+
+    assert 'CREATE_NO_WINDOW' in ffmpeg
+    assert 'command.creation_flags(CREATE_NO_WINDOW);' in ffmpeg
+    assert ffmpeg.count('hidden_command(') >= 9
+    assert 'Command::new(&settings.ffmpeg_path)' not in ffmpeg
