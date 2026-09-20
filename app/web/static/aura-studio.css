@@ -676,6 +676,35 @@ body {
   transition: width .22s ease;
 }
 
+.audio-controls {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 8px;
+  align-items: center;
+  margin-top: 9px;
+}
+
+.audio-controls input[type="range"] {
+  width: 100%;
+  accent-color: var(--studio-violet);
+}
+
+.audio-mute {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 9px;
+  color: #d8dce7;
+  background: rgba(255,255,255,.045);
+  cursor: pointer;
+}
+
+.audio-mute.muted {
+  color: #ff9aa9;
+  border-color: rgba(255,100,124,.2);
+  background: rgba(255,100,124,.07);
+}
+
 .studio-main-actions {
   display: flex;
   gap: 9px;
