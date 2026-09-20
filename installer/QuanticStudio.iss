@@ -35,7 +35,9 @@ VersionInfoCompany=Quantic Sillage
 VersionInfoDescription=Quantic Studio Native Broadcast Suite
 VersionInfoCopyright=Quantic Sillage
 
-SetupIconFile=..\build-assets\quantic-studio.ico\n\n[Tasks]
+SetupIconFile=..\build-assets\quantic-studio.ico
+
+[Tasks]
 Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; GroupDescription: "Raccourcis"; Flags: unchecked
 
 [Files]
