@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from array import array
 import json
 import os
 import re
@@ -210,6 +211,134 @@ class NativeBroadcastService:
         self._browser_renderers: dict[int, _BrowserSourceRenderer] = {}
         self._browser_frames: dict[int, bytes] = {}
         self._browser_targets: dict[int, str] = {}
+        self._audio_lock = threading.RLock()
+        self._audio_tracks: list[dict[str, Any]] = []
+        self._audio_decode_threads: set[threading.Thread] = set()
+
+    def ffmpeg_executable(self) -> str:
+        bundled = RUNTIME_DIR / "ffmpeg" / "ffmpeg.exe"
+        if bundled.is_file():
+            return str(bundled)
+
+        try:
+            config = json.loads(self.config_path.read_text(encoding="utf-8"))
+            configured = str((config.get("settings") or {}).get("ffmpeg_path") or "").strip()
+            if configured:
+                return configured
+        except Exception:
+            pass
+
+        return "ffmpeg"
+
+    def enqueue_overlay_audio(self, event: dict[str, Any]) -> None:
+        if not isinstance(event, dict):
+            return
+
+        volume = max(0.0, min(2.0, float(event.get("volume", 1.0) or 1.0)))
+        targets: list[str] = []
+        for key in ("audio_url", "sound_path"):
+            target = str(event.get(key) or "").strip()
+            if target and target not in targets:
+                targets.append(target)
+
+        for target in targets:
+            thread = threading.Thread(
+                target=self._decode_audio_track,
+                args=(target, volume),
+                name="AuraNativeAudioDecode",
+                daemon=True,
+            )
+            with self._audio_lock:
+                self._audio_decode_threads.add(thread)
+            thread.start()
+
+    def native_audio_chunk(self, byte_count: int = 19200) -> bytes:
+        byte_count = max(4, int(byte_count))
+        byte_count -= byte_count % 4
+        sample_count = byte_count // 2
+        mixed = array("h", [0]) * sample_count
+
+        with self._audio_lock:
+            active: list[dict[str, Any]] = []
+            for track in self._audio_tracks:
+                data = track.get("data", b"")
+                offset = int(track.get("offset", 0))
+                segment = data[offset : offset + byte_count]
+                if segment:
+                    samples = array("h")
+                    samples.frombytes(segment[: len(segment) - (len(segment) % 2)])
+                    for index, sample in enumerate(samples):
+                        if index >= sample_count:
+                            break
+                        value = mixed[index] + sample
+                        mixed[index] = max(-32768, min(32767, value))
+                    track["offset"] = offset + len(segment)
+
+                if int(track.get("offset", 0)) < len(data):
+                    active.append(track)
+
+            self._audio_tracks = active
+
+        return mixed.tobytes()
+
+    def _decode_audio_track(self, target: str, volume: float) -> None:
+        resolved = self._resolve_audio_target(target)
+        if not resolved:
+            return
+
+        creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            command = [
+                self.ffmpeg_executable(),
+                "-nostdin",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                resolved,
+                "-vn",
+                "-af",
+                f"volume={volume:.3f}",
+                "-f",
+                "s16le",
+                "-acodec",
+                "pcm_s16le",
+                "-ar",
+                "48000",
+                "-ac",
+                "2",
+                "pipe:1",
+            ]
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=45,
+                creationflags=creationflags,
+            )
+            pcm = bytes(result.stdout or b"")
+            if result.returncode != 0 or not pcm:
+                return
+
+            # Keep at most roughly two minutes per clip to protect memory.
+            pcm = pcm[: 48000 * 2 * 2 * 120]
+            with self._audio_lock:
+                self._audio_tracks.append({"data": pcm, "offset": 0})
+                if len(self._audio_tracks) > 16:
+                    self._audio_tracks = self._audio_tracks[-16:]
+        except Exception:
+            return
+        finally:
+            current = threading.current_thread()
+            with self._audio_lock:
+                self._audio_decode_threads.discard(current)
+
+    def _resolve_audio_target(self, target: str) -> str:
+        target = str(target or "").strip()
+        if not target:
+            return ""
+        if target.startswith("/"):
+            return self.local_base_url() + target
+        return target
 
     def local_base_url(self) -> str:
         host = str(getattr(self.settings, "host", "127.0.0.1") or "127.0.0.1").strip()
@@ -278,12 +407,7 @@ class NativeBroadcastService:
             return []
 
     def _discover_webcams(self) -> list[str]:
-        ffmpeg_path = "ffmpeg"
-        try:
-            config = json.loads(self.config_path.read_text(encoding="utf-8"))
-            ffmpeg_path = str((config.get("settings") or {}).get("ffmpeg_path") or "ffmpeg")
-        except Exception:
-            pass
+        ffmpeg_path = self.ffmpeg_executable()
 
         creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
         try:
@@ -481,6 +605,7 @@ class NativeBroadcastService:
             env["AURA_NATIVE_PREVIEW_FILE"] = str(self.preview_path)
             env["AURA_NATIVE_HEADLESS"] = "1"
             env["AURA_LOCAL_BASE_URL"] = self.local_base_url()
+            env["AURA_NATIVE_FFMPEG"] = self.ffmpeg_executable()
 
             creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self._process = subprocess.Popen(
@@ -586,6 +711,7 @@ class NativeBroadcastService:
             "engine": engine_status,
             "obs_fallback_enabled": bool(getattr(self.settings, "obs_enabled", False)),
             "preview_frame_available": self.preview_path.is_file(),
+            "audio_tracks_active": len(self._audio_tracks),
         }
 
     def _read_status(self) -> dict[str, Any]:
