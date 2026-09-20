@@ -269,12 +269,11 @@ jobs:
             }
 
             $broadcastStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
-            if ($broadcastStatus.mode -ne "obs" -or $broadcastStatus.engine_available -ne $true) {
+            if ($broadcastStatus.mode -ne "native" -or $broadcastStatus.engine_available -ne $true) {
               $broadcastStatus | ConvertTo-Json -Depth 8 | Write-Host
-              throw "Aura ne detecte pas le moteur natif embarque tout en conservant OBS par defaut."
+              throw "Aura Native doit etre le moteur livre par defaut."
             }
 
-            $nativeStart = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/native" -Method Post -TimeoutSec 15
             $nativeDeadline = (Get-Date).AddSeconds(15)
             $nativeReady = $false
             while ((Get-Date) -lt $nativeDeadline) {
@@ -296,7 +295,14 @@ jobs:
               throw "Aura Native 0.3.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
             }
 
-            Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/obs" -Method Post -TimeoutSec 15 | Out-Null
+            $obsFallback = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/obs" -Method Post -TimeoutSec 15
+            if ($obsFallback.mode -ne "obs") {
+              throw "Le mode de compatibilite OBS ne peut pas etre active."
+            }
+            $nativeReturn = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/native" -Method Post -TimeoutSec 15
+            if ($nativeReturn.mode -ne "native") {
+              throw "Impossible de revenir a Aura Native apres le fallback OBS."
+            }
 
             $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
             if ($setupStatus.gemini_required -ne $false -or $setupStatus.kokoro.ready -ne $true) {
