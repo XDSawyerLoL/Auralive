@@ -231,12 +231,22 @@ impl QuanticLiveApp {
         }
         self.last_status_write = Instant::now();
 
-        let scene = self
-            .project
-            .scenes
-            .get(self.project.selected_scene)
-            .map(|scene| scene.name.as_str())
-            .unwrap_or("");
+        let active_scene = self.project.scenes.get(self.project.selected_scene);
+        let scene = active_scene.map(|scene| scene.name.as_str()).unwrap_or("");
+        let scenes = self.project.scenes.iter().map(|scene| scene.name.clone()).collect();
+        let sources = active_scene
+            .map(|scene| {
+                scene.sources
+                    .iter()
+                    .map(|source| control::SourceStatus {
+                        id: source.id,
+                        name: source.name.clone(),
+                        kind: source.kind.label().to_owned(),
+                        visible: source.visible,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
         let encoder = self.detected_encoder.label();
         control::write_status(&control::EngineStatus {
             ok: true,
@@ -247,6 +257,12 @@ impl QuanticLiveApp {
             recording: self.record_process.is_some(),
             preview: self.preview.is_some(),
             scene,
+            scenes,
+            sources,
+            mic_volume: self.project.mic_volume,
+            desktop_volume: self.project.desktop_volume,
+            mic_muted: self.project.mic_muted,
+            desktop_muted: self.project.desktop_muted,
             ffmpeg_ok: self.ffmpeg_ok,
             encoder,
             message: &self.status,
