@@ -1,4 +1,4 @@
-# Inventaire fonctionnel Aura Live 2.7.1
+# Inventaire fonctionnel Aura Live 2.7.2
 
 ## Cœur Twitch et IA
 
@@ -93,7 +93,7 @@
 
 ## Limite honnête
 
-Aura Live 2.7.1 fournit un noyau local très étendu. Une parité absolue avec un service cloud exploité depuis plusieurs années ne peut pas être déclarée sans tests réels en charge, hébergement permanent et identifiants des services externes. Les dépendances externes sont affichées comme telles dans la page « Couverture fonctionnelle » au lieu d'être présentées comme actives.
+Aura Live 2.7.2 fournit un noyau local très étendu. Une parité absolue avec un service cloud exploité depuis plusieurs années ne peut pas être déclarée sans tests réels en charge, hébergement permanent et identifiants des services externes. Les dépendances externes sont affichées comme telles dans la page « Couverture fonctionnelle » au lieu d'être présentées comme actives.
 
 - [x] Compositeur multi-source natif : écran, fenêtre/jeu, webcam, image, texte et navigateur/Mairaiy
 - [x] Sources navigateur headless locales avec MJPEG + chroma-key
@@ -112,3 +112,8 @@ Aura Live 2.7.1 fournit un noyau local très étendu. Une parité absolue avec u
 - [x] Transition contrôlée Cut / Fondu lors du rebuild de scène
 - [x] Replay buffer segmenté et clip instantané
 - [x] Multistream via FFmpeg tee, clés secondaires chiffrées DPAPI
+- [x] Installateur Windows Inno Setup sans droits administrateur obligatoires
+- [x] Conservation de .env et des données utilisateur pendant les mises à jour
+- [x] Centre de mise à jour intégré avec vérification de la release officielle
+- [x] Vérification SHA-256 avant lancement d'une mise à jour
+- [x] Pipeline Authenticode prêt pour certificat de signature de code
