@@ -721,7 +721,7 @@
     let edit = null;
 
     stage.addEventListener("pointerdown", event => {
-      if (studio.busy || studio.status?.backend !== "native") return;
+      if (studio.busy) return;
       const handle = event.target.closest("[data-source-handle]");
       if (!handle) return;
 
@@ -817,45 +817,36 @@
     const systemMute = $s("#studio-system-mute");
     const auraMute = $s("#studio-aura-mute");
 
-    if (status.backend === "native") {
-      const micValue = Math.max(0, Math.min(2, Number(engine.mic_volume ?? .82)));
-      const systemValue = Math.max(0, Math.min(2, Number(engine.system_volume ?? .72)));
-      const auraValue = Math.max(0, Math.min(2, Number(engine.desktop_volume ?? .72)));
-      const systemAudio = status.system_audio || {};
+    const micValue = Math.max(0, Math.min(2, Number(engine.mic_volume ?? .82)));
+    const systemValue = Math.max(0, Math.min(2, Number(engine.system_volume ?? .72)));
+    const auraValue = Math.max(0, Math.min(2, Number(engine.desktop_volume ?? .72)));
+    const systemAudio = status.system_audio || {};
 
-      if (micMeter) micMeter.style.width = `${engine.mic_muted ? 0 : Math.min(100, micValue * 100)}%`;
-      if (systemMeter) systemMeter.style.width = `${engine.system_muted ? 0 : Math.min(100, systemValue * 100)}%`;
-      if (auraMeter) auraMeter.style.width = `${engine.desktop_muted ? 0 : Math.min(100, auraValue * 100)}%`;
+    if (micMeter) micMeter.style.width = `${engine.mic_muted ? 0 : Math.min(100, micValue * 100)}%`;
+    if (systemMeter) systemMeter.style.width = `${engine.system_muted ? 0 : Math.min(100, systemValue * 100)}%`;
+    if (auraMeter) auraMeter.style.width = `${engine.desktop_muted ? 0 : Math.min(100, auraValue * 100)}%`;
 
-      if (micDetail) micDetail.textContent = engine.mic_muted ? "Muet" : `${Math.round(micValue * 100)} %`;
-      if (systemDetail) {
-        if (engine.system_muted) systemDetail.textContent = "Muet";
-        else if (systemAudio.available || systemAudio.running) systemDetail.textContent = `${Math.round(systemValue * 100)} % · ${systemAudio.device || "WASAPI"}`;
-        else if (systemAudio.error) systemDetail.textContent = "WASAPI indisponible";
-        else systemDetail.textContent = `${Math.round(systemValue * 100)} % · prêt`;
-      }
-      if (auraDetail) auraDetail.textContent = engine.desktop_muted ? "Muet" : `${Math.round(auraValue * 100)} % · bus Aura`;
+    if (micDetail) micDetail.textContent = engine.mic_muted ? "Muet" : `${Math.round(micValue * 100)} %`;
+    if (systemDetail) {
+      if (engine.system_muted) systemDetail.textContent = "Muet";
+      else if (systemAudio.available || systemAudio.running) systemDetail.textContent = `${Math.round(systemValue * 100)} % · ${systemAudio.device || "WASAPI"}`;
+      else if (systemAudio.error) systemDetail.textContent = "Audio système indisponible";
+      else systemDetail.textContent = `${Math.round(systemValue * 100)} % · prêt`;
+    }
+    if (auraDetail) auraDetail.textContent = engine.desktop_muted ? "Muet" : `${Math.round(auraValue * 100)} % · bus Aura`;
 
-      if (micVolume && document.activeElement !== micVolume) micVolume.value = String(Math.round(micValue * 100));
-      if (systemVolume && document.activeElement !== systemVolume) systemVolume.value = String(Math.round(systemValue * 100));
-      if (auraVolume && document.activeElement !== auraVolume) auraVolume.value = String(Math.round(auraValue * 100));
+    if (micVolume && document.activeElement !== micVolume) micVolume.value = String(Math.round(micValue * 100));
+    if (systemVolume && document.activeElement !== systemVolume) systemVolume.value = String(Math.round(systemValue * 100));
+    if (auraVolume && document.activeElement !== auraVolume) auraVolume.value = String(Math.round(auraValue * 100));
 
-      for (const [button, muted] of [
-        [micMute, Boolean(engine.mic_muted)],
-        [systemMute, Boolean(engine.system_muted)],
-        [auraMute, Boolean(engine.desktop_muted)],
-      ]) {
-        if (!button) continue;
-        button.classList.toggle("muted", muted);
-        button.textContent = muted ? "○" : "◉";
-      }
-    } else {
-      if (micMeter) micMeter.style.width = "62%";
-      if (systemMeter) systemMeter.style.width = "48%";
-      if (auraMeter) auraMeter.style.width = "48%";
-      if (micDetail) micDetail.textContent = "Géré par OBS";
-      if (systemDetail) systemDetail.textContent = "Géré par OBS";
-      if (auraDetail) auraDetail.textContent = "Géré par OBS";
+    for (const [button, muted] of [
+      [micMute, Boolean(engine.mic_muted)],
+      [systemMute, Boolean(engine.system_muted)],
+      [auraMute, Boolean(engine.desktop_muted)],
+    ]) {
+      if (!button) continue;
+      button.classList.toggle("muted", muted);
+      button.textContent = muted ? "○" : "◉";
     }
   }
 
@@ -913,7 +904,6 @@
     const streaming = Boolean(status.streaming);
     const recording = Boolean(status.recording);
     const preview = Boolean(status.preview);
-    const native = status.backend === "native";
     const stage = $s("#studio-stage");
     const canvasWidth = Number(status.engine?.canvas_width || 16);
     const canvasHeight = Number(status.engine?.canvas_height || 9);
@@ -921,37 +911,37 @@
       stage.style.aspectRatio = `${canvasWidth} / ${canvasHeight}`;
     }
 
-    $$s("[data-studio-engine]").forEach(button => {
-      button.classList.toggle("active", button.dataset.studioEngine === status.backend);
-    });
-
     const outputButton = $s("[data-studio-output-settings]");
     if (outputButton) {
-      const configured = Boolean(status.output?.stream_key_configured);
+      const primaryConfigured = Boolean(status.output?.stream_key_configured);
+      const secondaryConfigured = Array.isArray(status.output?.destinations)
+        && status.output.destinations.some(row => row?.enabled && row?.stream_key_configured);
+      const configured = primaryConfigured || secondaryConfigured;
       outputButton.classList.toggle("configured", configured);
-      outputButton.textContent = configured ? "⚙ Diffusion · sécurisée" : "⚙ Diffusion";
+      outputButton.textContent = configured ? "⚙ Diffusion · prête" : "⚙ Configurer diffusion";
       outputButton.title = configured
-        ? "Destination RTMP configurée et clé protégée localement"
+        ? "Destination configurée et clé protégée localement"
         : "Configurer la destination et la clé de diffusion";
-      outputButton.disabled = !native;
+      outputButton.disabled = studio.busy;
     }
 
     const health = $s("#studio-broadcast-health");
     if (health) {
-      health.classList.toggle("ok", native ? Boolean(status.responsive || status.process_running) : Boolean(status.obs?.connected));
+      const engineOk = Boolean(status.responsive || status.process_running);
+      health.classList.toggle("ok", engineOk);
       health.classList.toggle("live", streaming);
       const label = health.querySelector("span");
       if (label) {
-        if (streaming) label.textContent = `En direct · ${engineLabel(status)}`;
-        else if (native && !status.engine_available) label.textContent = "Moteur natif absent";
-        else if (native && !status.process_running) label.textContent = "Aura Native prêt";
-        else if (!native && !status.obs?.connected) label.textContent = "OBS non connecté";
-        else label.textContent = `${engineLabel(status)} prêt`;
+        if (streaming) label.textContent = "En direct · Quantic Studio Core";
+        else if (!status.engine_available) label.textContent = "Moteur absent";
+        else if (!status.process_running) label.textContent = "Moteur prêt à démarrer";
+        else if (!status.responsive) label.textContent = "Moteur en démarrage…";
+        else label.textContent = "Moteur prêt";
       }
     }
 
     const service = $s("#service-status");
-    if (service) service.textContent = streaming ? "DIFFUSION EN COURS" : `${engineLabel(status).toUpperCase()} PRÊT`;
+    if (service) service.textContent = streaming ? "DIFFUSION EN COURS" : "QUANTIC STUDIO CORE PRÊT";
 
     const liveState = $s("#dashboard-live-state");
     if (liveState) {
@@ -963,19 +953,15 @@
     const stageCopy = $s("#studio-stage-copy");
     const stageStatus = $s("#studio-stage-status");
     if (stageTitle) {
-      stageTitle.textContent = streaming ? "Votre diffusion est en cours" : (preview ? "Aperçu natif actif" : "Studio prêt");
+      stageTitle.textContent = streaming ? "Diffusion en cours" : (preview ? "Aperçu actif" : "Studio prêt");
     }
     if (stageCopy) {
-      stageCopy.textContent = native
-        ? (preview
-            ? "Aperçu composite natif actif. Les scènes, sources et positions sont modifiables directement ici."
-            : "Cliquez sur Aperçu pour vérifier la capture avant de lancer le direct.")
-        : (status.obs?.connected
-            ? "Mode de compatibilité OBS actif. Aura continue de piloter OBS avec les mêmes commandes."
-            : "OBS est sélectionné mais la connexion WebSocket n’est pas disponible.");
+      stageCopy.textContent = preview
+        ? "La scène affichée ici est celle envoyée au direct. Tu peux déplacer et redimensionner les sources."
+        : "Commence par Aperçu pour contrôler l’image avant d’enregistrer ou de lancer le live.";
     }
     if (stageStatus) {
-      const encoder = status.encoder || status.engine?.encoder || (native ? "Détection en cours" : "Encodeur OBS");
+      const encoder = status.encoder || status.engine?.encoder || "Détection encodeur";
       const capture = status.engine?.capture_backend || "";
       stageStatus.innerHTML = `<i></i><span>${escapeHtml(status.scene || "Aucune scène")} · ${escapeHtml(encoder)}${capture ? " · " + escapeHtml(capture) : ""}</span>`;
     }
@@ -984,15 +970,16 @@
     if (previewButton) {
       previewButton.textContent = preview ? "■ Fermer aperçu" : "◉ Aperçu";
       previewButton.classList.toggle("active", preview);
-      previewButton.dataset.studioDisabled = native ? "false" : "true";
-      previewButton.disabled = studio.busy || !native;
-      previewButton.title = native ? "Ouvrir ou fermer l’aperçu natif" : "L’aperçu du mode de compatibilité reste affiché dans OBS";
+      previewButton.dataset.studioDisabled = "false";
+      previewButton.disabled = studio.busy;
+      previewButton.title = preview ? "Fermer l’aperçu" : "Vérifier la scène avant diffusion";
     }
 
     const recordButton = $s('[data-studio-action="record"]');
     if (recordButton) {
       recordButton.textContent = recording ? "■ Arrêter REC" : "● Enregistrer";
       recordButton.classList.toggle("active", recording);
+      recordButton.disabled = studio.busy;
     }
 
     const replayButton = $s('[data-studio-action="replay"]');
@@ -1000,16 +987,17 @@
       const buffering = Boolean(status.replay_buffering);
       replayButton.textContent = buffering ? "■ Stop replay" : `↺ Replay ${Number(status.replay_seconds || 30)} s`;
       replayButton.classList.toggle("active", buffering);
-      replayButton.dataset.studioDisabled = native ? "false" : "true";
-      replayButton.disabled = studio.busy || !native;
+      replayButton.dataset.studioDisabled = "false";
+      replayButton.disabled = studio.busy;
     }
+
     const clipButton = $s('[data-studio-action="clip"]');
     if (clipButton) {
-      clipButton.dataset.studioDisabled = native && status.replay_buffering ? "false" : "true";
-      clipButton.disabled = studio.busy || !native || !status.replay_buffering;
+      clipButton.dataset.studioDisabled = status.replay_buffering ? "false" : "true";
+      clipButton.disabled = studio.busy || !status.replay_buffering;
       clipButton.title = status.last_replay_file
         ? `Dernier clip : ${status.last_replay_file}`
-        : "Sauvegarder les dernières secondes du replay buffer";
+        : (status.replay_buffering ? "Sauvegarder les dernières secondes" : "Active Replay avant de créer un clip");
     }
 
     const transitionKind = $s("#studio-transition-kind");
@@ -1022,15 +1010,25 @@
     const readiness = renderLiveReadiness(status);
     const liveButton = $s('[data-studio-action="live"]');
     if (liveButton) {
-      const needsOutput = native && !streaming && !readiness.outputReady;
+      const needsOutput = !streaming && !readiness.outputReady;
       liveButton.textContent = streaming
         ? "■ Couper le direct"
         : (needsOutput ? "⚙ Configurer le live" : "▶ Lancer le live");
       liveButton.classList.toggle("active", streaming);
       liveButton.classList.toggle("needs-setup", needsOutput);
+      liveButton.disabled = studio.busy;
       liveButton.title = needsOutput
-        ? "Ajoutez votre destination et votre clé de stream avant de lancer le direct"
-        : (readiness.ready ? "Tout est prêt pour lancer le direct" : "Aura vérifiera les éléments manquants au lancement");
+        ? "Ajoute la destination et la clé de stream"
+        : (readiness.ready ? "Tout est prêt pour le direct" : "Vérifie les indicateurs Moteur, Diffusion et Scène");
+    }
+
+    if (!studio.busy && !streaming && !preview && !recording && !status.replay_buffering) {
+      actionFeedback(
+        readiness.ready
+          ? "Prêt. Lance un aperçu pour vérifier la scène."
+          : "Complète les éléments signalés ci-dessus avant le live.",
+        readiness.ready ? "idle" : "warn"
+      );
     }
 
     setNativePreview(status);
@@ -1054,22 +1052,6 @@
       return studio.status;
     } finally {
       studio.refreshInFlight = false;
-    }
-  }
-
-  async function selectEngine(mode) {
-    if (studio.busy || studio.status?.backend === mode) return;
-    setBusy(true);
-    try {
-      const result = await request(`/api/broadcast/mode/${mode}`, {method: "POST"});
-      notify(mode === "native" ? "Aura Native Broadcast activé" : "Compatibilité OBS activée");
-      await refreshBroadcast(false);
-      return result;
-    } catch (error) {
-      notify(error.message, true);
-    } finally {
-      setBusy(false);
-      if (studio.status) renderBroadcast(studio.status);
     }
   }
 
@@ -1143,7 +1125,7 @@
   async function selectScene(name) {
     if (!name || studio.busy) return;
     const stage = $s("#studio-stage");
-    const fade = studio.status?.backend === "native" && String(studio.status?.transition || "fade") === "fade";
+    const fade = String(studio.status?.transition || "fade") === "fade";
     if (fade) stage?.classList.add("switching");
     setBusy(true);
     try {
