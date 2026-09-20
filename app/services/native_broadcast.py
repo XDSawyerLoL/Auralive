@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -211,6 +212,112 @@ class NativeBroadcastService:
             host = "127.0.0.1"
         port = int(getattr(self.settings, "port", 18787) or 18787)
         return f"http://{host}:{port}"
+
+    def discover_sources(self) -> dict[str, list[str]]:
+        return {
+            "windows": self._discover_windows(),
+            "webcams": self._discover_webcams(),
+        }
+
+    def pick_image(self) -> str:
+        if os.name != "nt":
+            return ""
+        script = (
+            "Add-Type -AssemblyName System.Windows.Forms;"
+            "$d=New-Object System.Windows.Forms.OpenFileDialog;"
+            "$d.Filter='Images|*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif|Tous les fichiers|*.*';"
+            "$d.Multiselect=$false;"
+            "if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){$d.FileName}"
+        )
+        creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-STA", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=45,
+                creationflags=creationflags,
+            )
+            path = str(result.stdout or "").strip()
+            return path if path and Path(path).is_file() else ""
+        except Exception:
+            return ""
+
+    def _discover_windows(self) -> list[str]:
+        if os.name != "nt":
+            return []
+        script = (
+            "Get-Process | Where-Object {$_.MainWindowTitle -and $_.MainWindowTitle.Trim()} | "
+            "ForEach-Object {$_.MainWindowTitle.Trim()} | Sort-Object -Unique | ConvertTo-Json -Compress"
+        )
+        creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=6,
+                creationflags=creationflags,
+            )
+            payload = str(result.stdout or "").strip()
+            if not payload:
+                return []
+            decoded = json.loads(payload)
+            values = decoded if isinstance(decoded, list) else [decoded]
+            return [
+                str(value)
+                for value in values
+                if str(value).strip() and "Aura Live" not in str(value)
+            ][:100]
+        except Exception:
+            return []
+
+    def _discover_webcams(self) -> list[str]:
+        ffmpeg_path = "ffmpeg"
+        try:
+            config = json.loads(self.config_path.read_text(encoding="utf-8"))
+            ffmpeg_path = str((config.get("settings") or {}).get("ffmpeg_path") or "ffmpeg")
+        except Exception:
+            pass
+
+        creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg_path,
+                    "-hide_banner",
+                    "-list_devices",
+                    "true",
+                    "-f",
+                    "dshow",
+                    "-i",
+                    "dummy",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                creationflags=creationflags,
+            )
+            text = str(result.stderr or "")
+        except Exception:
+            return []
+
+        devices: list[str] = []
+        in_video = False
+        for line in text.splitlines():
+            if "DirectShow video devices" in line:
+                in_video = True
+                continue
+            if "DirectShow audio devices" in line:
+                break
+            if not in_video or "Alternative name" in line:
+                continue
+            match = re.search(r'"([^"]+)"', line)
+            if match:
+                name = match.group(1).strip()
+                if name and name not in devices:
+                    devices.append(name)
+        return devices[:50]
 
     def browser_frame(self, source_id: int) -> bytes | None:
         with self._browser_lock:
