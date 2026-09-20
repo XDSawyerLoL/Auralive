@@ -41,6 +41,8 @@ pub struct EngineStatus<'a> {
     pub desktop_volume: f32,
     pub mic_muted: bool,
     pub desktop_muted: bool,
+    pub canvas_width: u32,
+    pub canvas_height: u32,
     pub ffmpeg_ok: bool,
     pub encoder: &'a str,
     pub message: &'a str,
