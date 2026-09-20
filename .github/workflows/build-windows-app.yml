@@ -3,13 +3,7 @@ name: Build Aura Live Windows app
 on:
   push:
     branches:
-      - feature/windows-desktop-app
       - main
-      - feat/kokoro-primary-voice
-      - fix/local-voice-status-and-twitch-setup
-      - fix/mairaiy-natural-reactions
-      - fix/oauth-voice-fastpath
-      - feature/aura-native-broadcast
     paths:
       - "app/**"
       - "engine/quantic-live/**"
@@ -22,7 +16,20 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - "app/**"
+      - "engine/quantic-live/**"
+      - "config/**"
+      - "scripts/build-windows.ps1"
+      - "scripts/install-aura-ffmpeg.ps1"
+      - "requirements*.txt"
+      - ".env.example"
+      - ".github/workflows/build-windows-app.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-windows:
