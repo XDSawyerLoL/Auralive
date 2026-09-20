@@ -12,7 +12,7 @@ use chrono::Local;
 
 use crate::{
     control,
-    model::{Encoder, Scene, Settings, Source, SourceKind, SourceTransform},
+    model::{Encoder, Scene, Settings, Source, SourceKind, SourceTransform, TransitionKind},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -335,7 +335,14 @@ fn build_video_pipeline(settings: &Settings, scene: &Scene) -> VideoPipeline {
         source_index += 1;
     }
 
-    filters.push(format!("[base{base_index}]format=yuv420p[vout]"));
+    if settings.transition == TransitionKind::Fade && settings.transition_ms > 0 {
+        let duration = settings.transition_ms.clamp(80, 3000) as f32 / 1000.0;
+        filters.push(format!(
+            "[base{base_index}]format=yuv420p,fade=t=in:st=0:d={duration:.3}:color=black[vout]"
+        ));
+    } else {
+        filters.push(format!("[base{base_index}]format=yuv420p[vout]"));
+    }
 
     VideoPipeline {
         args,
@@ -414,18 +421,27 @@ pub fn start_stream(settings: &Settings, scene: &Scene, audio: AudioMix) -> Resu
     if !cfg!(target_os = "windows") {
         return Err(anyhow!("Le compositeur Aura Native est actuellement ciblé Windows."));
     }
-    if settings.stream_key.trim().is_empty() {
-        return Err(anyhow!("Ajoute une clé de stream avant de lancer le direct."));
-    }
     if !ffmpeg_available(&settings.ffmpeg_path) {
         return Err(anyhow!("FFmpeg est introuvable : vérifie son chemin dans Réglages."));
     }
 
-    let destination = format!(
-        "{}/{}",
-        settings.rtmp_url.trim_end_matches('/'),
-        settings.stream_key.trim_start_matches('/')
-    );
+    let mut destinations: Vec<String> = Vec::new();
+    if !settings.stream_key.trim().is_empty() {
+        destinations.push(format!(
+            "{}/{}",
+            settings.rtmp_url.trim_end_matches('/'),
+            settings.stream_key.trim_start_matches('/')
+        ));
+    }
+    for destination in &settings.stream_destinations {
+        let destination = destination.trim();
+        if !destination.is_empty() && !destinations.iter().any(|value| value == destination) {
+            destinations.push(destination.to_owned());
+        }
+    }
+    if destinations.is_empty() {
+        return Err(anyhow!("Ajoute une clé de stream avant de lancer le direct."));
+    }
 
     let pipeline = build_video_pipeline(settings, scene);
     let mic_index = pipeline.next_input_index;
@@ -441,7 +457,20 @@ pub fn start_stream(settings: &Settings, scene: &Scene, audio: AudioMix) -> Resu
         "-map".into(), "[aout]".into(),
     ]);
     append_output_encoding(&mut args, settings);
-    args.extend(["-f".into(), "flv".into(), destination]);
+
+    if destinations.len() == 1 {
+        args.extend(["-f".into(), "flv".into(), destinations.remove(0)]);
+    } else {
+        let tee = destinations
+            .iter()
+            .map(|destination| {
+                let escaped = destination.replace('\\', "\\\\").replace('|', "\\|");
+                format!("[f=flv:onfail=ignore]{escaped}")
+            })
+            .collect::<Vec<_>>()
+            .join("|");
+        args.extend(["-f".into(), "tee".into(), tee]);
+    }
 
     Command::new(&settings.ffmpeg_path)
         .args(args)
@@ -495,6 +524,116 @@ pub fn start_recording(settings: &Settings, scene: &Scene, audio: AudioMix) -> R
         .context("Impossible de lancer le compositeur FFmpeg pour l’enregistrement")?;
 
     Ok((child, file))
+}
+
+pub fn start_replay_buffer(settings: &Settings, scene: &Scene, audio: AudioMix) -> Result<(Child, PathBuf)> {
+    if !cfg!(target_os = "windows") {
+        return Err(anyhow!("Le replay buffer Aura Native est actuellement ciblé Windows."));
+    }
+    if !ffmpeg_available(&settings.ffmpeg_path) {
+        return Err(anyhow!("FFmpeg est introuvable : vérifie son chemin dans Réglages."));
+    }
+
+    let directory = Path::new(&settings.recording_dir).join("replay-buffer");
+    std::fs::create_dir_all(&directory).context("Impossible de créer le replay buffer")?;
+    for entry in std::fs::read_dir(&directory).context("Impossible de lire le replay buffer")? {
+        let Ok(entry) = entry else { continue };
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) == Some("mkv") {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    let pipeline = build_video_pipeline(settings, scene);
+    let mic_index = pipeline.next_input_index;
+    let system_index = mic_index + 1;
+    let aura_index = system_index + 1;
+    let mut args = pipeline.args;
+    append_mic_input(&mut args, settings);
+    append_system_audio_input(&mut args);
+    append_aura_audio_input(&mut args);
+    args.extend([
+        "-filter_complex".into(), mixed_filter(&pipeline.filter_complex, mic_index, system_index, aura_index, audio),
+        "-map".into(), pipeline.output_label.into(),
+        "-map".into(), "[aout]".into(),
+    ]);
+    append_output_encoding(&mut args, settings);
+
+    let seconds = settings.replay_seconds.clamp(10, 300);
+    let segment_seconds = 5_u32;
+    let wrap = ((seconds + segment_seconds - 1) / segment_seconds + 1).max(3);
+    let pattern = directory.join("replay-%03d.mkv");
+    args.extend([
+        "-f".into(), "segment".into(),
+        "-segment_time".into(), segment_seconds.to_string(),
+        "-segment_wrap".into(), wrap.to_string(),
+        "-reset_timestamps".into(), "1".into(),
+        pattern.to_string_lossy().into_owned(),
+    ]);
+
+    let child = Command::new(&settings.ffmpeg_path)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Impossible de lancer le replay buffer Aura Native")?;
+
+    Ok((child, directory))
+}
+
+pub fn save_replay_clip(settings: &Settings, directory: &Path) -> Result<PathBuf> {
+    let mut segments: Vec<PathBuf> = std::fs::read_dir(directory)
+        .context("Replay buffer inaccessible")?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("mkv"))
+        .filter(|path| std::fs::metadata(path).map(|meta| meta.len() > 0).unwrap_or(false))
+        .collect();
+    segments.sort_by_key(|path| {
+        std::fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+    if segments.is_empty() {
+        return Err(anyhow!("Le replay buffer ne contient pas encore assez d’images."));
+    }
+
+    let recording_dir = Path::new(&settings.recording_dir);
+    std::fs::create_dir_all(recording_dir).context("Impossible de créer le dossier d’enregistrement")?;
+    let output = recording_dir.join(format!(
+        "aura-replay-{}.mkv",
+        Local::now().format("%Y-%m-%d_%H-%M-%S-%3f")
+    ));
+    let list_path = directory.join("concat.txt");
+    let list = segments
+        .iter()
+        .map(|path| {
+            let safe = path.to_string_lossy().replace('\\', "/").replace('\'', "\\'");
+            format!("file '{safe}'")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&list_path, list).context("Impossible de préparer le clip replay")?;
+
+    let status = Command::new(&settings.ffmpeg_path)
+        .args([
+            "-hide_banner",
+            "-loglevel", "error",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", &list_path.to_string_lossy(),
+            "-c", "copy",
+            &output.to_string_lossy(),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .context("Impossible de finaliser le clip replay")?;
+    let _ = std::fs::remove_file(&list_path);
+    if !status.success() {
+        return Err(anyhow!("FFmpeg n’a pas pu finaliser le clip replay."));
+    }
+    Ok(output)
 }
 
 pub fn stop_gracefully(child: &mut Child) {
