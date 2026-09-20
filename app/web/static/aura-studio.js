@@ -102,7 +102,7 @@
       <div class="studio-source">
         <span class="source-icon">${sourceIcon(source.kind)}</span>
         <div><b>${escapeHtml(source.name)}</b><small>${escapeHtml(source.kind)}</small></div>
-        <button class="studio-source-visibility ${source.visible ? "" : "off"}" type="button" data-source-toggle="${Number(source.id)}" data-source-visible="${source.visible ? "1" : "0"}" title="${source.visible ? "Masquer" : "Afficher"}">${source.visible ? "◉" : "○"}</button>
+        <button class="studio-source-visibility ${source.visible ? "" : "off"}" type="button" data-source-toggle="${Number(source.id)}" data-source-visible="${source.visible ? "1" : "0"}" title="${source.visible ? "Masquer" : "Afficher"}" ${status.streaming || status.recording ? "disabled" : ""}>${source.visible ? "◉" : "○"}</button>
       </div>
     `).join("");
     renderSourceHandles(status);
