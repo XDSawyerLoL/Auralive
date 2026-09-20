@@ -1,4 +1,4 @@
-name: Publish Aura Live 2.7.2 Native Release
+name: Publish Quantic Studio 2.7.3 Native Release
 
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
         shell: pwsh
         run: python -m compileall -q app
 
-      - name: Build Aura Native Broadcast engine
+      - name: Build Quantic Studio Core engine
         shell: pwsh
         run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
 
@@ -57,39 +57,39 @@ jobs:
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
         run: .\scripts\sign-windows.ps1 -Path @("engine\quantic-live\target\release\quantic-live.exe")
 
-      - name: Build full Aura Live 2.7.2 Native
+      - name: Build full Quantic Studio 2.7.3 Native
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
         run: |
           .\scripts\build-windows.ps1 -Python python
-          .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\AuraLive\ffmpeg"
-          Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\AuraLive\AuraNativeBroadcast.exe" -Force
+          .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
+          Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\QuanticStudio\QuanticStudioCore.exe" -Force
 
-          if (-not (Test-Path "dist\AuraLive\AuraLive.exe")) { throw "AuraLive.exe absent du package complet." }
-          if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent du package complet." }
-          if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package complet." }
-          $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7.2-Windows-Native-2026-09-20") {
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudio.exe")) { throw "QuanticStudio.exe absent du package complet." }
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) { throw "QuanticStudioCore.exe absent du package complet." }
+          if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package complet." }
+          $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
+          if ($buildId -ne "QuanticStudio-2.7.3-Windows-Native-2026-09-20") {
             throw "Build ID complet inattendu: $buildId"
           }
-          $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "gfxcapture absent du FFmpeg complet." }
 
-          $model = Get-Item "dist\AuraLive\data\voices\kokoro\kokoro-v1.0.onnx" -ErrorAction Stop
-          $voices = Get-Item "dist\AuraLive\data\voices\kokoro\voices-v1.0.bin" -ErrorAction Stop
+          $model = Get-Item "dist\QuanticStudio\data\voices\kokoro\kokoro-v1.0.onnx" -ErrorAction Stop
+          $voices = Get-Item "dist\QuanticStudio\data\voices\kokoro\voices-v1.0.bin" -ErrorAction Stop
           if ($model.Length -lt 250000000 -or $voices.Length -lt 10000000) {
             throw "Les assets Kokoro complets sont incomplets."
           }
 
           .\scripts\sign-windows.ps1 -Path @(
-            "dist\AuraLive\AuraLive.exe",
-            "dist\AuraLive\AuraNativeBroadcast.exe"
+            "dist\QuanticStudio\QuanticStudio.exe",
+            "dist\QuanticStudio\QuanticStudioCore.exe"
           )
 
-          $zip = "release\AuraLive-Windows-Native-2.7.2.zip"
-          Compress-Archive -Path "dist\AuraLive" -DestinationPath $zip -CompressionLevel Optimal
+          $zip = "release\QuanticStudio-Windows-Native-2.7.3.zip"
+          Compress-Archive -Path "dist\QuanticStudio" -DestinationPath $zip -CompressionLevel Optimal
           if ((Get-Item $zip).Length -lt 1000000) { throw "Archive complète anormalement petite." }
 
       - name: Ensure Inno Setup 6
@@ -103,65 +103,65 @@ jobs:
             choco install innosetup --yes --no-progress
           }
 
-      - name: Build Aura Live 2.7.2 installer
+      - name: Build Quantic Studio 2.7.3 installer
         shell: pwsh
-        run: .\scripts\build-installer.ps1 -Version "2.7.2" -SourceDir "dist\AuraLive"
+        run: .\scripts\build-installer.ps1 -Version "2.7.3" -SourceDir "dist\QuanticStudio"
 
       - name: Sign installer when certificate is configured
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
-        run: .\scripts\sign-windows.ps1 -Path @("release\AuraLive-Setup-2.7.2.exe")
+        run: .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-2.7.3.exe")
 
-      - name: Build Lite Aura Live 2.7.2 Native
+      - name: Build Lite Quantic Studio 2.7.3 Native
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
         run: |
-          if (Test-Path "dist\AuraLive") { Remove-Item "dist\AuraLive" -Recurse -Force }
+          if (Test-Path "dist\QuanticStudio") { Remove-Item "dist\QuanticStudio" -Recurse -Force }
           .\scripts\build-windows-lite.ps1 -Python python
-          .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\AuraLive\ffmpeg"
-          Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\AuraLive\AuraNativeBroadcast.exe" -Force
+          .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
+          Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\QuanticStudio\QuanticStudioCore.exe" -Force
 
-          if (-not (Test-Path "dist\AuraLive\AuraLive.exe")) { throw "AuraLive.exe absent du package Lite." }
-          if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent du package Lite." }
-          if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package Lite." }
-          $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7.2-Windows-Native-LITE-2026-09-20") {
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudio.exe")) { throw "QuanticStudio.exe absent du package Lite." }
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) { throw "QuanticStudioCore.exe absent du package Lite." }
+          if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package Lite." }
+          $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
+          if ($buildId -ne "QuanticStudio-2.7.3-Windows-Native-LITE-2026-09-20") {
             throw "Build ID Lite inattendu: $buildId"
           }
-          $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "gfxcapture absent du FFmpeg Lite." }
-          $envContent = Get-Content "dist\AuraLive\.env" -Raw
+          $envContent = Get-Content "dist\QuanticStudio\.env" -Raw
           if ($envContent -notmatch "MAIRAIY_KOKORO_AUTO_DOWNLOAD=true") {
             throw "Auto-download Kokoro inactif dans le Lite."
           }
-          if (Test-Path "dist\AuraLive\data\voices\kokoro\kokoro-v1.0.onnx") {
+          if (Test-Path "dist\QuanticStudio\data\voices\kokoro\kokoro-v1.0.onnx") {
             throw "Le modèle Kokoro ne doit pas être embarqué dans le Lite."
           }
-          if (Test-Path "dist\AuraLive\data\voices\kokoro\voices-v1.0.bin") {
+          if (Test-Path "dist\QuanticStudio\data\voices\kokoro\voices-v1.0.bin") {
             throw "Le pack de voix Kokoro ne doit pas être embarqué dans le Lite."
           }
 
           .\scripts\sign-windows.ps1 -Path @(
-            "dist\AuraLive\AuraLive.exe",
-            "dist\AuraLive\AuraNativeBroadcast.exe"
+            "dist\QuanticStudio\QuanticStudio.exe",
+            "dist\QuanticStudio\QuanticStudioCore.exe"
           )
 
-          $zip = "release\AuraLive-Windows-Native-2.7.2-LITE.zip"
-          Compress-Archive -Path "dist\AuraLive" -DestinationPath $zip -CompressionLevel Optimal
+          $zip = "release\QuanticStudio-Windows-Native-2.7.3-LITE.zip"
+          Compress-Archive -Path "dist\QuanticStudio" -DestinationPath $zip -CompressionLevel Optimal
           if ((Get-Item $zip).Length -lt 1000000) { throw "Archive Lite anormalement petite." }
 
       - name: Package standalone native engine
         shell: pwsh
         run: |
-          $dir = "release\Aura-Native-Broadcast-Windows-x64"
+          $dir = "release\Quantic-Studio-Core-Windows-x64"
           New-Item -ItemType Directory -Force $dir | Out-Null
-          Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "$dir\AuraNativeBroadcast.exe" -Force
+          Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "$dir\QuanticStudioCore.exe" -Force
           Copy-Item "engine\quantic-live\README.md" "$dir\README-Native-Broadcast.md" -Force
-          Compress-Archive -Path $dir -DestinationPath "release\Aura-Native-Broadcast-Windows-x64.zip" -CompressionLevel Optimal
+          Compress-Archive -Path $dir -DestinationPath "release\Quantic-Studio-Core-Windows-x64.zip" -CompressionLevel Optimal
           Remove-Item $dir -Recurse -Force
 
       - name: Generate SHA-256 checksums
@@ -179,16 +179,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "auralive-2.7.2-native"
-          $full = "release\AuraLive-Windows-Native-2.7.2.zip"
-          $lite = "release\AuraLive-Windows-Native-2.7.2-LITE.zip"
-          $engine = "release\Aura-Native-Broadcast-Windows-x64.zip"
-          $installer = "release\AuraLive-Setup-2.7.2.exe"
+          $tag = "quantic-studio-v2.7.3"
+          $full = "release\QuanticStudio-Windows-Native-2.7.3.zip"
+          $lite = "release\QuanticStudio-Windows-Native-2.7.3-LITE.zip"
+          $engine = "release\Quantic-Studio-Core-Windows-x64.zip"
+          $installer = "release\QuanticStudio-Setup-2.7.3.exe"
           $sums = "release\SHA256SUMS.txt"
           $notes = @"
-          # Aura Live 2.7.2 Native
+          # Quantic Studio 2.7.3
 
-          Aura Live devient un studio de streaming Windows autonome avec **Aura Native Broadcast 0.4** comme moteur par défaut. OBS reste disponible uniquement comme mode de compatibilité manuel.
+          Quantic Studio devient un studio de streaming Windows autonome avec **Quantic Studio Core 0.4** comme moteur par défaut. OBS reste disponible uniquement comme mode de compatibilité manuel.
 
           ## Points clés
           - Studio glossy unifié : scènes, sources, aperçu, REC, Live, chat, activité et Aura.
@@ -207,28 +207,28 @@ jobs:
           - CI Windows et moteur natif validés sur la branche principale.
 
           ## Fichiers
-          - **AuraLive-Windows-Native-2.7.2.zip** : package complet avec assets Kokoro embarqués.
-          - **AuraLive-Windows-Native-2.7.2-LITE.zip** : package allégé ; Kokoro se télécharge au premier usage.
-          - **AuraLive-Setup-2.7.2.exe** : installateur Windows recommandé, données utilisateur conservées lors des mises à jour.
-          - **Aura-Native-Broadcast-Windows-x64.zip** : moteur natif autonome.
+          - **QuanticStudio-Windows-Native-2.7.3.zip** : package complet avec assets Kokoro embarqués.
+          - **QuanticStudio-Windows-Native-2.7.3-LITE.zip** : package allégé ; Kokoro se télécharge au premier usage.
+          - **QuanticStudio-Setup-2.7.3.exe** : installateur Windows recommandé, données utilisateur conservées lors des mises à jour.
+          - **Quantic-Studio-Core-Windows-x64.zip** : moteur natif autonome.
           - **SHA256SUMS.txt** : empreintes SHA-256 des archives et de l’installateur.
           - Mise à jour intégrée : Aura vérifie la release officielle et contrôle le SHA-256 avant exécution.
           - Signature Authenticode appliquée automatiquement lorsque le certificat de signature est configuré dans les secrets CI.
 
-          Build complet : `AuraLive-2.7.2-Windows-Native-2026-09-20`
-          Build Lite : `AuraLive-2.7.2-Windows-Native-LITE-2026-09-20`
+          Build complet : `QuanticStudio-2.7.3-Windows-Native-2026-09-20`
+          Build Lite : `QuanticStudio-2.7.3-Windows-Native-LITE-2026-09-20`
           Moteur natif : 0.4.0
           "@
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $full $lite $engine $installer $sums --clobber --repo "${{ github.repository }}"
-            gh release edit $tag --repo "${{ github.repository }}" --title "Aura Live 2.7.2 Native" --notes $notes --latest
+            gh release edit $tag --repo "${{ github.repository }}" --title "Quantic Studio 2.7.3 Native" --notes $notes --latest
           } else {
             gh release create $tag $full $lite $engine $installer $sums `
               --repo "${{ github.repository }}" `
               --target "${{ github.sha }}" `
-              --title "Aura Live 2.7.2 Native" `
+              --title "Quantic Studio 2.7.3 Native" `
               --notes $notes `
               --latest
           }
