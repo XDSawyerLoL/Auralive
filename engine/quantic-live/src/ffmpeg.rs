@@ -1,4 +1,5 @@
 use std::{
+    env,
     io::Read,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -9,7 +10,10 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
 
-use crate::model::{Encoder, Settings, SourceTransform};
+use crate::{
+    control,
+    model::{Encoder, Scene, Settings, Source, SourceKind, SourceTransform},
+};
 
 pub fn ffmpeg_available(path: &str) -> bool {
     Command::new(path)
@@ -89,47 +93,175 @@ fn encoder_args(encoder: Encoder, settings: &Settings) -> Vec<String> {
     }
 }
 
-fn video_filter(
-    settings: &Settings,
-    transform: Option<&SourceTransform>,
-    visible: bool,
-) -> String {
-    if !visible {
-        return format!(
-            "scale={}:{},drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill",
-            settings.width, settings.height
-        );
-    }
-    let transform = transform.cloned().unwrap_or_default();
-    let target_width = ((settings.width as f32 * transform.width).round() as u32).max(2);
-    let target_height = ((settings.height as f32 * transform.height).round() as u32).max(2);
-    let x = ((settings.width as f32 * transform.x).round() as u32)
-        .min(settings.width.saturating_sub(target_width));
-    let y = ((settings.height as f32 * transform.y).round() as u32)
-        .min(settings.height.saturating_sub(target_height));
+struct VideoPipeline {
+    args: Vec<String>,
+    filter_complex: String,
+    output_label: &'static str,
+    next_input_index: usize,
+}
 
+fn source_geometry(settings: &Settings, transform: &SourceTransform) -> (u32, u32, u32, u32) {
+    let width = ((settings.width as f32 * transform.width.clamp(0.05, 1.0)).round() as u32)
+        .clamp(2, settings.width.max(2));
+    let height = ((settings.height as f32 * transform.height.clamp(0.05, 1.0)).round() as u32)
+        .clamp(2, settings.height.max(2));
+    let max_x = settings.width.saturating_sub(width);
+    let max_y = settings.height.saturating_sub(height);
+    let x = ((settings.width as f32 * transform.x.clamp(0.0, 1.0)).round() as u32).min(max_x);
+    let y = ((settings.height as f32 * transform.y.clamp(0.0, 1.0)).round() as u32).min(max_y);
+    (width, height, x, y)
+}
+
+fn source_has_target(source: &Source) -> bool {
+    match source.kind {
+        SourceKind::Desktop => true,
+        SourceKind::Text => !source.target.trim().is_empty() || !source.name.trim().is_empty(),
+        _ => !source.target.trim().is_empty(),
+    }
+}
+
+fn push_video_input(args: &mut Vec<String>, settings: &Settings, source: &Source) {
+    let fps = settings.fps.to_string();
+    match source.kind {
+        SourceKind::Desktop => {
+            args.extend([
+                "-thread_queue_size".into(), "512".into(),
+                "-f".into(), "gdigrab".into(),
+                "-framerate".into(), fps,
+                "-draw_mouse".into(), "1".into(),
+                "-i".into(), "desktop".into(),
+            ]);
+        }
+        SourceKind::Window | SourceKind::Game => {
+            args.extend([
+                "-thread_queue_size".into(), "512".into(),
+                "-f".into(), "gdigrab".into(),
+                "-framerate".into(), fps,
+                "-draw_mouse".into(), "1".into(),
+                "-i".into(), format!("title={}", source.target.trim()),
+            ]);
+        }
+        SourceKind::Webcam => {
+            args.extend([
+                "-thread_queue_size".into(), "512".into(),
+                "-rtbufsize".into(), "256M".into(),
+                "-f".into(), "dshow".into(),
+                "-i".into(), format!("video={}", source.target.trim()),
+            ]);
+        }
+        SourceKind::Image => {
+            args.extend([
+                "-loop".into(), "1".into(),
+                "-framerate".into(), fps,
+                "-i".into(), source.target.trim().to_owned(),
+            ]);
+        }
+        SourceKind::Browser => {
+            args.extend([
+                "-thread_queue_size".into(), "512".into(),
+                "-f".into(), "mjpeg".into(),
+                "-i".into(), format!(
+                    "{}/api/broadcast/browser-source/{}.mjpeg",
+                    control::local_base_url(),
+                    source.id
+                ),
+            ]);
+        }
+        SourceKind::Text => {}
+    }
+}
+
+fn normalize_filter(input_index: usize, source_index: usize, settings: &Settings, source: &Source) -> String {
+    let (width, height, _, _) = source_geometry(settings, &source.transform);
+    let browser_key = if source.kind == SourceKind::Browser {
+        "chromakey=0x00ff00:0.10:0.04,"
+    } else {
+        ""
+    };
     format!(
-        "scale={target_width}:{target_height}:force_original_aspect_ratio=decrease,pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:color=black,pad={}:{}:{x}:{y}:color=black",
-        settings.width, settings.height
+        "[{input_index}:v]setpts=PTS-STARTPTS,fps={},{}scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba[src{source_index}]",
+        settings.fps,
+        browser_key,
     )
 }
 
-fn capture_args(
-    settings: &Settings,
-    transform: Option<&SourceTransform>,
-    visible: bool,
-) -> Vec<String> {
+fn escape_drawtext(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace(':', "\\:")
+        .replace('\'', "\\'")
+        .replace('%', "\\%")
+        .replace('[', "\\[")
+        .replace(']', "\\]")
+        .replace(',', "\\,")
+}
+
+fn windows_font_filter_path() -> String {
+    let windows = env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_owned());
+    let path = format!("{}/Fonts/segoeui.ttf", windows.replace('\\', "/"));
+    path.replace(':', "\\:")
+}
+
+fn build_video_pipeline(settings: &Settings, scene: &Scene) -> VideoPipeline {
     let mut args = vec![
         "-hide_banner".into(),
         "-loglevel".into(), "warning".into(),
-        "-f".into(), "gdigrab".into(),
-        "-framerate".into(), settings.fps.to_string(),
-        "-draw_mouse".into(), "1".into(),
-        "-i".into(), "desktop".into(),
+        "-f".into(), "lavfi".into(),
+        "-i".into(), format!("color=c=black:s={}x{}:r={}", settings.width, settings.height, settings.fps),
     ];
 
+    let mut filters = vec!["[0:v]format=rgba,setpts=PTS-STARTPTS[base0]".to_owned()];
+    let mut base_index = 0usize;
+    let mut input_index = 1usize;
+    let mut source_index = 0usize;
+
+    for source in scene.sources.iter().filter(|source| source.visible && source_has_target(source)) {
+        let (_, _, x, y) = source_geometry(settings, &source.transform);
+
+        if source.kind == SourceKind::Text {
+            let text = if source.target.trim().is_empty() {
+                source.name.trim()
+            } else {
+                source.target.trim()
+            };
+            let font_size = ((settings.height as f32 * source.transform.height.clamp(0.05, 1.0) * 0.24)
+                .round() as u32)
+                .clamp(18, 180);
+            let next_base = base_index + 1;
+            filters.push(format!(
+                "[base{base_index}]drawtext=fontfile='{}':text='{}':fontcolor=white:fontsize={font_size}:x={x}:y={y}:box=1:boxcolor=black@0.30:boxborderw=8[base{next_base}]",
+                windows_font_filter_path(),
+                escape_drawtext(text),
+            ));
+            base_index = next_base;
+            continue;
+        }
+
+        push_video_input(&mut args, settings, source);
+        filters.push(normalize_filter(input_index, source_index, settings, source));
+        let next_base = base_index + 1;
+        filters.push(format!(
+            "[base{base_index}][src{source_index}]overlay=x={x}:y={y}:eof_action=pass:shortest=0:format=auto[base{next_base}]"
+        ));
+        base_index = next_base;
+        source_index += 1;
+        input_index += 1;
+    }
+
+    filters.push(format!("[base{base_index}]format=yuv420p[vout]"));
+
+    VideoPipeline {
+        args,
+        filter_complex: filters.join(";"),
+        output_label: "[vout]",
+        next_input_index: input_index,
+    }
+}
+
+fn append_audio_input(args: &mut Vec<String>, settings: &Settings, input_index: usize) {
     if !settings.audio_device.trim().is_empty() {
         args.extend([
+            "-thread_queue_size".into(), "512".into(),
             "-f".into(), "dshow".into(),
             "-i".into(), format!("audio={}", settings.audio_device.trim()),
         ]);
@@ -140,15 +272,15 @@ fn capture_args(
         ]);
     }
 
+    let _ = input_index;
+}
+
+fn append_output_encoding(args: &mut Vec<String>, settings: &Settings) {
     args.extend([
-        "-map".into(), "0:v:0".into(),
-        "-map".into(), "1:a:0".into(),
-        "-vf".into(), video_filter(settings, transform, visible),
         "-pix_fmt".into(), "yuv420p".into(),
         "-g".into(), (settings.fps * 2).to_string(),
         "-keyint_min".into(), (settings.fps * 2).to_string(),
     ]);
-
     args.extend(encoder_args(settings.encoder, settings));
     args.extend([
         "-c:a".into(), "aac".into(),
@@ -156,16 +288,11 @@ fn capture_args(
         "-ar".into(), "48000".into(),
         "-ac".into(), "2".into(),
     ]);
-    args
 }
 
-pub fn start_stream(
-    settings: &Settings,
-    transform: Option<&SourceTransform>,
-    visible: bool,
-) -> Result<Child> {
+pub fn start_stream(settings: &Settings, scene: &Scene) -> Result<Child> {
     if !cfg!(target_os = "windows") {
-        return Err(anyhow!("La capture de bureau V0.1 est actuellement ciblée Windows."));
+        return Err(anyhow!("Le compositeur Aura Native V0.2 est actuellement ciblé Windows."));
     }
     if settings.stream_key.trim().is_empty() {
         return Err(anyhow!("Ajoute une clé de stream avant de lancer le direct."));
@@ -180,7 +307,16 @@ pub fn start_stream(
         settings.stream_key.trim_start_matches('/')
     );
 
-    let mut args = capture_args(settings, transform, visible);
+    let pipeline = build_video_pipeline(settings, scene);
+    let audio_index = pipeline.next_input_index;
+    let mut args = pipeline.args;
+    append_audio_input(&mut args, settings, audio_index);
+    args.extend([
+        "-filter_complex".into(), pipeline.filter_complex,
+        "-map".into(), pipeline.output_label.into(),
+        "-map".into(), format!("{audio_index}:a:0"),
+    ]);
+    append_output_encoding(&mut args, settings);
     args.extend(["-f".into(), "flv".into(), destination]);
 
     Command::new(&settings.ffmpeg_path)
@@ -189,16 +325,12 @@ pub fn start_stream(
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .context("Impossible de lancer FFmpeg pour le direct")
+        .context("Impossible de lancer le compositeur FFmpeg pour le direct")
 }
 
-pub fn start_recording(
-    settings: &Settings,
-    transform: Option<&SourceTransform>,
-    visible: bool,
-) -> Result<(Child, PathBuf)> {
+pub fn start_recording(settings: &Settings, scene: &Scene) -> Result<(Child, PathBuf)> {
     if !cfg!(target_os = "windows") {
-        return Err(anyhow!("La capture de bureau V0.1 est actuellement ciblée Windows."));
+        return Err(anyhow!("Le compositeur Aura Native V0.2 est actuellement ciblé Windows."));
     }
     if !ffmpeg_available(&settings.ffmpeg_path) {
         return Err(anyhow!("FFmpeg est introuvable : vérifie son chemin dans Réglages."));
@@ -207,11 +339,20 @@ pub fn start_recording(
     let directory = Path::new(&settings.recording_dir);
     std::fs::create_dir_all(directory).context("Impossible de créer le dossier d’enregistrement")?;
     let file = directory.join(format!(
-        "quantic-live-{}.mkv",
+        "aura-live-{}.mkv",
         Local::now().format("%Y-%m-%d_%H-%M-%S")
     ));
 
-    let mut args = capture_args(settings, transform, visible);
+    let pipeline = build_video_pipeline(settings, scene);
+    let audio_index = pipeline.next_input_index;
+    let mut args = pipeline.args;
+    append_audio_input(&mut args, settings, audio_index);
+    args.extend([
+        "-filter_complex".into(), pipeline.filter_complex,
+        "-map".into(), pipeline.output_label.into(),
+        "-map".into(), format!("{audio_index}:a:0"),
+    ]);
+    append_output_encoding(&mut args, settings);
     args.extend([
         "-f".into(), "matroska".into(),
         file.to_string_lossy().into_owned(),
@@ -223,7 +364,7 @@ pub fn start_recording(
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .context("Impossible de lancer FFmpeg pour l’enregistrement")?;
+        .context("Impossible de lancer le compositeur FFmpeg pour l’enregistrement")?;
 
     Ok((child, file))
 }
@@ -255,41 +396,34 @@ pub struct PreviewEngine {
 }
 
 impl PreviewEngine {
-    pub fn start(
-        settings: &Settings,
-        transform: Option<&SourceTransform>,
-        visible: bool,
-        preview_file: Option<PathBuf>,
-    ) -> Result<Self> {
+    pub fn start(settings: &Settings, scene: &Scene, preview_file: Option<PathBuf>) -> Result<Self> {
         if !cfg!(target_os = "windows") {
-            return Err(anyhow!("L’aperçu bureau V0.1 est ciblé Windows."));
+            return Err(anyhow!("L’aperçu Aura Native V0.2 est ciblé Windows."));
         }
         if !ffmpeg_available(&settings.ffmpeg_path) {
             return Err(anyhow!("FFmpeg est introuvable."));
         }
 
-        let preview_filter = format!(
-            "{},scale=960:-2",
-            video_filter(settings, transform, visible)
-        );
+        let pipeline = build_video_pipeline(settings, scene);
+        let filter = format!("{};{}scale=960:-2[preview]", pipeline.filter_complex, pipeline.output_label);
+        let mut args = pipeline.args;
+        args.extend([
+            "-filter_complex".into(), filter,
+            "-map".into(), "[preview]".into(),
+            "-an".into(),
+            "-q:v".into(), "7".into(),
+            "-f".into(), "image2pipe".into(),
+            "-vcodec".into(), "mjpeg".into(),
+            "pipe:1".into(),
+        ]);
+
         let mut child = Command::new(&settings.ffmpeg_path)
-            .args([
-                "-hide_banner", "-loglevel", "error",
-                "-f", "gdigrab",
-                "-framerate", "10",
-                "-draw_mouse", "1",
-                "-i", "desktop",
-                "-vf", preview_filter.as_str(),
-                "-q:v", "7",
-                "-f", "image2pipe",
-                "-vcodec", "mjpeg",
-                "pipe:1",
-            ])
+            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .context("Impossible de lancer l’aperçu FFmpeg")?;
+            .context("Impossible de lancer l’aperçu composite FFmpeg")?;
 
         let stdout = child.stdout.take().context("Flux aperçu indisponible")?;
         let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(2);
@@ -319,7 +453,7 @@ impl PreviewEngine {
                         }
                     }
                     if tx.try_send(frame).is_err() {
-                        // UI has not consumed the previous frame yet. Drop this one.
+                        // The dashboard or native UI has not consumed the previous frame yet.
                     }
                 }
 
