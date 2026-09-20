@@ -103,7 +103,11 @@ def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
 def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
     installer = INSTALLER.read_text(encoding="utf-8")
     assert "PrivilegesRequired=lowest" in installer
-    assert "DefaultDirName={localappdata}\\Programs\\Aura Live" in installer
+    assert "DefaultDirName={localappdata}\\Programs\\Quantic Studio" in installer
+    assert "UsePreviousAppDir=no" in installer
+    assert "LegacyInstallDirName = 'Aura Live'" in installer
+    assert "MigrateLegacyAuraLiveData" in installer
+    assert "DelTree(LegacyDir, True, True, True)" in installer
     assert "uninsneveruninstall" in installer
     assert 'Excludes: ".env,data\\*,QuanticStudio-startup.log"' in installer
     assert 'Source: "{#SourceDir}\\.env"' in installer
