@@ -1,41 +1,49 @@
-# Aura Native Broadcast — V0.1
+# Aura Native Broadcast — 0.3.0
 
-Studio de streaming desktop natif pour l'écosystème Aura Live.
+Moteur de diffusion desktop natif intégré à Aura Live.
 
-## Ce qui fonctionne dans cette V0.1
+## Capacités actuelles
 
-- interface native Rust + egui, sans Electron ;
+- moteur Rust + egui, utilisé en mode headless par Aura Live ;
 - scènes et sources persistantes ;
-- aperçu réel du bureau Windows via FFmpeg ;
-- enregistrement local MKV ;
-- diffusion RTMP (Twitch, YouTube, Kick ou serveur personnalisé) ;
-- détection automatique NVIDIA NVENC / AMD AMF / Intel Quick Sync / x264 ;
-- choix résolution, FPS et bitrate ;
-- entrée micro DirectShow facultative ;
-- configuration locale `quantic-live.json` ;
+- compositeur FFmpeg multi-source ;
+- capture écran Windows ;
+- capture Fenêtre / Jeu via **Windows Graphics Capture (`gfxcapture`)** quand disponible, avec fallback GDI ;
+- webcam DirectShow ;
+- image, texte et navigateur headless ;
+- overlays Aura et Mairaiy ;
+- aperçu natif ;
+- enregistrement MKV ;
+- diffusion RTMP ;
+- détection NVIDIA NVENC / AMD AMF / Intel Quick Sync / x264 ;
+- édition de scène/source pendant Live/REC avec rebuild contrôlé ;
+- mix audio 3 voies : micro + son système WASAPI + Aura/Mairaiy/alertes ;
 - aucune obligation de compte ni cloud.
 
-> La V0.1 encode réellement la source **Écran**. Les sources Fenêtre, Jeu, Webcam, Image, Texte et Navigateur sont déjà présentes dans le modèle UI mais seront raccordées au moteur de composition dans la V0.2.
+## Distribution Windows
 
-## Prérequis Windows
+Aura Live embarque :
 
-1. Installer Rust stable avec `rustup`.
-2. Installer une build FFmpeg Windows avec `gdigrab`, `dshow` et l'encodeur matériel voulu.
-3. Mettre `ffmpeg.exe` dans le PATH, ou indiquer son chemin dans **Réglages > Système**.
+- `AuraNativeBroadcast.exe` ;
+- un FFmpeg Windows vérifié par SHA-256 ;
+- le support `gfxcapture` ;
+- le backend WASAPI loopback.
 
-## Lancer en développement
+Le chemin FFmpeg est fourni automatiquement au moteur par Aura Live. Aucun réglage manuel n’est requis dans le package Windows normal.
+
+## Développement
 
 ```powershell
 cargo run --release
 ```
 
-## Construire l'EXE
+Compilation :
 
 ```powershell
 ./scripts/build-windows.ps1
 ```
 
-Le binaire se trouvera dans :
+Le binaire se trouve dans :
 
 ```text
 target\release\quantic-live.exe
@@ -43,28 +51,33 @@ target\release\quantic-live.exe
 
 ## Direct RTMP
 
-Dans **Réglages > Direct RTMP**, renseigner l'URL RTMP du service et la clé de stream privée.
+Aura Native diffuse directement du PC vers l’endpoint RTMP choisi.
 
-La clé est stockée localement dans `quantic-live.json` dans cette V0.1. Une V0.2 devra la déplacer vers Windows Credential Manager / Quantic Identity Vault.
+La clé de stream doit rester locale. Le stockage historique dans la configuration JSON est en cours de remplacement par le coffre secret local Aura afin qu’elle ne soit plus persistée en clair.
 
 ## Audio
 
-Si le champ périphérique audio est vide, Aura Native Broadcast crée une piste silencieuse afin de garder un flux RTMP standard.
-Pour le micro, indiquer le nom DirectShow exact du périphérique.
+En usage intégré, le moteur reçoit trois flux :
 
-```powershell
-ffmpeg -list_devices true -f dshow -i dummy
-```
+1. micro ;
+2. son Windows / jeu via WASAPI loopback ;
+3. bus Aura pour Mairaiy et les alertes.
 
-## Architecture cible
+Les trois niveaux sont réglables indépendamment depuis Aura Studio.
 
-- **UI** : Rust + egui/eframe
-- **V0.1 media** : FFmpeg en processus isolé
-- **V0.2** : moteur de composition multi-source, capture fenêtre/jeu/webcam et vrai mix audio
-- **V0.3** : capture native Windows Graphics Capture / DXGI + WASAPI
-- **V0.4** : replay buffer, clips, hotkeys, transitions, overlays et chat
-- **V0.5** : Quantic Pulse / Quantic Identity / multistream
+## Architecture
 
-## Sécurité
+- **Cerveau / UX** : Aura Live FastAPI + Studio web local
+- **Moteur média** : Rust + FFmpeg
+- **Capture jeu/fenêtre** : Windows Graphics Capture / `gfxcapture`
+- **Capture système audio** : WASAPI loopback
+- **Overlays** : Chromium/Edge headless → MJPEG local
+- **Contrôle moteur** : fichiers commande/statut locaux
+- **Fallback** : OBS, activable manuellement
 
-Aucun secret n'est envoyé à Aura Live. Le streaming va directement du PC vers l'endpoint RTMP choisi.
+## Prochain durcissement
+
+- secret RTMP dans le coffre local Aura/Quantic, hors JSON ;
+- transitions graphiques ;
+- replay buffer / clips ;
+- multistream.
