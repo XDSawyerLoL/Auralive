@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use chrono::Local;
 
-use crate::model::{Encoder, Settings};
+use crate::model::{Encoder, Settings, SourceTransform};
 
 pub fn ffmpeg_available(path: &str) -> bool {
     Command::new(path)
@@ -89,7 +89,22 @@ fn encoder_args(encoder: Encoder, settings: &Settings) -> Vec<String> {
     }
 }
 
-fn capture_args(settings: &Settings) -> Vec<String> {
+fn video_filter(settings: &Settings, transform: Option<&SourceTransform>) -> String {
+    let transform = transform.cloned().unwrap_or_default();
+    let target_width = ((settings.width as f32 * transform.width).round() as u32).max(2);
+    let target_height = ((settings.height as f32 * transform.height).round() as u32).max(2);
+    let x = ((settings.width as f32 * transform.x).round() as u32)
+        .min(settings.width.saturating_sub(target_width));
+    let y = ((settings.height as f32 * transform.y).round() as u32)
+        .min(settings.height.saturating_sub(target_height));
+
+    format!(
+        "scale={target_width}:{target_height}:force_original_aspect_ratio=decrease,pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:color=black,pad={}:{}:{x}:{y}:color=black",
+        settings.width, settings.height
+    )
+}
+
+fn capture_args(settings: &Settings, transform: Option<&SourceTransform>) -> Vec<String> {
     let mut args = vec![
         "-hide_banner".into(),
         "-loglevel".into(), "warning".into(),
@@ -114,10 +129,7 @@ fn capture_args(settings: &Settings) -> Vec<String> {
     args.extend([
         "-map".into(), "0:v:0".into(),
         "-map".into(), "1:a:0".into(),
-        "-vf".into(), format!(
-            "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2",
-            settings.width, settings.height, settings.width, settings.height
-        ),
+        "-vf".into(), video_filter(settings, transform),
         "-pix_fmt".into(), "yuv420p".into(),
         "-g".into(), (settings.fps * 2).to_string(),
         "-keyint_min".into(), (settings.fps * 2).to_string(),
@@ -133,7 +145,7 @@ fn capture_args(settings: &Settings) -> Vec<String> {
     args
 }
 
-pub fn start_stream(settings: &Settings) -> Result<Child> {
+pub fn start_stream(settings: &Settings, transform: Option<&SourceTransform>) -> Result<Child> {
     if !cfg!(target_os = "windows") {
         return Err(anyhow!("La capture de bureau V0.1 est actuellement ciblée Windows."));
     }
@@ -150,7 +162,7 @@ pub fn start_stream(settings: &Settings) -> Result<Child> {
         settings.stream_key.trim_start_matches('/')
     );
 
-    let mut args = capture_args(settings);
+    let mut args = capture_args(settings, transform);
     args.extend(["-f".into(), "flv".into(), destination]);
 
     Command::new(&settings.ffmpeg_path)
@@ -162,7 +174,7 @@ pub fn start_stream(settings: &Settings) -> Result<Child> {
         .context("Impossible de lancer FFmpeg pour le direct")
 }
 
-pub fn start_recording(settings: &Settings) -> Result<(Child, PathBuf)> {
+pub fn start_recording(settings: &Settings, transform: Option<&SourceTransform>) -> Result<(Child, PathBuf)> {
     if !cfg!(target_os = "windows") {
         return Err(anyhow!("La capture de bureau V0.1 est actuellement ciblée Windows."));
     }
@@ -177,7 +189,7 @@ pub fn start_recording(settings: &Settings) -> Result<(Child, PathBuf)> {
         Local::now().format("%Y-%m-%d_%H-%M-%S")
     ));
 
-    let mut args = capture_args(settings);
+    let mut args = capture_args(settings, transform);
     args.extend([
         "-f".into(), "matroska".into(),
         file.to_string_lossy().into_owned(),
@@ -221,7 +233,11 @@ pub struct PreviewEngine {
 }
 
 impl PreviewEngine {
-    pub fn start(settings: &Settings, preview_file: Option<PathBuf>) -> Result<Self> {
+    pub fn start(
+        settings: &Settings,
+        transform: Option<&SourceTransform>,
+        preview_file: Option<PathBuf>,
+    ) -> Result<Self> {
         if !cfg!(target_os = "windows") {
             return Err(anyhow!("L’aperçu bureau V0.1 est ciblé Windows."));
         }
@@ -229,6 +245,7 @@ impl PreviewEngine {
             return Err(anyhow!("FFmpeg est introuvable."));
         }
 
+        let preview_filter = format!("{},scale=960:-2", video_filter(settings, transform));
         let mut child = Command::new(&settings.ffmpeg_path)
             .args([
                 "-hide_banner", "-loglevel", "error",
@@ -236,7 +253,7 @@ impl PreviewEngine {
                 "-framerate", "10",
                 "-draw_mouse", "1",
                 "-i", "desktop",
-                "-vf", "scale=960:-2",
+                "-vf", preview_filter.as_str(),
                 "-q:v", "7",
                 "-f", "image2pipe",
                 "-vcodec", "mjpeg",
