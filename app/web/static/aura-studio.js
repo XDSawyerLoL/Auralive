@@ -47,7 +47,7 @@
   }
 
   function engineLabel(status) {
-    if (status?.backend === "native") return "Aura Native";
+    if (status?.backend === "native") return "Moteur Quantic";
     return "OBS";
   }
 
@@ -191,7 +191,7 @@
 
   async function openSourceModal(source = null) {
     if (studio.status?.backend !== "native") {
-      notify("Passe en Aura Native pour gérer les sources", true);
+      notify("Passe sur le Moteur Quantic pour gérer les sources", true);
       return;
     }
     const modal = $s("#studio-source-modal");
@@ -358,7 +358,7 @@
 
   function openOutputModal() {
     if (studio.status?.backend !== "native") {
-      notify("Passe en Aura Native pour régler la destination", true);
+      notify("Passe sur le Moteur Quantic pour régler la destination", true);
       return;
     }
     const modal = $s("#studio-output-modal");
@@ -489,7 +489,7 @@
 
   function openSceneModal(sceneName = "") {
     if (studio.status?.backend !== "native") {
-      notify("Passe en Aura Native pour gérer les scènes", true);
+      notify("Passe sur le Moteur Quantic pour gérer les scènes", true);
       return;
     }
     const modal = $s("#studio-scene-modal");
@@ -936,7 +936,7 @@
       if (label) {
         if (streaming) label.textContent = `En direct · ${engineLabel(status)}`;
         else if (native && !status.engine_available) label.textContent = "Moteur natif absent";
-        else if (native && !status.process_running) label.textContent = "Aura Native prêt";
+        else if (native && !status.process_running) label.textContent = "Moteur Quantic prêt";
         else if (!native && !status.obs?.connected) label.textContent = "OBS non connecté";
         else label.textContent = `${engineLabel(status)} prêt`;
       }
@@ -1046,7 +1046,7 @@
     setBusy(true);
     try {
       const result = await request(`/api/broadcast/mode/${mode}`, {method: "POST"});
-      notify(mode === "native" ? "Aura Native Broadcast activé" : "Compatibilité OBS activée");
+      notify(mode === "native" ? "Moteur Quantic activé" : "Compatibilité OBS activée");
       await refreshBroadcast(false);
       return result;
     } catch (error) {
