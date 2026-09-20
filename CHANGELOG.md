@@ -1,3 +1,13 @@
+# Quantic Studio 2.7.4 — Integrated Core
+
+- Le moteur de diffusion devient **Quantic Studio Core 0.4.1** et fonctionne en arrière-plan par défaut.
+- Suppression de la seconde fenêtre « Aura Live — Native Broadcast » en usage normal.
+- Tous les processus FFmpeg sont lancés sans fenêtre console sous Windows.
+- Le panneau de stream reste intégré directement à Quantic Studio.
+- Installation forcée dans `%LOCALAPPDATA%\\Programs\\Quantic Studio`.
+- Migration de l’ancienne installation `Aura Live` et nettoyage du vieux dossier/raccourcis.
+- Passage en 2.7.4 pour forcer une vraie mise à niveau des installations 2.7.3 existantes.
+
 # Quantic Studio 2.7.3 — Rebrand
 
 ## Identité produit
