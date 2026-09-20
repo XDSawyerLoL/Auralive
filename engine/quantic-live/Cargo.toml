@@ -2,7 +2,7 @@
 name = "quantic-live"
 version = "0.1.0"
 edition = "2024"
-description = "Native streaming studio for Quantic Sillage"
+description = "Native broadcast engine for Aura Live"
 license = "MIT"
 
 [dependencies]
