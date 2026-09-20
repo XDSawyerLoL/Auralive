@@ -14,7 +14,7 @@ def make_service(tmp_path):
     settings = SimpleNamespace(
         broadcast_engine="native",
         native_engine_exe=str(tmp_path / "missing-engine.exe"),
-        obs_enabled=True,
+        obs_enabled=False,
     )
     service = NativeBroadcastService(settings)
     service.runtime_dir = tmp_path
@@ -33,7 +33,7 @@ def test_native_broadcast_status_without_binary(tmp_path):
     assert status["selected"] is True
     assert status["engine_available"] is False
     assert status["process_running"] is False
-    assert status["obs_fallback_enabled"] is True
+    assert status["obs_fallback_enabled"] is False
 
 
 def test_native_broadcast_rejects_unknown_command(tmp_path):
