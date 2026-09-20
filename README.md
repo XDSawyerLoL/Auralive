@@ -139,6 +139,36 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 - Pings privés au streamer et page communautaire locale `http://localhost:8787/channel`.
 - Connecteurs testables et API locale pour StreamDeck/Loupedeck.
 
+## Aura Native Broadcast
+
+Aura Live intègre désormais son propre moteur de diffusion natif en Rust. Le mode historique OBS reste disponible pendant la transition.
+
+```env
+AURA_BROADCAST_ENGINE=obs
+# ou
+AURA_BROADCAST_ENGINE=native
+```
+
+Le moteur natif est embarqué dans le package Windows sous le nom `AuraNativeBroadcast.exe`. Aura le pilote localement via un canal de commandes sur disque : aucun port réseau supplémentaire n'est exposé.
+
+API locale disponible :
+
+```text
+GET  /api/broadcast/status
+POST /api/broadcast/mode/obs
+POST /api/broadcast/mode/native
+POST /api/broadcast/engine/start
+POST /api/broadcast/engine/stop
+POST /api/broadcast/stream/start
+POST /api/broadcast/stream/stop
+POST /api/broadcast/record/start
+POST /api/broadcast/record/stop
+POST /api/broadcast/preview/start
+POST /api/broadcast/preview/stop
+POST /api/broadcast/scene
+```
+
+La première version native prend réellement en charge la capture écran Windows, l'enregistrement MKV et la diffusion RTMP avec NVENC, AMD AMF, Intel Quick Sync ou x264. OBS reste le fallback tant que la composition multi-source native (jeu, fenêtre, webcam, navigateur, overlays et mixage complet) n'a pas atteint la parité.
 ## Installation Windows
 
 ### Mise à niveau
