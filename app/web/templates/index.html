@@ -175,7 +175,7 @@
                 </div>
 
                 <div>
-                  <div class="studio-section-head"><span>SOURCES</span><button class="studio-mini-action" type="button" data-page-jump="overlays" title="Gérer les sources et overlays">＋</button></div>
+                  <div class="studio-section-head"><span>SOURCES</span><button class="studio-mini-action" type="button" data-studio-source-add title="Ajouter une source">＋</button></div>
                   <div class="studio-source-list" id="studio-source-list"><div class="studio-empty">Chargement des sources…</div></div>
                 </div>
 
@@ -471,6 +471,46 @@
   <div class="modal" id="goal-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><span class="modal-kicker">OBJECTIF</span><h2 id="goal-modal-title">Nouvel objectif</h2><form id="goal-form"><input type="hidden" id="goal-id"><label>Titre<input id="goal-title" required placeholder="Objectif followers"></label><div class="form-row"><label>Valeur actuelle<input id="goal-current" type="number" min="0" value="0"></label><label>Cible<input id="goal-target" type="number" min="1" value="100"></label></div><div class="form-row"><label>Type<select id="goal-type"><option value="custom">Personnalisé</option><option value="followers">Followers</option><option value="subs">Abonnements</option><option value="bits">Bits</option></select></label><label>Unité<input id="goal-unit" placeholder="followers"></label></div><label class="checkbox-line"><input id="goal-enabled" type="checkbox" checked>Objectif affiché</label><button class="primary-button wide" type="submit">Enregistrer</button></form></div></div>
 
   <div class="modal ai-modal" id="ai-modal"><div class="modal-card"><button class="modal-close" data-close-modal>×</button><div class="ai-modal-head"><div class="mini-orb"><span></span></div><div><span class="modal-kicker">CONVERSATION PRIVÉE</span><h2>Parler à Aura</h2></div></div><div id="ai-conversation" class="ai-conversation"><div class="ai-message aura"><b>Aura</b><p>Je t’écoute. Cette conversation ne part pas dans le chat sauf si tu coches l’option dédiée.</p></div></div><form id="ai-form"><textarea id="ai-message" required placeholder="Écris à Aura…"></textarea><div class="ai-form-options"><label><input id="ai-speak-aloud" type="checkbox" checked>Lire sa réponse à voix haute</label><label><input id="ai-send-chat" type="checkbox">Publier sa réponse sur Twitch</label></div><button class="primary-button wide" type="submit">Envoyer à Aura</button></form></div></div>
+
+  <div class="studio-source-modal" id="studio-source-modal" hidden>
+    <div class="studio-source-dialog">
+      <button class="studio-source-modal-close" type="button" data-studio-source-close>×</button>
+      <span class="modal-kicker">AURA NATIVE</span>
+      <h2 id="studio-source-modal-title">Ajouter une source</h2>
+      <p class="studio-source-intro">Choisis ce que tu veux montrer. Aura prépare le compositeur automatiquement.</p>
+
+      <div class="studio-source-types" id="studio-source-types">
+        <button type="button" data-source-kind="desktop"><b>🖥</b><span>Écran</span><small>Ton bureau</small></button>
+        <button type="button" data-source-kind="game"><b>🎮</b><span>Jeu</span><small>Fenêtre détectée</small></button>
+        <button type="button" data-source-kind="window"><b>▤</b><span>Fenêtre</span><small>Une application</small></button>
+        <button type="button" data-source-kind="webcam"><b>◉</b><span>Webcam</span><small>Caméra détectée</small></button>
+        <button type="button" data-source-kind="image"><b>▧</b><span>Image</span><small>PNG, JPG…</small></button>
+        <button type="button" data-source-kind="text"><b>T</b><span>Texte</span><small>Titre ou message</small></button>
+        <button type="button" data-source-kind="browser" data-source-preset="/overlay/avatar"><b>◈</b><span>Mairaiy</span><small>Avatar Aura</small></button>
+        <button type="button" data-source-kind="browser" data-source-preset="/overlay"><b>✦</b><span>Overlay Aura</span><small>Alertes natives</small></button>
+      </div>
+
+      <form id="studio-source-form" class="studio-source-form">
+        <input type="hidden" id="studio-source-id">
+        <input type="hidden" id="studio-source-kind" value="desktop">
+        <label>Nom
+          <input id="studio-source-name" maxlength="120" placeholder="Écran principal">
+        </label>
+        <label id="studio-source-target-row">Source
+          <div class="studio-source-target-line">
+            <input id="studio-source-target" list="studio-source-target-list" maxlength="1000" placeholder="Choisir une source">
+            <button type="button" id="studio-source-browse" class="studio-source-browse" hidden>Parcourir</button>
+          </div>
+          <datalist id="studio-source-target-list"></datalist>
+          <small id="studio-source-target-help">Aura détecte automatiquement ce qui est disponible.</small>
+        </label>
+        <div class="studio-source-form-actions">
+          <button type="button" class="studio-source-delete" id="studio-source-delete" hidden>Supprimer</button>
+          <button type="submit" class="primary-button">Ajouter au studio</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div id="toast-zone" class="toast-zone"></div>
   <script src="/static/app.js?v=1.2.0"></script>
