@@ -63,14 +63,14 @@ jobs:
           if (-not (Test-Path $engine)) {
             throw "Le moteur natif compile est introuvable: $engine"
           }
-          Copy-Item $engine "dist\QuanticStudio\AuraNativeBroadcast.exe" -Force
+          Copy-Item $engine "dist\QuanticStudio\QuanticStudioCore.exe" -Force
 
       - name: Verify Lite package
         shell: pwsh
         run: |
           if (-not (Test-Path "dist\QuanticStudio\QuanticStudio.exe")) { throw "QuanticStudio.exe absent." }
           if (-not (Test-Path "dist\QuanticStudio\BUILD-ID.txt")) { throw "BUILD-ID.txt absent." }
-          if (-not (Test-Path "dist\QuanticStudio\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent." }
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) { throw "QuanticStudioCore.exe absent." }
           if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent." }
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
