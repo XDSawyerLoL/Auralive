@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from array import array
 import audioop
+import ctypes
 import importlib.util
 import json
 import os
@@ -205,6 +206,7 @@ class NativeBroadcastService:
         self.status_path = self.runtime_dir / "status.json"
         self.config_path = self.runtime_dir / "engine.json"
         self.preview_path = self.runtime_dir / "preview.jpg"
+        self.stream_key_path = self.runtime_dir / "stream-key.dpapi"
         self._process: subprocess.Popen[bytes] | None = None
         self._owns_process = False
         self._lock = threading.RLock()
@@ -228,6 +230,188 @@ class NativeBroadcastService:
         self._system_audio_ready = False
         self._system_audio_device = ""
         self._system_audio_error = ""
+        self._migrate_legacy_stream_key()
+
+    def stream_secret_configured(self) -> bool:
+        env_secret = str(os.environ.get("AURA_NATIVE_STREAM_KEY") or "").strip()
+        return bool(env_secret or self.stream_key_path.is_file())
+
+    def stream_secret(self) -> str:
+        env_secret = str(os.environ.get("AURA_NATIVE_STREAM_KEY") or "").strip()
+        if env_secret:
+            return env_secret
+        if os.name != "nt" or not self.stream_key_path.is_file():
+            return ""
+        try:
+            encrypted = self.stream_key_path.read_bytes()
+            return self._dpapi_unprotect(encrypted).decode("utf-8").strip()
+        except Exception:
+            return ""
+
+    def set_stream_secret(self, secret: str) -> None:
+        secret = str(secret or "").strip()
+        if not secret:
+            raise ValueError("La clé de stream est vide")
+        if os.name != "nt":
+            raise RuntimeError("Le coffre RTMP chiffré est disponible sous Windows")
+        encrypted = self._dpapi_protect(secret.encode("utf-8"))
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        temporary = self.stream_key_path.with_suffix(".tmp")
+        temporary.write_bytes(encrypted)
+        os.replace(temporary, self.stream_key_path)
+
+    def clear_stream_secret(self) -> None:
+        self.stream_key_path.unlink(missing_ok=True)
+
+    def output_configuration(self) -> dict[str, Any]:
+        rtmp_url = "rtmp://live.twitch.tv/app"
+        try:
+            payload = json.loads(self.config_path.read_text(encoding="utf-8"))
+            settings = payload.get("settings") if isinstance(payload, dict) else None
+            if isinstance(settings, dict):
+                value = str(settings.get("rtmp_url") or "").strip()
+                if value:
+                    rtmp_url = value
+        except Exception:
+            pass
+        return {
+            "rtmp_url": rtmp_url,
+            "stream_key_configured": self.stream_secret_configured(),
+            "vault": "windows-dpapi" if os.name == "nt" else "environment-only",
+        }
+
+    def configure_output(
+        self,
+        rtmp_url: str,
+        stream_key: str | None = None,
+        *,
+        clear_stream_key: bool = False,
+    ) -> dict[str, Any]:
+        rtmp_url = str(rtmp_url or "").strip()
+        if not (rtmp_url.startswith("rtmp://") or rtmp_url.startswith("rtmps://")):
+            raise ValueError("L'URL de diffusion doit commencer par rtmp:// ou rtmps://")
+
+        if clear_stream_key:
+            self.clear_stream_secret()
+        elif stream_key is not None and str(stream_key).strip():
+            self.set_stream_secret(str(stream_key))
+
+        config: dict[str, Any] = {}
+        try:
+            loaded = json.loads(self.config_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                config = loaded
+        except Exception:
+            pass
+
+        settings = config.get("settings")
+        if not isinstance(settings, dict):
+            settings = {}
+            config["settings"] = settings
+        settings["rtmp_url"] = rtmp_url
+        # Never persist the stream key in the engine JSON.
+        settings["stream_key"] = ""
+        if config:
+            self._atomic_json(self.config_path, config)
+
+        was_running = self.process_running()
+        if was_running:
+            self.stop()
+            self.start()
+        return self.output_configuration()
+
+    def _migrate_legacy_stream_key(self) -> None:
+        if os.name != "nt" or not self.config_path.is_file():
+            return
+        try:
+            payload = json.loads(self.config_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return
+            settings = payload.get("settings")
+            if not isinstance(settings, dict):
+                return
+            legacy = str(settings.get("stream_key") or "").strip()
+            if not legacy:
+                return
+            self.set_stream_secret(legacy)
+            settings["stream_key"] = ""
+            self._atomic_json(self.config_path, payload)
+        except Exception:
+            return
+
+    @staticmethod
+    def _dpapi_protect(data: bytes) -> bytes:
+        if os.name != "nt":
+            raise RuntimeError("DPAPI indisponible")
+
+        from ctypes import wintypes
+
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+        def blob(payload: bytes):
+            buffer = ctypes.create_string_buffer(payload)
+            return DATA_BLOB(len(payload), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_byte))), buffer
+
+        input_blob, input_buffer = blob(data)
+        entropy_blob, entropy_buffer = blob(b"AuraNativeBroadcast:stream-key:v1")
+        output_blob = DATA_BLOB()
+        crypt32 = ctypes.WinDLL("Crypt32.dll")
+        kernel32 = ctypes.WinDLL("Kernel32.dll")
+
+        ok = crypt32.CryptProtectData(
+            ctypes.byref(input_blob),
+            "Aura Native RTMP",
+            ctypes.byref(entropy_blob),
+            None,
+            None,
+            0x1,
+            ctypes.byref(output_blob),
+        )
+        _ = (input_buffer, entropy_buffer)
+        if not ok:
+            raise ctypes.WinError()
+        try:
+            return ctypes.string_at(output_blob.pbData, output_blob.cbData)
+        finally:
+            kernel32.LocalFree(output_blob.pbData)
+
+    @staticmethod
+    def _dpapi_unprotect(data: bytes) -> bytes:
+        if os.name != "nt":
+            raise RuntimeError("DPAPI indisponible")
+
+        from ctypes import wintypes
+
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
+
+        def blob(payload: bytes):
+            buffer = ctypes.create_string_buffer(payload)
+            return DATA_BLOB(len(payload), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_byte))), buffer
+
+        input_blob, input_buffer = blob(data)
+        entropy_blob, entropy_buffer = blob(b"AuraNativeBroadcast:stream-key:v1")
+        output_blob = DATA_BLOB()
+        crypt32 = ctypes.WinDLL("Crypt32.dll")
+        kernel32 = ctypes.WinDLL("Kernel32.dll")
+
+        ok = crypt32.CryptUnprotectData(
+            ctypes.byref(input_blob),
+            None,
+            ctypes.byref(entropy_blob),
+            None,
+            None,
+            0x1,
+            ctypes.byref(output_blob),
+        )
+        _ = (input_buffer, entropy_buffer)
+        if not ok:
+            raise ctypes.WinError()
+        try:
+            return ctypes.string_at(output_blob.pbData, output_blob.cbData)
+        finally:
+            kernel32.LocalFree(output_blob.pbData)
 
     def ffmpeg_executable(self) -> str:
         bundled = RUNTIME_DIR / "ffmpeg" / "ffmpeg.exe"
@@ -761,6 +945,11 @@ class NativeBroadcastService:
             env["AURA_NATIVE_HEADLESS"] = "1"
             env["AURA_LOCAL_BASE_URL"] = self.local_base_url()
             env["AURA_NATIVE_FFMPEG"] = self.ffmpeg_executable()
+            stream_secret = self.stream_secret()
+            if stream_secret:
+                env["AURA_NATIVE_STREAM_KEY"] = stream_secret
+            else:
+                env.pop("AURA_NATIVE_STREAM_KEY", None)
 
             creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self._process = subprocess.Popen(
@@ -879,6 +1068,7 @@ class NativeBroadcastService:
             "preview_frame_available": self.preview_path.is_file(),
             "audio_tracks_active": len(self._audio_tracks),
             "system_audio": self.system_audio_status(),
+            "output": self.output_configuration(),
         }
 
     def _read_status(self) -> dict[str, Any]:
