@@ -56,7 +56,9 @@ def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     assert "--hide-console hide-early" in build
     assert "--windowed" not in build
     assert "pyinstaller==6.22.2" in build
-    assert '--hidden-import "uvicorn.logging"' in build\n    assert '--name "QuanticStudio"' in build\n    assert '--icon "build-assets\\\\quantic-studio.ico"' in build
+    assert '--hidden-import "uvicorn.logging"' in build
+    assert '--name "QuanticStudio"' in build
+    assert '--icon "build-assets\\\\quantic-studio.ico"' in build
     assert "BUILD-ID.txt" in build
     assert build_id in build
     assert build_id in desktop
@@ -106,7 +108,8 @@ def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
     assert 'Excludes: ".env,data\\*,QuanticStudio-startup.log"' in installer
     assert 'Source: "{#SourceDir}\\.env"' in installer
     assert "CloseApplications=yes" in installer
-    assert "RestartApplications=yes" in installer\n    assert "SetupIconFile=..\\\\build-assets\\\\quantic-studio.ico" in installer
+    assert "RestartApplications=yes" in installer
+    assert "SetupIconFile=..\\\\build-assets\\\\quantic-studio.ico" in installer
 
 
 def test_windows_ci_builds_installer_and_supports_authenticode() -> None:
