@@ -87,14 +87,8 @@ impl QuanticLiveApp {
         };
     }
 
-    fn active_desktop_layout(&self) -> (Option<SourceTransform>, bool) {
-        let Some(scene) = self.project.scenes.get(self.project.selected_scene) else {
-            return (None, false);
-        };
-        let Some(source) = scene.sources.iter().find(|source| source.kind == SourceKind::Desktop) else {
-            return (None, false);
-        };
-        (Some(source.transform.clone()), source.visible)
+    fn active_scene(&self) -> Option<crate::model::Scene> {
+        self.project.scenes.get(self.project.selected_scene).cloned()
     }
 
     fn restart_preview(&mut self) {
@@ -102,16 +96,18 @@ impl QuanticLiveApp {
             preview.stop();
         }
         self.preview_texture = None;
-        let (transform, visible) = self.active_desktop_layout();
+        let Some(scene) = self.active_scene() else {
+            self.status = "Aucune scène active".into();
+            return;
+        };
         match ffmpeg::PreviewEngine::start(
             &self.project.settings,
-            transform.as_ref(),
-            visible,
+            &scene,
             control::preview_path(),
         ) {
             Ok(preview) => {
                 self.preview = Some(preview);
-                self.status = "Aperçu actualisé".into();
+                self.status = "Aperçu composite actualisé".into();
             }
             Err(err) => self.status = err.to_string(),
         }
@@ -128,16 +124,18 @@ impl QuanticLiveApp {
             return;
         }
 
-        let (transform, visible) = self.active_desktop_layout();
+        let Some(scene) = self.active_scene() else {
+            self.status = "Aucune scène active".into();
+            return;
+        };
         match ffmpeg::PreviewEngine::start(
             &self.project.settings,
-            transform.as_ref(),
-            visible,
+            &scene,
             control::preview_path(),
         ) {
             Ok(preview) => {
                 self.preview = Some(preview);
-                self.status = "Aperçu actif".into();
+                self.status = "Aperçu composite actif".into();
             }
             Err(err) => self.status = err.to_string(),
         }
@@ -150,11 +148,14 @@ impl QuanticLiveApp {
             return;
         }
 
-        let (transform, visible) = self.active_desktop_layout();
-        match ffmpeg::start_stream(&self.project.settings, transform.as_ref(), visible) {
+        let Some(scene) = self.active_scene() else {
+            self.status = "Aucune scène active".into();
+            return;
+        };
+        match ffmpeg::start_stream(&self.project.settings, &scene) {
             Ok(child) => {
                 self.stream_process = Some(child);
-                self.status = "EN DIRECT".into();
+                self.status = "EN DIRECT · compositeur Aura Native".into();
             }
             Err(err) => self.status = err.to_string(),
         }
@@ -172,12 +173,15 @@ impl QuanticLiveApp {
             return;
         }
 
-        let (transform, visible) = self.active_desktop_layout();
-        match ffmpeg::start_recording(&self.project.settings, transform.as_ref(), visible) {
+        let Some(scene) = self.active_scene() else {
+            self.status = "Aucune scène active".into();
+            return;
+        };
+        match ffmpeg::start_recording(&self.project.settings, &scene) {
             Ok((child, file)) => {
                 self.record_process = Some(child);
                 self.recording_file = Some(file);
-                self.status = "Enregistrement en cours".into();
+                self.status = "Enregistrement composite en cours".into();
             }
             Err(err) => self.status = err.to_string(),
         }
