@@ -161,83 +161,42 @@ async def voice_control_status_v3() -> dict[str, Any]:
 @app.get("/api/broadcast/status")
 async def broadcast_status_v3() -> dict[str, Any]:
     native = await asyncio.to_thread(native_broadcast.status)
-    mode = str(settings.broadcast_engine or "obs").lower()
-
-    if mode != "obs":
-        engine = dict(native.get("engine") or {})
-        return {
-            **native,
-            "backend": "native",
-            "streaming": bool(engine.get("streaming")),
-            "recording": bool(engine.get("recording")),
-            "preview": bool(engine.get("preview")),
-            "replay_buffering": bool(engine.get("replay_buffering")),
-            "replay_seconds": int(engine.get("replay_seconds") or 30),
-            "last_replay_file": str(engine.get("last_replay_file") or ""),
-            "transition": str(engine.get("transition") or "fade"),
-            "transition_ms": int(engine.get("transition_ms") or 350),
-            "multistream_outputs": int(engine.get("multistream_outputs") or 0),
-            "scene": str(engine.get("scene") or ""),
-            "scenes": list(engine.get("scenes") or []),
-            "sources": list(engine.get("sources") or []),
-            "encoder": str(engine.get("encoder") or ""),
-            "ffmpeg_ok": bool(engine.get("ffmpeg_ok")),
-        }
-
-    obs_status: dict[str, Any] = {
-        "connected": False,
-        "streaming": False,
-        "recording": False,
-        "scene": "",
-    }
-    if settings.obs_enabled:
-        try:
-            stream = await aura.obs.call("GetStreamStatus")
-            record = await aura.obs.call("GetRecordStatus")
-            scene = await aura.obs.call("GetCurrentProgramScene")
-            scenes_payload = await aura.obs.call("GetSceneList")
-            obs_status = {
-                "connected": True,
-                "streaming": bool(stream.get("outputActive")),
-                "recording": bool(record.get("outputActive")),
-                "scene": str(scene.get("currentProgramSceneName") or ""),
-                "scenes": [
-                    str(item.get("sceneName") or "")
-                    for item in list(scenes_payload.get("scenes") or [])
-                    if str(item.get("sceneName") or "").strip()
-                ],
-            }
-        except Exception as exc:  # noqa: BLE001
-            obs_status["error"] = str(exc or exc.__class__.__name__)[:240]
-
+    engine = dict(native.get("engine") or {})
     return {
         **native,
-        "backend": "obs",
-        "streaming": bool(obs_status.get("streaming")),
-        "recording": bool(obs_status.get("recording")),
-        "preview": False,
-        "scene": str(obs_status.get("scene") or ""),
-        "scenes": list(obs_status.get("scenes") or []),
-        "sources": [],
-        "obs": obs_status,
+        "backend": "native",
+        "streaming": bool(engine.get("streaming")),
+        "recording": bool(engine.get("recording")),
+        "preview": bool(engine.get("preview")),
+        "replay_buffering": bool(engine.get("replay_buffering")),
+        "replay_seconds": int(engine.get("replay_seconds") or 30),
+        "last_replay_file": str(engine.get("last_replay_file") or ""),
+        "transition": str(engine.get("transition") or "fade"),
+        "transition_ms": int(engine.get("transition_ms") or 350),
+        "multistream_outputs": int(engine.get("multistream_outputs") or 0),
+        "scene": str(engine.get("scene") or ""),
+        "scenes": list(engine.get("scenes") or []),
+        "sources": list(engine.get("sources") or []),
+        "encoder": str(engine.get("encoder") or ""),
+        "ffmpeg_ok": bool(engine.get("ffmpeg_ok")),
     }
 
 
 @app.post("/api/broadcast/mode/{mode}")
 async def broadcast_mode_v3(mode: str) -> dict[str, Any]:
-    mode = str(mode or "").strip().lower()
-    if mode not in {"obs", "native"}:
-        raise HTTPException(status_code=422, detail="Le moteur doit être 'obs' ou 'native'")
-
-    _write_runtime_env({"AURA_BROADCAST_ENGINE": mode})
-    os.environ["AURA_BROADCAST_ENGINE"] = mode
-    settings.broadcast_engine = mode
-
-    if mode == "native":
-        return await asyncio.to_thread(native_broadcast.start)
-
-    await asyncio.to_thread(native_broadcast.stop)
-    return await asyncio.to_thread(native_broadcast.status)
+    # Route conservée pour les anciens clients 2.7.x : tout mode demandé
+    # converge désormais vers Quantic Studio Core.
+    _write_runtime_env({
+        "AURA_BROADCAST_ENGINE": "native",
+        "OBS_ENABLED": "false",
+        "OBS_AUTO_CONNECT": "false",
+    })
+    os.environ["AURA_BROADCAST_ENGINE"] = "native"
+    os.environ["OBS_ENABLED"] = "false"
+    os.environ["OBS_AUTO_CONNECT"] = "false"
+    settings.broadcast_engine = "native"
+    settings.obs_enabled = False
+    return await asyncio.to_thread(native_broadcast.start)
 
 
 @app.post("/api/broadcast/engine/start")
@@ -251,40 +210,11 @@ async def broadcast_engine_stop_v3() -> dict[str, Any]:
 
 
 async def _broadcast_command(action: str, value: str | None = None) -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() == "obs":
-        if not settings.obs_enabled:
-            raise HTTPException(status_code=503, detail="OBS est désactivé ou non configuré")
-        try:
-            if action == "stream.start":
-                await aura.obs.call("StartStream")
-            elif action == "stream.stop":
-                await aura.obs.call("StopStream")
-            elif action == "record.start":
-                await aura.obs.call("StartRecord")
-            elif action == "record.stop":
-                await aura.obs.call("StopRecord")
-            elif action == "scene.select":
-                if not value:
-                    raise ValueError("Nom de scène requis")
-                await aura.obs.set_scene(value)
-            elif action in {"preview.start", "preview.stop", "runtime.refresh"}:
-                pass
-            elif action in {"source.transform", "source.visibility"}:
-                raise ValueError("L’édition visuelle des sources exige Aura Native Broadcast")
-            else:
-                raise ValueError(f"Commande de diffusion inconnue: {action}")
-            return await broadcast_status_v3()
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Commande OBS %s impossible: %s", action, exc)
-            raise HTTPException(status_code=503, detail=str(exc) or exc.__class__.__name__) from exc
-
     result = await asyncio.to_thread(native_broadcast.command, action, value)
     if result.get("error") == "native_engine_missing":
         raise HTTPException(
             status_code=503,
-            detail="Aura Native Broadcast n'est pas encore compilé ou installé.",
+            detail="Quantic Studio Core n'est pas encore compilé ou installé.",
         )
     return await broadcast_status_v3()
 
@@ -313,8 +243,6 @@ async def broadcast_record_stop_v3() -> dict[str, Any]:
 async def broadcast_replay_start_v3(
     payload: dict[str, Any] | None = Body(default=None),
 ) -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
     payload = payload or {}
     try:
         seconds = max(10, min(300, int(payload.get("seconds", 30))))
@@ -325,15 +253,11 @@ async def broadcast_replay_start_v3(
 
 @app.post("/api/broadcast/replay/stop")
 async def broadcast_replay_stop_v3() -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
     return await _broadcast_command("replay.stop")
 
 
 @app.post("/api/broadcast/replay/save")
 async def broadcast_replay_save_v3() -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
     return await _broadcast_command("replay.save")
 
 
@@ -469,8 +393,6 @@ async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse
 
 
 async def _ensure_native_source_editable() -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
     return await broadcast_status_v3()
 
 
@@ -483,12 +405,6 @@ async def broadcast_output_settings_v3() -> dict[str, Any]:
 async def broadcast_output_settings_update_v3(
     payload: dict[str, Any] = Body(...),
 ) -> dict[str, Any]:
-    if str(settings.broadcast_engine or "native").lower() != "native":
-        raise HTTPException(
-            status_code=409,
-            detail="Passe en mode Aura Native pour modifier la sortie de diffusion",
-        )
-
     state = await broadcast_status_v3()
     if state.get("streaming") or state.get("recording"):
         raise HTTPException(
@@ -520,9 +436,6 @@ async def broadcast_output_settings_update_v3(
 
 @app.put("/api/broadcast/audio")
 async def broadcast_audio_mix_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour régler le mix audio")
-
     def gain(name: str, default: float) -> float:
         try:
             return max(0.0, min(2.0, float(payload.get(name, default))))
@@ -638,8 +551,6 @@ async def broadcast_scene_remove_v3(scene_name: str) -> dict[str, Any]:
 
 @app.put("/api/broadcast/transition")
 async def broadcast_transition_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Les transitions natives exigent Aura Native")
     kind = str(payload.get("kind") or "fade").strip().lower()
     if kind not in {"cut", "fade"}:
         raise HTTPException(status_code=422, detail="Transition inconnue")
@@ -657,8 +568,6 @@ async def broadcast_transition_v3(payload: dict[str, Any] = Body(...)) -> dict[s
 async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if source_id <= 0:
         raise HTTPException(status_code=422, detail="Source invalide")
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
     def number(name: str, default: float) -> float:
         try:
             return float(payload.get(name, default))
@@ -684,8 +593,6 @@ async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] 
 async def broadcast_source_visibility_v3(source_id: int, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     if source_id <= 0:
         raise HTTPException(status_code=422, detail="Source invalide")
-    if str(settings.broadcast_engine or "obs").lower() != "native":
-        raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
     value = {"id": source_id, "visible": bool(payload.get("visible", True))}
     return await _broadcast_command("source.visibility", json.dumps(value, separators=(",", ":")))
 
@@ -887,7 +794,7 @@ async def _v3_lifespan(application):
             try:
                 await asyncio.to_thread(native_broadcast.start)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Démarrage Aura Native Broadcast non bloquant impossible: %s", exc)
+                logger.warning("Démarrage Quantic Studio Core Broadcast non bloquant impossible: %s", exc)
         try:
             yield
         finally:
