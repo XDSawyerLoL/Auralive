@@ -49,6 +49,14 @@ impl QuanticLiveApp {
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
             .unwrap_or_default();
+        project.settings.stream_destinations = std::env::var("AURA_NATIVE_STREAM_DESTINATIONS")
+            .ok()
+            .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .collect();
         let ffmpeg_ok = ffmpeg::ffmpeg_available(&project.settings.ffmpeg_path);
         let detected_encoder = if ffmpeg_ok {
             ffmpeg::detect_encoder(&project.settings.ffmpeg_path)
