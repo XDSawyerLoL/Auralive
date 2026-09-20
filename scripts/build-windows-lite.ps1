@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "AuraLive-2.5-Windows-FastVoiceOAuth-LITE-2026-09-05"
+$BuildId = "AuraLive-2.7-Windows-Native-LITE-2026-09-20"
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt
@@ -29,6 +29,7 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     --collect-all "misaki" `
     --collect-all "espeakng_loader" `
     --collect-all "soundfile" `
+    --collect-all "pyaudiowpatch" `
     --collect-all "onnxruntime" `
     --collect-all "language_tags" `
     --collect-all "csvw" `
@@ -73,8 +74,10 @@ Build: $BuildId
 2. Au premier usage de la voix, Aura Live telecharge automatiquement les fichiers Kokoro dans data\voices\kokoro.
 3. Ensuite la voix fonctionne localement comme dans le build complet.
 4. La connexion Twitch s'ouvre dans ton navigateur Windows normal.
-5. Tester la voix ne depend pas d'OBS.
-6. Le Voice Control utilise le chemin court gemma3:12b -> Kokoro.
+5. Aura Native Broadcast + FFmpeg/gfxcapture sont inclus comme dans le build complet.
+6. Le son PC/jeu utilise WASAPI loopback, sans cable audio virtuel.
+7. Tester la voix ne depend pas d'OBS.
+8. Le Voice Control utilise le chemin court gemma3:12b -> Kokoro.
 
 Aucune cle Gemini n'est necessaire pour Kokoro.
 Ollama + gemma3:12b restent necessaires pour la conversation IA locale de qualite.
