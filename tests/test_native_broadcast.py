@@ -84,3 +84,21 @@ def test_overlay_bus_listener_can_prepare_event_before_delivery():
     asyncio.run(bus.emit(event))
 
     assert event["audio_url"] == "/media/native-test.wav"
+
+
+def test_system_audio_chunk_has_fixed_realtime_shape(tmp_path):
+    service = make_service(tmp_path)
+
+    chunk = service.system_audio_chunk(19200)
+
+    assert len(chunk) == 19200
+    service._stop_system_audio_capture()
+
+
+def test_system_audio_status_reports_backend(tmp_path):
+    service = make_service(tmp_path)
+
+    status = service.system_audio_status()
+
+    assert status["backend"] == "WASAPI / PyAudioWPatch"
+    assert "backend_present" in status
