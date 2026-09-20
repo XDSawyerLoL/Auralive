@@ -102,3 +102,4 @@ Aura Live 1.2 fournit un noyau local très étendu. Une parité absolue avec un 
 - [x] Édition scène/source pendant Live/REC avec rebuild contrôlé
 - [x] Mix audio natif 3 voies : micro + son PC/jeu WASAPI + Aura/Mairaiy/alertes
 - [x] Live + REC simultanés sans concurrence sur les buffers PCM
+- [x] Coffre RTMP local chiffré DPAPI, migration des anciennes clés et zéro secret dans engine.json
