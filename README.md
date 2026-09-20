@@ -169,6 +169,22 @@ POST /api/broadcast/scene
 ```
 
 La première version native prend réellement en charge la capture écran Windows, l'enregistrement MKV et la diffusion RTMP avec NVENC, AMD AMF, Intel Quick Sync ou x264. OBS reste le fallback tant que la composition multi-source native (jeu, fenêtre, webcam, navigateur, overlays et mixage complet) n'a pas atteint la parité.
+### Compositeur multi-source V0.2
+
+Le backend `Aura Native Broadcast` compose désormais plusieurs sources vidéo dans un seul graphe FFmpeg utilisé pour l’aperçu, l’enregistrement et le direct :
+
+- écran Windows ;
+- fenêtre / jeu par titre de fenêtre ;
+- webcam DirectShow ;
+- image locale ;
+- texte ;
+- sources navigateur headless, dont Mairaiy (`/overlay/avatar`) et les overlays Aura (`/overlay`).
+
+Le Studio permet d’ajouter, configurer, masquer, supprimer, déplacer et redimensionner ces sources. Aura détecte les fenêtres et webcams disponibles et utilise le sélecteur de fichiers Windows pour les images.
+
+Les sources navigateur sont rendues localement par Chromium/Edge headless, transformées en MJPEG local puis composées par FFmpeg avec chroma-key automatique. Aucun service cloud n’est requis.
+
+Les changements de scène et de géométrie sont encore verrouillés pendant un Live/REC ; le hot-reload du graphe et Windows Graphics Capture/DXGI restent les prochaines étapes de parité avec OBS.
 ## Installation Windows
 
 ### Mise à niveau
