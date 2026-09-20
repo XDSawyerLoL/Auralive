@@ -1,4 +1,4 @@
-name: Publish Quantic Studio 2.7.4 Native Release
+name: Publish Quantic Studio 2.7.4 Release
 
 on:
   push:
@@ -6,11 +6,19 @@ on:
       - main
     paths:
       - ".github/workflows/publish-native-release.yml"
+      - "app/**"
+      - "engine/quantic-live/**"
       - "installer/**"
       - "scripts/build-installer.ps1"
+      - "scripts/build-windows.ps1"
+      - "scripts/build-windows-lite.ps1"
       - "scripts/generate-studio-icon.py"
+      - "scripts/install-aura-ffmpeg.ps1"
+      - "scripts/sign-windows.ps1"
+      - "requirements*.txt"
       - "build-assets/**"
       - "tests/test_windows_desktop_packaging.py"
+      - "tests/test_native_broadcast.py"
   workflow_dispatch:
 
 permissions:
@@ -62,7 +70,7 @@ jobs:
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
         run: .\scripts\sign-windows.ps1 -Path @("engine\quantic-live\target\release\quantic-live.exe")
 
-      - name: Build full Quantic Studio 2.7.4 Native
+      - name: Build full Quantic Studio 2.7.4
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
@@ -119,7 +127,7 @@ jobs:
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
         run: .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-2.7.4.exe")
 
-      - name: Build Lite Quantic Studio 2.7.4 Native
+      - name: Build Lite Quantic Studio 2.7.4
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
@@ -228,12 +236,12 @@ jobs:
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $full $lite $engine $installer $sums --clobber --repo "${{ github.repository }}"
-            gh release edit $tag --repo "${{ github.repository }}" --title "Quantic Studio 2.7.4 Native" --notes $notes --latest
+            gh release edit $tag --repo "${{ github.repository }}" --title "Quantic Studio 2.7.4" --notes $notes --latest
           } else {
             gh release create $tag $full $lite $engine $installer $sums `
               --repo "${{ github.repository }}" `
               --target "${{ github.sha }}" `
-              --title "Quantic Studio 2.7.4 Native" `
+              --title "Quantic Studio 2.7.4" `
               --notes $notes `
               --latest
           }
