@@ -32,7 +32,7 @@ jobs:
         with:
           workspaces: engine/quantic-live
 
-      - name: Build Aura Native Broadcast engine
+      - name: Build Quantic Studio Core engine
         shell: pwsh
         run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
 
@@ -56,7 +56,7 @@ jobs:
         shell: pwsh
         run: .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
 
-      - name: Embed Aura Native Broadcast
+      - name: Embed Quantic Studio Core
         shell: pwsh
         run: |
           $engine = "engine\quantic-live\target\release\quantic-live.exe"
@@ -75,7 +75,7 @@ jobs:
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.7.3-Windows-Native-LITE-2026-09-20") {
+          if ($buildId -ne "QuanticStudio-2.7.4-Windows-Native-LITE-2026-09-20") {
             throw "Build ID inattendu: $buildId"
           }
           $envContent = Get-Content "dist\QuanticStudio\.env" -Raw
@@ -130,7 +130,7 @@ jobs:
                 $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
                 if ($nativeStatus.mode -eq "native" -and
                     $nativeStatus.responsive -eq $true -and
-                    $nativeStatus.engine.version -eq "0.4.0" -and
+                    $nativeStatus.engine.version -eq "0.4.1" -and
                     $nativeStatus.engine.ffmpeg_ok -eq $true -and
                     $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
                     $nativeStatus.system_audio.backend_present -eq $true) {
@@ -142,7 +142,7 @@ jobs:
             }
             if (-not $nativeReady) {
               try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Aura Native 0.4.0 n'est pas operationnel dans le build Lite."
+              throw "Aura Native 0.4.1 n'est pas operationnel dans le build Lite."
             }
 
             $voice = Invoke-RestMethod "http://127.0.0.1:18787/api/avatar/test" `
@@ -176,7 +176,7 @@ jobs:
       - name: Upload Windows Lite application
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Windows-Native-2.7.3-LITE
+          name: QuanticStudio-Windows-Native-2.7.4-LITE
           path: dist/QuanticStudio
           if-no-files-found: error
           include-hidden-files: true
