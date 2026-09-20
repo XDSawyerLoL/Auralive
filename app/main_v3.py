@@ -324,6 +324,12 @@ async def broadcast_source_transform_v3(source_id: int, payload: dict[str, Any] 
         raise HTTPException(status_code=422, detail="Source invalide")
     if str(settings.broadcast_engine or "obs").lower() != "native":
         raise HTTPException(status_code=409, detail="Passe en mode Aura Native pour éditer les sources")
+    native_state = await broadcast_status_v3()
+    if native_state.get("streaming") or native_state.get("recording"):
+        raise HTTPException(
+            status_code=409,
+            detail="Arrête le direct ou l'enregistrement avant de repositionner une source",
+        )
 
     def number(name: str, default: float) -> float:
         try:
