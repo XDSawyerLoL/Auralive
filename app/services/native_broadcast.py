@@ -230,7 +230,7 @@ class NativeBroadcastService:
         script = (
             "Add-Type -AssemblyName System.Windows.Forms;"
             "$d=New-Object System.Windows.Forms.OpenFileDialog;"
-            "$d.Filter='Images|*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif|Tous les fichiers|*.*';"
+            "$d.Filter='Images|*.png;*.jpg;*.jpeg;*.webp;*.bmp|Tous les fichiers|*.*';"
             "$d.Multiselect=$false;"
             "if($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK){$d.FileName}"
         )
