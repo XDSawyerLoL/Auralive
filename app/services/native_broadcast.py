@@ -24,6 +24,7 @@ class NativeBroadcastService:
         self.command_path = self.runtime_dir / "command.json"
         self.status_path = self.runtime_dir / "status.json"
         self.config_path = self.runtime_dir / "engine.json"
+        self.preview_path = self.runtime_dir / "preview.jpg"
         self._process: subprocess.Popen[bytes] | None = None
         self._owns_process = False
         self._lock = threading.RLock()
@@ -81,6 +82,7 @@ class NativeBroadcastService:
             env["AURA_NATIVE_CONTROL_FILE"] = str(self.command_path)
             env["AURA_NATIVE_STATUS_FILE"] = str(self.status_path)
             env["AURA_NATIVE_CONFIG_FILE"] = str(self.config_path)
+            env["AURA_NATIVE_PREVIEW_FILE"] = str(self.preview_path)
 
             creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self._process = subprocess.Popen(
@@ -177,6 +179,7 @@ class NativeBroadcastService:
             "status_age_seconds": round(status_age, 3) if status_age is not None else None,
             "engine": engine_status,
             "obs_fallback_enabled": bool(getattr(self.settings, "obs_enabled", False)),
+            "preview_frame_available": self.preview_path.is_file(),
         }
 
     def _read_status(self) -> dict[str, Any]:
