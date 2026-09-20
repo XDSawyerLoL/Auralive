@@ -210,10 +210,18 @@
                     <div class="audio-mini">
                       <div class="audio-mini-head"><b>🎙 Micro</b><span id="studio-mic-detail">Détection…</span></div>
                       <div class="audio-meter"><i id="studio-mic-meter" style="width:0%"></i></div>
+                      <div class="audio-controls">
+                        <button type="button" id="studio-mic-mute" class="audio-mute" title="Couper le micro">◉</button>
+                        <input id="studio-mic-volume" type="range" min="0" max="200" value="82" aria-label="Volume micro">
+                      </div>
                     </div>
                     <div class="audio-mini">
-                      <div class="audio-mini-head"><b>🔊 Son du PC</b><span id="studio-pc-detail">Détection…</span></div>
+                      <div class="audio-mini-head"><b>◈ Aura / alertes</b><span id="studio-pc-detail">Bus natif</span></div>
                       <div class="audio-meter"><i id="studio-pc-meter" style="width:0%"></i></div>
+                      <div class="audio-controls">
+                        <button type="button" id="studio-aura-mute" class="audio-mute" title="Couper Aura et les alertes">◉</button>
+                        <input id="studio-aura-volume" type="range" min="0" max="200" value="72" aria-label="Volume Aura et alertes">
+                      </div>
                     </div>
                   </div>
                   <div class="studio-main-actions">
