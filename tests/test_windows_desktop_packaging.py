@@ -47,7 +47,7 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
 def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     build = BUILD.read_text(encoding="utf-8")
     desktop = DESKTOP.read_text(encoding="utf-8")
-    build_id = "AuraLive-2.7.1-Windows-Native-2026-09-20"
+    build_id = "AuraLive-2.7.2-Windows-Native-2026-09-20"
 
     assert "--console" in build
     assert "--hide-console hide-early" in build
@@ -83,7 +83,7 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert "Kokoro ff_siwis n'est pas pret" in workflow
     assert "api/avatar/test" in workflow
     assert "overlay_required" in workflow
-    assert "AuraLive-Windows-Native-2.7" in workflow
+    assert "AuraLive-Windows-Native-2.7.2" in workflow
 
 
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
