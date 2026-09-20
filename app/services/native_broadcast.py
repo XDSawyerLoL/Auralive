@@ -217,7 +217,11 @@ class NativeBroadcastService:
         self._audio_tracks: list[dict[str, Any]] = []
         self._audio_decode_threads: set[threading.Thread] = set()
         self._audio_last_pull = 0.0
+        self._audio_cached_slot: tuple[int, int] | None = None
+        self._audio_cached_chunk = b""
         self._system_audio_buffer = bytearray()
+        self._system_cached_slot: tuple[int, int] | None = None
+        self._system_cached_chunk = b""
         self._system_audio_thread: threading.Thread | None = None
         self._system_audio_stop = threading.Event()
         self._system_audio_last_pull = 0.0
@@ -244,21 +248,29 @@ class NativeBroadcastService:
         return time.monotonic() - self._audio_last_pull <= 2.0
 
     def system_audio_chunk(self, byte_count: int = 19200) -> bytes:
-        self._system_audio_last_pull = time.monotonic()
+        now = time.monotonic()
+        self._system_audio_last_pull = now
         self._ensure_system_audio_capture()
 
         byte_count = max(4, int(byte_count))
         byte_count -= byte_count % 4
+        slot = (int(now * 10), byte_count)
+
         with self._audio_lock:
+            if self._system_cached_slot == slot:
+                return self._system_cached_chunk
+
             available = min(byte_count, len(self._system_audio_buffer))
             available -= available % 4
             chunk = bytes(self._system_audio_buffer[:available])
             if available:
                 del self._system_audio_buffer[:available]
+            if len(chunk) < byte_count:
+                chunk += b"\x00" * (byte_count - len(chunk))
 
-        if len(chunk) < byte_count:
-            chunk += b"\x00" * (byte_count - len(chunk))
-        return chunk
+            self._system_cached_slot = slot
+            self._system_cached_chunk = chunk
+            return chunk
 
     def system_audio_status(self) -> dict[str, Any]:
         thread = self._system_audio_thread
@@ -360,6 +372,8 @@ class NativeBroadcastService:
         self._system_audio_ready = False
         with self._audio_lock:
             self._system_audio_buffer.clear()
+            self._system_cached_slot = None
+            self._system_cached_chunk = b""
 
     def enqueue_overlay_audio(self, event: dict[str, Any]) -> None:
         if not isinstance(event, dict):
@@ -386,13 +400,18 @@ class NativeBroadcastService:
             thread.start()
 
     def native_audio_chunk(self, byte_count: int = 19200) -> bytes:
-        self._audio_last_pull = time.monotonic()
+        now = time.monotonic()
+        self._audio_last_pull = now
         byte_count = max(4, int(byte_count))
         byte_count -= byte_count % 4
-        sample_count = byte_count // 2
-        mixed = array("h", [0]) * sample_count
+        slot = (int(now * 10), byte_count)
 
         with self._audio_lock:
+            if self._audio_cached_slot == slot:
+                return self._audio_cached_chunk
+
+            sample_count = byte_count // 2
+            mixed = array("h", [0]) * sample_count
             active: list[dict[str, Any]] = []
             for track in self._audio_tracks:
                 data = track.get("data", b"")
@@ -412,8 +431,10 @@ class NativeBroadcastService:
                     active.append(track)
 
             self._audio_tracks = active
-
-        return mixed.tobytes()
+            chunk = mixed.tobytes()
+            self._audio_cached_slot = slot
+            self._audio_cached_chunk = chunk
+            return chunk
 
     def _decode_audio_track(self, target: str, volume: float) -> None:
         resolved = self._resolve_audio_target(target)
