@@ -1,10 +1,10 @@
-# Aura Native Broadcast — 0.4.0
+# Quantic Studio Core — 0.4.1
 
-Moteur de diffusion desktop natif intégré à Aura Live.
+Moteur de diffusion desktop natif intégré à Quantic Studio.
 
 ## Capacités actuelles
 
-- moteur Rust + egui, utilisé en mode headless par Aura Live ;
+- moteur Rust + egui, utilisé en mode headless par Quantic Studio ;
 - scènes et sources persistantes ;
 - compositeur FFmpeg multi-source ;
 - capture écran Windows ;
@@ -25,14 +25,14 @@ Moteur de diffusion desktop natif intégré à Aura Live.
 
 ## Distribution Windows
 
-Aura Live embarque :
+Quantic Studio embarque :
 
 - `AuraNativeBroadcast.exe` ;
 - un FFmpeg Windows vérifié par SHA-256 ;
 - le support `gfxcapture` ;
 - le backend WASAPI loopback.
 
-Le chemin FFmpeg est fourni automatiquement au moteur par Aura Live. Aucun réglage manuel n’est requis dans le package Windows normal.
+Le chemin FFmpeg est fourni automatiquement au moteur par Quantic Studio. Aucun réglage manuel n’est requis dans le package Windows normal.
 
 ## Développement
 
@@ -56,7 +56,7 @@ target\release\quantic-live.exe
 
 Aura Native diffuse directement du PC vers l’endpoint RTMP choisi.
 
-La clé principale et les clés multistream restent locales et ne sont jamais persistées dans `engine.json`. Aura Live les protège avec Windows DPAPI dans `data/native_broadcast/`, lié au profil Windows local, puis les injecte au moteur uniquement au lancement. Une ancienne clé trouvée en clair est migrée automatiquement puis effacée du JSON.
+La clé principale et les clés multistream restent locales et ne sont jamais persistées dans `engine.json`. Quantic Studio les protège avec Windows DPAPI dans `data/native_broadcast/`, lié au profil Windows local, puis les injecte au moteur uniquement au lancement. Une ancienne clé trouvée en clair est migrée automatiquement puis effacée du JSON.
 
 ## Audio
 
@@ -70,7 +70,7 @@ Les trois niveaux sont réglables indépendamment depuis Aura Studio.
 
 ## Architecture
 
-- **Cerveau / UX** : Aura Live FastAPI + Studio web local
+- **Cerveau / UX** : Quantic Studio FastAPI + Studio web local
 - **Moteur média** : Rust + FFmpeg
 - **Capture jeu/fenêtre** : Windows Graphics Capture / `gfxcapture`
 - **Capture système audio** : WASAPI loopback
