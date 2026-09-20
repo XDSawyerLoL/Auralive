@@ -71,7 +71,7 @@ jobs:
           $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.5-Windows-FastVoiceOAuth-LITE-2026-09-05") {
+          if ($buildId -ne "AuraLive-2.7-Windows-Native-LITE-2026-09-20") {
             throw "Build ID inattendu: $buildId"
           }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
