@@ -453,7 +453,7 @@ impl QuanticLiveApp {
         control::write_status(&control::EngineStatus {
             ok: true,
             engine: "aura-native-broadcast",
-            version: "0.1.0",
+            version: "0.2.0",
             last_command_id: self.last_command_id,
             streaming: self.stream_process.is_some(),
             recording: self.record_process.is_some(),
