@@ -315,6 +315,13 @@ async def broadcast_scene_v3(payload: dict[str, Any] = Body(...)) -> dict[str, A
     scene = " ".join(str(payload.get("scene") or "").split()).strip()
     if not scene:
         raise HTTPException(status_code=422, detail="Nom de scène requis")
+    if str(settings.broadcast_engine or "obs").lower() == "native":
+        native_state = await broadcast_status_v3()
+        if native_state.get("streaming") or native_state.get("recording"):
+            raise HTTPException(
+                status_code=409,
+                detail="Le changement de scène natif en direct arrive avec le compositeur multi-source V0.2",
+            )
     return await _broadcast_command("scene.select", scene)
 
 
