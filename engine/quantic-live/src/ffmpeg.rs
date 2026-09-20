@@ -615,16 +615,17 @@ pub fn save_replay_clip(settings: &Settings, directory: &Path) -> Result<PathBuf
         .join("\n");
     std::fs::write(&list_path, list).context("Impossible de préparer le clip replay")?;
 
+    let concat_args = vec![
+        "-hide_banner".to_owned(),
+        "-loglevel".to_owned(), "error".to_owned(),
+        "-f".to_owned(), "concat".to_owned(),
+        "-safe".to_owned(), "0".to_owned(),
+        "-i".to_owned(), list_path.to_string_lossy().into_owned(),
+        "-c".to_owned(), "copy".to_owned(),
+        output.to_string_lossy().into_owned(),
+    ];
     let status = Command::new(&settings.ffmpeg_path)
-        .args([
-            "-hide_banner",
-            "-loglevel", "error",
-            "-f", "concat",
-            "-safe", "0",
-            "-i", &list_path.to_string_lossy(),
-            "-c", "copy",
-            &output.to_string_lossy(),
-        ])
+        .args(concat_args)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
