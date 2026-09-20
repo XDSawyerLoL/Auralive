@@ -112,6 +112,11 @@ class _BrowserSourceRenderer:
                     {"width": 1280, "height": 720, "deviceScaleFactor": 1, "mobile": False},
                 )
                 command(
+                    "Emulation.setDefaultBackgroundColorOverride",
+                    {"color": {"r": 0, "g": 255, "b": 0, "a": 1}},
+                )
+                time.sleep(0.45)
+                command(
                     "Runtime.evaluate",
                     {
                         "expression": (
