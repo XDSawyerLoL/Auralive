@@ -10,6 +10,9 @@ on:
       - "config/**"
       - "scripts/build-windows.ps1"
       - "scripts/install-aura-ffmpeg.ps1"
+      - "scripts/build-installer.ps1"
+      - "scripts/sign-windows.ps1"
+      - "installer/**"
       - "requirements*.txt"
       - ".env.example"
       - ".github/workflows/build-windows-app.yml"
@@ -22,6 +25,9 @@ on:
       - "config/**"
       - "scripts/build-windows.ps1"
       - "scripts/install-aura-ffmpeg.ps1"
+      - "scripts/build-installer.ps1"
+      - "scripts/sign-windows.ps1"
+      - "installer/**"
       - "requirements*.txt"
       - ".env.example"
       - ".github/workflows/build-windows-app.yml"
@@ -77,6 +83,18 @@ jobs:
           }
           Copy-Item $engine "dist\AuraLive\AuraNativeBroadcast.exe" -Force
 
+      - name: Sign Aura Live binaries when certificate is configured
+        shell: pwsh
+        env:
+          AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
+          AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: |
+          .\scripts\sign-windows.ps1 -Path @(
+            "dist\AuraLive\AuraLive.exe",
+            "dist\AuraLive\AuraNativeBroadcast.exe"
+          )
+
+
       - name: Verify Windows package
         shell: pwsh
         run: |
@@ -97,7 +115,7 @@ jobs:
             throw "Le FFmpeg livre ne contient pas gfxcapture."
           }
           $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7.1-Windows-Native-2026-09-20") {
+          if ($buildId -ne "AuraLive-2.7.2-Windows-Native-2026-09-20") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\AuraLive\.env")) {
@@ -179,7 +197,7 @@ jobs:
               throw "AuraLive-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "AuraLive-2.7.1-Windows-Native-2026-09-20") {
+            if ($startup -notmatch "AuraLive-2.7.2-Windows-Native-2026-09-20") {
               throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
@@ -357,10 +375,53 @@ jobs:
             $global:LASTEXITCODE = 0
           }
 
+      - name: Ensure Inno Setup 6
+        shell: pwsh
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup --yes --no-progress
+          }
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: .\scripts\build-installer.ps1 -Version "2.7.2" -SourceDir "dist\AuraLive"
+
+      - name: Sign installer when certificate is configured
+        shell: pwsh
+        env:
+          AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
+          AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
+        run: .\scripts\sign-windows.ps1 -Path @("release\AuraLive-Setup-2.7.2.exe")
+
+      - name: Verify Windows installer
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "release\AuraLive-Setup-2.7.2.exe")) {
+            throw "Installateur Aura Live absent."
+          }
+          if ((Get-Item "release\AuraLive-Setup-2.7.2.exe").Length -lt 1000000) {
+            throw "Installateur Aura Live anormalement petit."
+          }
+          if (-not (Select-String -Path "installer\AuraLive.iss" -Pattern "uninsneveruninstall" -Quiet)) {
+            throw "L'installateur ne protege pas les donnees utilisateur."
+          }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AuraLive-Setup-2.7.2
+          path: release/AuraLive-Setup-2.7.2.exe
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-Native-2.7
+          name: AuraLive-Windows-Native-2.7.2
           path: dist/AuraLive
           if-no-files-found: error
           include-hidden-files: true
