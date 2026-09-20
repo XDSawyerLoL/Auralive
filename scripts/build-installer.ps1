@@ -5,12 +5,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $ProjectRoot
+
 if (-not (Test-Path "build-assets\\quantic-studio.ico")) {
     python scripts\\generate-studio-icon.py
     if ($LASTEXITCODE -ne 0) { throw "Impossible de generer l icone Quantic Studio." }
 }
-$ProjectRoot = Split-Path -Parent $PSScriptRoot
-Set-Location $ProjectRoot
 
 $isccCandidates = @(
     "${env:ProgramFiles(x86)}\\Inno Setup 6\\ISCC.exe",
