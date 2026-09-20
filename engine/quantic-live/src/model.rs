@@ -89,6 +89,35 @@ pub struct Scene {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum TransitionKind {
+    Cut,
+    Fade,
+}
+
+impl Default for TransitionKind {
+    fn default() -> Self {
+        Self::Fade
+    }
+}
+
+impl TransitionKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Cut => "cut",
+            Self::Fade => "fade",
+        }
+    }
+
+    pub fn from_slug(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "cut" | "instant" => Some(Self::Cut),
+            "fade" | "fondu" => Some(Self::Fade),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Encoder {
     Auto,
     NvencH264,
@@ -119,8 +148,16 @@ pub struct Settings {
     pub encoder: Encoder,
     pub rtmp_url: String,
     pub stream_key: String,
+    #[serde(skip)]
+    pub stream_destinations: Vec<String>,
     pub audio_device: String,
     pub recording_dir: String,
+    #[serde(default)]
+    pub transition: TransitionKind,
+    #[serde(default = "default_transition_ms")]
+    pub transition_ms: u32,
+    #[serde(default = "default_replay_seconds")]
+    pub replay_seconds: u32,
 }
 
 impl Default for Settings {
@@ -134,14 +171,26 @@ impl Default for Settings {
             encoder: Encoder::Auto,
             rtmp_url: "rtmp://live.twitch.tv/app".into(),
             stream_key: String::new(),
+            stream_destinations: Vec::new(),
             audio_device: String::new(),
             recording_dir: "recordings".into(),
+            transition: TransitionKind::Fade,
+            transition_ms: default_transition_ms(),
+            replay_seconds: default_replay_seconds(),
         }
     }
 }
 
 fn default_system_volume() -> f32 {
     0.72
+}
+
+fn default_transition_ms() -> u32 {
+    350
+}
+
+fn default_replay_seconds() -> u32 {
+    30
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
