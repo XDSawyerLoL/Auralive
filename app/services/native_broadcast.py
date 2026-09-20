@@ -1,14 +1,185 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
+import urllib.request
 from pathlib import Path
 from typing import Any
 
+from websockets.sync.client import connect as websocket_connect
+
 from app.config import BASE_DIR, RUNTIME_DIR, Settings
+
+
+class _BrowserSourceRenderer:
+    def __init__(
+        self,
+        source_id: int,
+        target_url: str,
+        browser_executable: Path,
+        frame_sink,
+    ):
+        self.source_id = int(source_id)
+        self.target_url = target_url
+        self.browser_executable = browser_executable
+        self.frame_sink = frame_sink
+        self.profile_dir = Path(tempfile.mkdtemp(prefix=f"AuraNativeBrowser-{self.source_id}-"))
+        self.process: subprocess.Popen[bytes] | None = None
+        self.stop_event = threading.Event()
+        self.thread = threading.Thread(
+            target=self._run,
+            name=f"AuraBrowserSource-{self.source_id}",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        self.thread.start()
+
+    def stop(self) -> None:
+        self.stop_event.set()
+        process = self.process
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=2)
+            except Exception:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
+        if self.thread.is_alive():
+            self.thread.join(timeout=2)
+        shutil.rmtree(self.profile_dir, ignore_errors=True)
+
+    def _run(self) -> None:
+        args = [
+            str(self.browser_executable),
+            "--headless=new",
+            f"--user-data-dir={self.profile_dir}",
+            "--remote-debugging-address=127.0.0.1",
+            "--remote-debugging-port=0",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-background-networking",
+            "--disable-sync",
+            "--disable-extensions",
+            "--disable-notifications",
+            "--hide-scrollbars",
+            "--mute-audio",
+            "--autoplay-policy=no-user-gesture-required",
+            "--window-size=1280,720",
+            self.target_url,
+        ]
+        creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        try:
+            self.process = subprocess.Popen(
+                args,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+            )
+            port = self._wait_for_debug_port()
+            if port is None:
+                return
+            ws_url = self._page_websocket_url(port)
+            if not ws_url:
+                return
+            with websocket_connect(ws_url, open_timeout=4, close_timeout=1, max_size=8_000_000) as socket:
+                command_id = 0
+
+                def command(method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+                    nonlocal command_id
+                    command_id += 1
+                    wanted = command_id
+                    socket.send(json.dumps({"id": wanted, "method": method, "params": params or {}}))
+                    while not self.stop_event.is_set():
+                        message = json.loads(socket.recv(timeout=3))
+                        if int(message.get("id") or 0) == wanted:
+                            return message
+                    return {}
+
+                command("Page.enable")
+                command(
+                    "Emulation.setDeviceMetricsOverride",
+                    {"width": 1280, "height": 720, "deviceScaleFactor": 1, "mobile": False},
+                )
+                command(
+                    "Runtime.evaluate",
+                    {
+                        "expression": (
+                            "document.documentElement.style.background='#00ff00';"
+                            "if(document.body){document.body.style.background='#00ff00';"
+                            "document.body.style.margin='0';}"
+                        ),
+                        "awaitPromise": False,
+                    },
+                )
+
+                while not self.stop_event.wait(0.10):
+                    try:
+                        response = command(
+                            "Page.captureScreenshot",
+                            {
+                                "format": "jpeg",
+                                "quality": 82,
+                                "fromSurface": True,
+                                "captureBeyondViewport": False,
+                            },
+                        )
+                        data = ((response.get("result") or {}).get("data") or "")
+                        if data:
+                            self.frame_sink(self.source_id, base64.b64decode(data))
+                    except Exception:
+                        if self.stop_event.wait(0.25):
+                            break
+        except Exception:
+            return
+        finally:
+            process = self.process
+            if process is not None and process.poll() is None:
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+
+    def _wait_for_debug_port(self) -> int | None:
+        marker = self.profile_dir / "DevToolsActivePort"
+        deadline = time.monotonic() + 8.0
+        while time.monotonic() < deadline and not self.stop_event.is_set():
+            try:
+                lines = marker.read_text(encoding="utf-8", errors="ignore").splitlines()
+                port = int(lines[0].strip())
+                if 0 < port < 65536:
+                    return port
+            except (OSError, ValueError, IndexError):
+                pass
+            if self.process is not None and self.process.poll() is not None:
+                return None
+            time.sleep(0.08)
+        return None
+
+    @staticmethod
+    def _page_websocket_url(port: int) -> str:
+        deadline = time.monotonic() + 5.0
+        url = f"http://127.0.0.1:{port}/json/list"
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=1) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                for target in payload:
+                    if target.get("type") == "page" and target.get("webSocketDebuggerUrl"):
+                        return str(target["webSocketDebuggerUrl"])
+            except Exception:
+                pass
+            time.sleep(0.08)
+        return ""
 
 
 class NativeBroadcastService:
@@ -29,6 +200,112 @@ class NativeBroadcastService:
         self._owns_process = False
         self._lock = threading.RLock()
         self._command_id = int(time.time() * 1000)
+        self._browser_lock = threading.RLock()
+        self._browser_renderers: dict[int, _BrowserSourceRenderer] = {}
+        self._browser_frames: dict[int, bytes] = {}
+        self._browser_targets: dict[int, str] = {}
+
+    def local_base_url(self) -> str:
+        host = str(getattr(self.settings, "host", "127.0.0.1") or "127.0.0.1").strip()
+        if host in {"0.0.0.0", "::", "[::]", "localhost"}:
+            host = "127.0.0.1"
+        port = int(getattr(self.settings, "port", 18787) or 18787)
+        return f"http://{host}:{port}"
+
+    def browser_frame(self, source_id: int) -> bytes | None:
+        with self._browser_lock:
+            frame = self._browser_frames.get(int(source_id))
+            return bytes(frame) if frame else None
+
+    def _set_browser_frame(self, source_id: int, frame: bytes) -> None:
+        if not frame.startswith(b"\xff\xd8") or not frame.endswith(b"\xff\xd9"):
+            return
+        with self._browser_lock:
+            self._browser_frames[int(source_id)] = frame
+
+    def _browser_executable(self) -> Path | None:
+        candidates: list[Path] = []
+        for executable in ("msedge.exe", "chrome.exe"):
+            resolved = shutil.which(executable)
+            if resolved:
+                candidates.append(Path(resolved))
+
+        env_paths = [
+            (os.environ.get("PROGRAMFILES(X86)"), "Microsoft/Edge/Application/msedge.exe"),
+            (os.environ.get("PROGRAMFILES"), "Microsoft/Edge/Application/msedge.exe"),
+            (os.environ.get("LOCALAPPDATA"), "Microsoft/Edge/Application/msedge.exe"),
+            (os.environ.get("PROGRAMFILES"), "Google/Chrome/Application/chrome.exe"),
+            (os.environ.get("PROGRAMFILES(X86)"), "Google/Chrome/Application/chrome.exe"),
+            (os.environ.get("LOCALAPPDATA"), "Google/Chrome/Application/chrome.exe"),
+        ]
+        for base, relative in env_paths:
+            if base:
+                candidates.append(Path(base) / relative)
+
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = str(candidate).casefold()
+            if key not in seen and candidate.is_file():
+                seen.add(key)
+                return candidate
+        return None
+
+    def _browser_target_url(self, target: str) -> str:
+        target = str(target or "").strip()
+        if target.startswith("/"):
+            return self.local_base_url() + target
+        if target.startswith("http://") or target.startswith("https://"):
+            return target
+        return self.local_base_url() + "/overlay/avatar"
+
+    def _sync_browser_sources(self, engine_status: dict[str, Any]) -> None:
+        sources = list(engine_status.get("sources") or [])
+        desired: dict[int, str] = {}
+        for source in sources:
+            if str(source.get("kind") or "") != "Navigateur" or not bool(source.get("visible", True)):
+                continue
+            source_id = int(source.get("id") or 0)
+            if source_id <= 0:
+                continue
+            desired[source_id] = self._browser_target_url(str(source.get("target") or "/overlay/avatar"))
+
+        with self._browser_lock:
+            stale = [
+                source_id
+                for source_id, renderer in self._browser_renderers.items()
+                if source_id not in desired or self._browser_targets.get(source_id) != desired.get(source_id)
+            ]
+            for source_id in stale:
+                renderer = self._browser_renderers.pop(source_id, None)
+                self._browser_targets.pop(source_id, None)
+                self._browser_frames.pop(source_id, None)
+                if renderer is not None:
+                    renderer.stop()
+
+            browser = self._browser_executable()
+            if browser is None:
+                return
+            for source_id, target in desired.items():
+                if source_id in self._browser_renderers:
+                    continue
+                renderer = _BrowserSourceRenderer(
+                    source_id,
+                    target,
+                    browser,
+                    self._set_browser_frame,
+                )
+                self._browser_renderers[source_id] = renderer
+                self._browser_targets[source_id] = target
+                renderer.start()
+
+    def _stop_browser_sources(self) -> None:
+        with self._browser_lock:
+            renderers = list(self._browser_renderers.values())
+            self._browser_renderers.clear()
+            self._browser_targets.clear()
+            self._browser_frames.clear()
+        for renderer in renderers:
+            renderer.stop()
 
     @property
     def selected(self) -> bool:
@@ -84,6 +361,7 @@ class NativeBroadcastService:
             env["AURA_NATIVE_CONFIG_FILE"] = str(self.config_path)
             env["AURA_NATIVE_PREVIEW_FILE"] = str(self.preview_path)
             env["AURA_NATIVE_HEADLESS"] = "1"
+            env["AURA_LOCAL_BASE_URL"] = self.local_base_url()
 
             creationflags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
             self._process = subprocess.Popen(
@@ -119,6 +397,7 @@ class NativeBroadcastService:
             self._process = None
             self._owns_process = False
 
+        self._stop_browser_sources()
         return self.status()
 
     def close(self) -> None:
@@ -166,6 +445,7 @@ class NativeBroadcastService:
 
     def status(self) -> dict[str, Any]:
         engine_status = self._read_status()
+        self._sync_browser_sources(engine_status)
         executable = self.executable()
         process_running = self.process_running()
         status_age = self._status_age_seconds()
