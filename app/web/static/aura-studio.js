@@ -248,6 +248,105 @@
     }
   }
 
+  function openOutputModal() {
+    if (studio.status?.backend !== "native") {
+      notify("Passe en Aura Native pour régler la destination", true);
+      return;
+    }
+    const modal = $s("#studio-output-modal");
+    if (!modal) return;
+
+    const output = studio.status?.output || {};
+    const url = $s("#studio-output-url");
+    const key = $s("#studio-output-key");
+    const keyStatus = $s("#studio-output-key-status");
+    const clearButton = $s("#studio-output-clear-key");
+
+    if (url) url.value = String(output.rtmp_url || "rtmp://live.twitch.tv/app");
+    if (key) key.value = "";
+    if (keyStatus) {
+      keyStatus.textContent = output.stream_key_configured
+        ? "Clé protégée dans le coffre local. Elle ne sera jamais réaffichée."
+        : "Aucune clé enregistrée.";
+    }
+    if (clearButton) clearButton.disabled = !output.stream_key_configured;
+    modal.hidden = false;
+  }
+
+  function closeOutputModal() {
+    const modal = $s("#studio-output-modal");
+    if (modal) modal.hidden = true;
+  }
+
+  async function saveOutputSettings(event) {
+    event.preventDefault();
+    if (studio.status?.streaming || studio.status?.recording) {
+      notify("Arrête le Live et le REC avant de modifier la destination", true);
+      return;
+    }
+
+    const rtmpUrl = String($s("#studio-output-url")?.value || "").trim();
+    const key = String($s("#studio-output-key")?.value || "").trim();
+    setBusy(true);
+    try {
+      await request("/api/broadcast/output", {
+        method: "PUT",
+        body: JSON.stringify({
+          rtmp_url: rtmpUrl,
+          stream_key: key || null,
+        }),
+      });
+      closeOutputModal();
+      await refreshBroadcast(false);
+      notify("Réglages de diffusion enregistrés dans le coffre local");
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  async function clearOutputStreamKey() {
+    if (!window.confirm("Supprimer la clé de stream enregistrée sur ce PC ?")) return;
+    const rtmpUrl = String($s("#studio-output-url")?.value || "rtmp://live.twitch.tv/app").trim();
+    setBusy(true);
+    try {
+      await request("/api/broadcast/output", {
+        method: "PUT",
+        body: JSON.stringify({
+          rtmp_url: rtmpUrl,
+          clear_stream_key: true,
+        }),
+      });
+      closeOutputModal();
+      await refreshBroadcast(false);
+      notify("Clé de stream supprimée du coffre local");
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  function bindOutputSettings() {
+    const form = $s("#studio-output-form");
+    if (form) form.addEventListener("submit", saveOutputSettings);
+
+    const clear = $s("#studio-output-clear-key");
+    if (clear) clear.addEventListener("click", clearOutputStreamKey);
+
+    $s("[data-studio-output-close]").forEach(button => {
+      button.addEventListener("click", closeOutputModal);
+    });
+
+    const modal = $s("#studio-output-modal");
+    if (modal) modal.addEventListener("click", event => {
+      if (event.target === modal) closeOutputModal();
+    });
+  }
+
   function renderScenes(status) {
     const holder = $s("#studio-scene-list");
     if (!holder) return;
@@ -583,6 +682,17 @@
       button.classList.toggle("active", button.dataset.studioEngine === status.backend);
     });
 
+    const outputButton = $s("[data-studio-output-settings]");
+    if (outputButton) {
+      const configured = Boolean(status.output?.stream_key_configured);
+      outputButton.classList.toggle("configured", configured);
+      outputButton.textContent = configured ? "⚙ Diffusion · sécurisée" : "⚙ Diffusion";
+      outputButton.title = configured
+        ? "Destination RTMP configurée et clé protégée localement"
+        : "Configurer la destination et la clé de diffusion";
+      outputButton.disabled = !native;
+    }
+
     const health = $s("#studio-broadcast-health");
     if (health) {
       health.classList.toggle("ok", native ? Boolean(status.responsive || status.process_running) : Boolean(status.obs?.connected));
@@ -793,6 +903,11 @@
 
   function bindControls() {
     document.addEventListener("click", event => {
+      const outputSettings = event.target.closest("[data-studio-output-settings]");
+      if (outputSettings) {
+        openOutputModal();
+        return;
+      }
       const addSource = event.target.closest("[data-studio-source-add]");
       if (addSource) {
         openSourceModal();
@@ -847,6 +962,7 @@
     bindControls();
     bindSourceEditor();
     bindSourceModal();
+    bindOutputSettings();
     bindAudioMixer();
     refreshBroadcast(false);
     refreshActivity();
