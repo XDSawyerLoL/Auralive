@@ -31,6 +31,7 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     --collect-all "misaki" `
     --collect-all "espeakng_loader" `
     --collect-all "soundfile" `
+    --collect-all "pyaudiowpatch" `
     --collect-all "onnxruntime" `
     --collect-all "language_tags" `
     --collect-all "csvw" `
