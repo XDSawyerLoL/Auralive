@@ -328,12 +328,10 @@ async def broadcast_browser_source_mjpeg_v3(source_id: int) -> StreamingResponse
 
     async def frames():
         boundary = b"--frame\r\n"
-        last_frame: bytes | None = None
         while True:
             try:
                 frame = await asyncio.to_thread(native_broadcast.browser_frame, source_id)
-                if frame and frame != last_frame:
-                    last_frame = frame
+                if frame:
                     yield (
                         boundary
                         + b"Content-Type: image/jpeg\r\n"
