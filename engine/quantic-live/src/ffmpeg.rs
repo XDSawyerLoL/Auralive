@@ -89,7 +89,17 @@ fn encoder_args(encoder: Encoder, settings: &Settings) -> Vec<String> {
     }
 }
 
-fn video_filter(settings: &Settings, transform: Option<&SourceTransform>) -> String {
+fn video_filter(
+    settings: &Settings,
+    transform: Option<&SourceTransform>,
+    visible: bool,
+) -> String {
+    if !visible {
+        return format!(
+            "scale={}:{},drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill",
+            settings.width, settings.height
+        );
+    }
     let transform = transform.cloned().unwrap_or_default();
     let target_width = ((settings.width as f32 * transform.width).round() as u32).max(2);
     let target_height = ((settings.height as f32 * transform.height).round() as u32).max(2);
@@ -104,7 +114,11 @@ fn video_filter(settings: &Settings, transform: Option<&SourceTransform>) -> Str
     )
 }
 
-fn capture_args(settings: &Settings, transform: Option<&SourceTransform>) -> Vec<String> {
+fn capture_args(
+    settings: &Settings,
+    transform: Option<&SourceTransform>,
+    visible: bool,
+) -> Vec<String> {
     let mut args = vec![
         "-hide_banner".into(),
         "-loglevel".into(), "warning".into(),
@@ -129,7 +143,7 @@ fn capture_args(settings: &Settings, transform: Option<&SourceTransform>) -> Vec
     args.extend([
         "-map".into(), "0:v:0".into(),
         "-map".into(), "1:a:0".into(),
-        "-vf".into(), video_filter(settings, transform),
+        "-vf".into(), video_filter(settings, transform, visible),
         "-pix_fmt".into(), "yuv420p".into(),
         "-g".into(), (settings.fps * 2).to_string(),
         "-keyint_min".into(), (settings.fps * 2).to_string(),
@@ -145,7 +159,11 @@ fn capture_args(settings: &Settings, transform: Option<&SourceTransform>) -> Vec
     args
 }
 
-pub fn start_stream(settings: &Settings, transform: Option<&SourceTransform>) -> Result<Child> {
+pub fn start_stream(
+    settings: &Settings,
+    transform: Option<&SourceTransform>,
+    visible: bool,
+) -> Result<Child> {
     if !cfg!(target_os = "windows") {
         return Err(anyhow!("La capture de bureau V0.1 est actuellement ciblée Windows."));
     }
@@ -162,7 +180,7 @@ pub fn start_stream(settings: &Settings, transform: Option<&SourceTransform>) ->
         settings.stream_key.trim_start_matches('/')
     );
 
-    let mut args = capture_args(settings, transform);
+    let mut args = capture_args(settings, transform, visible);
     args.extend(["-f".into(), "flv".into(), destination]);
 
     Command::new(&settings.ffmpeg_path)
@@ -174,7 +192,11 @@ pub fn start_stream(settings: &Settings, transform: Option<&SourceTransform>) ->
         .context("Impossible de lancer FFmpeg pour le direct")
 }
 
-pub fn start_recording(settings: &Settings, transform: Option<&SourceTransform>) -> Result<(Child, PathBuf)> {
+pub fn start_recording(
+    settings: &Settings,
+    transform: Option<&SourceTransform>,
+    visible: bool,
+) -> Result<(Child, PathBuf)> {
     if !cfg!(target_os = "windows") {
         return Err(anyhow!("La capture de bureau V0.1 est actuellement ciblée Windows."));
     }
@@ -189,7 +211,7 @@ pub fn start_recording(settings: &Settings, transform: Option<&SourceTransform>)
         Local::now().format("%Y-%m-%d_%H-%M-%S")
     ));
 
-    let mut args = capture_args(settings, transform);
+    let mut args = capture_args(settings, transform, visible);
     args.extend([
         "-f".into(), "matroska".into(),
         file.to_string_lossy().into_owned(),
@@ -236,6 +258,7 @@ impl PreviewEngine {
     pub fn start(
         settings: &Settings,
         transform: Option<&SourceTransform>,
+        visible: bool,
         preview_file: Option<PathBuf>,
     ) -> Result<Self> {
         if !cfg!(target_os = "windows") {
@@ -245,7 +268,10 @@ impl PreviewEngine {
             return Err(anyhow!("FFmpeg est introuvable."));
         }
 
-        let preview_filter = format!("{},scale=960:-2", video_filter(settings, transform));
+        let preview_filter = format!(
+            "{},scale=960:-2",
+            video_filter(settings, transform, visible)
+        );
         let mut child = Command::new(&settings.ffmpeg_path)
             .args([
                 "-hide_banner", "-loglevel", "error",
