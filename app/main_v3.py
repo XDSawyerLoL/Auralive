@@ -309,9 +309,12 @@ async def broadcast_record_stop_v3() -> dict[str, Any]:
 
 
 @app.post("/api/broadcast/replay/start")
-async def broadcast_replay_start_v3(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+async def broadcast_replay_start_v3(
+    payload: dict[str, Any] | None = Body(default=None),
+) -> dict[str, Any]:
     if str(settings.broadcast_engine or "obs").lower() != "native":
         raise HTTPException(status_code=409, detail="Le replay buffer exige Aura Native")
+    payload = payload or {}
     try:
         seconds = max(10, min(300, int(payload.get("seconds", 30))))
     except (TypeError, ValueError) as exc:
