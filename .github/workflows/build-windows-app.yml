@@ -81,7 +81,7 @@ jobs:
           if (-not (Test-Path $engine)) {
             throw "Le moteur natif compile est introuvable: $engine"
           }
-          Copy-Item $engine "dist\QuanticStudio\AuraNativeBroadcast.exe" -Force
+          Copy-Item $engine "dist\QuanticStudio\QuanticStudioCore.exe" -Force
 
       - name: Sign Quantic Studio binaries when certificate is configured
         shell: pwsh
@@ -91,7 +91,7 @@ jobs:
         run: |
           .\scripts\sign-windows.ps1 -Path @(
             "dist\QuanticStudio\QuanticStudio.exe",
-            "dist\QuanticStudio\AuraNativeBroadcast.exe"
+            "dist\QuanticStudio\QuanticStudioCore.exe"
           )
 
 
@@ -104,8 +104,8 @@ jobs:
           if (-not (Test-Path "dist\QuanticStudio\BUILD-ID.txt")) {
             throw "BUILD-ID.txt est absent du package."
           }
-          if (-not (Test-Path "dist\QuanticStudio\AuraNativeBroadcast.exe")) {
-            throw "AuraNativeBroadcast.exe est absent du package."
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) {
+            throw "QuanticStudioCore.exe est absent du package."
           }
           if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) {
             throw "Le FFmpeg Aura embarque est absent du package."
