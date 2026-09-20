@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from app.config import BASE_DIR, RUNTIME_DIR
 from app.main_v2 import app, aura, db, response_sync, settings, voice_input
 from app.services.native_broadcast import NativeBroadcastService
+from app.services.update_manager import update_manager
 from app.services.voice_identity_lock import install_voice_identity_lock
 from app.services.voice_realtime import install_voice_realtime
 
@@ -61,7 +62,7 @@ async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
 
 
 aura.overlay.subscribe(_native_overlay_audio_listener)
-app.version = "2.7.0-alpha"
+app.version = "2.7.2"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -737,6 +738,35 @@ async def avatar_test_v3(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
         "audio_duration_ms": int(aura.avatar_audio.last_audio_duration_ms or 0),
         "overlay_required": False,
     }
+
+
+@app.get("/api/update/status")
+async def update_status_v3() -> dict[str, Any]:
+    return update_manager.status()
+
+
+@app.post("/api/update/check")
+async def update_check_v3() -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(update_manager.check)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc) or "Vérification de mise à jour impossible") from exc
+
+
+@app.post("/api/update/download")
+async def update_download_v3() -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(update_manager.download)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc) or "Téléchargement de mise à jour impossible") from exc
+
+
+@app.post("/api/update/install")
+async def update_install_v3() -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(update_manager.install)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc) or "Installation de mise à jour impossible") from exc
 
 
 @app.get("/setup", response_class=HTMLResponse)
