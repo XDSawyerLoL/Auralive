@@ -107,7 +107,7 @@ impl QuanticLiveApp {
                 ui.add_space(6.0);
                 ui.label(
                     RichText::new(
-                        "V0.1 encode réellement la capture Écran. Les autres sources sont déjà modélisées pour le moteur de composition V0.2.",
+                        "Toutes les sources du Studio sont prises en charge par le compositeur Aura Native 0.3.",
                     )
                     .weak()
                     .size(11.0),
