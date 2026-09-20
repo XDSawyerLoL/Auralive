@@ -163,3 +163,13 @@ def test_ffmpeg_children_never_open_console_windows() -> None:
     assert 'command.creation_flags(CREATE_NO_WINDOW);' in ffmpeg
     assert ffmpeg.count('hidden_command(') >= 9
     assert 'Command::new(&settings.ffmpeg_path)' not in ffmpeg
+
+
+
+def test_windows_package_uses_quantic_studio_core_executable_name() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    service = NATIVE_SERVICE.read_text(encoding="utf-8")
+
+    assert "QuanticStudioCore.exe" in workflow
+    assert 'RUNTIME_DIR / "QuanticStudioCore.exe"' in service
+    assert "AuraNativeBroadcast.exe" not in workflow
