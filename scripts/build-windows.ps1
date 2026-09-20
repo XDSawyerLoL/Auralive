@@ -12,7 +12,9 @@ $KokoroVoicesUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/downloa
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt
-& $Python -m pip install "pyinstaller==6.22.2"\n& $Python -m pip install "pillow>=10,<12"\n& $Python scripts\\generate-studio-icon.py
+& $Python -m pip install "pyinstaller==6.22.2"
+& $Python -m pip install "pillow>=10,<12"
+& $Python scripts\\generate-studio-icon.py
 
 if (Test-Path "build\QuanticStudio") { Remove-Item -Recurse -Force "build\QuanticStudio" }
 if (Test-Path "dist\QuanticStudio") { Remove-Item -Recurse -Force "dist\QuanticStudio" }
