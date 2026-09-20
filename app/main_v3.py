@@ -375,6 +375,8 @@ async def broadcast_source_add_v3(payload: dict[str, Any] = Body(...)) -> dict[s
     allowed = {"desktop", "window", "game", "webcam", "image", "text", "browser"}
     if kind not in allowed:
         raise HTTPException(status_code=422, detail="Type de source inconnu")
+    if kind == "desktop" and any(str(source.get("kind") or "") == "Écran" for source in list(state.get("sources") or [])):
+        raise HTTPException(status_code=409, detail="Cette scène possède déjà une capture d'écran")
 
     name = " ".join(str(payload.get("name") or "").split()).strip()[:120]
     target = str(payload.get("target") or "").strip()[:1000]
