@@ -50,7 +50,7 @@ jobs:
         with:
           workspaces: engine/quantic-live
 
-      - name: Build Aura Native Broadcast engine
+      - name: Build Quantic Studio Core engine
         shell: pwsh
         run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
 
@@ -74,7 +74,7 @@ jobs:
         shell: pwsh
         run: .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
 
-      - name: Embed Aura Native Broadcast
+      - name: Embed Quantic Studio Core
         shell: pwsh
         run: |
           $engine = "engine\quantic-live\target\release\quantic-live.exe"
@@ -115,7 +115,7 @@ jobs:
             throw "Le FFmpeg livre ne contient pas gfxcapture."
           }
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.7.3-Windows-Native-2026-09-20") {
+          if ($buildId -ne "QuanticStudio-2.7.4-Windows-Native-2026-09-20") {
             throw "Identifiant de build inattendu: $buildId"
           }
           if (-not (Test-Path "dist\QuanticStudio\.env")) {
@@ -200,7 +200,7 @@ jobs:
               throw "QuanticStudio-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "QuanticStudio-2.7.3-Windows-Native-2026-09-20") {
+            if ($startup -notmatch "QuanticStudio-2.7.4-Windows-Native-2026-09-20") {
               throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
@@ -275,9 +275,9 @@ jobs:
             }
 
             $updateStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/update/status" -TimeoutSec 3
-            if ($updateStatus.current_version -ne "2.7.3") {
+            if ($updateStatus.current_version -ne "2.7.4") {
               $updateStatus | ConvertTo-Json -Depth 6 | Write-Host
-              throw "Le centre de mise a jour n'annonce pas Quantic Studio 2.7.3."
+              throw "Le centre de mise a jour n'annonce pas Quantic Studio 2.7.4."
             }
 
             $broadcastStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
@@ -292,7 +292,7 @@ jobs:
               try {
                 $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
                 if ($nativeStatus.responsive -eq $true -and
-                    $nativeStatus.engine.version -eq "0.4.0" -and
+                    $nativeStatus.engine.version -eq "0.4.1" -and
                     $nativeStatus.engine.ffmpeg_ok -eq $true -and
                     $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
                     $nativeStatus.system_audio.backend_present -eq $true) {
@@ -304,7 +304,7 @@ jobs:
             }
             if (-not $nativeReady) {
               try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Aura Native 0.4.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
+              throw "Aura Native 0.4.1 n'a pas demarre avec FFmpeg gfxcapture embarque."
             }
 
             $vaultSecret = "AURA-CI-SECRET-NOT-REAL"
@@ -397,22 +397,22 @@ jobs:
 
       - name: Build Windows installer
         shell: pwsh
-        run: .\scripts\build-installer.ps1 -Version "2.7.3" -SourceDir "dist\QuanticStudio"
+        run: .\scripts\build-installer.ps1 -Version "2.7.4" -SourceDir "dist\QuanticStudio"
 
       - name: Sign installer when certificate is configured
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
-        run: .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-2.7.3.exe")
+        run: .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-2.7.4.exe")
 
       - name: Verify Windows installer
         shell: pwsh
         run: |
-          if (-not (Test-Path "release\QuanticStudio-Setup-2.7.3.exe")) {
+          if (-not (Test-Path "release\QuanticStudio-Setup-2.7.4.exe")) {
             throw "Installateur Quantic Studio absent."
           }
-          if ((Get-Item "release\QuanticStudio-Setup-2.7.3.exe").Length -lt 1000000) {
+          if ((Get-Item "release\QuanticStudio-Setup-2.7.4.exe").Length -lt 1000000) {
             throw "Installateur Quantic Studio anormalement petit."
           }
           if (-not (Select-String -Path "installer\QuanticStudio.iss" -Pattern "uninsneveruninstall" -Quiet)) {
@@ -422,15 +422,15 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Setup-2.7.3
-          path: release/QuanticStudio-Setup-2.7.3.exe
+          name: QuanticStudio-Setup-2.7.4
+          path: release/QuanticStudio-Setup-2.7.4.exe
           if-no-files-found: error
           retention-days: 30
 
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Windows-Native-2.7.3
+          name: QuanticStudio-Windows-Native-2.7.4
           path: dist/QuanticStudio
           if-no-files-found: error
           include-hidden-files: true
