@@ -90,6 +90,12 @@ jobs:
           if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\avatar-test-fast.js")) {
             throw "Le test vocal autonome n'est pas embarque dans le package."
           }
+          if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\aura-studio.js")) {
+            throw "Le controleur Aura Studio n'est pas embarque dans le package."
+          }
+          if (-not (Test-Path "dist\AuraLive\_internal\app\web\static\aura-studio.css")) {
+            throw "Le theme glossy Aura Studio n'est pas embarque dans le package."
+          }
           $envContent = Get-Content "dist\AuraLive\.env" -Raw
           if ($envContent -notmatch "AI_MODE=ollama" -or
               $envContent -notmatch "AI_MODEL=gemma3:12b" -or
@@ -223,6 +229,9 @@ jobs:
             $dashboard = Invoke-WebRequest "http://127.0.0.1:18787/" -UseBasicParsing -TimeoutSec 5
             if ($dashboard.Content -notmatch "avatar-test-fast.js") {
               throw "Le dashboard n'active pas le lecteur vocal autonome."
+            }
+            if ($dashboard.Content -notmatch "aura-studio.js" -or $dashboard.Content -notmatch "Aura Live Studio") {
+              throw "Le nouveau Studio glossy n'est pas charge par le dashboard."
             }
 
             $broadcastStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
