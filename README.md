@@ -78,7 +78,7 @@ Commandes principales :
 - Approbation, refus et lecture manuelle depuis le panneau.
 - Lecture dans l’overlay principal.
 
-### Alertes, médias et OBS
+### Alertes, médias et overlays
 
 - Alertes par événement avec texte, couleur, durée, image/GIF/vidéo, son et volume.
 - Animations d’entrée et de sortie, disposition et tests en direct.
@@ -103,7 +103,7 @@ http://localhost:8787/overlay/avatar
 
 ### Avatar vocal Mairaiy
 
-La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni avec la version : pose au repos en silence, pose bouche ouverte pendant la voix, sous-titres et halo animé. Dans OBS, ajoute une source navigateur en 700 × 1050 et active **Contrôler l’audio via OBS** afin que la synthèse vocale soit envoyée au mixage du live. Les réglages se trouvent dans **Avatar & voix**.
+La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni avec la version : pose au repos en silence, pose bouche ouverte pendant la voix, sous-titres et halo animé. Avec Aura Native, ajoute simplement le preset **Mairaiy** dans le Studio : le rendu navigateur est capturé localement et sa voix est injectée directement dans le bus audio Aura. OBS reste disponible uniquement en mode de compatibilité. Les réglages se trouvent dans **Avatar & voix**.
 
 ### Modération et sécurité
 
@@ -141,17 +141,45 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 
 ## Aura Native Broadcast
 
-Aura Live intègre désormais son propre moteur de diffusion natif en Rust. Le mode historique OBS reste disponible pendant la transition.
+Aura Live utilise désormais **Aura Native Broadcast 0.3.0** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
 
 ```env
-AURA_BROADCAST_ENGINE=obs
-# ou
 AURA_BROADCAST_ENGINE=native
+AURA_NATIVE_ENGINE_AUTOSTART=true
 ```
 
-Le moteur natif est embarqué dans le package Windows sous le nom `AuraNativeBroadcast.exe`. Aura le pilote localement via un canal de commandes sur disque : aucun port réseau supplémentaire n'est exposé.
+Le moteur Rust `AuraNativeBroadcast.exe` et un build FFmpeg vérifié sont embarqués directement dans le package Windows. Aura vérifie que FFmpeg fournit **Windows Graphics Capture (`gfxcapture`)** et utilise automatiquement ce backend pour les sources Fenêtre/Jeu, avec repli GDI lorsque nécessaire.
 
-API locale disponible :
+Le moteur est piloté localement depuis Aura. Aucun port de contrôle supplémentaire n’est exposé.
+
+### Compositeur natif 0.3
+
+Le même compositeur FFmpeg alimente l’aperçu, l’enregistrement et le direct :
+
+- écran Windows ;
+- fenêtre et jeu via Windows Graphics Capture quand disponible ;
+- webcam DirectShow ;
+- image locale ;
+- texte ;
+- navigateur headless ;
+- Mairaiy (`/overlay/avatar`) ;
+- overlays Aura (`/overlay` et variantes).
+
+Le Studio permet d’ajouter, configurer, masquer, supprimer, déplacer et redimensionner ces sources. Les scènes et la géométrie restent modifiables pendant Live/REC : Aura reconstruit proprement le graphe puis réactive automatiquement les sorties actives.
+
+### Mix audio natif
+
+Aura dispose de trois canaux indépendants :
+
+- **Micro** ;
+- **Son PC / jeu** via WASAPI loopback ;
+- **Aura / Mairaiy / alertes** via le bus PCM local.
+
+Chaque canal possède son volume et son mute dans le Studio. Le Live et le REC partagent les mêmes tranches audio afin d’éviter toute perte ou double consommation lorsqu’ils sont actifs simultanément.
+
+Les sources navigateur sont rendues localement par Chromium/Edge headless. Mairaiy et les sons d’alertes ne dépendent donc plus du mixeur audio d’OBS.
+
+### API locale de diffusion
 
 ```text
 GET  /api/broadcast/status
@@ -166,25 +194,12 @@ POST /api/broadcast/record/stop
 POST /api/broadcast/preview/start
 POST /api/broadcast/preview/stop
 POST /api/broadcast/scene
+PUT  /api/broadcast/audio
+POST /api/broadcast/source
+PATCH /api/broadcast/source/{source_id}
+DELETE /api/broadcast/source/{source_id}
 ```
 
-La première version native prend réellement en charge la capture écran Windows, l'enregistrement MKV et la diffusion RTMP avec NVENC, AMD AMF, Intel Quick Sync ou x264. OBS reste le fallback tant que la composition multi-source native (jeu, fenêtre, webcam, navigateur, overlays et mixage complet) n'a pas atteint la parité.
-### Compositeur multi-source V0.2
-
-Le backend `Aura Native Broadcast` compose désormais plusieurs sources vidéo dans un seul graphe FFmpeg utilisé pour l’aperçu, l’enregistrement et le direct :
-
-- écran Windows ;
-- fenêtre / jeu par titre de fenêtre ;
-- webcam DirectShow ;
-- image locale ;
-- texte ;
-- sources navigateur headless, dont Mairaiy (`/overlay/avatar`) et les overlays Aura (`/overlay`).
-
-Le Studio permet d’ajouter, configurer, masquer, supprimer, déplacer et redimensionner ces sources. Aura détecte les fenêtres et webcams disponibles et utilise le sélecteur de fichiers Windows pour les images.
-
-Les sources navigateur sont rendues localement par Chromium/Edge headless, transformées en MJPEG local puis composées par FFmpeg avec chroma-key automatique. Aucun service cloud n’est requis.
-
-Les changements de scène et de géométrie sont encore verrouillés pendant un Live/REC ; le hot-reload du graphe et Windows Graphics Capture/DXGI restent les prochaines étapes de parité avec OBS.
 ## Installation Windows
 
 ### Mise à niveau
