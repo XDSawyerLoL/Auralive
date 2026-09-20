@@ -2,7 +2,7 @@
 
 Quantic Studio est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
-La version 2.7.3 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
+La version 2.7.4 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
 
 ## Modules inclus
 
