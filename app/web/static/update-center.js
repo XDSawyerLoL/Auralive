@@ -13,7 +13,7 @@
   }
 
   function render(payload) {
-    current.textContent = payload.current_version || "2.7.2";
+    current.textContent = payload.current_version || "2.7.3";
     latest.textContent = payload.latest_version || "—";
     const available = Boolean(payload.update_available && payload.installer_available);
     installButton.dataset.available = available ? "true" : "false";
@@ -27,7 +27,7 @@
       state.dataset.kind = "ready";
       installButton.textContent = `Installer ${payload.latest_version}`;
     } else if (payload.checked || payload.latest_version) {
-      state.textContent = "Aura Live est à jour.";
+      state.textContent = "Quantic Studio est à jour.";
       state.dataset.kind = "ok";
     } else {
       state.textContent = "Vérification non effectuée.";
@@ -74,7 +74,7 @@
         render(payload);
         return;
       }
-      state.textContent = payload.message || "Installateur lancé. Aura Live va être mis à jour.";
+      state.textContent = payload.message || "Installateur lancé. Quantic Studio va être mis à jour.";
       state.dataset.kind = "ready";
     } catch (error) {
       state.textContent = error.message || "Installation impossible.";
@@ -85,7 +85,7 @@
   });
 
   async function autoCheck() {
-    const key = "aura-live-update-last-check";
+    const key = "quantic-studio-update-last-check";
     const interval = 12 * 60 * 60 * 1000;
     const last = Number(window.localStorage?.getItem(key) || 0);
     if (Date.now() - last < interval) return;
