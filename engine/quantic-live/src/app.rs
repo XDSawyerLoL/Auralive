@@ -62,15 +62,20 @@ impl QuanticLiveApp {
 
     pub(crate) fn save(&mut self) {
         self.refresh_runtime_status();
+        if self.persist_project() {
+            self.status = "Configuration sauvegardée".into();
+        } else {
+            self.status = "Impossible de sauvegarder la configuration".into();
+        }
+    }
+
+    fn persist_project(&self) -> bool {
         let config_path = control::config_path();
         control::ensure_parent(&config_path);
-        match serde_json::to_string_pretty(&self.project)
+        serde_json::to_string_pretty(&self.project)
             .ok()
             .and_then(|json| fs::write(&config_path, json).ok())
-        {
-            Some(_) => self.status = "Configuration sauvegardée".into(),
-            None => self.status = "Impossible de sauvegarder la configuration".into(),
-        }
+            .is_some()
     }
 
     pub(crate) fn refresh_runtime_status(&mut self) {
@@ -241,10 +246,10 @@ impl QuanticLiveApp {
                                     source.transform.y = (1.0 - source.transform.height).max(0.0);
                                 }
                                 self.status = format!("Source positionnée · {}", source.name);
-                                self.save();
                             }
                         }
                     }
+                    let _ = self.persist_project();
                 }
             }
             "source.visibility" => {
@@ -260,10 +265,10 @@ impl QuanticLiveApp {
                                 } else {
                                     format!("Source masquée · {}", source.name)
                                 };
-                                self.save();
                             }
                         }
                     }
+                    let _ = self.persist_project();
                 }
             }
             "runtime.refresh" => {
