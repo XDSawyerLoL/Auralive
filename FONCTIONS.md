@@ -1,4 +1,4 @@
-# Inventaire fonctionnel Aura Live 1.2
+# Inventaire fonctionnel Aura Live 2.7.1
 
 ## Cœur Twitch et IA
 
@@ -60,7 +60,11 @@
 - [x] Song Request YouTube
 - [x] Clips manuels et règles de clips automatiques
 - [x] Pilotage OBS WebSocket
-- [x] Aura Native Broadcast : moteur Rust local, RTMP, enregistrement et contrôle depuis Aura
+- [x] Aura Native Broadcast 0.4 : moteur Rust local, RTMP, enregistrement et contrôle depuis Aura
+- [x] Gestion native des scènes : création, renommage, suppression et sélection
+- [x] Transitions de scène Cut / Fondu configurables
+- [x] Replay buffer local 10–300 s et sauvegarde de clips MKV
+- [x] Multistream natif jusqu’à 3 destinations secondaires avec un seul encodage
 - [x] Générique de fin et récapitulatif du live
 - [x] Pings privés au streamer
 - [x] Overlays alertes, chat, objectifs, écran, musique, Streamathon, emotes, TopWords, concours, crédits et pings
@@ -82,14 +86,14 @@
 
 - [ ] Métadonnées YouTube avancées : `YOUTUBE_API_KEY`
 - [ ] Discord : URL de webhook ou jeton d'un bot Discord complet
-- [ ] OBS : serveur WebSocket activé
+- [ ] OBS : serveur WebSocket activé uniquement si le mode de compatibilité OBS est utilisé
 - [ ] IA : Ollama lancé ou API compatible configurée
 - [ ] X, Bluesky, LastFM, Steam, IGDB, RCON et Telnet : identifiants propres à chaque service
 - [ ] Fonctionnement 24/7 : serveur, VPS ou machine restant allumée
 
 ## Limite honnête
 
-Aura Live 1.2 fournit un noyau local très étendu. Une parité absolue avec un service cloud exploité depuis plusieurs années ne peut pas être déclarée sans tests réels en charge, hébergement permanent et identifiants des services externes. Les dépendances externes sont affichées comme telles dans la page « Couverture fonctionnelle » au lieu d'être présentées comme actives.
+Aura Live 2.7.1 fournit un noyau local très étendu. Une parité absolue avec un service cloud exploité depuis plusieurs années ne peut pas être déclarée sans tests réels en charge, hébergement permanent et identifiants des services externes. Les dépendances externes sont affichées comme telles dans la page « Couverture fonctionnelle » au lieu d'être présentées comme actives.
 
 - [x] Compositeur multi-source natif : écran, fenêtre/jeu, webcam, image, texte et navigateur/Mairaiy
 - [x] Sources navigateur headless locales avec MJPEG + chroma-key
@@ -103,3 +107,8 @@ Aura Live 1.2 fournit un noyau local très étendu. Une parité absolue avec un 
 - [x] Mix audio natif 3 voies : micro + son PC/jeu WASAPI + Aura/Mairaiy/alertes
 - [x] Live + REC simultanés sans concurrence sur les buffers PCM
 - [x] Coffre RTMP local chiffré DPAPI, migration des anciennes clés et zéro secret dans engine.json
+
+- [x] Gestion complète des scènes depuis Aura Studio
+- [x] Transition contrôlée Cut / Fondu lors du rebuild de scène
+- [x] Replay buffer segmenté et clip instantané
+- [x] Multistream via FFmpeg tee, clés secondaires chiffrées DPAPI
