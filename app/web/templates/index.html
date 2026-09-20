@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/styles.css?v=1.2.0">
   <link rel="stylesheet" href="/static/power.css?v=1.2.0">
   <link rel="stylesheet" href="/static/complete.css?v=1.2.0">
-  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">
+  <link rel="stylesheet" href="/static/neural.css?v=1.2.0">\n  <link rel="stylesheet" href="/static/aura-studio.css?v=2.6.0">
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -49,7 +49,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">
         <div class="brand-orb"><span></span></div>
-        <div><strong>AURA LIVE</strong><small>Control Center</small></div>
+        <div><strong>AURA LIVE</strong><small>Streaming Studio</small></div>
         <button class="sidebar-collapse" id="sidebar-collapse" aria-label="Réduire le menu">‹</button>
       </div>
 
@@ -70,7 +70,7 @@
       <label class="nav-search"><svg><use href="#i-search"/></svg><input id="nav-search" placeholder="Fonctions, commandes…"></label>
 
       <nav class="main-nav" id="main-nav">
-        <button class="nav-link active" data-page="dashboard" data-search="accueil tableau de bord statistiques"><svg><use href="#i-home"/></svg><span>Accueil</span></button>
+        <button class="nav-link active" data-page="dashboard" data-search="studio live scènes sources streaming"><svg><use href="#i-home"/></svg><span>Studio</span></button>
         <button class="nav-link" data-page="connections" data-search="compte twitch obs connexion"><svg><use href="#i-user"/></svg><span>Mon compte</span><i id="connection-dot"></i></button>
 
         <div class="nav-group open">
@@ -128,13 +128,13 @@
         </div>
       </nav>
 
-      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Aura Live 1.2.0</small></div></footer>
+      <footer class="sidebar-footer"><span id="side-status-dot"></span><div><b id="side-status-text">Initialisation…</b><small>Aura Live 2.6 alpha</small></div></footer>
     </aside>
 
     <main class="main-area">
       <header class="topbar">
         <button class="mobile-menu" id="mobile-menu">☰</button>
-        <div class="breadcrumbs"><span>Aura Live</span><b>/</b><strong id="page-title">Accueil</strong></div>
+        <div class="breadcrumbs"><span>Aura Live</span><b>/</b><strong id="page-title">Studio</strong></div>
         <div class="topbar-actions">
           <div class="system-pill" id="top-system-pill"><span></span><b>Connexion</b></div>
           <button class="round-button" id="refresh-all" title="Actualiser"><svg><use href="#i-refresh"/></svg></button>
@@ -146,48 +146,124 @@
         <section class="page active" data-page-panel="dashboard">
           <div class="alert-banner hidden" id="global-banner"><svg><use href="#i-power"/></svg><strong id="global-banner-text"></strong><button id="global-banner-action">Corriger</button></div>
 
-          <article class="feature-card">
-            <div class="feature-visual">
-              <div class="feature-grid"></div>
-              <div class="feature-orb"><span></span><i></i></div>
-              <div class="signal-line one"></div><div class="signal-line two"></div>
-            </div>
-            <div class="feature-content">
-              <span class="feature-kicker"><svg><use href="#i-spark"/></svg>AURA INTELLIGENCE</span>
-              <h2>Un bot qui a une identité, pas seulement des commandes.</h2>
-              <p>Aura anime le chat, reconnaît les habitués, déclenche les outils du stream et conserve une personnalité cohérente.</p>
-              <div class="feature-tags"><span>Ollama local</span><span>Mémoire viewers</span><span>Interventions contrôlées</span></div>
-              <button class="primary-button wide" data-page-jump="ai">Configurer Aura IA</button>
-            </div>
-          </article>
-
-          <div class="dashboard-layout">
-            <article class="welcome-card">
-              <div class="welcome-head"><div><span class="wave-hand">◌</span><h2>Bienvenue SANSAHD</h2></div><div class="live-state" id="dashboard-live-state"><span></span>Hors ligne</div></div>
-              <div class="metric-row" id="dashboard-metrics"></div>
-              <p class="welcome-copy">Le centre de contrôle réunit les outils essentiels de la chaîne. Chaque bouton ci-dessous ouvre un module réellement configurable.</p>
-              <div class="quick-link-grid">
-                <button data-page-jump="commands"><svg><use href="#i-command"/></svg>Gérer mes commandes</button>
-                <button data-page-jump="announcements"><svg><use href="#i-megaphone"/></svg>Gérer mes annonces</button>
-                <button data-page-jump="overlays"><svg><use href="#i-monitor"/></svg>Installer mes overlays</button>
-                <button data-page-jump="protections"><svg><use href="#i-shield"/></svg>Configurer la protection</button>
-                <button data-page-jump="community"><svg><use href="#i-users"/></svg>Voir la communauté</button>
-                <button data-page-jump="polls"><svg><use href="#i-poll"/></svg>Lancer une interaction</button>
+          <div class="studio-dashboard">
+            <header class="studio-commandbar">
+              <div class="studio-title">
+                <div class="studio-logo">◈</div>
+                <div>
+                  <b>Aura Live Studio</b>
+                  <small>Votre live, vos scènes et Aura dans un seul espace.</small>
+                </div>
               </div>
-            </article>
+              <div class="studio-command-actions">
+                <div class="studio-engine-choice" aria-label="Moteur de diffusion">
+                  <button type="button" data-studio-engine="native">Aura Native</button>
+                  <button type="button" data-studio-engine="obs">OBS</button>
+                </div>
+                <div class="studio-health" id="studio-broadcast-health"><i></i><span>Connexion au moteur…</span></div>
+                <span id="service-status" class="studio-hidden-compat">SERVICE EN COURS</span>
+              </div>
+            </header>
 
-            <aside class="help-card">
-              <div class="help-icon"><svg><use href="#i-help"/></svg></div>
-              <h3>État du système</h3>
-              <div id="health-list" class="health-list"></div>
-              <button class="secondary-button wide" data-page-jump="connections">Vérifier les connexions</button>
-              <div class="service-badge"><span></span><b id="service-status">SERVICE EN COURS</b></div>
-            </aside>
-          </div>
+            <div id="dashboard-metrics" class="metric-row studio-legacy-data"></div>
 
-          <div class="home-bottom-grid">
-            <article class="panel-card"><div class="card-head"><div><small>ACTIVITÉ RÉCENTE</small><h3>Événements du stream</h3></div><button class="text-button" data-page-jump="notifications">Tout voir</button></div><div id="activity-list" class="activity-list"></div></article>
-            <article class="panel-card"><div class="card-head"><div><small>TOP COMMUNAUTÉ</small><h3>Membres actifs</h3></div><button class="text-button" data-page-jump="community">Classement</button></div><div id="dashboard-ranking" class="mini-ranking"></div></article>
+            <div class="studio-grid">
+              <aside class="studio-glass studio-side">
+                <div>
+                  <div class="studio-section-head"><span>SCÈNES</span><button class="studio-mini-action" type="button" title="Création de scène depuis le moteur natif à venir">＋</button></div>
+                  <div class="studio-scene-list" id="studio-scene-list"><div class="studio-empty">Chargement des scènes…</div></div>
+                </div>
+
+                <div>
+                  <div class="studio-section-head"><span>SOURCES</span><button class="studio-mini-action" type="button" data-page-jump="overlays" title="Gérer les sources et overlays">＋</button></div>
+                  <div class="studio-source-list" id="studio-source-list"><div class="studio-empty">Chargement des sources…</div></div>
+                </div>
+
+                <div class="studio-mode-note">
+                  <b>Mode simple</b><br>
+                  Aura choisit les réglages techniques utiles. Les paramètres détaillés restent disponibles sans encombrer le studio.
+                  <button class="studio-advanced-link" type="button" data-page-jump="connections">Réglages avancés</button>
+                </div>
+              </aside>
+
+              <div class="studio-preview-column">
+                <article class="studio-glass studio-preview">
+                  <div class="studio-preview-head">
+                    <strong>APERÇU PROGRAMME</strong>
+                    <div class="studio-live-state" id="dashboard-live-state"><span></span>Hors ligne</div>
+                  </div>
+                  <div class="studio-stage">
+                    <div class="stage-aura">
+                      <div class="stage-orb"></div>
+                      <h2 id="studio-stage-title">Studio prêt</h2>
+                      <p id="studio-stage-copy">Aura vérifie le moteur de diffusion et prépare votre espace de travail.</p>
+                      <div class="stage-status-line" id="studio-stage-status"><i></i><span>Initialisation…</span></div>
+                    </div>
+                  </div>
+                </article>
+
+                <div class="studio-glass studio-dock">
+                  <div class="studio-audio">
+                    <div class="audio-mini">
+                      <div class="audio-mini-head"><b>🎙 Micro</b><span id="studio-mic-detail">Détection…</span></div>
+                      <div class="audio-meter"><i id="studio-mic-meter" style="width:0%"></i></div>
+                    </div>
+                    <div class="audio-mini">
+                      <div class="audio-mini-head"><b>🔊 Son du PC</b><span id="studio-pc-detail">Détection…</span></div>
+                      <div class="audio-meter"><i id="studio-pc-meter" style="width:0%"></i></div>
+                    </div>
+                  </div>
+                  <div class="studio-main-actions">
+                    <button class="studio-control" type="button" data-studio-action="preview">◉ Aperçu</button>
+                    <button class="studio-control record" type="button" data-studio-action="record">● Enregistrer</button>
+                    <button class="studio-control live" type="button" data-studio-action="live">▶ Lancer le live</button>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="studio-glass studio-right">
+                <div class="studio-tabs">
+                  <button class="active" type="button" data-studio-tab="chat">Chat</button>
+                  <button type="button" data-studio-tab="activity">Activité</button>
+                  <button type="button" data-studio-tab="aura">Aura</button>
+                </div>
+
+                <div class="studio-tab-panel active" data-studio-panel="chat">
+                  <div class="studio-chat-list" id="studio-chat-list">
+                    <div class="studio-chat-empty">Connexion au chat Twitch…</div>
+                  </div>
+                </div>
+
+                <div class="studio-tab-panel" data-studio-panel="activity">
+                  <div id="activity-list" class="activity-list studio-activity-list"></div>
+                </div>
+
+                <div class="studio-tab-panel" data-studio-panel="aura">
+                  <div class="studio-aura-card">
+                    <div class="studio-aura-head">
+                      <div class="studio-aura-avatar"><img src="/static/avatar/mairaiy-idle.png?v=2.6.0" alt="Mairaiy"></div>
+                      <div><b>Mairaiy</b><small>● Aura active</small></div>
+                    </div>
+                    <p>Aura reste disponible pendant le live pour la voix, les alertes, les automatisations et l’assistance du stream.</p>
+                    <div class="studio-aura-actions">
+                      <button type="button" data-open-modal="ai-modal">◈ Parler à Aura</button>
+                      <button type="button" data-page-jump="avatar">🎙 Avatar & voix</button>
+                      <button type="button" data-page-jump="notifications">✦ Alertes</button>
+                    </div>
+                  </div>
+
+                  <div class="studio-legacy-data">
+                    <div class="studio-section-head"><span>SANTÉ DU STUDIO</span></div>
+                    <div id="health-list" class="health-list studio-health-list"></div>
+                  </div>
+
+                  <div class="studio-legacy-data">
+                    <div class="studio-section-head"><span>COMMUNAUTÉ</span></div>
+                    <div id="dashboard-ranking" class="mini-ranking studio-ranking-list"></div>
+                  </div>
+                </div>
+              </aside>
+            </div>
           </div>
         </section>
 
@@ -397,6 +473,6 @@
   <script src="/static/app.js?v=1.2.0"></script>
   <script src="/static/power.js?v=1.2.0"></script>
   <script src="/static/complete.js?v=1.2.0"></script>
-  <script src="/static/avatar-studio.js?v=1.2.0"></script>
+  <script src="/static/avatar-studio.js?v=1.2.0"></script>\n  <script src="/static/aura-studio.js?v=2.6.0"></script>
 </body>
 </html>
