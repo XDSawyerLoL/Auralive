@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "QuanticStudio-2.7.3-Windows-Native-LITE-2026-09-20"
+$BuildId = "QuanticStudio-2.7.4-Windows-Native-LITE-2026-09-20"
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt
@@ -77,7 +77,7 @@ Build: $BuildId
 2. Au premier usage de la voix, Quantic Studio telecharge automatiquement les fichiers Kokoro dans data\voices\kokoro.
 3. Ensuite la voix fonctionne localement comme dans le build complet.
 4. La connexion Twitch s'ouvre dans ton navigateur Windows normal.
-5. Aura Native Broadcast + FFmpeg/gfxcapture sont inclus comme dans le build complet.
+5. Quantic Studio Core + FFmpeg/gfxcapture sont inclus comme dans le build complet.
 6. Le son PC/jeu utilise WASAPI loopback, sans cable audio virtuel.
 7. Tester la voix ne depend pas d'OBS.
 8. Le Voice Control utilise le chemin court gemma3:12b -> Kokoro.
