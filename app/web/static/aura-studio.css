@@ -399,8 +399,9 @@ body {
 
 .studio-stage {
   position: relative;
-  min-height: 380px;
-  flex: 1;
+  min-height: 320px;
+  width: 100%;
+  flex: 0 0 auto;
   overflow: hidden;
   border-radius: 18px;
   background:
