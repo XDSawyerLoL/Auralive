@@ -56,7 +56,9 @@
     const engineReady = native
       ? Boolean(status?.engine_available && (status?.responsive || status?.process_running))
       : Boolean(status?.obs?.connected);
-    const outputReady = native ? Boolean(status?.output?.stream_key_configured) : engineReady;
+    const secondaryReady = Array.isArray(status?.output?.destinations)
+      && status.output.destinations.some(row => row?.enabled && row?.stream_key_configured);
+    const outputReady = native ? Boolean(status?.output?.stream_key_configured || secondaryReady) : engineReady;
     const sceneReady = Boolean(String(status?.scene || "").trim());
     return {
       engineReady,
@@ -295,6 +297,65 @@
     }
   }
 
+  function renderMultistreamDestinations(rows = []) {
+    const holder = $s("#studio-multistream-list");
+    if (!holder) return;
+    const destinations = Array.isArray(rows) ? rows : [];
+    holder.innerHTML = destinations.length
+      ? destinations.map((row, index) => `
+        <div class="studio-destination" data-destination-id="${escapeHtml(row.id || `dest-${index + 1}`)}">
+          <div class="studio-destination-head">
+            <b>Destination ${index + 2}</b>
+            <label><input type="checkbox" data-destination-enabled ${row.enabled !== false ? "checked" : ""}> Active</label>
+            <button type="button" data-destination-remove title="Retirer">×</button>
+          </div>
+          <input data-destination-label maxlength="80" value="${escapeHtml(row.label || "")}" placeholder="YouTube / Kick / autre">
+          <input data-destination-url maxlength="500" value="${escapeHtml(row.rtmp_url || "")}" placeholder="rtmps://serveur/app">
+          <input data-destination-key type="password" autocomplete="new-password" maxlength="500" placeholder="${row.stream_key_configured ? "Clé protégée — laisser vide pour conserver" : "Clé de stream"}">
+        </div>
+      `).join("")
+      : '<div class="studio-empty">Une seule destination active. Ajoute-en une pour diffuser simultanément ailleurs.</div>';
+  }
+
+  function addMultistreamDestination() {
+    const holder = $s("#studio-multistream-list");
+    if (!holder) return;
+    const count = $s(".studio-destination", holder).length;
+    if (count >= 3) {
+      notify("Maximum de 3 destinations secondaires", true);
+      return;
+    }
+    if (holder.querySelector(".studio-empty")) holder.innerHTML = "";
+    const id = `dest-${Date.now()}`;
+    holder.insertAdjacentHTML("beforeend", `
+      <div class="studio-destination" data-destination-id="${id}">
+        <div class="studio-destination-head">
+          <b>Destination ${count + 2}</b>
+          <label><input type="checkbox" data-destination-enabled checked> Active</label>
+          <button type="button" data-destination-remove title="Retirer">×</button>
+        </div>
+        <input data-destination-label maxlength="80" placeholder="YouTube / Kick / autre">
+        <input data-destination-url maxlength="500" placeholder="rtmps://serveur/app">
+        <input data-destination-key type="password" autocomplete="new-password" maxlength="500" placeholder="Clé de stream">
+      </div>
+    `);
+  }
+
+  function collectMultistreamDestinations() {
+    return $s("#studio-multistream-list .studio-destination").map((row, index) => {
+      const label = String($s("[data-destination-label]", row)?.value || "").trim();
+      const rtmpUrl = String($s("[data-destination-url]", row)?.value || "").trim();
+      const streamKey = String($s("[data-destination-key]", row)?.value || "").trim();
+      return {
+        id: String(row.dataset.destinationId || `dest-${index + 1}`),
+        label: label || `Destination ${index + 2}`,
+        rtmp_url: rtmpUrl,
+        stream_key: streamKey || null,
+        enabled: Boolean($s("[data-destination-enabled]", row)?.checked),
+      };
+    }).filter(row => row.rtmp_url || row.stream_key);
+  }
+
   function openOutputModal() {
     if (studio.status?.backend !== "native") {
       notify("Passe en Aura Native pour régler la destination", true);
@@ -317,6 +378,7 @@
         : "Aucune clé enregistrée.";
     }
     if (clearButton) clearButton.disabled = !output.stream_key_configured;
+    renderMultistreamDestinations(output.destinations || []);
     modal.hidden = false;
   }
 
@@ -341,6 +403,7 @@
         body: JSON.stringify({
           rtmp_url: rtmpUrl,
           stream_key: key || null,
+          destinations: collectMultistreamDestinations(),
         }),
       });
       closeOutputModal();
@@ -364,6 +427,7 @@
         body: JSON.stringify({
           rtmp_url: rtmpUrl,
           clear_stream_key: true,
+          destinations: collectMultistreamDestinations(),
         }),
       });
       closeOutputModal();
@@ -383,6 +447,18 @@
 
     const clear = $s("#studio-output-clear-key");
     if (clear) clear.addEventListener("click", clearOutputStreamKey);
+
+    const addDestination = $s("[data-studio-add-destination]");
+    if (addDestination) addDestination.addEventListener("click", addMultistreamDestination);
+
+    const list = $s("#studio-multistream-list");
+    if (list) list.addEventListener("click", event => {
+      const remove = event.target.closest("[data-destination-remove]");
+      if (remove) {
+        remove.closest(".studio-destination")?.remove();
+        if (!list.querySelector(".studio-destination")) renderMultistreamDestinations([]);
+      }
+    });
 
     $s("[data-studio-output-close]").forEach(button => {
       button.addEventListener("click", closeOutputModal);
@@ -404,8 +480,120 @@
     }
     holder.innerHTML = scenes.map(name => {
       const active = String(name) === String(status.scene || "");
-      return `<button class="studio-scene ${active ? "active" : ""}" data-studio-scene="${escapeHtml(name)}"><span>${escapeHtml(name)}</span><i></i></button>`;
+      return `<div class="studio-scene-row">
+        <button class="studio-scene ${active ? "active" : ""}" data-studio-scene="${escapeHtml(name)}"><span>${escapeHtml(name)}</span><i></i></button>
+        <button class="studio-scene-edit" type="button" data-studio-scene-edit="${escapeHtml(name)}" title="Renommer ou supprimer">•••</button>
+      </div>`;
     }).join("");
+  }
+
+  function openSceneModal(sceneName = "") {
+    if (studio.status?.backend !== "native") {
+      notify("Passe en Aura Native pour gérer les scènes", true);
+      return;
+    }
+    const modal = $s("#studio-scene-modal");
+    if (!modal) return;
+    const current = $s("#studio-scene-current");
+    const name = $s("#studio-scene-name");
+    const title = $s("#studio-scene-modal-title");
+    const submit = $s("#studio-scene-submit");
+    const remove = $s("#studio-scene-delete");
+    if (current) current.value = sceneName;
+    if (name) name.value = sceneName;
+    if (title) title.textContent = sceneName ? "Gérer la scène" : "Nouvelle scène";
+    if (submit) submit.textContent = sceneName ? "Renommer" : "Créer la scène";
+    if (remove) remove.hidden = !sceneName;
+    modal.hidden = false;
+    setTimeout(() => name?.focus(), 20);
+  }
+
+  function closeSceneModal() {
+    const modal = $s("#studio-scene-modal");
+    if (modal) modal.hidden = true;
+  }
+
+  async function saveScene(event) {
+    event.preventDefault();
+    const current = String($s("#studio-scene-current")?.value || "").trim();
+    const name = String($s("#studio-scene-name")?.value || "").trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const result = current
+        ? await request(`/api/broadcast/scenes/${encodeURIComponent(current)}`, {
+            method: "PATCH",
+            body: JSON.stringify({name}),
+          })
+        : await request("/api/broadcast/scenes", {
+            method: "POST",
+            body: JSON.stringify({name}),
+          });
+      renderBroadcast(result);
+      closeSceneModal();
+      notify(current ? `Scène renommée « ${name} »` : `Scène créée « ${name} »`);
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  async function removeScene() {
+    const current = String($s("#studio-scene-current")?.value || "").trim();
+    if (!current || !window.confirm(`Supprimer la scène « ${current} » ?`)) return;
+    setBusy(true);
+    try {
+      const result = await request(`/api/broadcast/scenes/${encodeURIComponent(current)}`, {method: "DELETE"});
+      renderBroadcast(result);
+      closeSceneModal();
+      notify("Scène supprimée");
+    } catch (error) {
+      notify(error.message, true);
+    } finally {
+      setBusy(false);
+      if (studio.status) renderBroadcast(studio.status);
+    }
+  }
+
+  async function saveTransition() {
+    if (studio.status?.backend !== "native") return;
+    const kind = String($s("#studio-transition-kind")?.value || "fade");
+    const durationMs = Number($s("#studio-transition-duration")?.value || 350);
+    try {
+      const result = await request("/api/broadcast/transition", {
+        method: "PUT",
+        body: JSON.stringify({kind, duration_ms: durationMs}),
+      });
+      renderBroadcast(result);
+      notify(kind === "fade" ? `Fondu réglé à ${durationMs} ms` : "Transition Cut activée");
+    } catch (error) {
+      notify(error.message, true);
+    }
+  }
+
+  function bindSceneControls() {
+    const form = $s("#studio-scene-form");
+    if (form) form.addEventListener("submit", saveScene);
+    const remove = $s("#studio-scene-delete");
+    if (remove) remove.addEventListener("click", removeScene);
+    $s("[data-studio-scene-close]").forEach(button => button.addEventListener("click", closeSceneModal));
+    const modal = $s("#studio-scene-modal");
+    if (modal) modal.addEventListener("click", event => {
+      if (event.target === modal) closeSceneModal();
+    });
+
+    const kind = $s("#studio-transition-kind");
+    if (kind) kind.addEventListener("change", saveTransition);
+    const duration = $s("#studio-transition-duration");
+    if (duration) {
+      duration.addEventListener("input", () => {
+        const label = $s("#studio-transition-duration-label");
+        if (label) label.textContent = `${duration.value} ms`;
+      });
+      duration.addEventListener("change", saveTransition);
+    }
   }
 
   function renderSources(status) {
@@ -799,6 +987,30 @@
       recordButton.classList.toggle("active", recording);
     }
 
+    const replayButton = $s('[data-studio-action="replay"]');
+    if (replayButton) {
+      const buffering = Boolean(status.replay_buffering);
+      replayButton.textContent = buffering ? "■ Stop replay" : `↺ Replay ${Number(status.replay_seconds || 30)} s`;
+      replayButton.classList.toggle("active", buffering);
+      replayButton.dataset.studioDisabled = native ? "false" : "true";
+      replayButton.disabled = studio.busy || !native;
+    }
+    const clipButton = $s('[data-studio-action="clip"]');
+    if (clipButton) {
+      clipButton.dataset.studioDisabled = native && status.replay_buffering ? "false" : "true";
+      clipButton.disabled = studio.busy || !native || !status.replay_buffering;
+      clipButton.title = status.last_replay_file
+        ? `Dernier clip : ${status.last_replay_file}`
+        : "Sauvegarder les dernières secondes du replay buffer";
+    }
+
+    const transitionKind = $s("#studio-transition-kind");
+    const transitionDuration = $s("#studio-transition-duration");
+    const transitionLabel = $s("#studio-transition-duration-label");
+    if (transitionKind) transitionKind.value = String(status.transition || "fade");
+    if (transitionDuration) transitionDuration.value = String(Number(status.transition_ms || 350));
+    if (transitionLabel) transitionLabel.textContent = `${Number(status.transition_ms || 350)} ms`;
+
     const readiness = renderLiveReadiness(status);
     const liveButton = $s('[data-studio-action="live"]');
     if (liveButton) {
@@ -863,16 +1075,24 @@
     if (kind === "live") endpoint = studio.status.streaming ? "/api/broadcast/stream/stop" : "/api/broadcast/stream/start";
     if (kind === "record") endpoint = studio.status.recording ? "/api/broadcast/record/stop" : "/api/broadcast/record/start";
     if (kind === "preview") endpoint = studio.status.preview ? "/api/broadcast/preview/stop" : "/api/broadcast/preview/start";
+    if (kind === "replay") endpoint = studio.status.replay_buffering ? "/api/broadcast/replay/stop" : "/api/broadcast/replay/start";
+    if (kind === "clip") endpoint = "/api/broadcast/replay/save";
     if (!endpoint) return;
 
     setBusy(true);
     try {
-      const result = await request(endpoint, {method: "POST"});
+      const requestOptions = {method: "POST"};
+      if (kind === "replay" && !studio.status.replay_buffering) {
+        requestOptions.body = JSON.stringify({seconds: Number(studio.status.replay_seconds || 30)});
+      }
+      const result = await request(endpoint, requestOptions);
       renderBroadcast(result);
       const messages = {
         live: result.streaming ? "Le direct est lancé" : "Le direct est arrêté",
         record: result.recording ? "Enregistrement démarré" : "Enregistrement arrêté",
         preview: result.preview ? "Aperçu natif lancé" : "Aperçu natif arrêté",
+        replay: result.replay_buffering ? "Replay buffer actif" : "Replay buffer arrêté",
+        clip: result.last_replay_file ? "Clip replay sauvegardé" : "Clip replay demandé",
       };
       notify(messages[kind]);
     } catch (error) {
@@ -885,6 +1105,9 @@
 
   async function selectScene(name) {
     if (!name || studio.busy) return;
+    const stage = $s("#studio-stage");
+    const fade = studio.status?.backend === "native" && String(studio.status?.transition || "fade") === "fade";
+    if (fade) stage?.classList.add("switching");
     setBusy(true);
     try {
       const result = await request("/api/broadcast/scene", {
@@ -897,6 +1120,8 @@
       notify(error.message, true);
     } finally {
       setBusy(false);
+      const duration = Number(studio.status?.transition_ms || 350);
+      setTimeout(() => stage?.classList.remove("switching"), Math.max(100, duration + 80));
       if (studio.status) renderBroadcast(studio.status);
     }
   }
@@ -970,6 +1195,16 @@
 
   function bindControls() {
     document.addEventListener("click", event => {
+      const sceneManage = event.target.closest("[data-studio-scene-manage]");
+      if (sceneManage) {
+        openSceneModal("");
+        return;
+      }
+      const sceneEdit = event.target.closest("[data-studio-scene-edit]");
+      if (sceneEdit) {
+        openSceneModal(String(sceneEdit.dataset.studioSceneEdit || ""));
+        return;
+      }
       const outputSettings = event.target.closest("[data-studio-output-settings]");
       if (outputSettings) {
         openOutputModal();
@@ -1029,6 +1264,7 @@
     bindControls();
     bindSourceEditor();
     bindSourceModal();
+    bindSceneControls();
     bindOutputSettings();
     bindAudioMixer();
     refreshBroadcast(false);
