@@ -109,7 +109,7 @@ def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
     assert 'Source: "{#SourceDir}\\.env"' in installer
     assert "CloseApplications=yes" in installer
     assert "RestartApplications=yes" in installer
-    assert "SetupIconFile=..\\\\build-assets\\\\quantic-studio.ico" in installer
+    assert "SetupIconFile=..\\build-assets\\quantic-studio.ico" in installer
 
 
 def test_windows_ci_builds_installer_and_supports_authenticode() -> None:
