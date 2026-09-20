@@ -52,7 +52,7 @@ impl QuanticLiveApp {
         } else {
             Encoder::X264
         };
-        Self {
+        let app = Self {
             project,
             preview: None,
             preview_texture: None,
@@ -68,7 +68,11 @@ impl QuanticLiveApp {
             last_control_poll: Instant::now(),
             last_status_write: Instant::now(),
             last_command_id: 0,
-        }
+        };
+        // Ensure Aura always has a complete engine config to update, while
+        // persist_project() strips the RTMP secret before writing.
+        let _ = app.persist_project();
+        app
     }
 
     pub(crate) fn save(&mut self) {
