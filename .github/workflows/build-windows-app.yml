@@ -274,6 +274,29 @@ jobs:
               throw "Aura ne detecte pas le moteur natif embarque tout en conservant OBS par defaut."
             }
 
+            $nativeStart = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/native" -Method Post -TimeoutSec 15
+            $nativeDeadline = (Get-Date).AddSeconds(15)
+            $nativeReady = $false
+            while ((Get-Date) -lt $nativeDeadline) {
+              try {
+                $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
+                if ($nativeStatus.responsive -eq $true -and
+                    $nativeStatus.engine.version -eq "0.3.0" -and
+                    $nativeStatus.engine.ffmpeg_ok -eq $true -and
+                    $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture") {
+                  $nativeReady = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 400
+            }
+            if (-not $nativeReady) {
+              try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
+              throw "Aura Native 0.3.0 n'a pas demarre avec FFmpeg gfxcapture embarque."
+            }
+
+            Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/broadcast/mode/obs" -Method Post -TimeoutSec 15 | Out-Null
+
             $setupStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/setup/status" -TimeoutSec 3
             if ($setupStatus.gemini_required -ne $false -or $setupStatus.kokoro.ready -ne $true) {
               $setupStatus | ConvertTo-Json -Depth 8 | Write-Host
