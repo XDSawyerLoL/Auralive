@@ -21,6 +21,7 @@ def make_service(tmp_path):
     service.command_path = tmp_path / "command.json"
     service.status_path = tmp_path / "status.json"
     service.config_path = tmp_path / "engine.json"
+    service.stream_key_path = tmp_path / "stream-key.dpapi"
     return service
 
 
@@ -102,3 +103,55 @@ def test_system_audio_status_reports_backend(tmp_path):
 
     assert status["backend"] == "WASAPI / PyAudioWPatch"
     assert "backend_present" in status
+
+
+def test_output_configuration_never_returns_stream_secret(tmp_path, monkeypatch):
+    service = make_service(tmp_path)
+    monkeypatch.setenv("AURA_NATIVE_STREAM_KEY", "super-secret-ci-key")
+    service.config_path.write_text(
+        json.dumps({"settings": {"rtmp_url": "rtmp://example.test/live", "stream_key": ""}}),
+        encoding="utf-8",
+    )
+
+    output = service.output_configuration()
+    status = service.status()
+
+    assert output["stream_key_configured"] is True
+    assert output["rtmp_url"] == "rtmp://example.test/live"
+    assert "super-secret-ci-key" not in json.dumps(output)
+    assert "super-secret-ci-key" not in json.dumps(status)
+
+
+def test_configure_output_keeps_engine_json_secret_empty(tmp_path, monkeypatch):
+    service = make_service(tmp_path)
+    service.config_path.write_text(
+        json.dumps(
+            {
+                "settings": {
+                    "rtmp_url": "rtmp://old.test/live",
+                    "stream_key": "",
+                    "ffmpeg_path": "ffmpeg",
+                },
+                "scenes": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_store(secret: str) -> None:
+        assert secret == "vault-only-secret"
+        service.stream_key_path.write_bytes(b"encrypted-test-data")
+
+    monkeypatch.setattr(service, "set_stream_secret", fake_store)
+
+    result = service.configure_output(
+        "rtmps://new.example.test/live",
+        "vault-only-secret",
+    )
+    payload = json.loads(service.config_path.read_text(encoding="utf-8"))
+
+    assert payload["settings"]["rtmp_url"] == "rtmps://new.example.test/live"
+    assert payload["settings"]["stream_key"] == ""
+    assert result["stream_key_configured"] is True
+    assert "vault-only-secret" not in json.dumps(result)
+    assert "vault-only-secret" not in service.config_path.read_text(encoding="utf-8")
