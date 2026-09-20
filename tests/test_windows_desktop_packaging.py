@@ -7,7 +7,7 @@ BUILD = ROOT / "scripts" / "build-windows.ps1"
 REQUIREMENTS = ROOT / "requirements-desktop.txt"
 ENV_EXAMPLE = ROOT / ".env.example"
 WORKFLOW = ROOT / ".github" / "workflows" / "build-windows-app.yml"
-INSTALLER = ROOT / "installer" / "AuraLive.iss"
+INSTALLER = ROOT / "installer" / "QuanticStudio.iss"
 UPDATER = ROOT / "app" / "services" / "update_manager.py"
 UPDATE_UI = ROOT / "app" / "web" / "static" / "update-center.js"
 
@@ -41,7 +41,7 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
     desktop = DESKTOP.read_text(encoding="utf-8")
     assert "sys.stdout is None" in desktop
     assert "sys.stderr is None" in desktop
-    assert "AuraLive-startup.log" in desktop
+    assert "QuanticStudio-startup.log" in desktop
     assert "stdout={'ok' if sys.stdout is not None else 'none'}" in desktop
     assert "stderr={'ok' if sys.stderr is not None else 'none'}" in desktop
     assert desktop.index("_ensure_stdio()") < desktop.index("import uvicorn")
@@ -50,13 +50,13 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
 def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     build = BUILD.read_text(encoding="utf-8")
     desktop = DESKTOP.read_text(encoding="utf-8")
-    build_id = "AuraLive-2.7.2-Windows-Native-2026-09-20"
+    build_id = "QuanticStudio-2.7.3-Windows-Native-2026-09-20"
 
     assert "--console" in build
     assert "--hide-console hide-early" in build
     assert "--windowed" not in build
     assert "pyinstaller==6.22.2" in build
-    assert '--hidden-import "uvicorn.logging"' in build
+    assert '--hidden-import "uvicorn.logging"' in build\n    assert '--name "QuanticStudio"' in build\n    assert '--icon "build-assets\\\\quantic-studio.ico"' in build
     assert "BUILD-ID.txt" in build
     assert build_id in build
     assert build_id in desktop
@@ -75,7 +75,7 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert '--collect-all "segments"' in build
     assert "kokoro-v1.0.onnx" in build
     assert "voices-v1.0.bin" in build
-    assert 'Copy-Item ".env.example" "dist\\AuraLive\\.env"' in build
+    assert 'Copy-Item ".env.example" "dist\\QuanticStudio\\.env"' in build
     assert "AI_MODE=ollama" in env_example
     assert "AI_MODEL=gemma3:12b" in env_example
     assert "AI_AUTO_FAST_MODEL=false" in env_example
@@ -86,7 +86,7 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert "Kokoro ff_siwis n'est pas pret" in workflow
     assert "api/avatar/test" in workflow
     assert "overlay_required" in workflow
-    assert "AuraLive-Windows-Native-2.7.2" in workflow
+    assert "QuanticStudio-Windows-Native-2.7.3" in workflow
 
 
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
@@ -103,16 +103,16 @@ def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
     assert "PrivilegesRequired=lowest" in installer
     assert "DefaultDirName={localappdata}\\Programs\\Aura Live" in installer
     assert "uninsneveruninstall" in installer
-    assert 'Excludes: ".env,data\\*,AuraLive-startup.log"' in installer
+    assert 'Excludes: ".env,data\\*,QuanticStudio-startup.log"' in installer
     assert 'Source: "{#SourceDir}\\.env"' in installer
     assert "CloseApplications=yes" in installer
-    assert "RestartApplications=yes" in installer
+    assert "RestartApplications=yes" in installer\n    assert "SetupIconFile=..\\\\build-assets\\\\quantic-studio.ico" in installer
 
 
 def test_windows_ci_builds_installer_and_supports_authenticode() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "build-installer.ps1" in workflow
-    assert "AuraLive-Setup-2.7.2.exe" in workflow
+    assert "QuanticStudio-Setup-2.7.3.exe" in workflow
     assert "sign-windows.ps1" in workflow
     assert "AURA_WINDOWS_SIGNING_PFX_BASE64" in workflow
     assert "AURA_WINDOWS_SIGNING_PFX_PASSWORD" in workflow
@@ -125,5 +125,5 @@ def test_updater_is_release_scoped_and_sha256_verified() -> None:
     assert "releases/latest" in updater
     assert "sha256" in updater.casefold()
     assert "actual != expected" in updater
-    assert "AuraLive-Setup-" in updater
+    assert "QuanticStudio-Setup-" in updater
     assert "/api/update/install" in ui
