@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "QuanticStudio-2.7.3-Windows-Native-LITE-2026-09-20"
+$BuildId = "QuanticStudio-2.7.4-Windows-Native-LITE-2026-09-20"
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt
