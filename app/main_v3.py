@@ -454,8 +454,10 @@ async def broadcast_audio_mix_v3(payload: dict[str, Any] = Body(...)) -> dict[st
     engine = dict(state.get("engine") or {})
     value = {
         "mic_volume": gain("mic_volume", float(engine.get("mic_volume", 0.82) or 0.82)),
+        "system_volume": gain("system_volume", float(engine.get("system_volume", 0.72) or 0.72)),
         "aura_volume": gain("aura_volume", float(engine.get("desktop_volume", 0.72) or 0.72)),
         "mic_muted": bool(payload.get("mic_muted", engine.get("mic_muted", False))),
+        "system_muted": bool(payload.get("system_muted", engine.get("system_muted", False))),
         "aura_muted": bool(payload.get("aura_muted", engine.get("desktop_muted", False))),
     }
     return await _broadcast_command("audio.update", json.dumps(value, separators=(",", ":")))
