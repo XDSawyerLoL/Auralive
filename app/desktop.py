@@ -16,7 +16,7 @@ from pathlib import Path
 
 
 _stdio_sink = None
-BUILD_ID = "QuanticStudio-2.7.3-Windows-Native-2026-09-20"
+BUILD_ID = "QuanticStudio-2.7.4-Windows-Native-2026-09-20"
 
 
 def _startup_log_path() -> Path:
@@ -87,7 +87,7 @@ def _dashboard_url() -> str:
 
 
 def _request_text(url: str, timeout: float = 0.8) -> tuple[int, str]:
-    request = urllib.request.Request(url, headers={"User-Agent": "QuanticStudioDesktop/2.7.3"})
+    request = urllib.request.Request(url, headers={"User-Agent": "QuanticStudioDesktop/2.7.4"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read(96_000).decode("utf-8", errors="ignore")
         return int(getattr(response, "status", 200)), body
@@ -101,7 +101,7 @@ def _looks_like_aura(url: str) -> bool:
     if status != 200:
         return False
     lowered = body.casefold()
-    return "aura live" in lowered or "mairaiy" in lowered or "neural" in lowered
+    return "quantic studio" in lowered or "mairaiy" in lowered or "neural" in lowered
 
 
 def _port_is_busy(host: str, port: int) -> bool:
