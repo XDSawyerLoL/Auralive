@@ -681,7 +681,16 @@ class NativeBroadcastService:
             self._atomic_json(self.command_path, payload)
             command_id = self._command_id
 
-        deadline = time.monotonic() + 2.0
+        reload_actions = {
+            "scene.select",
+            "source.transform",
+            "source.visibility",
+            "source.add",
+            "source.configure",
+            "source.remove",
+            "audio.update",
+        }
+        deadline = time.monotonic() + (12.0 if action in reload_actions else 2.0)
         while time.monotonic() < deadline:
             status = self._read_status()
             if int(status.get("last_command_id") or 0) >= command_id:
