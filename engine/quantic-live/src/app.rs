@@ -536,10 +536,11 @@ impl QuanticLiveApp {
             })
             .unwrap_or_default();
         let encoder = self.detected_encoder.label();
+        let capture_backend = ffmpeg::capture_backend_label(&self.project.settings.ffmpeg_path);
         control::write_status(&control::EngineStatus {
             ok: true,
             engine: "aura-native-broadcast",
-            version: "0.2.0",
+            version: "0.3.0",
             last_command_id: self.last_command_id,
             streaming: self.stream_process.is_some(),
             recording: self.record_process.is_some(),
@@ -554,6 +555,7 @@ impl QuanticLiveApp {
             canvas_width: self.project.settings.width,
             canvas_height: self.project.settings.height,
             ffmpeg_ok: self.ffmpeg_ok,
+            capture_backend,
             encoder,
             message: &self.status,
         });
