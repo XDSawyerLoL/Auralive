@@ -1009,6 +1009,9 @@ class NativeBroadcastService:
 
         candidates.extend(
             [
+                RUNTIME_DIR / "QuanticStudioCore.exe",
+                # Legacy fallbacks are read-only compatibility paths for old
+                # portable packages. New Quantic Studio builds never ship them.
                 RUNTIME_DIR / "AuraNativeBroadcast.exe",
                 RUNTIME_DIR / "Quantic-Live.exe",
                 BASE_DIR / "engine" / "quantic-live" / "target" / "release" / "quantic-live.exe",
