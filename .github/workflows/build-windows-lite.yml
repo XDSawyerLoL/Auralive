@@ -1,4 +1,4 @@
-name: Build Aura Live Windows Lite
+name: Build Quantic Studio Windows Lite
 
 on:
   pull_request:
@@ -48,13 +48,13 @@ jobs:
         shell: pwsh
         run: python -m compileall -q app
 
-      - name: Build AuraLive Lite
+      - name: Build QuanticStudio Lite
         shell: pwsh
         run: .\scripts\build-windows-lite.ps1 -Python python
 
       - name: Bundle FFmpeg with Windows Graphics Capture
         shell: pwsh
-        run: .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\AuraLive\ffmpeg"
+        run: .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
 
       - name: Embed Aura Native Broadcast
         shell: pwsh
@@ -63,29 +63,29 @@ jobs:
           if (-not (Test-Path $engine)) {
             throw "Le moteur natif compile est introuvable: $engine"
           }
-          Copy-Item $engine "dist\AuraLive\AuraNativeBroadcast.exe" -Force
+          Copy-Item $engine "dist\QuanticStudio\AuraNativeBroadcast.exe" -Force
 
       - name: Verify Lite package
         shell: pwsh
         run: |
-          if (-not (Test-Path "dist\AuraLive\AuraLive.exe")) { throw "AuraLive.exe absent." }
-          if (-not (Test-Path "dist\AuraLive\BUILD-ID.txt")) { throw "BUILD-ID.txt absent." }
-          if (-not (Test-Path "dist\AuraLive\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent." }
-          if (-not (Test-Path "dist\AuraLive\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent." }
-          $filters = & "dist\AuraLive\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
+          if (-not (Test-Path "dist\QuanticStudio\QuanticStudio.exe")) { throw "QuanticStudio.exe absent." }
+          if (-not (Test-Path "dist\QuanticStudio\BUILD-ID.txt")) { throw "BUILD-ID.txt absent." }
+          if (-not (Test-Path "dist\QuanticStudio\AuraNativeBroadcast.exe")) { throw "AuraNativeBroadcast.exe absent." }
+          if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent." }
+          $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
-          $buildId = (Get-Content "dist\AuraLive\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "AuraLive-2.7.2-Windows-Native-LITE-2026-09-20") {
+          $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
+          if ($buildId -ne "QuanticStudio-2.7.3-Windows-Native-LITE-2026-09-20") {
             throw "Build ID inattendu: $buildId"
           }
-          $envContent = Get-Content "dist\AuraLive\.env" -Raw
+          $envContent = Get-Content "dist\QuanticStudio\.env" -Raw
           if ($envContent -notmatch "MAIRAIY_KOKORO_AUTO_DOWNLOAD=true") {
             throw "Le telechargement automatique Kokoro n'est pas actif."
           }
-          if (Test-Path "dist\AuraLive\data\voices\kokoro\kokoro-v1.0.onnx") {
+          if (Test-Path "dist\QuanticStudio\data\voices\kokoro\kokoro-v1.0.onnx") {
             throw "Le modele Kokoro ne doit pas etre embarque dans le build Lite."
           }
-          if (Test-Path "dist\AuraLive\data\voices\kokoro\voices-v1.0.bin") {
+          if (Test-Path "dist\QuanticStudio\data\voices\kokoro\voices-v1.0.bin") {
             throw "Le pack de voix Kokoro ne doit pas etre embarque dans le build Lite."
           }
 
@@ -104,24 +104,24 @@ jobs:
           MAIRAIY_KOKORO_VOICE: "ff_siwis"
           MAIRAIY_KOKORO_LANGUAGE: "fr-fr"
         run: |
-          $tempKokoro = Join-Path $env:RUNNER_TEMP "AuraLive-Kokoro-FirstRun"
+          $tempKokoro = Join-Path $env:RUNNER_TEMP "QuanticStudio-Kokoro-FirstRun"
           if (Test-Path $tempKokoro) { Remove-Item $tempKokoro -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $tempKokoro | Out-Null
           $env:MAIRAIY_KOKORO_DIR = $tempKokoro
 
-          $process = Start-Process "dist\AuraLive\AuraLive.exe" -PassThru
+          $process = Start-Process "dist\QuanticStudio\QuanticStudio.exe" -PassThru
           try {
             $deadline = (Get-Date).AddSeconds(60)
             $ready = $false
             while ((Get-Date) -lt $deadline) {
-              if ($process.HasExited) { throw "AuraLive.exe s'est ferme au demarrage." }
+              if ($process.HasExited) { throw "QuanticStudio.exe s'est ferme au demarrage." }
               try {
                 $health = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 2
                 if ($health.StatusCode -eq 200) { $ready = $true; break }
               } catch {}
               Start-Sleep -Milliseconds 500
             }
-            if (-not $ready) { throw "AuraLive Lite n'a pas demarre." }
+            if (-not $ready) { throw "QuanticStudio Lite n'a pas demarre." }
 
             $nativeDeadline = (Get-Date).AddSeconds(15)
             $nativeReady = $false
@@ -176,8 +176,8 @@ jobs:
       - name: Upload Windows Lite application
         uses: actions/upload-artifact@v4
         with:
-          name: AuraLive-Windows-Native-2.7.2-LITE
-          path: dist/AuraLive
+          name: QuanticStudio-Windows-Native-2.7.3-LITE
+          path: dist/QuanticStudio
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30

@@ -1,3 +1,14 @@
+# Quantic Studio 2.7.3 — Rebrand
+
+## Identité produit
+
+- Aura Live devient **Quantic Studio**.
+- Nouveau symbole distinct de Quantic Sillage : panneaux superposés violet, magenta et or avec lecture centrale.
+- Logo intégré dans l'interface Studio et dans l'icône Windows.
+- Exécutable renommé en `QuanticStudio.exe`.
+- Installateur renommé en `QuanticStudio-Setup-2.7.3.exe`.
+- Aura reste l'assistante IA intégrée à Quantic Studio.
+
 # Aura Live 2.7.2 — Windows Product Finish
 
 ## Distribution Windows

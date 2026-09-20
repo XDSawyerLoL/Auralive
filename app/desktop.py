@@ -16,13 +16,13 @@ from pathlib import Path
 
 
 _stdio_sink = None
-BUILD_ID = "AuraLive-2.7.2-Windows-Native-2026-09-20"
+BUILD_ID = "QuanticStudio-2.7.3-Windows-Native-2026-09-20"
 
 
 def _startup_log_path() -> Path:
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent / "AuraLive-startup.log"
-    return Path(tempfile.gettempdir()) / "AuraLive-startup.log"
+        return Path(sys.executable).resolve().parent / "QuanticStudio-startup.log"
+    return Path(tempfile.gettempdir()) / "QuanticStudio-startup.log"
 
 
 def _ensure_stdio() -> None:
@@ -35,7 +35,7 @@ def _ensure_stdio() -> None:
     """
 
     global _stdio_sink
-    candidates = [_startup_log_path(), Path(tempfile.gettempdir()) / "AuraLive-startup.log"]
+    candidates = [_startup_log_path(), Path(tempfile.gettempdir()) / "QuanticStudio-startup.log"]
 
     sink = None
     for path in candidates:
@@ -87,7 +87,7 @@ def _dashboard_url() -> str:
 
 
 def _request_text(url: str, timeout: float = 0.8) -> tuple[int, str]:
-    request = urllib.request.Request(url, headers={"User-Agent": "AuraLiveDesktop/2.7.2"})
+    request = urllib.request.Request(url, headers={"User-Agent": "QuanticStudioDesktop/2.7.3"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read(96_000).decode("utf-8", errors="ignore")
         return int(getattr(response, "status", 200)), body
@@ -120,7 +120,7 @@ def _start_backend() -> bool:
     port = int(settings.port)
 
     if _looks_like_aura(url):
-        logger.info("Une instance Aura Live est deja active sur %s", url)
+        logger.info("Une instance Quantic Studio est deja active sur %s", url)
         _owns_server = False
         return False
 
@@ -156,10 +156,10 @@ def _wait_until_ready(timeout_seconds: float = 45.0) -> None:
         if _looks_like_aura(url):
             return
         if _owns_server and _server_thread is not None and not _server_thread.is_alive():
-            raise RuntimeError("Le moteur Aura Live s'est arrete pendant le demarrage.")
+            raise RuntimeError("Le moteur Quantic Studio s'est arrete pendant le demarrage.")
         time.sleep(0.25)
     raise RuntimeError(
-        "Le moteur Aura Live ne repond pas. Verifie .env, Twitch, Ollama et les journaux de lancement."
+        "Le moteur Quantic Studio ne repond pas. Verifie .env, Twitch, Ollama et les journaux de lancement."
     )
 
 
@@ -204,11 +204,11 @@ def _launch_app_window(url: str) -> tuple[subprocess.Popen[bytes], Path]:
     browsers = _browser_candidates()
     if not browsers:
         raise RuntimeError(
-            "Microsoft Edge ou Google Chrome est requis pour afficher Aura Live. "
+            "Microsoft Edge ou Google Chrome est requis pour afficher Quantic Studio. "
             "Edge est normalement deja installe avec Windows."
         )
 
-    profile_root = Path(tempfile.mkdtemp(prefix="AuraLiveBrowser-"))
+    profile_root = Path(tempfile.mkdtemp(prefix="QuanticStudioBrowser-"))
     args = [
         str(browsers[0]),
         f"--app={url}",
@@ -249,18 +249,18 @@ def _wait_for_app_window(profile_root: Path, process: subprocess.Popen[bytes]) -
         if devtools_port is not None:
             break
         if _owns_server and _server_thread is not None and not _server_thread.is_alive():
-            raise RuntimeError("Le moteur Aura Live s'est arrete pendant l'ouverture de la fenetre.")
+            raise RuntimeError("Le moteur Quantic Studio s'est arrete pendant l'ouverture de la fenetre.")
         time.sleep(0.2)
 
     if devtools_port is None:
-        logger.warning("Suivi Chromium avance indisponible; maintien du moteur Aura Live en mode securise.")
+        logger.warning("Suivi Chromium avance indisponible; maintien du moteur Quantic Studio en mode securise.")
         while _looks_like_aura(_dashboard_url()):
             if _owns_server and _server_thread is not None and not _server_thread.is_alive():
                 return
             time.sleep(2.0)
         return
 
-    logger.info("Fenetre Aura Live suivie via Chromium sur le port local %s", devtools_port)
+    logger.info("Fenetre Quantic Studio suivie via Chromium sur le port local %s", devtools_port)
     while True:
         if _owns_server and _server_thread is not None and not _server_thread.is_alive():
             return
@@ -279,7 +279,7 @@ def _show_error(message: str) -> None:
         pass
     if sys.platform == "win32":
         try:
-            ctypes.windll.user32.MessageBoxW(0, message, "Aura Live - erreur", 0x10)
+            ctypes.windll.user32.MessageBoxW(0, message, "Quantic Studio - erreur", 0x10)
             return
         except Exception:
             pass
@@ -300,7 +300,7 @@ def run_desktop() -> None:
     except KeyboardInterrupt:
         pass
     except Exception as exc:
-        logger.exception("Demarrage desktop Aura Live impossible")
+        logger.exception("Demarrage desktop Quantic Studio impossible")
         _show_error(str(exc) or exc.__class__.__name__)
     finally:
         if browser_process is not None and browser_process.poll() is None:

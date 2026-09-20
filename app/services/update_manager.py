@@ -13,11 +13,11 @@ from typing import Any
 
 from app.config import RUNTIME_DIR
 
-CURRENT_VERSION = "2.7.2"
+CURRENT_VERSION = "2.7.3"
 REPOSITORY = "XDSawyerLoL/Auralive"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
-USER_AGENT = f"AuraLiveUpdater/{CURRENT_VERSION}"
-_INSTALLER_PATTERN = re.compile(r"^AuraLive-Setup-(\d+\.\d+\.\d+)\.exe$", re.IGNORECASE)
+USER_AGENT = f"QuanticStudioUpdater/{CURRENT_VERSION}"
+_INSTALLER_PATTERN = re.compile(r"^QuanticStudio-Setup-(\d+\.\d+\.\d+)\.exe$", re.IGNORECASE)
 
 
 def _version_tuple(value: str) -> tuple[int, int, int]:
@@ -50,7 +50,7 @@ class UpdateManager:
     def __init__(self) -> None:
         local_app_data = os.getenv("LOCALAPPDATA") if os.name == "nt" else ""
         self.directory = (
-            Path(local_app_data) / "AuraLive" / "updates"
+            Path(local_app_data) / "QuanticStudio" / "updates"
             if local_app_data
             else Path(RUNTIME_DIR) / "updates"
         )
@@ -141,7 +141,7 @@ class UpdateManager:
                 return {**info, "downloaded": False, "up_to_date": True}
             installer = dict(info.get("installer") or {})
             if not installer:
-                raise RuntimeError("La nouvelle release ne contient pas d'installateur Aura Live.")
+                raise RuntimeError("La nouvelle release ne contient pas d'installateur Quantic Studio.")
             url = str(installer.get("url") or "")
             name = str(installer.get("name") or "")
             if not url.startswith("https://github.com/") or not _INSTALLER_PATTERN.match(name):
@@ -203,7 +203,7 @@ class UpdateManager:
             return {
                 **downloaded,
                 "installer_started": True,
-                "message": "L'installateur Aura Live a été lancé. Il fermera et relancera l'application si nécessaire.",
+                "message": "L'installateur Quantic Studio a été lancé. Il fermera et relancera l'application si nécessaire.",
             }
 
 

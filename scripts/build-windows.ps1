@@ -6,16 +6,18 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "AuraLive-2.7.2-Windows-Native-2026-09-20"
+$BuildId = "QuanticStudio-2.7.3-Windows-Native-2026-09-20"
 $KokoroModelUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
 $KokoroVoicesUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt
 & $Python -m pip install "pyinstaller==6.22.2"
+& $Python -m pip install "pillow>=10,<12"
+& $Python scripts\\generate-studio-icon.py
 
-if (Test-Path "build\AuraLive") { Remove-Item -Recurse -Force "build\AuraLive" }
-if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
+if (Test-Path "build\QuanticStudio") { Remove-Item -Recurse -Force "build\QuanticStudio" }
+if (Test-Path "dist\QuanticStudio") { Remove-Item -Recurse -Force "dist\QuanticStudio" }
 
 & $Python -m PyInstaller `
     --noconfirm `
@@ -23,7 +25,8 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     --console `
     --hide-console hide-early `
     --onedir `
-    --name "AuraLive" `
+    --name "QuanticStudio" `
+    --icon "build-assets\\quantic-studio.ico" `
     --paths "." `
     --hidden-import "uvicorn.logging" `
     --collect-all "piper" `
@@ -45,16 +48,16 @@ if (Test-Path "dist\AuraLive") { Remove-Item -Recurse -Force "dist\AuraLive" }
     "app/desktop.py"
 
 if ($LASTEXITCODE -ne 0) {
-    throw "La compilation Windows Aura Live a echoue."
+    throw "La compilation Windows Quantic Studio a echoue."
 }
 
-Copy-Item ".env.example" "dist\AuraLive\.env.example" -Force
+Copy-Item ".env.example" "dist\QuanticStudio\.env.example" -Force
 # Le package demarre directement en Ollama + Kokoro, sans ancienne configuration ni cle Gemini.
-Copy-Item ".env.example" "dist\AuraLive\.env" -Force
-Copy-Item "README.md" "dist\AuraLive\README.md" -Force
-Copy-Item "LISEZ-MOI.txt" "dist\AuraLive\LISEZ-MOI.txt" -Force
-New-Item -ItemType Directory -Force -Path "dist\AuraLive\data\media" | Out-Null
-$KokoroDir = "dist\AuraLive\data\voices\kokoro"
+Copy-Item ".env.example" "dist\QuanticStudio\.env" -Force
+Copy-Item "README.md" "dist\QuanticStudio\README.md" -Force
+Copy-Item "LISEZ-MOI.txt" "dist\QuanticStudio\LISEZ-MOI.txt" -Force
+New-Item -ItemType Directory -Force -Path "dist\QuanticStudio\data\media" | Out-Null
+$KokoroDir = "dist\QuanticStudio\data\voices\kokoro"
 New-Item -ItemType Directory -Force -Path $KokoroDir | Out-Null
 
 function Download-CheckedFile {
@@ -92,15 +95,15 @@ Download-CheckedFile `
     -Destination "$KokoroDir\voices-v1.0.bin" `
     -MinimumBytes 10000000
 
-Set-Content "dist\AuraLive\BUILD-ID.txt" -Value $BuildId -Encoding ascii
+Set-Content "dist\QuanticStudio\BUILD-ID.txt" -Value $BuildId -Encoding ascii
 
 @"
-AURA LIVE - APPLICATION WINDOWS
+QUANTIC STUDIO - APPLICATION WINDOWS
 Build: $BuildId
 
-1. Double-clique AuraLive.exe.
-2. Aura Live ouvre son interface dediee via Edge/Chrome.
-3. Les connexions Twitch s'ouvrent dans ton navigateur Windows normal, pas dans la fenetre Aura Live.
+1. Double-clique QuanticStudio.exe.
+2. Quantic Studio ouvre son interface dediee via Edge/Chrome.
+3. Les connexions Twitch s'ouvrent dans ton navigateur Windows normal, pas dans la fenetre Quantic Studio.
 4. Tester la voix fonctionne directement, meme sans OBS ni /overlay/avatar.
 5. Le vocal prive utilise un chemin court gemma3:12b -> Kokoro et OBS ne peut plus ralentir la reponse.
 
@@ -115,7 +118,7 @@ Aucune bascule aleatoire vers les voix Windows ou navigateur n'est autorisee par
 Cette version conserve le bootloader console PyInstaller avec console masquee et de vrais flux stdout/stderr pour Uvicorn.
 Tes donnees sont conservees dans le dossier data place a cote de l'application.
 Les overlays OBS restent disponibles sur http://localhost:8787/overlay et les autres URL Aura habituelles.
-En cas de probleme, envoie AuraLive-startup.log et BUILD-ID.txt.
-"@ | Set-Content "dist\AuraLive\DEMARRAGE.txt" -Encoding UTF8
+En cas de probleme, envoie QuanticStudio-startup.log et BUILD-ID.txt.
+"@ | Set-Content "dist\QuanticStudio\DEMARRAGE.txt" -Encoding UTF8
 
-Write-Host "Build pret : dist\AuraLive\AuraLive.exe ($BuildId)" -ForegroundColor Green
+Write-Host "Build pret : dist\QuanticStudio\QuanticStudio.exe ($BuildId)" -ForegroundColor Green

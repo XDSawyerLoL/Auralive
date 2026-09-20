@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#080b12">
-  <title>Aura Live — Configuration locale</title>
+  <title>Quantic Studio — Configuration locale</title>
   <style>
     :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#080b12;color:#f4f7fb}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% -20%,#182440 0,#0b101b 34%,#070910 72%);display:grid;place-items:center;padding:28px}
@@ -19,7 +19,7 @@
 </head>
 <body>
 <main>
-  <div class="brand"><span class="orb"></span><strong>AURA LIVE</strong></div>
+  <div class="brand"><img src="/static/quantic-studio-mark.svg?v=2.7.3" alt="" style="width:38px;height:38px"><strong>QUANTIC STUDIO</strong></div>
   <h1>Configuration locale</h1>
   <p>La voix de Mairaiy fonctionne localement avec Kokoro. Gemini n’est pas requis. Twitch est une connexion séparée à configurer une seule fois sur ce PC.</p>
 
@@ -30,7 +30,7 @@
 
   <section class="card">
     <div class="status" id="twitch-status"><span class="dot"></span><span>Twitch non configuré</span></div>
-    <p class="muted">Aura Live a besoin du Client ID et du Client Secret de ton application Twitch pour connecter <b>mairaiy</b> et <b>SANSAHD</b>. Ces valeurs restent dans le fichier <code>.env</code> à côté de AuraLive.exe et ne sont jamais renvoyées par l’interface.</p>
+    <p class="muted">Quantic Studio a besoin du Client ID et du Client Secret de ton application Twitch pour connecter <b>mairaiy</b> et <b>SANSAHD</b>. Ces valeurs restent dans le fichier <code>.env</code> à côté de QuanticStudio.exe et ne sont jamais renvoyées par l’interface.</p>
     <p class="muted">Dans la console Twitch Developer, l’URL de redirection doit être <code>http://localhost:8787/auth/callback</code>.</p>
     <a class="button secondary" href="https://dev.twitch.tv/console/apps" target="_blank" rel="noreferrer">Ouvrir Twitch Developer</a>
 
@@ -39,7 +39,7 @@
       <input id="client-id" name="client_id" required maxlength="200" spellcheck="false">
       <label for="client-secret">Twitch Client Secret</label>
       <input id="client-secret" name="client_secret" type="password" required maxlength="300" spellcheck="false">
-      <div class="secret-note">Le secret est enregistré localement. Aura Live ne l’affiche jamais après sauvegarde.</div>
+      <div class="secret-note">Le secret est enregistré localement. Quantic Studio ne l’affiche jamais après sauvegarde.</div>
       <button type="submit">Enregistrer Twitch</button>
       <div id="result"></div>
     </form>
@@ -51,7 +51,7 @@
   </section>
 
   <div class="actions">
-    <a class="button secondary" href="/">Retour à Aura Live</a>
+    <a class="button secondary" href="/">Retour à Quantic Studio</a>
     <a class="button secondary" href="/voice-control">Ouvrir le vocal</a>
   </div>
 </main>
@@ -93,7 +93,7 @@
       }
     } catch (error) {
       result.className = 'error';
-      result.textContent = 'Aura Live local est injoignable.';
+      result.textContent = 'Quantic Studio local est injoignable.';
     }
   }
 
