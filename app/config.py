@@ -113,8 +113,8 @@ class Settings:
 
     # Backend de diffusion: "obs" conserve le comportement historique.
     # "native" active Aura Native Broadcast, le moteur Rust local.
-    broadcast_engine: str = os.getenv("AURA_BROADCAST_ENGINE", "obs").strip().lower()
-    native_engine_autostart: bool = _bool("AURA_NATIVE_ENGINE_AUTOSTART", False)
+    broadcast_engine: str = os.getenv("AURA_BROADCAST_ENGINE", "native").strip().lower()
+    native_engine_autostart: bool = _bool("AURA_NATIVE_ENGINE_AUTOSTART", True)
     native_engine_exe: str = os.getenv("AURA_NATIVE_ENGINE_EXE", "").strip()
 
     youtube_api_key: str = os.getenv("YOUTUBE_API_KEY", "")
