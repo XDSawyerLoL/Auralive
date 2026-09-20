@@ -15,6 +15,14 @@ pub struct ControlCommand {
 }
 
 #[derive(Debug, Serialize)]
+pub struct SourceStatus {
+    pub id: u64,
+    pub name: String,
+    pub kind: String,
+    pub visible: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub struct EngineStatus<'a> {
     pub ok: bool,
     pub engine: &'static str,
@@ -24,6 +32,12 @@ pub struct EngineStatus<'a> {
     pub recording: bool,
     pub preview: bool,
     pub scene: &'a str,
+    pub scenes: Vec<String>,
+    pub sources: Vec<SourceStatus>,
+    pub mic_volume: f32,
+    pub desktop_volume: f32,
+    pub mic_muted: bool,
+    pub desktop_muted: bool,
     pub ffmpeg_ok: bool,
     pub encoder: &'a str,
     pub message: &'a str,
