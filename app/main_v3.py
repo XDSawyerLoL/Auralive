@@ -9,7 +9,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import Body, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.config import BASE_DIR, RUNTIME_DIR
 from app.main_v2 import app, aura, db, response_sync, settings, voice_input
@@ -264,6 +264,42 @@ async def broadcast_record_stop_v3() -> dict[str, Any]:
 @app.post("/api/broadcast/preview/start")
 async def broadcast_preview_start_v3() -> dict[str, Any]:
     return await _broadcast_command("preview.start")
+
+
+@app.get("/api/broadcast/preview.mjpeg")
+async def broadcast_preview_mjpeg_v3() -> StreamingResponse:
+    async def frames():
+        boundary = b"--frame\r\n"
+        last_mtime = 0
+        while True:
+            try:
+                stat = native_broadcast.preview_path.stat()
+                mtime = stat.st_mtime_ns
+                if mtime != last_mtime:
+                    payload = await asyncio.to_thread(native_broadcast.preview_path.read_bytes)
+                    if payload.startswith(b"\xff\xd8") and payload.endswith(b"\xff\xd9"):
+                        last_mtime = mtime
+                        yield (
+                            boundary
+                            + b"Content-Type: image/jpeg\r\n"
+                            + f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
+                            + payload
+                            + b"\r\n"
+                        )
+                await asyncio.sleep(0.06)
+            except asyncio.CancelledError:
+                raise
+            except OSError:
+                await asyncio.sleep(0.10)
+
+    return StreamingResponse(
+        frames(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @app.post("/api/broadcast/preview/stop")
