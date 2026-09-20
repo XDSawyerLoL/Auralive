@@ -221,7 +221,7 @@ pub struct PreviewEngine {
 }
 
 impl PreviewEngine {
-    pub fn start(settings: &Settings) -> Result<Self> {
+    pub fn start(settings: &Settings, preview_file: Option<PathBuf>) -> Result<Self> {
         if !cfg!(target_os = "windows") {
             return Err(anyhow!("L’aperçu bureau V0.1 est ciblé Windows."));
         }
@@ -263,6 +263,18 @@ impl PreviewEngine {
 
                 while let Some(end) = find_jpeg_end(&buffer) {
                     let frame: Vec<u8> = buffer.drain(..end).collect();
+                    if let Some(path) = preview_file.as_ref() {
+                        let temporary = path.with_extension("jpg.tmp");
+                        if let Some(parent) = path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        if std::fs::write(&temporary, &frame).is_ok() {
+                            if path.exists() {
+                                let _ = std::fs::remove_file(path);
+                            }
+                            let _ = std::fs::rename(&temporary, path);
+                        }
+                    }
                     if tx.try_send(frame).is_err() {
                         // UI has not consumed the previous frame yet. Drop this one.
                     }
