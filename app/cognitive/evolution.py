@@ -1181,6 +1181,8 @@ socket.create_connection = _guard_create
                 self._sync_db_status(cycle_id, "promotion-blocked", result)
         elif successful:
             self._sync_db_status(cycle_id, "validated-remote", result)
+        elif revalidation_required:
+            self._sync_db_status(cycle_id, "revalidation-required", result)
         elif failed:
             self._sync_db_status(cycle_id, "rejected-remote", result)
         else:
