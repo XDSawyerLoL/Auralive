@@ -121,6 +121,15 @@ class Settings:
     horizon_currency: str = os.getenv("HORIZON_CURRENCY", "EUR").upper()
     horizon_timezone: str = os.getenv("HORIZON_TIMEZONE", "Europe/Paris")
 
+    # Noyau unifié AURA: Soul persistant, réflexion ambient, apprentissage par
+    # résultats, routines et agents spécialisés. AURA_CLOUD_TOKEN protège les
+    # commandes privées lorsque le même noyau est exposé sur un serveur.
+    cognitive_enabled: bool = _bool("AURA_COGNITIVE_ENABLED", True)
+    cognitive_tick_seconds: int = _int("AURA_COGNITIVE_TICK_SECONDS", 30)
+    cognitive_reflection_seconds: int = _int("AURA_COGNITIVE_REFLECTION_SECONDS", 300)
+    cognitive_max_reflections_per_hour: int = _int("AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR", 6)
+    aura_cloud_token: str = os.getenv("AURA_CLOUD_TOKEN", "")
+
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
     obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")
