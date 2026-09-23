@@ -136,6 +136,23 @@ class Settings:
         "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS", "safe,ai"
     )
 
+    # AURA Evolution: recherche continue + sas local + CI GitHub distante.
+    # Désactivé par défaut tant qu'un environnement source et un jeton GitHub
+    # finement scoped n'ont pas été configurés.
+    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", False)
+    evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
+    evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
+    evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)
+    evolution_github_token: str = os.getenv("AURA_EVOLUTION_GITHUB_TOKEN", "")
+    evolution_github_repository: str = os.getenv(
+        "AURA_EVOLUTION_GITHUB_REPOSITORY", "XDSawyerLoL/Auralive"
+    )
+    evolution_github_base_branch: str = os.getenv("AURA_EVOLUTION_GITHUB_BASE_BRANCH", "main")
+    evolution_allowed_domains: str = os.getenv(
+        "AURA_EVOLUTION_ALLOWED_DOMAINS", "api.github.com,pypi.org"
+    )
+    evolution_research_urls: str = os.getenv("AURA_EVOLUTION_RESEARCH_URLS", "")
+
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
     obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")
