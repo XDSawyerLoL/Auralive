@@ -301,13 +301,31 @@ class AuraOrchestrator:
             try:
                 context = await self.memory.context(viewer)
                 history = await self.memory.conversation(viewer["user_id"], limit=12)
-                answer = await self.ai.reply(
-                    viewer["display_name"],
-                    message,
-                    context,
-                    [] if direct else list(self.recent_chat),
-                    history,
-                )
+                world_context = ""
+                horizon = getattr(self, "horizon", None)
+                if horizon is not None:
+                    try:
+                        world_context = await horizon.context_for_ai()
+                    except Exception:
+                        logger.debug("Contexte HORIZON indisponible pour la réponse IA", exc_info=True)
+
+                if world_context:
+                    answer = await self.ai.reply(
+                        viewer["display_name"],
+                        message,
+                        context,
+                        [] if direct else list(self.recent_chat),
+                        history,
+                        world_context=world_context,
+                    )
+                else:
+                    answer = await self.ai.reply(
+                        viewer["display_name"],
+                        message,
+                        context,
+                        [] if direct else list(self.recent_chat),
+                        history,
+                    )
             except Exception:
                 logger.exception("Réponse IA impossible")
                 answer = f"@{viewer['display_name']} mon cerveau local a eu un raté. Réessaie dans quelques secondes."
