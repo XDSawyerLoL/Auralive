@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -646,12 +646,14 @@ class CognitiveKernel:
         return results
 
     async def _reflection_count_last_hour(self) -> int:
+        threshold = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         row = await self.db.fetchone(
             """
             SELECT COUNT(*) AS total
             FROM aura_reflections
-            WHERE created_at >= datetime('now','-1 hour')
-            """
+            WHERE created_at >= ?
+            """,
+            (threshold,),
         )
         return int((row or {}).get("total") or 0)
 
@@ -1075,7 +1077,7 @@ class CognitiveKernel:
             f"intention={soul.get('current_intention') or ''}",
             f"pensée_dominante={soul.get('dominant_thought') or ''}",
         ]
-        if intentions:
+        if intentions and private:
             lines.append("INTENTIONS ACTIVES")
             lines.extend(f"- {row['statement']}" for row in intentions)
         if lessons:
@@ -1090,8 +1092,6 @@ class CognitiveKernel:
         if horizon_context:
             lines.append("HORIZON")
             lines.append(horizon_context)
-        if not private:
-            lines = [line for line in lines if not line.startswith("INTENTIONS ACTIVES")]
         return "\n".join(lines)[:14000]
 
     async def status(self) -> dict[str, Any]:
