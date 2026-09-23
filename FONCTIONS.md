@@ -70,6 +70,19 @@
 - [x] Overlays alertes, chat, objectifs, écran, musique, Streamathon, emotes, TopWords, concours, crédits et pings
 - [x] Avatar vocal Mairaiy avec pose repos/parole, sous-titres et synthèse vocale OBS
 
+## Intelligence monde et boucle cognitive HORIZON
+
+- [x] Pont HORIZON versionné avec déduplication persistante des signaux
+- [x] Événements monde confirmés/dérivés vers Automation Studio
+- [x] Hypothèses émergentes conservées explicitement comme non confirmées
+- [x] Prévisions personnelles HORIZON vers AURA
+- [x] Contexte HORIZON injecté dans l'IA locale avec garde-fous épistémiques
+- [x] Faits de contexte AURA → HORIZON
+- [x] Intentions AURA → HORIZON
+- [x] Nœuds d'automatisation HORIZON (domaine, statut épistémique, personnel, sûreté d'autonomie)
+- [x] Fonctionnement AURA non bloquant si HORIZON est hors ligne
+- [x] API locale de diagnostic et synchronisation HORIZON
+
 ## Statistiques et automatisation
 
 - [x] Journal d'activité

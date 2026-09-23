@@ -137,10 +137,25 @@ def install_builtins(registry: AutomationRegistry) -> None:
         dispatcher = context.get("services", {}).get("dispatch")
         if dispatcher is None:
             raise RuntimeError("Service de dispatch indisponible")
+        payload = dict(config.get("payload", {}))
+        source = "automation"
+        if event.source == "horizon":
+            source = "horizon"
+            # Do not allow flow.emit to strip HORIZON's authority boundary.
+            for key in (
+                "autonomy_hint",
+                "epistemic_status",
+                "horizon_signal_id",
+                "horizon_entity_key",
+                "horizon_observed_at",
+                "horizon_bridge",
+            ):
+                if key in event.payload:
+                    payload[key] = event.payload[key]
         emitted = Event(
             str(config["type"]),
-            dict(config.get("payload", {})),
-            source="automation",
+            payload,
+            source=source,
         )
         reports = await dispatcher(emitted)
         return {"event_id": emitted.id, "reports": len(reports)}

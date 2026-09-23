@@ -6,4 +6,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN mkdir -p /app/data/media
 EXPOSE 8787
-CMD ["python", "-m", "app.main"]
+CMD ["python", "-m", "app.main_v3"]

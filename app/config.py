@@ -105,6 +105,22 @@ class Settings:
     ai_temperature: float = _float("AI_TEMPERATURE", 0.78)
     ai_warmup_enabled: bool = _bool("AI_WARMUP_ENABLED", True)
 
+    # Fusion cognitive AURA <-> HORIZON. Le pont reste optionnel et non bloquant :
+    # AURA continue de fonctionner localement même si HORIZON est indisponible.
+    horizon_enabled: bool = _bool("HORIZON_ENABLED", False)
+    horizon_base_url: str = os.getenv("HORIZON_BASE_URL", "").rstrip("/")
+    horizon_api_key: str = os.getenv("HORIZON_API_KEY", "")
+    horizon_external_id: str = os.getenv("HORIZON_EXTERNAL_ID", "aura-local").strip()
+    horizon_poll_seconds: int = _int("HORIZON_POLL_SECONDS", 60)
+    horizon_request_timeout_seconds: int = _int("HORIZON_REQUEST_TIMEOUT_SECONDS", 8)
+    horizon_event_limit: int = _int("HORIZON_EVENT_LIMIT", 100)
+    horizon_candidate_limit: int = _int("HORIZON_CANDIDATE_LIMIT", 100)
+    horizon_forecast_limit: int = _int("HORIZON_FORECAST_LIMIT", 100)
+    horizon_ai_context_signals: int = _int("HORIZON_AI_CONTEXT_SIGNALS", 10)
+    horizon_country: str = os.getenv("HORIZON_COUNTRY", "FR").upper()
+    horizon_currency: str = os.getenv("HORIZON_CURRENCY", "EUR").upper()
+    horizon_timezone: str = os.getenv("HORIZON_TIMEZONE", "Europe/Paris")
+
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
     obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")

@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import Body, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.automation.horizon_nodes import install_horizon_nodes
 from app.automation.pro_nodes import (
     automation_replaces_legacy,
     install_pro_nodes,
@@ -16,11 +17,13 @@ from app.automation.resilience_nodes import install_resilience_nodes
 from app.automation.routes import build_automation_router
 from app.automation.runtime import AutomationStudioRuntime
 from app.config import BASE_DIR, settings
+from app.horizon_routes import build_horizon_router
 from app.main import app, aura, db
 from app.services.avatar_audio import install_avatar_audio
 from app.services.cohost import install_cohost
 from app.services.eventsub_compat import install_eventsub_compat
 from app.services.gemini_provider import install_gemini_provider
+from app.services.horizon_bridge import HorizonBridge
 from app.services.oauth_resilience import install_oauth_resilience
 from app.services.response_sync import install_response_sync
 from app.services.tts_budget import install_tts_budget
@@ -36,11 +39,15 @@ cohost = install_cohost(aura, db, settings)
 response_sync = install_response_sync(aura, cohost)
 voice_input = install_voice_input(aura, db, cohost, settings)
 automation = AutomationStudioRuntime(aura, db, settings)
+horizon = HorizonBridge(settings, db)
+aura.horizon = horizon
 install_pro_nodes(automation.registry)
+install_horizon_nodes(automation.registry)
 install_resilience_nodes(automation.registry)
 automation.engine.set_service("moderation", aura.moderation)
 automation.engine.set_service("cohost", cohost)
 automation.engine.set_service("voice_input", voice_input)
+automation.engine.set_service("horizon", horizon)
 _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
 
@@ -205,6 +212,7 @@ async def _migrate_youthful_voice_preset() -> None:
 async def _v2_lifespan(application):
     async with _original_lifespan(application):
         await automation.initialize()
+        await horizon.start(automation.dispatch)
         await cohost.start()
         await _migrate_youthful_voice_preset()
         await automation.dispatch(
@@ -223,11 +231,13 @@ async def _v2_lifespan(application):
                 )
             finally:
                 await cohost.close()
+                await horizon.close()
                 await automation.close()
 
 
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
+app.include_router(build_horizon_router(horizon))
 app.version = "2.1.0-alpha"
 
 
