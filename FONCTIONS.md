@@ -83,6 +83,26 @@
 - [x] Fonctionnement AURA non bloquant si HORIZON est hors ligne
 - [x] API locale de diagnostic et synchronisation HORIZON
 
+## Noyau souverain AURA unifié
+
+- [x] Soul persistant avec cycles et état développemental runtime
+- [x] Boucle de réflexion ambient non auto-récursive
+- [x] Intentions persistantes
+- [x] Routines autonomes persistantes
+- [x] Réflexions auditables avec hypothèse/prochaine action/confiance
+- [x] Apprentissage durable à partir des résultats d'automatisation
+- [x] Détection des motifs d'échec répétés
+- [x] Propositions d'amélioration avec plan de validation
+- [x] Sous-agents spécialisés AURA
+- [x] Swarm multi-agents avec synthèse
+- [x] API AURA Cloud protégée par `AURA_CLOUD_TOKEN`
+- [x] `/api/chat` reconnecté au noyau serveur
+- [x] `/api/kernel/tick` reconnecté à la réflexion privée
+- [x] Soul + leçons + HORIZON injectés dans le contexte IA
+- [x] Perception `live_awareness` réellement installée au runtime
+- [x] Garde-fous Automation Studio conservés comme autorité d'exécution
+- [x] Aucune auto-modification silencieuse du code de production
+
 ## Statistiques et automatisation
 
 - [x] Journal d'activité
