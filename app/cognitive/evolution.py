@@ -186,11 +186,22 @@ class EvolutionLab:
             getattr(
                 self.settings,
                 "evolution_required_checks",
-                "validate,build-engine,build-windows-lite,build-windows",
+                "validate,build-windows-lite,build-windows",
             )
             or ""
         )
         return {item.strip() for item in raw.split(",") if item.strip()}
+
+    def required_checks_for_paths(self, paths: list[str]) -> set[str]:
+        required = set(self.required_checks)
+        native_paths = {
+            "app/main_v3.py",
+            "app/services/native_broadcast.py",
+            "app/config.py",
+        }
+        if any(path in native_paths or path.startswith("engine/quantic-live/") for path in paths):
+            required.add("build-engine")
+        return required
 
     async def initialize(self) -> None:
         self.workspaces.mkdir(parents=True, exist_ok=True)
@@ -854,6 +865,35 @@ socket.create_connection = _guard_create
             [sys.executable, "-m", "pytest", "-q"],
             timeout=900,
         )
+        candidate_security_invariants = self._run_validation_command(
+            workspace,
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tests/test_horizon_bridge.py",
+                "tests/test_cognitive_kernel.py",
+                "tests/test_update_manager.py",
+            ],
+            timeout=420,
+        )
+        candidate_runtime_canary = self._run_validation_command(
+            workspace,
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import app.main_v3 as runtime; "
+                    "assert getattr(runtime, 'app', None) is not None; "
+                    "assert getattr(runtime, 'aura', None) is not None; "
+                    "assert getattr(runtime.aura, 'cognitive', None) is not None; "
+                    "assert getattr(runtime.aura, 'evolution', None) is not None; "
+                    "print(getattr(runtime.app, 'version', 'unknown'))"
+                ),
+            ],
+            timeout=120,
+        )
         ok = all(
             item["ok"]
             for item in (
@@ -861,6 +901,8 @@ socket.create_connection = _guard_create
                 baseline_tests,
                 candidate_compile,
                 candidate_tests,
+                candidate_security_invariants,
+                candidate_runtime_canary,
             )
         )
         return {
@@ -870,6 +912,8 @@ socket.create_connection = _guard_create
             "baseline_tests": baseline_tests,
             "candidate_compile": candidate_compile,
             "candidate_tests": candidate_tests,
+            "candidate_security_invariants": candidate_security_invariants,
+            "candidate_runtime_canary": candidate_runtime_canary,
             "changed_paths": changed_paths,
             "external_network_blocked_during_tests": True,
             "validated_at": utcnow(),
@@ -1062,29 +1106,70 @@ socket.create_connection = _guard_create
             for item in checks
         ]
         by_name = {item["name"]: item for item in states if item["name"]}
-        required = self.required_checks
+
+        head_ref = str((pr.get("head") or {}).get("ref") or "")
+        branch_policy_ok = head_ref.startswith("aura-evolution/")
+        base_ref = self._github_request(
+            "GET",
+            f"/repos/{repo}/git/ref/heads/{urllib.parse.quote(self.base_branch, safe='')}",
+        )
+        current_base_sha = str((base_ref.get("object") or {}).get("sha") or "")
+        candidate_base_sha = str(promotion.get("base_sha") or "")
+        base_unchanged = bool(current_base_sha) and current_base_sha == candidate_base_sha
+
+        files_payload = self._github_request(
+            "GET",
+            f"/repos/{repo}/pulls/{number}/files?per_page=100",
+        )
+        remote_files = list(files_payload or []) if isinstance(files_payload, list) else []
+        remote_paths = [str((item or {}).get("filename") or "") for item in remote_files]
+        remote_policy_issues: list[str] = []
+        for rel in remote_paths:
+            ok, reason = self._path_policy(rel, auto=True)
+            if not ok:
+                remote_policy_issues.append(f"{rel}: {reason}")
+        remote_policy_ok = bool(remote_paths) and not remote_policy_issues
+
+        required = self.required_checks_for_paths(remote_paths)
         missing_required = sorted(required.difference(by_name))
         required_states = [by_name[name] for name in sorted(required) if name in by_name]
+
         pending = bool(missing_required) or any(
             item["status"] != "completed" for item in required_states
         )
-        successful = bool(required) and not pending and all(
+        checks_successful = bool(required) and not pending and all(
             item["conclusion"] == "success" for item in required_states
+        )
+        revalidation_required = checks_successful and not base_unchanged
+        successful = (
+            checks_successful
+            and base_unchanged
+            and branch_policy_ok
+            and remote_policy_ok
         )
         failed = (
             bool(required_states)
             and not missing_required
             and not pending
-            and not successful
-        )
+            and not checks_successful
+        ) or (checks_successful and (not branch_policy_ok or not remote_policy_ok))
 
         result = {
             "cycle_id": cycle_id,
             "pr_number": number,
             "head_sha": head_sha,
+            "head_ref": head_ref,
             "checks": states,
             "required_checks": sorted(required),
             "missing_required_checks": missing_required,
+            "branch_policy_ok": branch_policy_ok,
+            "remote_files": remote_paths,
+            "remote_policy_ok": remote_policy_ok,
+            "remote_policy_issues": remote_policy_issues,
+            "candidate_base_sha": candidate_base_sha,
+            "current_base_sha": current_base_sha,
+            "base_unchanged": base_unchanged,
+            "revalidation_required": revalidation_required,
             "pending": pending,
             "successful": successful,
             "failed": failed,
@@ -1108,6 +1193,8 @@ socket.create_connection = _guard_create
                 self._sync_db_status(cycle_id, "promotion-blocked", result)
         elif successful:
             self._sync_db_status(cycle_id, "validated-remote", result)
+        elif revalidation_required:
+            self._sync_db_status(cycle_id, "revalidation-required", result)
         elif failed:
             self._sync_db_status(cycle_id, "rejected-remote", result)
         else:
@@ -1288,7 +1375,11 @@ socket.create_connection = _guard_create
                 "sensitive-primitive scan",
                 "baseline compile + pytest",
                 "candidate compile + pytest",
+                "candidate security invariants",
+                "candidate runtime canary",
                 "GitHub PR",
+                "remote changed-files policy",
+                "base SHA freshness",
                 "remote CI",
                 "merge only after all checks succeed",
             ],
