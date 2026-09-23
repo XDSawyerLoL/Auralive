@@ -705,6 +705,12 @@ class CognitiveKernel:
     ) -> dict[str, Any]:
         if not self.enabled and not force:
             return {"ok": False, "skipped": True, "reason": "noyau cognitif désactivé"}
+        if self._tick_lock.locked():
+            return {
+                "ok": True,
+                "skipped": True,
+                "reason": "un cycle cognitif est déjà en cours",
+            }
 
         async with self._tick_lock:
             now_mono = time.monotonic()
