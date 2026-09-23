@@ -135,6 +135,8 @@ class AuraAI:
         viewer_context: str,
         recent_chat: list[str],
         conversation_history: list[dict[str, str]] | None = None,
+        *,
+        world_context: str = "",
     ) -> str:
         grounded = self._grounded_identity_answer(message)
         if grounded:
@@ -164,6 +166,19 @@ class AuraAI:
                 ),
             }
         )
+        if world_context:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "Contexte externe fourni par HORIZON. Utilise-le seulement lorsqu'il est pertinent. "
+                        "Conserve strictement les étiquettes épistémiques: une hypothèse non confirmée ne devient "
+                        "jamais un fait, un score diagnostic n'est jamais une probabilité, et une prévision doit "
+                        "rester présentée comme une prévision.\n"
+                        + world_context[:6000]
+                    ),
+                }
+            )
         if self._needs_conversation_repair(message):
             messages.append(
                 {
