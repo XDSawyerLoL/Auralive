@@ -103,6 +103,25 @@
 - [x] Garde-fous Automation Studio conservés comme autorité d'exécution
 - [x] Aucune auto-modification silencieuse du code de production
 
+## Auto-évolution AURA
+
+- [x] Recherche périodique des améliorations documentées sur sources HTTPS autorisées
+- [x] Veille du dépôt GitHub officiel et des versions PyPI
+- [x] Analyse des erreurs récurrentes et des leçons du noyau
+- [x] Génération de patchs minimaux par remplacement exact
+- [x] Workspace de test séparé du runtime actif
+- [x] Réseau externe bloqué pendant les tests du sas
+- [x] Compilation baseline + candidat
+- [x] Suite pytest baseline + candidat
+- [x] Interdiction d'auto-modifier les tests existants
+- [x] Fichiers de sécurité/politique protégés de toute auto-promotion
+- [x] Détection de nouvelles primitives sensibles dans un patch
+- [x] Soumission automatique optionnelle d'une PR GitHub
+- [x] Deuxième sas via checks CI GitHub
+- [x] Fusion automatique optionnelle uniquement après checks distants réussis
+- [x] Historique persistant de chaque cycle d'évolution et de ses preuves
+- [x] Pas d'écriture directe dans le runtime actif pendant la génération/test
+
 ## Statistiques et automatisation
 
 - [x] Journal d'activité
