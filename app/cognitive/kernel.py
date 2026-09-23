@@ -1084,9 +1084,14 @@ class CognitiveKernel:
             "ÉTAT AURA",
             f"phase={soul.get('phase')} cycles={soul.get('cycles')} énergie={soul.get('energy')} "
             f"curiosité={soul.get('curiosity')} pression={soul.get('pressure')} continuité={soul.get('continuity')}",
-            f"intention={soul.get('current_intention') or ''}",
-            f"pensée_dominante={soul.get('dominant_thought') or ''}",
         ]
+        if private:
+            lines.extend(
+                [
+                    f"intention={soul.get('current_intention') or ''}",
+                    f"pensée_dominante={soul.get('dominant_thought') or ''}",
+                ]
+            )
         if intentions and private:
             lines.append("INTENTIONS ACTIVES")
             lines.extend(f"- {row['statement']}" for row in intentions)
