@@ -193,6 +193,16 @@ class AutomationEngine:
     async def _execute_action(
         self, action: Any, event: Event, context: dict[str, Any]
     ) -> ExecutionStep:
+        policy_error = self._policy_error(action, event)
+        if policy_error:
+            return ExecutionStep(
+                action.type,
+                False,
+                error=policy_error,
+                action_id=action.id,
+                finished_at=utc_now_iso(),
+            )
+
         handler = self.registry.actions.get(action.type)
         if handler is None:
             return ExecutionStep(
@@ -235,6 +245,45 @@ class AutomationEngine:
             attempts=attempts,
             finished_at=utc_now_iso(),
             duration_ms=round((time.perf_counter() - started) * 1000, 3),
+        )
+
+    def _policy_error(self, action: Any, event: Event) -> str | None:
+        """Hard enforcement for low-trust predictive inputs.
+
+        Emerging HORIZON hypotheses may notify, explain, update local variables,
+        or fan out into another HORIZON-tagged event. They cannot directly
+        trigger network writes, processes, moderation, OBS control or other
+        potentially irreversible capabilities.
+        """
+        if event.source != "horizon":
+            return None
+        if (
+            event.type != "horizon.world.emerging"
+            and str(event.payload.get("autonomy_hint") or "") != "notify_or_verify_only"
+        ):
+            return None
+
+        allowed = {
+            "flow.delay",
+            "flow.emit",
+            "variables.set",
+            "variables.increment",
+            "variables.delete",
+            "debug.capture",
+            "aura.chat.send",
+            "aura.overlay.emit",
+            "aura.tts.speak",
+            "aura.ai.generate",
+            "aura.event.log",
+        }
+        if action.type in allowed:
+            return None
+
+        definition = self.registry.action_definitions.get(action.type)
+        risk = definition.risk if definition is not None else "unknown"
+        return (
+            "Garde-fou HORIZON: une hypothèse non confirmée ne peut pas exécuter "
+            f"l'action {action.type!r} (risque={risk})."
         )
 
     async def _rollback(
