@@ -22,7 +22,7 @@ def settings(*, auto_merge: bool = False):
         evolution_github_base_branch="main",
         evolution_allowed_domains="api.github.com,pypi.org",
         evolution_research_urls="",
-        evolution_required_checks="validate,build-engine,build-windows-lite,build-windows",
+        evolution_required_checks="validate,build-windows-lite,build-windows",
     )
 
 
@@ -186,3 +186,13 @@ def test_remote_gate_merges_only_after_all_independent_checks(tmp_path: Path, mo
     assert result["base_unchanged"] is True
     assert merge_calls
     assert statuses[-1][1] == "promoted"
+
+
+def test_native_paths_require_dedicated_core_check(tmp_path: Path):
+    evolution = lab(tmp_path)
+    generic = evolution.required_checks_for_paths(["app/services/cohost.py"])
+    native = evolution.required_checks_for_paths(["app/main_v3.py"])
+
+    assert "build-engine" not in generic
+    assert "build-engine" in native
+    assert {"validate", "build-windows-lite", "build-windows"}.issubset(native)
