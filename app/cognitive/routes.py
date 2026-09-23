@@ -130,6 +130,28 @@ def build_cognitive_router(kernel: Any, settings: Any) -> APIRouter:
         names = payload.get("names")
         return await kernel.swarm(task, list(names) if isinstance(names, list) else None)
 
+    @router.post("/api/kernel/operator")
+    async def kernel_operator(
+        request: Request,
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        _require_private(request)
+        task = str(payload.get("task") or "").strip()
+        if not task:
+            raise HTTPException(status_code=422, detail="Mission vide")
+        risks = payload.get("allowed_risks")
+        requested_risks = (
+            {str(item).casefold() for item in risks}
+            if isinstance(risks, list)
+            else None
+        )
+        return await kernel.operate(
+            task,
+            max_steps=int(payload.get("max_steps", 4)),
+            requested_risks=requested_risks,
+            source="private-api",
+        )
+
     @router.post("/api/chat")
     async def aura_cloud_chat(
         request: Request,
