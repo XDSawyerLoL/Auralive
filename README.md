@@ -139,6 +139,33 @@ La source `http://localhost:8787/overlay/avatar` affiche le personnage fourni av
 - Pings privés au streamer et page communautaire locale `http://localhost:8787/channel`.
 - Connecteurs testables et API locale pour StreamDeck/Loupedeck.
 
+## Fusion cognitive AURA × HORIZON
+
+AURA peut maintenant consommer nativement le moteur **HORIZON Predictive Intelligence** et lui renvoyer son contexte local. La fusion reste découplée : si HORIZON est indisponible, le moteur local d'AURA, le streaming et les automatisations continuent de fonctionner.
+
+Le pont versionné fournit trois événements Automation Studio :
+
+```text
+horizon.world.confirmed
+horizon.world.emerging
+horizon.personal.forecast
+```
+
+AURA conserve strictement le statut épistémique transmis par HORIZON : une hypothèse émergente reste non confirmée, les scores diagnostiques ne sont jamais convertis en probabilités, et une hypothèse ne peut pas autoriser automatiquement une action irréversible.
+
+AURA peut également transmettre à HORIZON des faits de contexte local et des intentions via les nœuds `horizon.context.fact` et `horizon.context.intent`. Le contexte HORIZON récent peut être injecté dans l'IA locale pour que Mairaiy raisonne avec la situation du monde sans confondre faits, hypothèses et prévisions.
+
+Configuration minimale :
+
+```env
+HORIZON_ENABLED=true
+HORIZON_BASE_URL=https://votre-horizon.example
+HORIZON_API_KEY=...
+HORIZON_EXTERNAL_ID=aura-local
+```
+
+Diagnostic local : `GET /api/horizon/status`. Synchronisation manuelle : `POST /api/horizon/sync`.
+
 ## Quantic Studio Core
 
 Quantic Studio utilise désormais **Quantic Studio Core 0.4.1** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
