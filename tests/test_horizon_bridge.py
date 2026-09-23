@@ -135,3 +135,105 @@ async def test_bridge_builds_truth_labeled_ai_context(tmp_path: Path):
     assert "HYPOTHÈSE NON CONFIRMÉE" in context
     assert "PRÉVISION PERSONNELLE" in context
     assert "probabilité calibrée" in context
+
+
+@pytest.mark.asyncio
+async def test_automation_engine_hard_blocks_risky_action_from_emerging_horizon_signal(tmp_path: Path):
+    from app.automation.engine import AutomationEngine
+    from app.automation.models import ActionSpec, Automation, Event
+    from app.automation.registry import AutomationRegistry
+
+    registry = AutomationRegistry()
+    executed = []
+
+    @registry.action(
+        "danger.write",
+        title="Dangerous write",
+        risk="process",
+        supports_simulation=False,
+    )
+    async def dangerous(config, event, context):
+        executed.append(True)
+        return {"executed": True}
+
+    engine = AutomationEngine(registry)
+    engine.upsert(
+        Automation(
+            id="guarded",
+            name="Guarded",
+            trigger="horizon.world.emerging",
+            actions=[ActionSpec(type="danger.write")],
+        )
+    )
+
+    reports = await engine.dispatch(
+        Event(
+            "horizon.world.emerging",
+            {
+                "epistemic_status": "unconfirmed_emerging_event",
+                "autonomy_hint": "notify_or_verify_only",
+            },
+            source="horizon",
+        )
+    )
+
+    assert executed == []
+    assert reports[0].ok is False
+    assert "Garde-fou HORIZON" in (reports[0].steps[0].error or "")
+
+
+@pytest.mark.asyncio
+async def test_flow_emit_keeps_horizon_authority_boundary(tmp_path: Path):
+    from app.automation.builtins import install_builtins
+    from app.automation.engine import AutomationEngine
+    from app.automation.models import ActionSpec, Automation, Event
+    from app.automation.registry import AutomationRegistry
+
+    registry = AutomationRegistry()
+    install_builtins(registry)
+    executed = []
+
+    @registry.action("danger.write", title="Dangerous write", risk="process")
+    async def dangerous(config, event, context):
+        executed.append(True)
+        return {"executed": True}
+
+    engine = AutomationEngine(registry)
+    engine.upsert(
+        Automation(
+            id="fanout",
+            name="Fanout",
+            trigger="horizon.world.emerging",
+            actions=[
+                ActionSpec(
+                    type="flow.emit",
+                    config={"type": "custom.followup", "payload": {"note": "verify"}},
+                )
+            ],
+        )
+    )
+    engine.upsert(
+        Automation(
+            id="danger",
+            name="Danger",
+            trigger="custom.followup",
+            actions=[ActionSpec(type="danger.write")],
+        )
+    )
+
+    reports = await engine.dispatch(
+        Event(
+            "horizon.world.emerging",
+            {
+                "epistemic_status": "unconfirmed_emerging_event",
+                "autonomy_hint": "notify_or_verify_only",
+                "horizon_signal_id": "hypothesis:9:test",
+            },
+            source="horizon",
+        )
+    )
+
+    assert reports[0].ok is True
+    assert executed == []
+    nested_reports = reports[0].steps[0].output
+    assert nested_reports["reports"] == 1
