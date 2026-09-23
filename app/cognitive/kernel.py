@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from app.automation.models import Event, ExecutionReport
+from app.automation.models import ActionSpec, Automation, Event, ExecutionReport
 from app.database import Database, utcnow
 
 logger = logging.getLogger(__name__)
@@ -114,6 +114,18 @@ class CognitiveKernel:
     def max_reflections_per_hour(self) -> int:
         return max(1, min(int(getattr(self.settings, "cognitive_max_reflections_per_hour", 6)), 60))
 
+    @property
+    def operator_allowed_risks(self) -> set[str]:
+        raw = str(
+            getattr(
+                self.settings,
+                "cognitive_operator_allowed_risks",
+                "safe,ai",
+            )
+            or "safe,ai"
+        )
+        return {item.strip().casefold() for item in raw.split(",") if item.strip()}
+
     async def initialize(self) -> None:
         await self.db.executescript(
             """
@@ -180,6 +192,7 @@ class CognitiveKernel:
                 name TEXT NOT NULL UNIQUE,
                 prompt TEXT NOT NULL,
                 every_seconds INTEGER NOT NULL,
+                mode TEXT NOT NULL DEFAULT 'reflect',
                 enabled INTEGER NOT NULL DEFAULT 1,
                 last_run_at REAL NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
@@ -224,6 +237,12 @@ class CognitiveKernel:
             );
             """
         )
+        routine_columns = await self.db.fetchall("PRAGMA table_info(aura_routines)")
+        if not any(str(row.get("name") or "") == "mode" for row in routine_columns):
+            await self.db.execute(
+                "ALTER TABLE aura_routines ADD COLUMN mode TEXT NOT NULL DEFAULT 'reflect'"
+            )
+
         row = await self.db.fetchone("SELECT state FROM aura_soul_state WHERE id=1")
         if row:
             try:
@@ -590,29 +609,54 @@ class CognitiveKernel:
         )
         return True
 
-    async def add_routine(self, name: str, prompt: str, every_seconds: int) -> dict[str, Any]:
+    async def add_routine(
+        self,
+        name: str,
+        prompt: str,
+        every_seconds: int,
+        *,
+        mode: str = "reflect",
+    ) -> dict[str, Any]:
         now = utcnow()
         routine_id = str(uuid4())
         interval = max(60, min(int(every_seconds), 31_536_000))
+        normalized_mode = str(mode or "reflect").casefold()
+        if normalized_mode not in {"reflect", "operate"}:
+            raise ValueError("mode de routine inconnu: reflect ou operate attendu")
         await self.db.execute(
             """
             INSERT INTO aura_routines(
-                id,name,prompt,every_seconds,enabled,last_run_at,created_at,updated_at
-            ) VALUES(?,?,?,?,1,0,?,?)
+                id,name,prompt,every_seconds,mode,enabled,last_run_at,created_at,updated_at
+            ) VALUES(?,?,?,?,?,1,0,?,?)
             ON CONFLICT(name) DO UPDATE SET
                 prompt=excluded.prompt,
                 every_seconds=excluded.every_seconds,
+                mode=excluded.mode,
                 enabled=1,
                 updated_at=excluded.updated_at
             """,
-            (routine_id, name[:160], prompt[:4000], interval, now, now),
+            (
+                routine_id,
+                name[:160],
+                prompt[:4000],
+                interval,
+                normalized_mode,
+                now,
+                now,
+            ),
         )
-        return {"name": name, "prompt": prompt, "every_seconds": interval, "enabled": True}
+        return {
+            "name": name,
+            "prompt": prompt,
+            "every_seconds": interval,
+            "mode": normalized_mode,
+            "enabled": True,
+        }
 
     async def routines(self) -> list[dict[str, Any]]:
         return await self.db.fetchall(
             """
-            SELECT id,name,prompt,every_seconds,enabled,last_run_at,created_at,updated_at
+            SELECT id,name,prompt,every_seconds,mode,enabled,last_run_at,created_at,updated_at
             FROM aura_routines ORDER BY name
             """
         )
@@ -621,7 +665,7 @@ class CognitiveKernel:
         now = time.time()
         rows = await self.db.fetchall(
             """
-            SELECT id,name,prompt,every_seconds,last_run_at
+            SELECT id,name,prompt,every_seconds,mode,last_run_at
             FROM aura_routines WHERE enabled=1
             ORDER BY name
             """
@@ -641,12 +685,21 @@ class CognitiveKernel:
                 "scheduled": True,
             }
             await self.automation.dispatch("aura.cognitive.routine", payload, source="cognitive")
-            reflection = await self.tick(
-                trigger=f"routine:{row['name']}",
-                text=str(row["prompt"]),
-                force=True,
-            )
-            results.append({"routine": row["name"], "reflection": reflection})
+            if str(row.get("mode") or "reflect") == "operate":
+                outcome = await self.operate(
+                    str(row["prompt"]),
+                    max_steps=3,
+                    requested_risks={"safe", "ai"},
+                    source=f"routine:{row['name']}",
+                )
+                results.append({"routine": row["name"], "mode": "operate", "outcome": outcome})
+            else:
+                reflection = await self.tick(
+                    trigger=f"routine:{row['name']}",
+                    text=str(row["prompt"]),
+                    force=True,
+                )
+                results.append({"routine": row["name"], "mode": "reflect", "reflection": reflection})
         return results
 
     async def _reflection_count_last_hour(self) -> int:
@@ -809,11 +862,18 @@ class CognitiveKernel:
             next_action = str(parsed.get("next_action") or "")[:4000]
             memory = str(parsed.get("memory") or "").strip()[:4000]
             intention = str(parsed.get("intention") or "").strip()[:3000]
+            restricted_authority = any(
+                str(item.get("type") or "") == "horizon.world.emerging"
+                or str((item.get("payload") or {}).get("autonomy_hint") or "") == "notify_or_verify_only"
+                for item in (bundle.get("stimuli") or [])
+                if isinstance(item, dict)
+            )
             context = {
                 "trigger": trigger,
                 "horizon_used": bool(bundle.get("horizon")),
                 "stimuli_count": len(bundle.get("stimuli") or []),
                 "lesson_count": len(bundle.get("lessons") or []),
+                "restricted_authority": restricted_authority,
             }
             await self.db.execute(
                 """
@@ -863,6 +923,11 @@ class CognitiveKernel:
                 "hypothesis": hypothesis,
                 "next_action": next_action,
                 "confidence": confidence,
+                "autonomy_hint": (
+                    "notify_or_verify_only"
+                    if restricted_authority
+                    else "personal_relevance_gate_then_propose"
+                ),
             }
             await self._trace("reflection", title, summary, payload)
             await self.automation.dispatch(
@@ -979,6 +1044,191 @@ class CognitiveKernel:
             """,
             (max(1, min(int(limit), 100)),),
         )
+
+    def _operator_catalog(self, allowed_risks: set[str]) -> list[dict[str, Any]]:
+        blocked = {
+            "flow.emit",
+            "cognitive.tick",
+            "cognitive.routine.add",
+            "cognitive.operator",
+        }
+        catalog: list[dict[str, Any]] = []
+        for definition in self.automation.registry.action_definitions.values():
+            risk = str(definition.risk or "safe").casefold()
+            if risk not in allowed_risks or definition.name in blocked:
+                continue
+            catalog.append(
+                {
+                    "name": definition.name,
+                    "title": definition.title,
+                    "category": definition.category,
+                    "description": definition.description,
+                    "risk": risk,
+                    "config_schema": definition.config_schema,
+                }
+            )
+        return catalog
+
+    async def operate(
+        self,
+        task: str,
+        *,
+        max_steps: int = 4,
+        requested_risks: set[str] | None = None,
+        source: str = "private-command",
+    ) -> dict[str, Any]:
+        mission = " ".join(str(task).split()).strip()
+        if not mission:
+            raise ValueError("Mission vide")
+
+        configured = self.operator_allowed_risks
+        requested = {str(item).casefold() for item in (requested_risks or configured)}
+        allowed_risks = configured.intersection(requested)
+        catalog = self._operator_catalog(allowed_risks)
+        if not catalog:
+            raise RuntimeError("Aucune capacité opérateur autorisée par la politique AURA")
+
+        context = await self.context_for_ai()
+        feedback = ""
+        reports: list[dict[str, Any]] = []
+        spoken: list[str] = []
+        step_limit = max(1, min(int(max_steps), 8))
+
+        for step_index in range(step_limit):
+            prompt = (
+                "Mission AURA:\n"
+                + mission[:6000]
+                + "\n\nCapacités autorisées:\n"
+                + json.dumps(catalog, ensure_ascii=False, default=str)[:18000]
+                + "\n\nContexte:\n"
+                + context[:9000]
+            )
+            if feedback:
+                prompt += (
+                    "\n\nRésultat des actions précédentes:\n"
+                    + feedback[:12000]
+                    + "\nDécide si une nouvelle étape est réellement nécessaire."
+                )
+            prompt += (
+                "\n\nRetourne uniquement JSON: "
+                '{"say":"résumé court","actions":[{"type":"nom","config":{},"reason":"raison"}],"continue":false}. '
+                "N'utilise que les capacités listées. Maximum 6 actions. "
+                "Ne contourne jamais une permission par un événement indirect."
+            )
+            raw = await self.aura.ai.generate(
+                prompt,
+                (
+                    "Tu es l'orchestrateur Sovereign d'AURA. Tu planifies puis délègues l'exécution "
+                    "au moteur Automation Studio. Tu ne peux utiliser que le catalogue fourni et tu "
+                    "dois préférer l'action minimale vérifiable. Aucun raisonnement détaillé."
+                ),
+                800,
+                system_is_complete=True,
+            )
+            plan = _json_object(raw)
+            if not plan:
+                spoken.append(str(raw)[:2000])
+                break
+
+            say = str(plan.get("say") or "").strip()
+            if say:
+                spoken.append(say[:2000])
+
+            raw_actions = plan.get("actions")
+            actions = raw_actions if isinstance(raw_actions, list) else []
+            action_specs: list[ActionSpec] = []
+            allowed_names = {row["name"] for row in catalog}
+            rejected: list[str] = []
+            for item in actions[:6]:
+                if not isinstance(item, dict):
+                    continue
+                action_type = str(item.get("type") or "")
+                if action_type not in allowed_names:
+                    rejected.append(action_type or "<vide>")
+                    continue
+                action_specs.append(
+                    ActionSpec(
+                        type=action_type,
+                        config=dict(item.get("config") or {}),
+                        timeout_seconds=30.0,
+                        retries=0,
+                    )
+                )
+
+            if rejected:
+                feedback = json.dumps(
+                    {
+                        "rejected_actions": rejected,
+                        "reason": "capabilité non autorisée par la politique opérateur",
+                    },
+                    ensure_ascii=False,
+                )
+                if not action_specs and bool(plan.get("continue", False)):
+                    continue
+
+            if not action_specs:
+                if not bool(plan.get("continue", False)):
+                    break
+                feedback = feedback or "Aucune action valide exécutée."
+                continue
+
+            trigger = f"aura.operator.{uuid4()}"
+            automation_id = f"cognitive-operator-{uuid4()}"
+            ephemeral = Automation(
+                id=automation_id,
+                name="AURA Sovereign ephemeral plan",
+                trigger=trigger,
+                actions=action_specs,
+                priority=0,
+                description=f"Plan éphémère du noyau cognitif: {mission[:240]}",
+                tags=["cognitive", "sovereign", "ephemeral"],
+            )
+            self.automation.engine.upsert(ephemeral)
+            try:
+                engine_reports = await self.automation.engine.dispatch(
+                    Event(
+                        trigger,
+                        {
+                            "task": mission,
+                            "step": step_index + 1,
+                            "source": source,
+                            "allowed_risks": sorted(allowed_risks),
+                        },
+                        source="cognitive-operator",
+                    )
+                )
+            finally:
+                self.automation.engine.remove(automation_id)
+
+            serialized = [
+                self.automation.report_to_dict(report)
+                for report in engine_reports
+            ]
+            reports.extend(serialized)
+            feedback = json.dumps(serialized, ensure_ascii=False, default=str)
+            if not bool(plan.get("continue", False)):
+                break
+
+        result = {
+            "ok": all(bool(report.get("ok", False)) for report in reports) if reports else True,
+            "task": mission,
+            "allowed_risks": sorted(allowed_risks),
+            "say": "\n".join(spoken).strip(),
+            "reports": reports,
+            "steps": len(reports),
+        }
+        await self._trace(
+            "operator",
+            "Sovereign plan",
+            result["say"] or mission,
+            {
+                "task": mission,
+                "allowed_risks": sorted(allowed_risks),
+                "report_count": len(reports),
+                "ok": result["ok"],
+            },
+        )
+        return result
 
     async def run_agent(self, name: str, task: str) -> dict[str, Any]:
         role = self.AGENT_ROLES.get(name)
