@@ -270,6 +270,7 @@ class AutomationStudioRuntime:
             ("aura.cognitive.reflection", "Réflexion AURA", "AURA Cognitive"),
             ("aura.cognitive.routine", "Routine AURA", "AURA Cognitive"),
             ("aura.cognitive.improvement.proposed", "Amélioration proposée", "AURA Cognitive"),
+            ("aura.evolution.cycle", "Cycle d’évolution AURA", "AURA Evolution"),
             ("automation.manual", "Déclenchement manuel", "Aura Live"),
             ("automation.timer", "Planificateur", "Aura Live"),
             ("*", "Tous les événements", "Avancé"),
