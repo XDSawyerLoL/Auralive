@@ -153,6 +153,11 @@ class Settings:
     )
     evolution_research_urls: str = os.getenv("AURA_EVOLUTION_RESEARCH_URLS", "")
 
+    evolution_required_checks: str = os.getenv(
+        "AURA_EVOLUTION_REQUIRED_CHECKS",
+        "validate,build-engine,build-windows-lite,build-windows",
+    )
+
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
     obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")
