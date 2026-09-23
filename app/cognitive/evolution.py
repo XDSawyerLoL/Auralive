@@ -186,11 +186,22 @@ class EvolutionLab:
             getattr(
                 self.settings,
                 "evolution_required_checks",
-                "validate,build-engine,build-windows-lite,build-windows",
+                "validate,build-windows-lite,build-windows",
             )
             or ""
         )
         return {item.strip() for item in raw.split(",") if item.strip()}
+
+    def required_checks_for_paths(self, paths: list[str]) -> set[str]:
+        required = set(self.required_checks)
+        native_paths = {
+            "app/main_v3.py",
+            "app/services/native_broadcast.py",
+            "app/config.py",
+        }
+        if any(path in native_paths or path.startswith("engine/quantic-live/") for path in paths):
+            required.add("build-engine")
+        return required
 
     async def initialize(self) -> None:
         self.workspaces.mkdir(parents=True, exist_ok=True)
@@ -1095,9 +1106,6 @@ socket.create_connection = _guard_create
             for item in checks
         ]
         by_name = {item["name"]: item for item in states if item["name"]}
-        required = self.required_checks
-        missing_required = sorted(required.difference(by_name))
-        required_states = [by_name[name] for name in sorted(required) if name in by_name]
 
         head_ref = str((pr.get("head") or {}).get("ref") or "")
         branch_policy_ok = head_ref.startswith("aura-evolution/")
@@ -1114,13 +1122,17 @@ socket.create_connection = _guard_create
             f"/repos/{repo}/pulls/{number}/files?per_page=100",
         )
         remote_files = list(files_payload or []) if isinstance(files_payload, list) else []
+        remote_paths = [str((item or {}).get("filename") or "") for item in remote_files]
         remote_policy_issues: list[str] = []
-        for item in remote_files:
-            rel = str((item or {}).get("filename") or "")
+        for rel in remote_paths:
             ok, reason = self._path_policy(rel, auto=True)
             if not ok:
                 remote_policy_issues.append(f"{rel}: {reason}")
-        remote_policy_ok = bool(remote_files) and not remote_policy_issues
+        remote_policy_ok = bool(remote_paths) and not remote_policy_issues
+
+        required = self.required_checks_for_paths(remote_paths)
+        missing_required = sorted(required.difference(by_name))
+        required_states = [by_name[name] for name in sorted(required) if name in by_name]
 
         pending = bool(missing_required) or any(
             item["status"] != "completed" for item in required_states
@@ -1151,7 +1163,7 @@ socket.create_connection = _guard_create
             "required_checks": sorted(required),
             "missing_required_checks": missing_required,
             "branch_policy_ok": branch_policy_ok,
-            "remote_files": [str((item or {}).get("filename") or "") for item in remote_files],
+            "remote_files": remote_paths,
             "remote_policy_ok": remote_policy_ok,
             "remote_policy_issues": remote_policy_issues,
             "candidate_base_sha": candidate_base_sha,
