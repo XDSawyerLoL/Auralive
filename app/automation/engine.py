@@ -60,7 +60,8 @@ class AutomationEngine:
         self._semaphores.pop(automation_id, None)
 
     def add_listener(self, listener: ReportListener) -> None:
-        self.listeners.append(listener)
+        if listener not in self.listeners:
+            self.listeners.append(listener)
 
     async def dispatch(self, event: Event) -> list[ExecutionReport]:
         matches = sorted(
