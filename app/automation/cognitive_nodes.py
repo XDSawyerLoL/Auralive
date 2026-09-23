@@ -134,3 +134,30 @@ def install_cognitive_nodes(registry: AutomationRegistry) -> None:
             str(config["task"]),
             list(names) if isinstance(names, list) else None,
         )
+
+
+    @registry.action(
+        "cognitive.operator",
+        title="AURA Sovereign : planifier et agir",
+        category="AURA Cognitive",
+        risk="ai",
+        supports_simulation=False,
+        config_schema={
+            "task": "string",
+            "max_steps": "integer",
+            "allowed_risks": "array",
+        },
+    )
+    async def cognitive_operator(config: dict[str, Any], event: Event, context: dict[str, Any]) -> Any:
+        requested = config.get("allowed_risks")
+        requested_risks = (
+            {str(item).casefold() for item in requested}
+            if isinstance(requested, list)
+            else None
+        )
+        return await _kernel(context).operate(
+            str(config["task"]),
+            max_steps=int(config.get("max_steps", 4)),
+            requested_risks=requested_risks,
+            source=f"automation:{event.type}",
+        )
