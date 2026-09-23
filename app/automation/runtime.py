@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from dataclasses import asdict
@@ -47,6 +48,7 @@ class AutomationStudioRuntime:
             },
         )
         self.engine.add_listener(self._persist_report)
+        self.event_listeners: list[Any] = []
         self.started = False
 
     async def initialize(self) -> None:
@@ -156,6 +158,10 @@ class AutomationStudioRuntime:
         )
         await self._save_variables()
 
+    def add_event_listener(self, listener: Any) -> None:
+        if listener not in self.event_listeners:
+            self.event_listeners.append(listener)
+
     async def dispatch(
         self,
         event_type: str,
@@ -164,6 +170,13 @@ class AutomationStudioRuntime:
         source: str = "aura",
     ) -> list[dict[str, Any]]:
         event = Event(event_type, self.normalize_payload(payload or {}), source=source)
+        for listener in list(self.event_listeners):
+            try:
+                result = listener(event)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.exception("Observateur d'événement AURA en erreur pour %s", event_type)
         reports = await self.engine.dispatch(event)
         return [self.report_to_dict(item) for item in reports]
 
@@ -253,6 +266,11 @@ class AutomationStudioRuntime:
             ("horizon.world.emerging", "Hypothèse émergente HORIZON", "HORIZON"),
             ("horizon.personal.forecast", "Prévision personnelle HORIZON", "HORIZON"),
             ("horizon.bridge.synced", "Synchronisation HORIZON", "HORIZON"),
+            ("aura.cognitive.tick", "Cycle cognitif AURA", "AURA Cognitive"),
+            ("aura.cognitive.reflection", "Réflexion AURA", "AURA Cognitive"),
+            ("aura.cognitive.routine", "Routine AURA", "AURA Cognitive"),
+            ("aura.cognitive.improvement.proposed", "Amélioration proposée", "AURA Cognitive"),
+            ("aura.evolution.cycle", "Cycle d’évolution AURA", "AURA Evolution"),
             ("automation.manual", "Déclenchement manuel", "Aura Live"),
             ("automation.timer", "Planificateur", "Aura Live"),
             ("*", "Tous les événements", "Avancé"),

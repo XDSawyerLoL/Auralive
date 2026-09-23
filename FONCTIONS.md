@@ -83,6 +83,45 @@
 - [x] Fonctionnement AURA non bloquant si HORIZON est hors ligne
 - [x] API locale de diagnostic et synchronisation HORIZON
 
+## Noyau souverain AURA unifié
+
+- [x] Soul persistant avec cycles et état développemental runtime
+- [x] Boucle de réflexion ambient non auto-récursive
+- [x] Intentions persistantes
+- [x] Routines autonomes persistantes
+- [x] Réflexions auditables avec hypothèse/prochaine action/confiance
+- [x] Apprentissage durable à partir des résultats d'automatisation
+- [x] Détection des motifs d'échec répétés
+- [x] Propositions d'amélioration avec plan de validation
+- [x] Sous-agents spécialisés AURA
+- [x] Swarm multi-agents avec synthèse
+- [x] API AURA Cloud protégée par `AURA_CLOUD_TOKEN`
+- [x] `/api/chat` reconnecté au noyau serveur
+- [x] `/api/kernel/tick` reconnecté à la réflexion privée
+- [x] Soul + leçons + HORIZON injectés dans le contexte IA
+- [x] Perception `live_awareness` réellement installée au runtime
+- [x] Garde-fous Automation Studio conservés comme autorité d'exécution
+- [x] Aucune auto-modification silencieuse du code de production
+
+## Auto-évolution AURA
+
+- [x] Recherche périodique des améliorations documentées sur sources HTTPS autorisées
+- [x] Veille du dépôt GitHub officiel et des versions PyPI
+- [x] Analyse des erreurs récurrentes et des leçons du noyau
+- [x] Génération de patchs minimaux par remplacement exact
+- [x] Workspace de test séparé du runtime actif
+- [x] Réseau externe bloqué pendant les tests du sas
+- [x] Compilation baseline + candidat
+- [x] Suite pytest baseline + candidat
+- [x] Interdiction d'auto-modifier les tests existants
+- [x] Fichiers de sécurité/politique protégés de toute auto-promotion
+- [x] Détection de nouvelles primitives sensibles dans un patch
+- [x] Soumission automatique optionnelle d'une PR GitHub
+- [x] Deuxième sas via checks CI GitHub
+- [x] Fusion automatique optionnelle uniquement après checks distants réussis
+- [x] Historique persistant de chaque cycle d'évolution et de ses preuves
+- [x] Pas d'écriture directe dans le runtime actif pendant la génération/test
+
 ## Statistiques et automatisation
 
 - [x] Journal d'activité

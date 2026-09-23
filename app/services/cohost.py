@@ -289,6 +289,8 @@ class CohostService:
         viewer_context: str,
         recent_chat: list[str],
         conversation_history: list[dict[str, str]] | None = None,
+        *,
+        world_context: str = "",
     ) -> str:
         combined_context = (
             f"{viewer_context}\n\nCONTEXTE DE CHAÎNE VÉRIFIÉ:\n{self.channel_context_text()}"
@@ -299,6 +301,7 @@ class CohostService:
             combined_context,
             recent_chat,
             conversation_history,
+            world_context=world_context,
         )
 
     async def _maybe_analyze_screen(self) -> None:

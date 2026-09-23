@@ -301,14 +301,26 @@ class AuraOrchestrator:
             try:
                 context = await self.memory.context(viewer)
                 history = await self.memory.conversation(viewer["user_id"], limit=12)
-                world_context = ""
+                world_context_parts: list[str] = []
                 horizon = getattr(self, "horizon", None)
                 if horizon is not None:
                     try:
-                        world_context = await horizon.context_for_ai()
+                        horizon_context = await horizon.context_for_ai()
+                        if horizon_context:
+                            world_context_parts.append(horizon_context)
                     except Exception:
                         logger.debug("Contexte HORIZON indisponible pour la réponse IA", exc_info=True)
 
+                cognitive = getattr(self, "cognitive", None)
+                if cognitive is not None:
+                    try:
+                        cognitive_context = await cognitive.context_for_ai()
+                        if cognitive_context:
+                            world_context_parts.append(cognitive_context)
+                    except Exception:
+                        logger.debug("Contexte cognitif AURA indisponible pour la réponse IA", exc_info=True)
+
+                world_context = "\n\n".join(world_context_parts)
                 if world_context:
                     answer = await self.ai.reply(
                         viewer["display_name"],

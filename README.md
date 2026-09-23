@@ -166,6 +166,53 @@ HORIZON_EXTERNAL_ID=aura-local
 
 Diagnostic local : `GET /api/horizon/status`. Synchronisation manuelle : `POST /api/horizon/sync`.
 
+## Noyau souverain AURA unifié
+
+Le runtime moderne réunit désormais les lignées historiques **AURA Brain**, **Aura Sovereign**, **AURA Cloud**, **Quantic Studio** et **HORIZON** dans un seul noyau persistant.
+
+Le noyau ajoute :
+
+- **Soul persistant** : identité runtime, phase, cycles, énergie, curiosité, pression, continuité, introspection, ouverture, réactivité et intention courante ;
+- **boucle ambient** : AURA observe les événements utiles et ne déclenche une réflexion que lorsqu'un nouveau stimulus ou une routine le justifie ;
+- **réflexions auditables** : résumé, hypothèse éventuelle, prochaine action proposée et niveau de confiance, sans journal de raisonnement détaillé ;
+- **apprentissage par résultats** : les succès/échecs des automatisations alimentent des leçons persistantes réinjectées dans les décisions suivantes ;
+- **laboratoire d'amélioration** : les échecs répétés produisent des propositions d'amélioration et un plan de validation, sans modification silencieuse du code de production ;
+- **intentions persistantes** et **routines autonomes** ;
+- **agents spécialisés** (planner, research, dev, security, operator, critic) et mode **swarm** avec synthèse ;
+- **AURA Cloud API** : `/api/chat`, `/api/kernel/tick`, Soul, réflexions, intentions, routines, leçons et propositions d'amélioration ;
+- **perception live** réactivée via `live_awareness` et intégrée au cycle de vie du cohost ;
+- contexte combiné **Soul + leçons + HORIZON** injecté dans les réponses IA.
+
+Le noyau est volontairement autonome sans être incontrôlable : une réflexion propose une action, puis Automation Studio reste l'autorité d'exécution avec ses permissions, risques, simulations et rollbacks. Les hypothèses HORIZON conservent leurs garde-fous jusqu'à l'action finale.
+
+Pour un déploiement serveur, protège les commandes privées :
+
+```env
+AURA_COGNITIVE_ENABLED=true
+AURA_COGNITIVE_TICK_SECONDS=30
+AURA_COGNITIVE_REFLECTION_SECONDS=300
+AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR=6
+AURA_CLOUD_TOKEN=<secret-long-et-aleatoire>
+```
+
+Endpoints principaux :
+
+```text
+GET  /api/kernel/status
+GET  /api/kernel/soul
+POST /api/kernel/tick
+GET  /api/kernel/reflections
+GET  /api/kernel/lessons
+GET  /api/kernel/intentions
+POST /api/kernel/intentions
+GET  /api/kernel/routines
+POST /api/kernel/routines
+GET  /api/kernel/improvements
+POST /api/kernel/agents/run
+POST /api/kernel/agents/swarm
+POST /api/chat
+```
+
 ## Quantic Studio Core
 
 Quantic Studio utilise désormais **Quantic Studio Core 0.4.1** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.

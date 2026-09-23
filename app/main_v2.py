@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import Body, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from app.automation.cognitive_nodes import install_cognitive_nodes
 from app.automation.horizon_nodes import install_horizon_nodes
 from app.automation.pro_nodes import (
     automation_replaces_legacy,
@@ -16,6 +17,8 @@ from app.automation.pro_nodes import (
 from app.automation.resilience_nodes import install_resilience_nodes
 from app.automation.routes import build_automation_router
 from app.automation.runtime import AutomationStudioRuntime
+from app.cognitive import CognitiveKernel, EvolutionLab, build_cognitive_router
+from app.cognitive.evolution_routes import build_evolution_router
 from app.config import BASE_DIR, settings
 from app.horizon_routes import build_horizon_router
 from app.main import app, aura, db
@@ -24,6 +27,7 @@ from app.services.cohost import install_cohost
 from app.services.eventsub_compat import install_eventsub_compat
 from app.services.gemini_provider import install_gemini_provider
 from app.services.horizon_bridge import HorizonBridge
+from app.services.live_awareness import install_live_awareness
 from app.services.oauth_resilience import install_oauth_resilience
 from app.services.response_sync import install_response_sync
 from app.services.tts_budget import install_tts_budget
@@ -36,18 +40,27 @@ install_oauth_resilience(aura.twitch)
 install_avatar_audio(aura)
 install_tts_budget(aura.avatar_audio)
 cohost = install_cohost(aura, db, settings)
+live_awareness = install_live_awareness(aura, db, cohost, settings)
 response_sync = install_response_sync(aura, cohost)
 voice_input = install_voice_input(aura, db, cohost, settings)
 automation = AutomationStudioRuntime(aura, db, settings)
 horizon = HorizonBridge(settings, db)
+cognitive = CognitiveKernel(aura, db, automation, horizon, settings)
+evolution = EvolutionLab(aura, db, automation, cognitive, settings)
 aura.horizon = horizon
+aura.cognitive = cognitive
+aura.evolution = evolution
 install_pro_nodes(automation.registry)
 install_horizon_nodes(automation.registry)
+install_cognitive_nodes(automation.registry)
 install_resilience_nodes(automation.registry)
 automation.engine.set_service("moderation", aura.moderation)
 automation.engine.set_service("cohost", cohost)
 automation.engine.set_service("voice_input", voice_input)
 automation.engine.set_service("horizon", horizon)
+automation.engine.set_service("cognitive", cognitive)
+automation.engine.set_service("evolution", evolution)
+automation.engine.set_service("live_awareness", live_awareness)
 _original_lifespan = app.router.lifespan_context
 _original_twitch_handler = aura.handle_twitch_event
 
@@ -212,6 +225,8 @@ async def _migrate_youthful_voice_preset() -> None:
 async def _v2_lifespan(application):
     async with _original_lifespan(application):
         await automation.initialize()
+        await cognitive.start()
+        await evolution.start()
         await horizon.start(automation.dispatch)
         await cohost.start()
         await _migrate_youthful_voice_preset()
@@ -230,6 +245,8 @@ async def _v2_lifespan(application):
                     source="system",
                 )
             finally:
+                await evolution.close()
+                await cognitive.close()
                 await cohost.close()
                 await horizon.close()
                 await automation.close()
@@ -238,6 +255,8 @@ async def _v2_lifespan(application):
 app.router.lifespan_context = _v2_lifespan
 app.include_router(build_automation_router(automation))
 app.include_router(build_horizon_router(horizon))
+app.include_router(build_cognitive_router(cognitive, settings))
+app.include_router(build_evolution_router(evolution, settings))
 app.version = "2.1.0-alpha"
 
 

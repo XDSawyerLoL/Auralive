@@ -121,6 +121,43 @@ class Settings:
     horizon_currency: str = os.getenv("HORIZON_CURRENCY", "EUR").upper()
     horizon_timezone: str = os.getenv("HORIZON_TIMEZONE", "Europe/Paris")
 
+    # Noyau unifié AURA: Soul persistant, réflexion ambient, apprentissage par
+    # résultats, routines et agents spécialisés. AURA_CLOUD_TOKEN protège les
+    # commandes privées lorsque le même noyau est exposé sur un serveur.
+    cognitive_enabled: bool = _bool("AURA_COGNITIVE_ENABLED", True)
+    cognitive_tick_seconds: int = _int("AURA_COGNITIVE_TICK_SECONDS", 30)
+    cognitive_reflection_seconds: int = _int("AURA_COGNITIVE_REFLECTION_SECONDS", 300)
+    cognitive_max_reflections_per_hour: int = _int("AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR", 6)
+    aura_cloud_token: str = os.getenv("AURA_CLOUD_TOKEN", "")
+    # Le planificateur Sovereign ne peut exécuter que les classes de risque
+    # explicitement présentes ici. Par défaut : actions locales sans effet
+    # irréversible et appels IA. Une installation peut élargir consciemment.
+    cognitive_operator_allowed_risks: str = os.getenv(
+        "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS", "safe,ai"
+    )
+
+    # AURA Evolution: recherche continue + sas local + CI GitHub distante.
+    # Désactivé par défaut tant qu'un environnement source et un jeton GitHub
+    # finement scoped n'ont pas été configurés.
+    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", False)
+    evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
+    evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
+    evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)
+    evolution_github_token: str = os.getenv("AURA_EVOLUTION_GITHUB_TOKEN", "")
+    evolution_github_repository: str = os.getenv(
+        "AURA_EVOLUTION_GITHUB_REPOSITORY", "XDSawyerLoL/Auralive"
+    )
+    evolution_github_base_branch: str = os.getenv("AURA_EVOLUTION_GITHUB_BASE_BRANCH", "main")
+    evolution_allowed_domains: str = os.getenv(
+        "AURA_EVOLUTION_ALLOWED_DOMAINS", "api.github.com,pypi.org"
+    )
+    evolution_research_urls: str = os.getenv("AURA_EVOLUTION_RESEARCH_URLS", "")
+
+    evolution_required_checks: str = os.getenv(
+        "AURA_EVOLUTION_REQUIRED_CHECKS",
+        "validate,build-engine,build-windows-lite,build-windows",
+    )
+
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
     obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
     obs_host: str = os.getenv("OBS_HOST", "127.0.0.1")
