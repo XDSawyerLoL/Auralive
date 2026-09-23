@@ -180,6 +180,18 @@ class EvolutionLab:
         raw = str(getattr(self.settings, "evolution_research_urls", "") or "")
         return [item.strip() for item in raw.split(",") if item.strip()]
 
+    @property
+    def required_checks(self) -> set[str]:
+        raw = str(
+            getattr(
+                self.settings,
+                "evolution_required_checks",
+                "validate,build-engine,build-windows-lite,build-windows",
+            )
+            or ""
+        )
+        return {item.strip() for item in raw.split(",") if item.strip()}
+
     async def initialize(self) -> None:
         self.workspaces.mkdir(parents=True, exist_ok=True)
         self.artifacts.mkdir(parents=True, exist_ok=True)
@@ -640,8 +652,13 @@ class EvolutionLab:
         ignore = shutil.ignore_patterns(
             ".git",
             ".venv",
+            ".env",
+            ".env.*",
             "__pycache__",
             "*.pyc",
+            "*.db",
+            "*.sqlite",
+            "*.sqlite3",
             "data",
             "dist",
             "build",
@@ -1044,18 +1061,30 @@ socket.create_connection = _guard_create
             }
             for item in checks
         ]
-        pending = any(item["status"] != "completed" for item in states)
-        successful = bool(states) and not pending and all(
-            item["conclusion"] in {"success", "neutral", "skipped"}
-            for item in states
+        by_name = {item["name"]: item for item in states if item["name"]}
+        required = self.required_checks
+        missing_required = sorted(required.difference(by_name))
+        required_states = [by_name[name] for name in sorted(required) if name in by_name]
+        pending = bool(missing_required) or any(
+            item["status"] != "completed" for item in required_states
         )
-        failed = bool(states) and not pending and not successful
+        successful = bool(required) and not pending and all(
+            item["conclusion"] == "success" for item in required_states
+        )
+        failed = (
+            bool(required_states)
+            and not missing_required
+            and not pending
+            and not successful
+        )
 
         result = {
             "cycle_id": cycle_id,
             "pr_number": number,
             "head_sha": head_sha,
             "checks": states,
+            "required_checks": sorted(required),
+            "missing_required_checks": missing_required,
             "pending": pending,
             "successful": successful,
             "failed": failed,
@@ -1244,6 +1273,7 @@ socket.create_connection = _guard_create
             "github_repository": self.github_repository,
             "base_branch": self.base_branch,
             "allowed_domains": sorted(self.allowed_domains),
+            "required_checks": sorted(self.required_checks),
             "protected_paths": sorted(_PROTECTED_EXACT),
             "last_cycle_at": self.last_cycle_at,
             "last_error": self.last_error,
