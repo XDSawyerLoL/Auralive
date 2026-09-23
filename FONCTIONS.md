@@ -113,14 +113,20 @@
 - [x] Réseau externe bloqué pendant les tests du sas
 - [x] Compilation baseline + candidat
 - [x] Suite pytest baseline + candidat
+- [x] Canary d'import du runtime complet avant promotion
+- [x] Tests ciblés des invariants HORIZON, cognition et updater
 - [x] Interdiction d'auto-modifier les tests existants
 - [x] Fichiers de sécurité/politique protégés de toute auto-promotion
 - [x] Détection de nouvelles primitives sensibles dans un patch
 - [x] Soumission automatique optionnelle d'une PR GitHub
 - [x] Deuxième sas via checks CI GitHub
+- [x] Re-vérification distante des fichiers réellement modifiés
+- [x] Blocage si la branche main a avancé depuis le test du candidat
+- [x] État revalidation-required pour tout candidat devenu périmé
 - [x] Fusion automatique optionnelle uniquement après checks distants réussis
 - [x] Historique persistant de chaque cycle d'évolution et de ses preuves
 - [x] Pas d'écriture directe dans le runtime actif pendant la génération/test
+- [x] Secrets, bases SQLite et données runtime exclus des workspaces d'évolution
 
 ## Statistiques et automatisation
 
