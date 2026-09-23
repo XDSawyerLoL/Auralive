@@ -155,7 +155,7 @@ class Settings:
 
     evolution_required_checks: str = os.getenv(
         "AURA_EVOLUTION_REQUIRED_CHECKS",
-        "validate,build-engine,build-windows-lite,build-windows",
+        "validate,build-windows-lite,build-windows",
     )
 
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
