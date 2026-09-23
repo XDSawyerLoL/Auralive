@@ -558,6 +558,8 @@ class EvolutionLab:
         if not (normalized.startswith("app/") or normalized.startswith("tests/")):
             return False, "fichier hors app/tests"
         if auto:
+            if normalized.startswith("tests/"):
+                return False, "les tests existants ne sont jamais modifiables par auto-promotion"
             if normalized in _PROTECTED_EXACT:
                 return False, "fichier de politique protégé"
             low = normalized.casefold()
@@ -702,6 +704,38 @@ class EvolutionLab:
         manifest["manifest_sha256"] = _sha256(artifact)
         return manifest
 
+    def _network_guard_dir(self) -> Path:
+        guard = self.root / "validation-guard"
+        guard.mkdir(parents=True, exist_ok=True)
+        sitecustomize = guard / "sitecustomize.py"
+        sitecustomize.write_text(
+            """import socket
+_orig_connect = socket.socket.connect
+_orig_create = socket.create_connection
+
+def _local(host):
+    value = str(host or '').casefold()
+    return value in {'localhost','127.0.0.1','::1'} or value.startswith('127.')
+
+def _guard_connect(self, address):
+    host = address[0] if isinstance(address, tuple) and address else address
+    if not _local(host):
+        raise OSError('AURA evolution sandbox: external network disabled during tests')
+    return _orig_connect(self, address)
+
+def _guard_create(address, *args, **kwargs):
+    host = address[0] if isinstance(address, tuple) and address else address
+    if not _local(host):
+        raise OSError('AURA evolution sandbox: external network disabled during tests')
+    return _orig_create(address, *args, **kwargs)
+
+socket.socket.connect = _guard_connect
+socket.create_connection = _guard_create
+""",
+            encoding="utf-8",
+        )
+        return guard
+
     def _validation_env(self) -> dict[str, str]:
         allowed = {
             "PATH",
@@ -716,6 +750,9 @@ class EvolutionLab:
             "PYTHONPATH",
         }
         env = {key: value for key, value in os.environ.items() if key in allowed}
+        guard = str(self._network_guard_dir())
+        existing_pythonpath = str(env.get("PYTHONPATH") or "")
+        env["PYTHONPATH"] = guard + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
         env.update(
             {
                 "AI_MODE": "off",
@@ -817,7 +854,7 @@ class EvolutionLab:
             "candidate_compile": candidate_compile,
             "candidate_tests": candidate_tests,
             "changed_paths": changed_paths,
-            "network_during_tests": False,
+            "external_network_blocked_during_tests": True,
             "validated_at": utcnow(),
         }
 
