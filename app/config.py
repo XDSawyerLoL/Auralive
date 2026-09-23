@@ -129,6 +129,12 @@ class Settings:
     cognitive_reflection_seconds: int = _int("AURA_COGNITIVE_REFLECTION_SECONDS", 300)
     cognitive_max_reflections_per_hour: int = _int("AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR", 6)
     aura_cloud_token: str = os.getenv("AURA_CLOUD_TOKEN", "")
+    # Le planificateur Sovereign ne peut exécuter que les classes de risque
+    # explicitement présentes ici. Par défaut : actions locales sans effet
+    # irréversible et appels IA. Une installation peut élargir consciemment.
+    cognitive_operator_allowed_risks: str = os.getenv(
+        "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS", "safe,ai"
+    )
 
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
     obs_enabled: bool = _bool("OBS_ENABLED", False) or _bool("OBS_AUTO_CONNECT", True)
