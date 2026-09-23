@@ -367,7 +367,11 @@ class CognitiveKernel:
             "occurred_at": event.occurred_at,
             "payload": dict(event.payload),
         }
-        self._stimuli.append(stimulus)
+        # Les événements produits par la cognition elle-même sont auditables,
+        # mais ne doivent jamais la réveiller à nouveau : sinon AURA pourrait
+        # entretenir une boucle de réflexion sans nouveau signal extérieur.
+        if event.source != "cognitive":
+            self._stimuli.append(stimulus)
 
         if event.source == "horizon":
             self._adjust_soul(curiosity=0.025, introspection=0.01)
