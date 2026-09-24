@@ -26,7 +26,7 @@ test('Hostinger runtime stays online without MySQL and renders dashboard', async
       // Simule une variable HOST potentiellement injectée par l'hébergeur.
       // AURA doit l'ignorer et écouter sur 0.0.0.0.
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
-      PORT: String(PORT),
+      // Hostinger peut injecter PORT; AURA doit l'ignorer et utiliser AURA_PORT\n      // (3000 par défaut en production).\n      PORT: '49999',\n      AURA_PORT: String(PORT),
       DB_HOST: '',
       DB_USER: '',
       DB_PASSWORD: '',
