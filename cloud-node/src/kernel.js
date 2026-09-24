@@ -450,7 +450,7 @@ export class CognitiveKernel {
       'ÉTAT AURA',
       `phase=${soul.phase} cycles=${soul.cycles} énergie=${soul.energy} curiosité=${soul.curiosity} pression=${soul.pressure} continuité=${soul.continuity}`,
       'ORGANISME HOMEOSTATIQUE',
-      `humeur=${publicOrganism.mood} valence=${publicOrganism.valence} identité=${publicOrganism.identite} stabilité=${publicOrganism.stabilite} clarté=${publicOrganism.clarte} attachement=${publicOrganism.attachement} tension=${publicOrganism.tension} fatigue=${publicOrganism.fatigue_cognitive} pression_de_rêve=${publicOrganism.pression_de_reve} besoin_de_silence=${publicOrganism.besoin_de_silence}`,
+      `humeur=${publicOrganism.mood} valence=${publicOrganism.valence} identité=${publicOrganism.identite} stabilité=${publicOrganism.stabilite} clarté=${publicOrganism.clarte} attachement=${publicOrganism.attachement} curiosité=${publicOrganism.curiosite} pression_de_rêve=${publicOrganism.pression_de_reve} besoin_de_silence=${publicOrganism.besoin_de_silence}`,
       `intention_organique=${publicOrganism.active_intention || ''}`,
       `habitat=${JSON.stringify(publicOrganism.habitat || {})}`,
     ];
