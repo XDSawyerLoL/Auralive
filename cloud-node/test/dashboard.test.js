@@ -47,7 +47,7 @@ test('desktop dashboard keeps the reference composition', () => {
   assert.equal(DASHBOARD_HTML.includes('grid-area:map'), true);
   assert.equal(DASHBOARD_HTML.includes('grid-area:side'), true);
   assert.equal(DASHBOARD_HTML.includes('grid-area:bottom'), true);
-  assert.equal(DASHBOARD_HTML.includes('En ligne · conscience active'), true);
+  assert.equal(DASHBOARD_HTML.includes("setLive(true,boot.runtime_ready?'En ligne · '+mood"), true);
 });
 
 
@@ -70,4 +70,18 @@ test('dashboard speaks through the private Mairaiy voice bridge', () => {
   assert.equal(DASHBOARD_HTML.includes('/api/voice/speak'), true);
   assert.equal(DASHBOARD_HTML.includes('audio_base64'), true);
   assert.equal(DASHBOARD_HTML.includes('aura-speaking'), true);
+});
+
+
+test('living AURA visuals are driven by the organism state', () => {
+  for (const token of [
+    'id="organismMood"',
+    'id="organismDot"',
+    'scene.organism',
+    'organism.tension',
+    'organism.pression_de_reve',
+    'organism.fatigue_cognitive',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
 });
