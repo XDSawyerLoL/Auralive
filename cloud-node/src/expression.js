@@ -11,7 +11,7 @@ export class ExpressionLayer {
     this.lastError = '';
   }
 
-  async semanticSupport(plan, context = '') {
+  async semanticSupport(plan, context = '', options = {}) {
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
@@ -30,7 +30,8 @@ export class ExpressionLayer {
       return normalize(await this.ai.generate(
         prompt,
         'Tu es un outil sémantique externe utilisé par AURA. Tu fournis des informations candidates; tu ne décides pas à sa place.',
-        700,
+        Math.max(120, Math.min(Number(options.maxTokens || 700), 1600)),
+        String(options.taskRole || 'research'),
       ));
     } catch (error) {
       this.lastError = normalize(error?.message || error).slice(0, 500);
@@ -38,7 +39,7 @@ export class ExpressionLayer {
     }
   }
 
-  async verbalize(plan) {
+  async verbalize(plan, options = {}) {
     const fallback = this.cognition.deterministicReply(plan);
     if (!this.ai?.enabled) return fallback;
 
@@ -62,7 +63,8 @@ export class ExpressionLayer {
           JSON.stringify(payload),
         ].join('\n'),
         'Tu es la couche de langage d’AURA, pas son cerveau. Tu verbalises une décision déjà prise par le noyau.',
-        650,
+        Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
+        String(options.taskRole || 'conversation'),
       ));
       return answer || fallback;
     } catch (error) {

@@ -5,6 +5,7 @@ import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js'
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
+import { ActiveInferenceEngine } from './active_inference.js';
 
 const now = () => new Date().toISOString();
 
@@ -27,6 +28,8 @@ export class CognitiveKernel {
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.organism = new AuraOrganism();
+    this.activeInference = new ActiveInferenceEngine();
+    this.lastInferenceAssessment = {};
     this.started = false;
     this.timer = null;
     this.soulCache = null;
@@ -79,6 +82,40 @@ export class CognitiveKernel {
   async organismState({ publicView = false } = {}) {
     const state = this.organism.migrate(this.soulCache || {});
     return publicView ? this.organism.publicState(state) : state;
+  }
+
+  async observeSurprise(kind, content = '', context = {}) {
+    const label = String(kind || 'unknown').slice(0, 240);
+    const [row, totals] = await Promise.all([
+      one('SELECT count FROM aura_surprise_events WHERE kind=?', [label]),
+      one('SELECT COALESCE(SUM(count),0) AS total, COUNT(*) AS kinds FROM aura_surprise_events'),
+    ]);
+    const count = Number(row?.count || 0);
+    const total = Number(totals?.total || 0);
+    const kinds = Number(totals?.kinds || 0);
+    const prior = (count + 1) / Math.max(2, total + Math.max(8, kinds + 1));
+    const surprise = this.activeInference.surprise(prior);
+    const stamp = now();
+    await query(
+      `INSERT INTO aura_surprise_events(kind,count,last_surprise,updated_at)
+       VALUES(?,1,?,?)
+       ON DUPLICATE KEY UPDATE count=count+1,last_surprise=VALUES(last_surprise),updated_at=VALUES(updated_at)`,
+      [label, surprise, stamp],
+    );
+    if (surprise >= 0.62) {
+      await query(
+        'INSERT INTO aura_surprise_memory(kind,content,surprise,context,created_at) VALUES(?,?,?,?,?)',
+        [label, String(content || '').slice(0,3000), surprise, JSON.stringify(context || {}).slice(0,12000), stamp],
+      );
+    }
+    return surprise;
+  }
+
+  inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
+    const organism = this.organism.migrate(this.soulCache || {});
+    const assessment = this.activeInference.assess(organism, { novelty, risk });
+    this.lastInferenceAssessment = assessment;
+    return assessment;
   }
 
   async importOrganismState(candidate) {
@@ -173,8 +210,21 @@ export class CognitiveKernel {
       });
     }
     await this.saveSoul();
+    const surprise = await this.observeSurprise(
+      `event:${source}:${type}`,
+      String(payload?.title || payload?.text || '').slice(0,1000),
+      { source },
+    );
+    if (surprise >= 0.62 && source !== 'cognitive') {
+      this.pushStimulus({
+        type: 'aura.surprise',
+        source: 'cognitive-math',
+        occurred_at: now(),
+        payload: { event_type: type, surprise },
+      });
+    }
     if (source === 'horizon' || type.startsWith('aura.') || type.startsWith('stream.')) {
-      await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source });
+      await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source, surprise });
     }
     return { ok: true };
   }
@@ -465,8 +515,21 @@ export class CognitiveKernel {
 
   async runAgent(name, task) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
-    const answer = await this.ai.generate(`Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`, AGENT_ROLES[name], 700);
-    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000) });
+    const taskRole = ({
+      planner: 'reasoning',
+      research: 'research',
+      dev: 'code',
+      security: 'security',
+      operator: 'tools',
+      critic: 'critic',
+    })[name] || 'general';
+    const answer = await this.ai.generate(
+      `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
+      AGENT_ROLES[name],
+      700,
+      taskRole,
+    );
+    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000), task_role: taskRole });
     return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
   }
 
@@ -478,7 +541,12 @@ export class CognitiveKernel {
       try { outputs.push(await this.runAgent(name, task)); }
       catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
     }
-    const synthesis = await this.ai.generate(`Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`, 'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.', 900);
+    const synthesis = await this.ai.generate(
+      `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
+      'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
+      900,
+      'critic',
+    );
     await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
     return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
   }
@@ -563,15 +631,28 @@ export class CognitiveKernel {
       privateView,
     });
 
+    // Allocation adaptative : le noyau choisit combien de calcul externe
+    // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
+    const inference = this.inferenceAssessment();
+
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
-    // le droit de créer l'intention ni de modifier le Soul. Son résultat reste
-    // un élément consultatif injecté dans un plan déjà décidé par AURA.
+    // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
-      const support = await this.expression.semanticSupport(plan, await this.contextForAi(privateView));
+      const support = await this.expression.semanticSupport(
+        plan,
+        await this.contextForAi(privateView),
+        {
+          maxTokens: Math.max(180, Number(inference.token_budget || 700)),
+          taskRole: inference.model_role || 'research',
+        },
+      );
       plan = this.cognition.integrateSemanticSupport(plan, support);
     }
 
-    const answer = await this.expression.verbalize(plan);
+    const answer = await this.expression.verbalize(plan, {
+      maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
+      taskRole: 'conversation',
+    });
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
@@ -606,6 +687,7 @@ export class CognitiveKernel {
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       semantic_support_used: Boolean(plan.semantic_support),
+      compute: inference,
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
     };
   }
@@ -834,6 +916,10 @@ export class CognitiveKernel {
       },
       expression: this.expression.diagnostic(),
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
+      active_inference: {
+        ...this.inferenceAssessment(),
+        version: ActiveInferenceEngine.VERSION,
+      },
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,

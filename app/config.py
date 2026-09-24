@@ -104,6 +104,21 @@ class Settings:
     ai_keep_alive: str = os.getenv("AI_KEEP_ALIVE", "30m")
     ai_temperature: float = _float("AI_TEMPERATURE", 0.78)
     ai_warmup_enabled: bool = _bool("AI_WARMUP_ENABLED", True)
+    ai_constellation_enabled: bool = _bool("AI_CONSTELLATION_ENABLED", True)
+    ai_constellation_multi_review: bool = _bool("AI_CONSTELLATION_MULTI_REVIEW", True)
+    ai_constellation_review_min_tokens: int = _int("AI_CONSTELLATION_REVIEW_MIN_TOKENS", 220)
+    ai_constellation_max_models: int = _int("AI_CONSTELLATION_MAX_MODELS", 2)
+
+    # Génération d'images locale. "auto" essaie A1111 puis ComfyUI.
+    image_mode: str = os.getenv("AURA_IMAGE_MODE", "auto").strip().lower()
+    image_a1111_url: str = os.getenv("AURA_IMAGE_A1111_URL", "http://127.0.0.1:7860").rstrip("/")
+    image_comfy_url: str = os.getenv("AURA_IMAGE_COMFY_URL", "http://127.0.0.1:8188").rstrip("/")
+    image_output_dir: Path = _runtime_path("AURA_IMAGE_OUTPUT_DIR", "data/generated-images")
+    image_default_width: int = _int("AURA_IMAGE_WIDTH", 1024)
+    image_default_height: int = _int("AURA_IMAGE_HEIGHT", 1024)
+    image_default_steps: int = _int("AURA_IMAGE_STEPS", 8)
+    image_default_model: str = os.getenv("AURA_IMAGE_MODEL", "FLUX.1-schnell").strip()
+    image_comfy_workflow: Path = _runtime_path("AURA_IMAGE_COMFY_WORKFLOW", "config/comfyui-aura-workflow.json")
 
     # Fusion cognitive AURA <-> HORIZON. Le pont reste optionnel et non bloquant :
     # AURA continue de fonctionner localement même si HORIZON est indisponible.

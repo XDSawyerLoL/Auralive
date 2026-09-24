@@ -11,8 +11,11 @@ from typing import Any
 from uuid import uuid4
 
 from app.automation.models import ActionSpec, Automation, Event, ExecutionReport
+from app.cognitive.active_inference import ActiveInferenceEngine
 from app.cognitive.native_cognition import NativeCognitionEngine
 from app.cognitive.organism import AuraOrganism
+from app.cognitive.relational import RelationalSignalEngine
+from app.cognitive.world_model import CounterfactualWorldModel
 from app.database import Database, utcnow
 
 logger = logging.getLogger(__name__)
@@ -90,6 +93,11 @@ class CognitiveKernel:
         self.settings = settings
         self.native_cognition = NativeCognitionEngine()
         self.organism = AuraOrganism()
+        self.active_inference = ActiveInferenceEngine()
+        self.world_model = CounterfactualWorldModel()
+        self.relational = RelationalSignalEngine(db)
+        self.last_inference_assessment: dict[str, Any] = {}
+        self.last_world_forecast: dict[str, Any] = {}
         self.started = False
         self.task: asyncio.Task[None] | None = None
         self._wired = False
@@ -251,6 +259,25 @@ class CognitiveKernel:
 
             CREATE INDEX IF NOT EXISTS idx_aura_organism_events_created
             ON aura_organism_events(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS aura_surprise_events (
+                kind TEXT PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 0,
+                last_surprise REAL NOT NULL DEFAULT 0.0,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS aura_surprise_memory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                surprise REAL NOT NULL,
+                context TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_aura_surprise_memory_score
+            ON aura_surprise_memory(surprise DESC, created_at DESC);
             """
         )
         routine_columns = await self.db.fetchall("PRAGMA table_info(aura_routines)")
@@ -270,6 +297,7 @@ class CognitiveKernel:
 
         self._soul_cache["organism"] = self.organism.migrate(self._soul_cache)
         self._sync_legacy_from_organism()
+        await self.relational.initialize()
         await self._save_soul()
 
     def _default_soul(self) -> dict[str, Any]:
@@ -338,6 +366,78 @@ class CognitiveKernel:
     async def organism_state(self, *, public: bool = False) -> dict[str, Any]:
         state = self.organism.migrate(self._soul_cache)
         return self.organism.public_state(state) if public else state
+
+    async def _observe_surprise(
+        self,
+        kind: str,
+        *,
+        content: str = "",
+        context: dict[str, Any] | None = None,
+    ) -> float:
+        label = str(kind or "unknown")[:240]
+        row = await self.db.fetchone(
+            "SELECT count FROM aura_surprise_events WHERE kind=?",
+            (label,),
+        )
+        totals = await self.db.fetchone(
+            "SELECT COALESCE(SUM(count),0) AS total, COUNT(*) AS kinds FROM aura_surprise_events"
+        )
+        count = int((row or {}).get("count") or 0)
+        total = int((totals or {}).get("total") or 0)
+        kinds = int((totals or {}).get("kinds") or 0)
+        prior = (count + 1.0) / max(2.0, total + max(8, kinds + 1))
+        surprise = self.active_inference.surprise(prior)
+        stamp = utcnow()
+        await self.db.execute(
+            """
+            INSERT INTO aura_surprise_events(kind,count,last_surprise,updated_at)
+            VALUES(?,1,?,?)
+            ON CONFLICT(kind) DO UPDATE SET
+                count=count+1,
+                last_surprise=excluded.last_surprise,
+                updated_at=excluded.updated_at
+            """,
+            (label, surprise, stamp),
+        )
+        if surprise >= 0.62:
+            await self.db.execute(
+                """
+                INSERT INTO aura_surprise_memory(kind,content,surprise,context,created_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    label,
+                    str(content or "")[:3000],
+                    surprise,
+                    json.dumps(context or {}, ensure_ascii=False, default=str)[:12000],
+                    stamp,
+                ),
+            )
+            await self.db.execute(
+                """
+                DELETE FROM aura_surprise_memory
+                WHERE id IN (
+                    SELECT id FROM aura_surprise_memory
+                    ORDER BY id DESC LIMIT -1 OFFSET 1500
+                )
+                """
+            )
+        return surprise
+
+    def inference_assessment(
+        self,
+        *,
+        novelty: float = 0.0,
+        risk: float = 0.0,
+    ) -> dict[str, Any]:
+        organism = self.organism.migrate(self._soul_cache)
+        assessment = self.active_inference.assess(
+            organism,
+            novelty=novelty,
+            risk=risk,
+        )
+        self.last_inference_assessment = assessment
+        return assessment
 
     async def import_organism_state(self, candidate: dict[str, Any]) -> bool:
         if not isinstance(candidate, dict) or not candidate:
@@ -496,12 +596,31 @@ class CognitiveKernel:
             )
             await self._save_soul()
 
+        surprise = await self._observe_surprise(
+            f"event:{event.source}:{event.type}",
+            content=str(event.payload.get("title") or event.payload.get("text") or "")[:1000],
+            context={"source": event.source, "event_id": event.id},
+        )
+        if surprise >= 0.62 and event.source != "cognitive":
+            self._stimuli.append(
+                {
+                    "type": "aura.surprise",
+                    "source": "cognitive-math",
+                    "occurred_at": event.occurred_at,
+                    "payload": {"event_type": event.type, "surprise": surprise},
+                }
+            )
+
         if important:
             await self._trace(
                 "event",
                 event.type,
                 str(event.payload.get("title") or event.payload.get("text") or "")[:1000],
-                {"source": event.source, "event_id": event.id},
+                {
+                    "source": event.source,
+                    "event_id": event.id,
+                    "surprise": surprise,
+                },
             )
 
     @staticmethod
@@ -575,6 +694,16 @@ class CognitiveKernel:
             },
         )
         await self._save_soul()
+
+        report_surprise = await self._observe_surprise(
+            f"outcome:{report.event_type}:{signature}",
+            content=str(report.reason or signature),
+            context={
+                "automation_id": report.automation_id,
+                "ok": bool(report.ok),
+                "signature": signature,
+            },
+        )
 
         if report.ok:
             return
@@ -1074,6 +1203,7 @@ class CognitiveKernel:
                 "Tu es le laboratoire d'amélioration d'AURA. Tu proposes; tu n'appliques rien silencieusement.",
                 360,
                 system_is_complete=True,
+                task_role="evolution",
             )
             parsed = _json_object(raw)
         except Exception:
@@ -1180,6 +1310,14 @@ class CognitiveKernel:
             raise RuntimeError("Aucune capacité opérateur autorisée par la politique AURA")
 
         context = await self.context_for_ai()
+        inference = self.inference_assessment(risk=0.18)
+        organism_state = self.organism.migrate(self._soul_cache)
+        policy_forecast = self.world_model.forecast_policy(
+            organism_state,
+            uncertainty=float(inference.get("uncertainty") or 0.0),
+            explicit_mission=True,
+        )
+        self.last_world_forecast = {"policy": policy_forecast}
         feedback = ""
         reports: list[dict[str, Any]] = []
         spoken: list[str] = []
@@ -1193,6 +1331,13 @@ class CognitiveKernel:
                 + json.dumps(catalog, ensure_ascii=False, default=str)[:18000]
                 + "\n\nContexte:\n"
                 + context[:9000]
+                + "\n\nPrévision native AURA:\n"
+                + json.dumps(policy_forecast, ensure_ascii=False)[:2000]
+                + (
+                    "\nPolitique: privilégie une vérification d'état avant une écriture/action si un outil de lecture adapté existe."
+                    if policy_forecast.get("selected") == "verify_first"
+                    else "\nPolitique: action directe minimale, puis vérification du résultat."
+                )
             )
             if feedback:
                 prompt += (
@@ -1217,6 +1362,7 @@ class CognitiveKernel:
                 ),
                 800,
                 system_is_complete=True,
+                task_role="tools",
             )
             plan = _json_object(raw)
             if not plan:
@@ -1265,6 +1411,22 @@ class CognitiveKernel:
                 feedback = feedback or "Aucune action valide exécutée."
                 continue
 
+            catalog_by_name = {row["name"]: row for row in catalog}
+            forecast_actions = [
+                catalog_by_name.get(spec.type, {"name": spec.type, "risk": "safe"})
+                for spec in action_specs
+            ]
+            plan_forecast = self.world_model.forecast_plan(
+                forecast_actions,
+                organism=organism_state,
+                uncertainty=float(inference.get("uncertainty") or 0.0),
+            )
+            self.last_world_forecast = {
+                "policy": policy_forecast,
+                "plan": plan_forecast,
+                "step": step_index + 1,
+            }
+
             trigger = f"aura.operator.{uuid4()}"
             automation_id = f"cognitive-operator-{uuid4()}"
             ephemeral = Automation(
@@ -1309,6 +1471,8 @@ class CognitiveKernel:
             "say": "\n".join(spoken).strip(),
             "reports": reports,
             "steps": len(reports),
+            "forecast": dict(self.last_world_forecast),
+            "compute": inference,
         }
         await self._trace(
             "operator",
@@ -1328,11 +1492,20 @@ class CognitiveKernel:
         if role is None:
             raise ValueError(f"Agent inconnu: {name}")
         context = await self.context_for_ai()
+        model_role = {
+            "planner": "reasoning",
+            "research": "research",
+            "dev": "code",
+            "security": "security",
+            "operator": "tools",
+            "critic": "critic",
+        }.get(name, "general")
         answer = await self.aura.ai.generate(
             f"Mission:\n{str(task)[:6000]}\n\nContexte AURA:\n{context[:6000]}",
             role,
             700,
             system_is_complete=True,
+            task_role=model_role,
         )
         await self._trace("agent", name, answer[:4000], {"task": str(task)[:2000]})
         return {"agent": name, "answer": answer}
@@ -1358,6 +1531,7 @@ class CognitiveKernel:
             "Tu es l'orchestrateur collectif d'AURA. Tu arbitres les agents sans inventer de faits.",
             900,
             system_is_complete=True,
+            task_role="critic",
         )
         await self._trace("swarm", "collective", synthesis[:4000], {"agents": selected})
         return {"agents": outputs, "synthesis": synthesis}
@@ -1430,6 +1604,15 @@ class CognitiveKernel:
             private=private,
         )
 
+        relational_state = await self.relational.observe(author, content)
+        relational_guidance = self.relational.response_guidance(relational_state)
+        plan["relational_guidance"] = relational_guidance
+        novelty = max(
+            float(relational_state.get("correction_signal", 0.0)),
+            float(relational_state.get("uncertainty_signal", 0.0)),
+            float(relational_state.get("urgency_signal", 0.0)),
+        )
+        inference = self.inference_assessment(novelty=novelty)
         semantic_support = ""
         if bool(plan.get("needs_semantic_support")) and bool(getattr(self.aura.ai, "enabled", False)):
             semantic_prompt = (
@@ -1437,6 +1620,8 @@ class CognitiveKernel:
                 + str(plan.get("semantic_query") or "")[:5000]
                 + "\n\nCONTEXTE AURA\n"
                 + (await self.context_for_ai(private=private))[:9000]
+                + "\n\nGUIDE RELATIONNEL CALIBRÉ\n"
+                + relational_guidance[:1000]
                 + "\n\nFournis uniquement un appui sémantique factuel pour AURA. "
                 "Ne parle pas à la première personne au nom d'AURA. "
                 "Ne crée aucune intention, mémoire, émotion, priorité ou décision pour AURA. "
@@ -1449,8 +1634,9 @@ class CognitiveKernel:
                         "Tu es un outil sémantique utilisé par AURA. "
                         "Tu proposes des informations candidates; tu ne décides jamais à sa place."
                     ),
-                    700,
+                    max(180, int(inference.get("token_budget") or 700)),
                     system_is_complete=True,
+                    task_role=str(inference.get("model_role") or "conversation"),
                 )
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"{exc.__class__.__name__}: {exc}"[:500]
@@ -1470,6 +1656,8 @@ class CognitiveKernel:
                     "semantic_support": plan.get("semantic_support") or "",
                     "current_intention": plan.get("current_intention") or "",
                     "dominant_thought": plan.get("dominant_thought") or "",
+                    "relational_guidance": relational_guidance,
+                    "relational_basis": "conversation-observation-not-mind-reading",
                 }
                 candidate = await self.aura.ai.generate(
                     (
@@ -1485,6 +1673,7 @@ class CognitiveKernel:
                     ),
                     700,
                     system_is_complete=True,
+                    task_role="conversation",
                 )
                 if str(candidate).strip():
                     answer = str(candidate).strip()
@@ -1531,6 +1720,8 @@ class CognitiveKernel:
             "cognition_version": self.native_cognition.VERSION,
             "language_model_used_for_decision": False,
             "semantic_support_used": bool(str(plan.get("semantic_support") or "").strip()),
+            "compute": inference,
+            "relational": relational_state,
             "organism": self.organism.public_state(
                 self.organism.migrate(self._soul_cache)
             ),
@@ -1624,6 +1815,18 @@ class CognitiveKernel:
                 "independent_from_language_model": True,
             },
             "language_model_role": "semantic-support-and-verbalisation-only",
+            "active_inference": {
+                **self.inference_assessment(),
+                "version": self.active_inference.VERSION,
+            },
+            "world_model": {
+                "version": self.world_model.VERSION,
+                "last_forecast": dict(self.last_world_forecast),
+            },
+            "relational_signals": {
+                "version": self.relational.VERSION,
+                "claim": "calibrated conversation signals, not mind-reading",
+            },
             "self_modifying_code": False,
             "improvement_mode": "observe-learn-propose-validate",
         }

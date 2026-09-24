@@ -265,6 +265,7 @@ class AuraCloudWorker:
             system,
             max_tokens,
             system_is_complete=True,
+            task_role=str(payload.get("task_role") or "auto"),
         )
         return {
             "answer": str(answer or ""),
@@ -323,6 +324,30 @@ class AuraCloudWorker:
             "duration_ms": int(getattr(self.aura.avatar_audio, "last_audio_duration_ms", 0) or 0),
         }
 
+    async def _run_image(self, payload: dict[str, Any]) -> dict[str, Any]:
+        image = getattr(self.aura, "image", None)
+        if image is None:
+            raise RuntimeError("Moteur image local indisponible")
+        result = await image.generate(
+            str(payload.get("prompt") or ""),
+            negative_prompt=str(payload.get("negative_prompt") or ""),
+            width=int(payload.get("width") or self.settings.image_default_width),
+            height=int(payload.get("height") or self.settings.image_default_height),
+            steps=int(payload.get("steps") or self.settings.image_default_steps),
+            seed=int(payload["seed"]) if payload.get("seed") is not None else None,
+            model=str(payload.get("model") or ""),
+        )
+        path = Path(str(result.get("path") or ""))
+        encoded = ""
+        if path.is_file():
+            data = await asyncio.to_thread(path.read_bytes)
+            if len(data) <= 12_000_000:
+                encoded = base64.b64encode(data).decode("ascii")
+        return {
+            **result,
+            "image_base64": encoded,
+        }
+
     async def _run_evolution(self, payload: dict[str, Any]) -> dict[str, Any]:
         evolution = getattr(self.aura, "evolution", None)
         if evolution is None:
@@ -348,6 +373,8 @@ class AuraCloudWorker:
             return await self._run_operator(payload, risks)
         if kind == "tts":
             return await self._run_tts(payload)
+        if kind == "image":
+            return await self._run_image(payload)
         if kind == "evolution":
             return await self._run_evolution(payload)
         raise ValueError(f"Type de mission Cloud inconnu: {kind}")

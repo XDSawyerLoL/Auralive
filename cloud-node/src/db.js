@@ -138,6 +138,21 @@ export async function initSchema() {
       created_at VARCHAR(40) NOT NULL,
       INDEX idx_aura_organism_events_created(created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_surprise_events (
+      kind VARCHAR(240) PRIMARY KEY,
+      count BIGINT NOT NULL DEFAULT 0,
+      last_surprise DOUBLE NOT NULL DEFAULT 0,
+      updated_at VARCHAR(40) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_surprise_memory (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      kind VARCHAR(240) NOT NULL,
+      content TEXT NOT NULL,
+      surprise DOUBLE NOT NULL,
+      context LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_surprise_memory_score(surprise,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS horizon_bridge_seen (
       signal_id VARCHAR(220) PRIMARY KEY,
       entity_key VARCHAR(300) NOT NULL,

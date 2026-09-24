@@ -153,7 +153,7 @@ export class AiClient {
     return String(payload?.choices?.[0]?.message?.content || payload?.response || '').trim();
   }
 
-  async generate(prompt, system, maxTokens = 700) {
+  async generate(prompt, system, maxTokens = 700, taskRole = 'auto') {
     if (!this.enabled) return '';
 
     const started = Date.now();
@@ -165,7 +165,7 @@ export class AiClient {
       );
       if (wantsLocal && await this.bridge.workerOnline()) {
         try {
-          const answer = await this.bridge.infer(prompt, system, maxTokens);
+          const answer = await this.bridge.infer(prompt, system, maxTokens, taskRole);
           this.lastBackend = 'quantic-studio-local';
           this.lastError = '';
           this.lastLatencyMs = Date.now() - started;

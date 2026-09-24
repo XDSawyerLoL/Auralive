@@ -23,6 +23,7 @@ from app.modules.powerpack import PowerPack
 from app.modules.shop import ShopModule
 from app.modules.studio import StudioModule
 from app.services.ai import AuraAI
+from app.services.image_generation import AuraImageService
 from app.services.obs import OBSClient
 from app.services.twitch import TwitchClient
 
@@ -37,6 +38,7 @@ class AuraOrchestrator:
         self.identity.load()
         self.overlay = OverlayBus()
         self.ai = AuraAI(settings, self.identity)
+        self.image = AuraImageService(settings)
         self.obs = OBSClient(settings)
         self.twitch = TwitchClient(settings, db, self.handle_twitch_event)
 
@@ -65,6 +67,7 @@ class AuraOrchestrator:
         await self.power.initialize()
         await self.complete.initialize()
         await self.ai.start()
+        await self.image.start()
         await self.twitch.start()
         await self.power.start(self)
         await self.complete.start(self)
@@ -83,6 +86,7 @@ class AuraOrchestrator:
         await self.complete.close()
         await self.power.close()
         await self.twitch.close()
+        await self.image.close()
         await self.ai.close()
         self.started = False
 
