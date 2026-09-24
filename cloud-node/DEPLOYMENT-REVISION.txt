@@ -1,0 +1,2 @@
+AURA Cloud Hostinger 1.1 — dashboard + graceful diagnostic boot
+Validated target: Node.js 22 / Fastify / MySQL
