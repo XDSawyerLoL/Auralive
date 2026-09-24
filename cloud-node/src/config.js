@@ -20,7 +20,7 @@ function csv(name, fallback = '') {
 }
 
 export const config = Object.freeze({
-  host: process.env.HOST || process.env.AURA_HOST || '0.0.0.0',
+  host: process.env.AURA_HOST || '0.0.0.0',
   port: int('PORT', int('AURA_PORT', 3000, 1, 65535), 1, 65535),
   publicBaseUrl: String(process.env.AURA_PUBLIC_BASE_URL || '').replace(/\/$/, ''),
   logLevel: process.env.LOG_LEVEL || 'info',
