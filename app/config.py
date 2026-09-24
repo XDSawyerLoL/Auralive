@@ -137,9 +137,10 @@ class Settings:
     )
 
     # AURA Evolution: recherche continue + sas local + CI GitHub distante.
-    # Désactivé par défaut tant qu'un environnement source et un jeton GitHub
-    # finement scoped n'ont pas été configurés.
-    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", False)
+    # La phase 1 est active par défaut uniquement depuis un checkout source
+    # complet (serveur/dev). Un binaire Windows frozen reste désactivé tant
+    # qu'un workspace source fiable n'est pas explicitement fourni.
+    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", not IS_FROZEN)
     evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
     evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
     evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)
@@ -156,6 +157,13 @@ class Settings:
     evolution_required_checks: str = os.getenv(
         "AURA_EVOLUTION_REQUIRED_CHECKS",
         "validate,build-engine,build-windows-lite,build-windows",
+    )
+    evolution_canary_timeout_seconds: int = _int("AURA_EVOLUTION_CANARY_TIMEOUT_SECONDS", 90)
+    evolution_max_test_regression_ratio: float = _float(
+        "AURA_EVOLUTION_MAX_TEST_REGRESSION_RATIO", 1.75
+    )
+    evolution_max_test_regression_seconds: int = _int(
+        "AURA_EVOLUTION_MAX_TEST_REGRESSION_SECONDS", 5
     )
 
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)
