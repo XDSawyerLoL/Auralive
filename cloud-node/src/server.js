@@ -168,10 +168,23 @@ app.get('/api/bootstrap/status', async () => ({
   ai_enabled: ai.enabled,
   ai_provider: ai.provider,
   ai_api_key_configured: Boolean(config.aiApiKey),
+  cognition_native: true,
+  cognition_independent_from_language_model: true,
+  language_role: 'semantic-support-and-verbalisation-only',
   horizon_configured: Boolean(config.horizonEnabled && config.horizonBaseUrl),
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
+
+app.get('/api/kernel/architecture', async () => ({
+  identity_owner: 'AURA Soul + persistent memory + intentions',
+  cognition_owner: 'AURA native cognitive kernel',
+  language_model_role: 'semantic-support-and-verbalisation-only',
+  cognition_independent_from_language_model: true,
+  language_provider_replaceable: true,
+  provider: ai.provider,
+  provider_enabled: ai.enabled,
+}));
 
 app.get('/healthz', async () => {
   let databaseAlive = false;
@@ -190,6 +203,8 @@ app.get('/healthz', async () => {
     status: bootstrap.runtimeReady && databaseAlive ? 'ready' : 'diagnostic',
     db: databaseAlive,
     kernel_started: Boolean(kernel.started && bootstrap.runtimeReady),
+    cognition_native: true,
+    cognition_independent_from_language_model: true,
     horizon: horizon.status().enabled,
     evolution: config.evolutionEnabled,
     issues: bootstrap.issues.map((item) => item.code),
