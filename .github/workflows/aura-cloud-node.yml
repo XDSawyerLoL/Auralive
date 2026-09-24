@@ -50,7 +50,8 @@ jobs:
             fi
             sleep 0.5
           done
-          grep -q "AURA CLOUD" /tmp/aura-dashboard.html
+          grep -q "Interface de conscience opérationnelle" /tmp/aura-dashboard.html
+          grep -q "Carte d’intérêt" /tmp/aura-dashboard.html
           curl -fsS http://127.0.0.1:3987/healthz | grep -q '"ok":true'
           curl -fsS http://127.0.0.1:3987/api/bootstrap/status | grep -q '"server_ready":true'
       - name: Dependency production tree

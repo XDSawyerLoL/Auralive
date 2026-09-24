@@ -422,6 +422,209 @@ export class CognitiveKernel {
     return { ok: true, answer };
   }
 
+  async activity(limit = 12) {
+    return query(
+      `SELECT kind,title,content,context,created_at
+       FROM aura_cognitive_traces
+       ORDER BY id DESC LIMIT ?`,
+      [Math.max(1, Math.min(Number(limit) || 12, 50))],
+    );
+  }
+
+  async workItems(limit = 6) {
+    const max = Math.max(1, Math.min(Number(limit) || 6, 12));
+    const [intentions, improvements, routines, traces] = await Promise.all([
+      this.intentions(max),
+      this.improvements(max),
+      query(
+        `SELECT name,prompt,every_seconds,mode,enabled,last_run_at,updated_at
+         FROM aura_routines WHERE enabled=1 ORDER BY updated_at DESC LIMIT ?`,
+        [max],
+      ),
+      this.activity(max),
+    ]);
+
+    const items = [];
+    for (const row of intentions) {
+      items.push({
+        kind: 'intention',
+        title: String(row.statement || '').slice(0, 180),
+        detail: 'Intention active',
+        priority: clamp(row.priority ?? 0.5),
+        updated_at: row.updated_at,
+      });
+    }
+    for (const row of improvements) {
+      if (!['proposed', 'accepted'].includes(String(row.status || ''))) continue;
+      items.push({
+        kind: 'improvement',
+        title: String(row.proposal || row.diagnosis || row.target || '').slice(0, 180),
+        detail: 'Amélioration ' + String(row.status || 'proposed'),
+        priority: Math.min(0.95, 0.55 + Math.min(Number(row.evidence_count || 0), 8) * 0.05),
+        updated_at: row.updated_at,
+      });
+    }
+    for (const row of routines) {
+      items.push({
+        kind: 'routine',
+        title: String(row.name || row.prompt || '').slice(0, 180),
+        detail: row.mode === 'operate' ? 'Routine opérateur' : 'Routine de réflexion',
+        priority: row.mode === 'operate' ? 0.7 : 0.5,
+        updated_at: row.updated_at,
+      });
+    }
+    for (const row of traces.slice(0, 3)) {
+      items.push({
+        kind: 'activity',
+        title: String(row.title || row.content || row.kind || '').slice(0, 180),
+        detail: String(row.kind || 'activité'),
+        priority: row.kind === 'reflection' ? 0.64 : 0.46,
+        updated_at: row.created_at,
+      });
+    }
+
+    return items
+      .filter((item) => item.title)
+      .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))
+      .slice(0, max);
+  }
+
+  async attentionMap() {
+    const soul = await this.soul({ privateView: true });
+    const [intentions, traces, status] = await Promise.all([
+      this.intentions(8),
+      this.activity(18),
+      this.status(),
+    ]);
+
+    const text = [
+      soul.current_intention,
+      soul.dominant_thought,
+      ...intentions.map((row) => row.statement),
+      ...traces.map((row) => `${row.title || ''} ${row.content || ''}`),
+    ].join(' ').toLowerCase();
+
+    const keywordBoost = (words) => words.reduce(
+      (score, word) => score + (text.includes(word) ? 0.12 : 0),
+      0,
+    );
+
+    const count = status.counts || {};
+    const nodes = [
+      {
+        id: 'stability',
+        label: 'Stabilité',
+        subtitle: 'Équilibre du système',
+        score: clamp(
+          0.18
+          + Number(soul.pressure || 0) * 0.58
+          + keywordBoost(['stabil', 'erreur', 'incident', 'fiabil', 'risque']),
+        ),
+      },
+      {
+        id: 'learning',
+        label: 'Apprentissage',
+        subtitle: 'Exploration active',
+        score: clamp(
+          0.12
+          + Number(soul.curiosity || 0) * 0.46
+          + Number(soul.introspection || 0) * 0.25
+          + keywordBoost(['appren', 'comprendre', 'analyse', 'recherche']),
+        ),
+      },
+      {
+        id: 'studio',
+        label: 'Quantic Studio',
+        subtitle: 'Création · Tests',
+        score: clamp(
+          0.14
+          + Math.min(Number(count.outcomes || 0) / 20, 0.24)
+          + keywordBoost(['studio', 'stream', 'obs', 'automation', 'quantic']),
+        ),
+      },
+      {
+        id: 'horizon',
+        label: 'HORIZON',
+        subtitle: 'Anticipation',
+        score: clamp(
+          0.08
+          + (this.horizon?.enabled ? 0.24 : 0)
+          + keywordBoost(['horizon', 'prévision', 'prediction', 'signal']),
+        ),
+      },
+      {
+        id: 'automation',
+        label: 'Automatisation',
+        subtitle: 'Optimisation',
+        score: clamp(
+          0.12
+          + Math.min(Number(count.routines || 0) / 12, 0.22)
+          + Math.min(Number(count.improvements || 0) / 12, 0.18)
+          + keywordBoost(['automat', 'routine', 'opérateur', 'action']),
+        ),
+      },
+      {
+        id: 'memory',
+        label: 'Mémoire',
+        subtitle: 'Consolidation',
+        score: clamp(
+          0.1
+          + Number(soul.continuity || 0) * 0.33
+          + Math.min(Number(count.lessons || 0) / 25, 0.22)
+          + keywordBoost(['mémoire', 'leçon', 'souvenir', 'consolid']),
+        ),
+      },
+      {
+        id: 'evolution',
+        label: 'Évolution',
+        subtitle: 'Amélioration',
+        score: clamp(
+          0.1
+          + Math.min(Number(count.improvements || 0) / 10, 0.28)
+          + keywordBoost(['évolution', 'amélioration', 'corriger', 'version']),
+        ),
+      },
+      {
+        id: 'watch',
+        label: 'Veille',
+        subtitle: 'Collecte d’informations',
+        score: clamp(
+          0.1
+          + Number(soul.openness || 0) * 0.24
+          + Number(soul.curiosity || 0) * 0.24
+          + keywordBoost(['veille', 'article', 'nouveau', 'information']),
+        ),
+      },
+    ].map((node) => ({
+      ...node,
+      score: Number(node.score.toFixed(4)),
+    }));
+
+    const ranked = [...nodes].sort((a, b) => b.score - a.score);
+    const top = ranked[0];
+    const second = ranked[1];
+    const prior = this._lastAttention || {};
+    const enriched = nodes.map((node) => {
+      const previous = Number(prior[node.id] ?? node.score);
+      const delta = Number((node.score - previous).toFixed(4));
+      return {
+        ...node,
+        trend: delta > 0.025 ? 'rising' : delta < -0.025 ? 'falling' : 'stable',
+        delta,
+        dominant: node.id === top?.id,
+      };
+    });
+    this._lastAttention = Object.fromEntries(nodes.map((node) => [node.id, node.score]));
+
+    return {
+      updated_at: now(),
+      dominant: top?.id || '',
+      secondary: second?.id || '',
+      focus_statement: String(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      nodes: enriched,
+    };
+  }
+
   async status() {
     const counts = {};
     for (const [key, table] of Object.entries({ reflections: 'aura_reflections', intentions: 'aura_intentions', lessons: 'aura_lessons', routines: 'aura_routines', outcomes: 'aura_outcomes', improvements: 'aura_improvement_proposals' })) {

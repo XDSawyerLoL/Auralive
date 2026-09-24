@@ -3,217 +3,421 @@ export const DASHBOARD_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#080b14">
-<title>AURA Cloud</title>
+<meta name="theme-color" content="#070a12">
+<title>AURA — Interface de conscience opérationnelle</title>
 <style>
 :root{
   color-scheme:dark;
-  --bg:#070912;--panel:rgba(17,22,38,.78);--panel2:rgba(25,31,50,.68);
-  --line:rgba(255,255,255,.09);--text:#f4f6fb;--muted:#98a2b8;
-  --accent:#8c66ff;--cyan:#4fd8d4;--green:#52d694;--amber:#ffc768;--red:#ff6d80;
+  --bg:#060810;--bg2:#090d18;--panel:rgba(13,18,31,.78);--panel2:rgba(18,25,42,.72);
+  --line:rgba(164,184,255,.13);--line2:rgba(255,255,255,.07);
+  --text:#f6f8ff;--muted:#8f9bb3;--muted2:#65718a;
+  --violet:#9a6cff;--violet2:#6f4fff;--cyan:#59e0ef;--blue:#6da7ff;
+  --green:#60e6ad;--gold:#ffc96a;--pink:#f178d6;--red:#ff758d;
 }
-*{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;background:
-radial-gradient(circle at 20% -10%,rgba(124,84,255,.25),transparent 34rem),
-radial-gradient(circle at 90% 0,rgba(45,196,190,.12),transparent 30rem),var(--bg);color:var(--text)}
-button,input,textarea{font:inherit} button{cursor:pointer}
-.shell{max-width:1180px;margin:auto;padding:22px 18px 60px}
-.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
-.brand{display:flex;align-items:center;gap:12px}.orb{width:42px;height:42px;border-radius:50%;background:
-radial-gradient(circle at 35% 32%,#fff 0 4%,#bca8ff 9%,#7650ff 35%,#20144d 68%,#080b14 75%);
-box-shadow:0 0 34px rgba(140,102,255,.45)}
-h1{font-size:21px;margin:0;letter-spacing:.08em}.sub{font-size:12px;color:var(--muted);margin-top:3px}
-.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);padding:8px 11px;border-radius:999px;font-size:12px}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 12px currentColor}
-.dot.good{background:var(--green)}.dot.bad{background:var(--red)}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
-.card{border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),rgba(11,14,25,.78));backdrop-filter:blur(18px);
-border-radius:20px;padding:18px;box-shadow:0 16px 50px rgba(0,0,0,.22)}
-.hero{grid-column:span 8}.auth{grid-column:span 4}.state{grid-column:span 7}.systems{grid-column:span 5}
-.chat{grid-column:span 7}.activity{grid-column:span 5}
-.card h2{font-size:14px;margin:0 0 14px;color:#dfe4ef;font-weight:650}.big{font-size:34px;font-weight:720;letter-spacing:-.04em;margin:3px 0 4px}
-.muted{color:var(--muted)}.small{font-size:12px}.hero-row{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
-.notice{margin-top:14px;padding:12px 14px;border-radius:14px;background:rgba(255,199,104,.08);border:1px solid rgba(255,199,104,.2);color:#ffe2ac;font-size:13px;line-height:1.45}
-.notice.good{background:rgba(82,214,148,.08);border-color:rgba(82,214,148,.22);color:#bff6d8}
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px}
-.kpi b{display:block;font-size:20px;margin-top:4px}.bars{display:grid;gap:11px}.bar-head{display:flex;justify-content:space-between;font-size:12px;color:#cbd2df}
-.track{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}.fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),var(--cyan))}
-.system-list{display:grid;gap:9px}.system{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.025)}
-.system strong{font-size:13px}.status{font-size:11px;color:var(--muted)}
-.token-row{display:flex;gap:8px}.token-row input,.chatbox textarea{width:100%;background:rgba(0,0,0,.2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:11px 12px;outline:none}
-.token-row input:focus,.chatbox textarea:focus{border-color:rgba(140,102,255,.6)}
-.btn{border:0;border-radius:12px;padding:10px 14px;background:linear-gradient(135deg,#8d67ff,#6944e6);color:white;font-weight:650}
-.btn.secondary{background:rgba(255,255,255,.06);border:1px solid var(--line)}.chatbox{display:grid;gap:10px}.messages{height:286px;overflow:auto;display:grid;align-content:start;gap:9px;padding-right:4px}
-.msg{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;line-height:1.45;background:rgba(255,255,255,.055);border:1px solid var(--line)}
-.msg.user{margin-left:auto;background:rgba(140,102,255,.14);border-color:rgba(140,102,255,.26)}
-.msg.aura{margin-right:auto}.composer{display:flex;gap:8px}.composer textarea{resize:none;min-height:44px;max-height:110px}
-.list{display:grid;gap:9px}.item{padding:11px 12px;border-radius:13px;border:1px solid var(--line);background:rgba(255,255,255,.025)}
-.item b{display:block;font-size:12px;margin-bottom:4px}.item span{font-size:12px;color:var(--muted);line-height:1.4}
-.empty{padding:18px;text-align:center;color:var(--muted);font-size:12px;border:1px dashed var(--line);border-radius:14px}
-@media(max-width:850px){.hero,.auth,.state,.systems,.chat,.activity{grid-column:span 12}.kpis{grid-template-columns:repeat(2,1fr)}.hero-row{display:block}.top{align-items:flex-start}}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{
+  background:
+    radial-gradient(900px 520px at 15% -10%,rgba(118,72,255,.22),transparent 68%),
+    radial-gradient(740px 480px at 92% 3%,rgba(38,120,255,.15),transparent 70%),
+    linear-gradient(180deg,#070a12 0%,#05070d 100%);
+}
+button,input,textarea{font:inherit}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+::selection{background:rgba(154,108,255,.35)}
+.shell{max-width:1680px;margin:0 auto;padding:22px 22px 34px;min-height:100vh}
+.topbar{display:flex;align-items:center;gap:18px;margin-bottom:18px;min-height:66px}
+.identity{display:flex;align-items:center;gap:14px;min-width:0}
+.logo{font-size:37px;letter-spacing:.26em;font-weight:280;line-height:1;text-shadow:0 0 28px rgba(255,255,255,.18)}
+.identity-copy{min-width:0;border-left:1px solid var(--line);padding-left:18px}
+.title{font-size:22px;line-height:1.1;font-weight:500;letter-spacing:.01em;white-space:nowrap}
+.subtitle{font-size:12px;color:var(--muted);margin-top:5px}
+.top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+.pill{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:rgba(16,23,39,.72);padding:9px 12px;border-radius:999px;font-size:11px;color:#cbd4e8;backdrop-filter:blur(16px)}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 14px currentColor}
+.live-dot.good{background:var(--green)}.live-dot.bad{background:var(--red)}
+.clock{padding:0 16px;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:right;min-width:106px}
+.clock .date{font-size:10px;color:var(--muted)}.clock .time{font-size:18px;font-weight:650;margin-top:2px}
+.mode-btn,.icon-btn{border:1px solid rgba(154,108,255,.32);background:rgba(70,45,125,.22);color:#e5dcff;border-radius:999px;padding:9px 13px;font-size:11px}
+.icon-btn{padding:9px 12px;border-color:var(--line);background:rgba(16,23,39,.7)}
+.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:14px}
+.metric{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:17px;background:linear-gradient(180deg,rgba(19,27,46,.82),rgba(10,15,26,.72));padding:13px 14px;display:flex;align-items:center;gap:12px;min-height:76px;box-shadow:inset 0 1px rgba(255,255,255,.03),0 16px 40px rgba(0,0,0,.12)}
+.metric::after{content:"";position:absolute;inset:auto -25% -55% 35%;height:90px;background:radial-gradient(circle,var(--metric-glow,rgba(154,108,255,.14)),transparent 70%)}
+.ring{width:47px;height:47px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;background:conic-gradient(var(--metric-color,var(--violet)) calc(var(--pct,0)*1%),rgba(255,255,255,.07) 0);position:relative;box-shadow:0 0 20px var(--metric-shadow,rgba(154,108,255,.12))}
+.ring::before{content:"";position:absolute;inset:5px;border-radius:50%;background:#0b101c;border:1px solid rgba(255,255,255,.05)}
+.ring span{position:relative;z-index:1;font-size:15px;font-weight:700}
+.metric-copy{min-width:0}.metric-label{font-size:11px;color:#cdd4e4}.metric-value{font-size:20px;font-weight:700;margin-top:2px}.metric-trend{font-size:9px;color:var(--muted);margin-top:1px}
+.workspace{display:grid;grid-template-columns:minmax(260px,3fr) minmax(540px,6.4fr) minmax(270px,3.2fr);gap:13px;align-items:stretch}
+.panel{border:1px solid var(--line);border-radius:19px;background:linear-gradient(180deg,rgba(14,20,34,.86),rgba(8,12,21,.82));backdrop-filter:blur(18px);box-shadow:0 18px 60px rgba(0,0,0,.18);overflow:hidden}
+.panel-head{display:flex;align-items:center;gap:8px;padding:14px 15px;border-bottom:1px solid rgba(255,255,255,.055)}
+.panel-title{font-size:13px;font-weight:650;letter-spacing:.01em}.panel-head .spacer{flex:1}.panel-meta{font-size:9px;color:var(--muted)}
+.panel-body{padding:14px}
+.chat-panel{display:flex;flex-direction:column;min-height:650px}
+.chat-body{display:flex;flex:1;min-height:0;flex-direction:column;padding:12px}
+.messages{display:flex;flex-direction:column;gap:10px;overflow:auto;min-height:360px;max-height:512px;padding:4px 3px 12px}
+.msg{max-width:91%;padding:11px 12px;border:1px solid var(--line2);border-radius:15px;font-size:11px;line-height:1.52;background:rgba(255,255,255,.035)}
+.msg.user{align-self:flex-end;background:linear-gradient(135deg,rgba(113,74,255,.18),rgba(73,118,255,.11));border-color:rgba(137,103,255,.2)}
+.msg.aura{align-self:flex-start}.msg .who{display:block;font-size:9px;color:var(--muted);margin-bottom:6px}.msg.aura .who{color:#c7b7ff}
+.quick{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}.quick button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b9c3d7;border-radius:999px;padding:7px 9px;font-size:9px}
+.composer{margin-top:auto;display:flex;gap:8px;align-items:flex-end}.composer textarea{resize:none;min-height:46px;max-height:112px;flex:1;border-radius:13px;border:1px solid var(--line);background:rgba(2,5,10,.45);color:var(--text);padding:11px 12px;outline:none;font-size:11px}.composer textarea:focus{border-color:rgba(154,108,255,.5);box-shadow:0 0 0 3px rgba(154,108,255,.08)}
+.send,.voice{width:43px;height:43px;border-radius:13px;border:1px solid var(--line);display:grid;place-items:center;color:white}.send{background:linear-gradient(135deg,#8a60ff,#5d4ae9);border:0}.voice{background:rgba(255,255,255,.04)}
+.map-panel{position:relative;min-height:650px}.map-wrap{position:relative;height:650px;overflow:hidden;background:radial-gradient(circle at 52% 47%,rgba(96,55,160,.18),transparent 28%),radial-gradient(circle at 50% 50%,rgba(39,87,151,.08),transparent 54%)}
+.map-wrap::before{content:"";position:absolute;inset:0;background-image:radial-gradient(circle,rgba(255,255,255,.4) 0 1px,transparent 1.4px);background-size:47px 47px;opacity:.11;mask-image:radial-gradient(circle at center,#000 15%,transparent 75%)}
+#attentionMap{position:absolute;inset:0;width:100%;height:100%}
+.map-toolbar{display:flex;gap:6px}.map-toolbar button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b8c1d5;border-radius:999px;padding:6px 9px;font-size:9px}
+.legend{position:absolute;right:14px;bottom:13px;background:rgba(7,10,18,.78);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:8px;color:#aab5ca;backdrop-filter:blur(12px);display:grid;gap:5px}.legend-row{display:flex;align-items:center;gap:7px}.legend-line{width:22px;height:2px;border-radius:4px;background:linear-gradient(90deg,var(--violet),#fff)}.legend-line.rise{background:linear-gradient(90deg,var(--cyan),#fff)}.legend-line.stable{background:rgba(255,255,255,.3)}
+.map-foot{position:absolute;left:15px;bottom:14px;max-width:55%;font-size:9px;color:var(--muted);line-height:1.45;padding:8px 10px;border-radius:10px;background:rgba(7,10,18,.6);border:1px solid rgba(255,255,255,.05)}
+.right-stack{display:grid;gap:12px;grid-template-rows:auto auto 1fr}.thought-card{padding:13px;border:1px solid rgba(255,201,106,.17);border-radius:14px;background:linear-gradient(135deg,rgba(255,201,106,.08),rgba(154,108,255,.07));font-size:12px;line-height:1.48;color:#f2e0b9;min-height:74px}
+.work-list,.intent-list,.memory-list,.activity-list{display:grid;gap:8px}.work-row,.intent-row,.memory-row,.activity-row{border:1px solid var(--line2);background:rgba(255,255,255,.02);border-radius:11px;padding:9px 10px}
+.work-top,.intent-top{display:flex;gap:8px;align-items:flex-start}.work-title,.intent-title{font-size:10px;line-height:1.35;flex:1}.badge{font-size:8px;border-radius:999px;padding:3px 7px;border:1px solid var(--line);color:#cbd4e8;white-space:nowrap}.badge.high{color:#ffda93;border-color:rgba(255,201,106,.24);background:rgba(255,201,106,.07)}.badge.medium{color:#b9cbff;border-color:rgba(109,167,255,.24);background:rgba(109,167,255,.06)}
+.progress{height:4px;margin-top:7px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--violet),var(--cyan))}
+.bottom-grid{display:grid;grid-template-columns:5fr 3fr 4fr;gap:13px;margin-top:13px}.bottom-grid .panel{min-height:212px}
+.activity-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:7px;padding:7px 9px}.activity-time{font-size:8px;color:var(--muted2)}.activity-title{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-kind{font-size:8px;color:#aab6ce;border:1px solid var(--line);padding:3px 6px;border-radius:999px}
+.next-action{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid rgba(154,108,255,.16);border-radius:14px;background:linear-gradient(135deg,rgba(154,108,255,.1),rgba(90,110,255,.05))}.next-orb{width:42px;height:42px;border-radius:50%;border:1px solid rgba(154,108,255,.45);display:grid;place-items:center;color:#c4b5ff;box-shadow:0 0 25px rgba(154,108,255,.18);flex:0 0 auto}.next-copy{font-size:10px;line-height:1.45}.confidence{font-size:8px;color:var(--muted);margin-top:14px}.memory-row{display:grid;grid-template-columns:auto 1fr;gap:8px}.memory-date{font-size:8px;color:var(--muted2)}.memory-text{font-size:9px;line-height:1.35}.empty{padding:14px;text-align:center;border:1px dashed var(--line);border-radius:11px;color:var(--muted);font-size:9px}
+.auth-drawer{position:fixed;inset:0;display:none;z-index:50;background:rgba(2,4,9,.72);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:18px}.auth-drawer.open{display:flex}.auth-box{width:min(460px,100%);border:1px solid var(--line);border-radius:20px;background:#0d1321;padding:20px;box-shadow:0 30px 100px rgba(0,0,0,.45)}.auth-box h3{margin:0 0 7px;font-size:16px}.auth-box p{margin:0 0 13px;color:var(--muted);font-size:10px;line-height:1.45}.auth-row{display:flex;gap:8px}.auth-row input{flex:1;border:1px solid var(--line);background:#070b13;color:white;border-radius:12px;padding:10px 11px;outline:none}.primary{border:0;border-radius:11px;background:linear-gradient(135deg,#9368ff,#624ee8);color:white;padding:9px 12px;font-weight:650}.secondary{border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);color:#ccd4e5;padding:9px 12px}
+.mobile-tabs{display:none}
+@media(max-width:1180px){
+  .metrics{grid-template-columns:repeat(3,1fr)}
+  .workspace{grid-template-columns:1fr 1.8fr}.right-stack{grid-column:1/-1;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto}.chat-panel{min-height:560px}.map-panel,.map-wrap{min-height:560px;height:560px}
+}
+@media(max-width:820px){
+  .shell{padding:14px 12px 26px}.topbar{align-items:flex-start}.identity-copy{display:none}.logo{font-size:30px}.clock{display:none}.mode-btn{display:none}
+  .metrics{grid-template-columns:repeat(2,1fr);gap:8px}.metric{min-height:66px;padding:10px}.ring{width:40px;height:40px}.metric-value{font-size:16px}
+  .workspace{grid-template-columns:1fr}.chat-panel{min-height:520px}.map-panel,.map-wrap{min-height:520px;height:520px}.right-stack{grid-column:auto;grid-template-columns:1fr}
+  .bottom-grid{grid-template-columns:1fr}.map-foot{max-width:72%}.legend{display:none}.title{white-space:normal}
+}
 </style>
 </head>
 <body>
 <div class="shell">
-  <header class="top">
-    <div class="brand"><div class="orb"></div><div><h1>AURA CLOUD</h1><div class="sub">Proto-organisme logiciel · Node.js / Hostinger</div></div></div>
-    <div class="pill"><span id="liveDot" class="dot"></span><span id="liveText">Connexion…</span></div>
+  <header class="topbar">
+    <div class="identity">
+      <div class="logo">AURA</div>
+      <div class="identity-copy">
+        <div class="title">Interface de conscience opérationnelle</div>
+        <div class="subtitle">Parler, observer, comprendre ses priorités</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="pill"><span id="liveDot" class="live-dot"></span><span id="liveText">Connexion…</span></div>
+      <div class="clock"><div id="clockDate" class="date">—</div><div id="clockTime" class="time">—</div></div>
+      <button class="mode-btn" id="modeBtn">◌ Mode évolutif</button>
+      <button class="icon-btn" id="authBtn">Privé</button>
+    </div>
   </header>
 
-  <main class="grid">
-    <section class="card hero">
-      <div class="hero-row">
-        <div><div class="small muted">ÉTAT GLOBAL</div><div class="big" id="phase">Initialisation</div><div class="muted small" id="runtimeText">Vérification du noyau…</div></div>
-        <div class="pill"><span>Cycles</span><strong id="cycles">—</strong></div>
-      </div>
-      <div id="notice" class="notice">Connexion au runtime AURA Cloud…</div>
-      <div class="kpis">
-        <div class="kpi"><span class="small muted">Mémoire</span><b id="lessonsCount">—</b></div>
-        <div class="kpi"><span class="small muted">Intentions</span><b id="intentionsCount">—</b></div>
-        <div class="kpi"><span class="small muted">Réflexions</span><b id="reflectionsCount">—</b></div>
-        <div class="kpi"><span class="small muted">Évolution</span><b id="evolutionPhase">—</b></div>
-      </div>
-    </section>
+  <section class="metrics">
+    <div class="metric" style="--metric-color:#60e6ad;--metric-glow:rgba(96,230,173,.16)"><div class="ring" id="ring-energy"><span>⚡</span></div><div class="metric-copy"><div class="metric-label">Énergie</div><div class="metric-value" id="metric-energy">—</div><div class="metric-trend" id="trend-energy">état interne</div></div></div>
+    <div class="metric" style="--metric-color:#9a6cff;--metric-glow:rgba(154,108,255,.18)"><div class="ring" id="ring-curiosity"><span>∞</span></div><div class="metric-copy"><div class="metric-label">Curiosité</div><div class="metric-value" id="metric-curiosity">—</div><div class="metric-trend" id="trend-curiosity">état interne</div></div></div>
+    <div class="metric" style="--metric-color:#ff758d;--metric-glow:rgba(255,117,141,.15)"><div class="ring" id="ring-pressure"><span>↗</span></div><div class="metric-copy"><div class="metric-label">Pression</div><div class="metric-value" id="metric-pressure">—</div><div class="metric-trend" id="trend-pressure">état interne</div></div></div>
+    <div class="metric" style="--metric-color:#6da7ff;--metric-glow:rgba(109,167,255,.16)"><div class="ring" id="ring-continuity"><span>◫</span></div><div class="metric-copy"><div class="metric-label">Continuité</div><div class="metric-value" id="metric-continuity">—</div><div class="metric-trend" id="trend-continuity">mémoire temporelle</div></div></div>
+    <div class="metric" style="--metric-color:#ffc96a;--metric-glow:rgba(255,201,106,.15)"><div class="ring" id="ring-introspection"><span>◉</span></div><div class="metric-copy"><div class="metric-label">Introspection</div><div class="metric-value" id="metric-introspection">—</div><div class="metric-trend" id="trend-introspection">réflexion</div></div></div>
+    <div class="metric" style="--metric-color:#59e0ef;--metric-glow:rgba(89,224,239,.15)"><div class="ring" id="ring-reactivity"><span>⌁</span></div><div class="metric-copy"><div class="metric-label">Réactivité</div><div class="metric-value" id="metric-reactivity">—</div><div class="metric-trend" id="trend-reactivity">réponse</div></div></div>
+  </section>
 
-    <section class="card auth">
-      <h2>Accès privé</h2>
-      <div class="small muted" style="margin-bottom:10px">Le token reste uniquement dans cet onglet.</div>
-      <div class="token-row"><input id="token" type="password" autocomplete="off" placeholder="AURA_CLOUD_TOKEN"><button class="btn" id="saveToken">Activer</button></div>
-      <button class="btn secondary" id="refresh" style="margin-top:10px;width:100%">Actualiser l’état</button>
-    </section>
-
-    <section class="card state">
-      <h2>État interne</h2>
-      <div class="bars" id="bars"></div>
-      <div class="item" style="margin-top:14px"><b>Intention actuelle</b><span id="intention">Connexion privée requise pour afficher l’intention.</span></div>
-      <div class="item" style="margin-top:9px"><b>Pensée dominante</b><span id="thought">Connexion privée requise pour afficher la pensée dominante.</span></div>
-    </section>
-
-    <section class="card systems">
-      <h2>Systèmes</h2>
-      <div class="system-list">
-        <div class="system"><strong>MySQL</strong><span class="status" id="dbStatus">—</span></div>
-        <div class="system"><strong>Noyau Soul</strong><span class="status" id="kernelStatus">—</span></div>
-        <div class="system"><strong>IA</strong><span class="status" id="aiStatus">—</span></div>
-        <div class="system"><strong>HORIZON</strong><span class="status" id="horizonStatus">—</span></div>
-        <div class="system"><strong>AURA Evolution</strong><span class="status" id="evolutionStatus">—</span></div>
-        <div class="system"><strong>Quantic Studio</strong><span class="status" id="studioStatus">API prête</span></div>
+  <main class="workspace">
+    <section class="panel chat-panel">
+      <div class="panel-head"><span>◱</span><div class="panel-title">Dialogue</div><div class="spacer"></div><div class="panel-meta" id="chatState">AURA</div></div>
+      <div class="chat-body">
+        <div class="messages" id="messages">
+          <div class="msg aura"><span class="who">AURA</span>Je suis en train de charger mon état. Connecte l’accès privé pour voir mes intentions, ma mémoire et mon activité complète.</div>
+        </div>
+        <div class="quick">
+          <button data-prompt="Fais-moi un point sur ce que tu fais maintenant.">Que fais-tu maintenant ?</button>
+          <button data-prompt="Quel est ton prochain objectif prioritaire ?">Quel est le prochain jalon ?</button>
+          <button data-prompt="Quels sont les risques ou tensions que tu détectes actuellement ?">Quels sont les risques ?</button>
+        </div>
+        <div class="composer">
+          <button class="voice" id="voiceBtn" title="Parler">⌁</button>
+          <textarea id="message" placeholder="Parler à AURA…"></textarea>
+          <button class="send" id="send" title="Envoyer">➜</button>
+        </div>
       </div>
     </section>
 
-    <section class="card chat">
-      <h2>Parler à AURA</h2>
-      <div class="chatbox">
-        <div class="messages" id="messages"><div class="msg aura">AURA Cloud attend le démarrage du noyau.</div></div>
-        <div class="composer"><textarea id="message" placeholder="Écris à AURA…"></textarea><button class="btn" id="send">Envoyer</button></div>
+    <section class="panel map-panel">
+      <div class="panel-head"><span>◉</span><div class="panel-title">Carte d’intérêt</div><div class="spacer"></div><div class="map-toolbar"><button id="refreshMap">Vue dynamique</button></div></div>
+      <div class="map-wrap">
+        <svg id="attentionMap" viewBox="0 0 900 650" aria-label="Carte d'intérêt AURA">
+          <defs>
+            <radialGradient id="coreGrad"><stop offset="0" stop-color="#ffffff"/><stop offset=".12" stop-color="#d9c9ff"/><stop offset=".34" stop-color="#8d65ff"/><stop offset=".68" stop-color="#2d1b5e"/><stop offset="1" stop-color="#080b15"/></radialGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="soft"><feGaussianBlur stdDeviation="2.4"/></filter>
+          </defs>
+          <g opacity=".28" stroke="#8b7fd0" fill="none">
+            <ellipse cx="450" cy="325" rx="330" ry="198" stroke-dasharray="3 9"/>
+            <ellipse cx="450" cy="325" rx="270" ry="250" transform="rotate(-22 450 325)" stroke-dasharray="2 11"/>
+            <ellipse cx="450" cy="325" rx="360" ry="118" transform="rotate(18 450 325)" stroke-dasharray="3 12"/>
+          </g>
+          <g id="flowLinks"></g>
+          <g id="interestNodes"></g>
+          <g id="core" filter="url(#glow)">
+            <circle cx="450" cy="325" r="74" fill="url(#coreGrad)" stroke="rgba(255,255,255,.36)" stroke-width="1.5"/>
+            <circle cx="450" cy="325" r="91" fill="none" stroke="#8f6bff" opacity=".32" stroke-dasharray="2 10"/>
+            <text x="450" y="331" fill="#f5f1ff" font-size="22" text-anchor="middle" letter-spacing="5">AURA</text>
+          </g>
+        </svg>
+        <div class="map-foot"><strong id="focusLabel" style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">connexion privée requise</span></div>
+        <div class="legend">
+          <div class="legend-row"><span class="legend-line"></span>Flux d’attention actuel</div>
+          <div class="legend-row"><span class="legend-line rise"></span>Intérêt croissant</div>
+          <div class="legend-row"><span class="legend-line stable"></span>Intérêt stable</div>
+        </div>
       </div>
     </section>
 
-    <section class="card activity">
-      <h2>Diagnostic</h2>
-      <div class="list" id="issues"><div class="empty">Chargement…</div></div>
-      <h2 style="margin-top:18px">Dernières réflexions</h2>
-      <div class="list" id="reflections"><div class="empty">Accès privé requis.</div></div>
-    </section>
+    <aside class="right-stack">
+      <section class="panel">
+        <div class="panel-head"><span>◉</span><div class="panel-title">Pensée dominante</div></div>
+        <div class="panel-body"><div class="thought-card" id="dominantThought">Connexion privée requise pour afficher la pensée dominante.</div></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>▣</span><div class="panel-title">Travail en cours</div><div class="spacer"></div><div class="panel-meta" id="workMeta">—</div></div>
+        <div class="panel-body"><div class="work-list" id="workList"><div class="empty">Accès privé requis.</div></div></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>◎</span><div class="panel-title">Intentions actives</div></div>
+        <div class="panel-body"><div class="intent-list" id="intentList"><div class="empty">Accès privé requis.</div></div></div>
+      </section>
+    </aside>
   </main>
+
+  <section class="bottom-grid">
+    <section class="panel">
+      <div class="panel-head"><span>◴</span><div class="panel-title">Ce qu’elle fait maintenant</div><div class="spacer"></div><div class="panel-meta" id="activityLive">En temps réel</div></div>
+      <div class="panel-body"><div class="activity-list" id="activityList"><div class="empty">Accès privé requis.</div></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>✦</span><div class="panel-title">Prochaine action probable</div></div>
+      <div class="panel-body">
+        <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune action calculée.</div></div>
+        <div class="confidence">Confiance estimée : <span id="confidenceValue">—</span></div>
+        <div class="progress"><span id="confidenceBar" style="width:0%"></span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>◫</span><div class="panel-title">Mémoire et leçons</div><div class="spacer"></div><div class="panel-meta" id="memoryMeta">—</div></div>
+      <div class="panel-body"><div class="memory-list" id="memoryList"><div class="empty">Accès privé requis.</div></div></div>
+    </section>
+  </section>
 </div>
+
+<div class="auth-drawer" id="authDrawer">
+  <div class="auth-box">
+    <h3>Accès privé AURA</h3>
+    <p>Le token reste dans <code>sessionStorage</code> de cet onglet. Il permet d’afficher intentions, pensée dominante, mémoire, activité et carte d’intérêt complète.</p>
+    <div class="auth-row"><input id="token" type="password" autocomplete="off" placeholder="AURA_CLOUD_TOKEN"><button class="primary" id="saveToken">Connecter</button></div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button class="secondary" id="logoutToken">Déconnecter</button><button class="secondary" id="closeAuth">Fermer</button></div>
+  </div>
+</div>
+
 <script>
-const $ = (id) => document.getElementById(id);
+const $ = function(id){ return document.getElementById(id); };
 let token = sessionStorage.getItem('aura_token') || '';
+let lastSoul = null;
+let lastAttention = null;
 $('token').value = token;
 
-function headers(json=true){
-  const h = {};
+function escapeHtml(value){
+  return String(value == null ? '' : value).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function headers(json){
+  const h={};
   if(json) h['Content-Type']='application/json';
   if(token) h.Authorization='Bearer '+token;
   return h;
 }
-async function api(path, options={}){
-  const response = await fetch(path,{...options,headers:{...headers(Boolean(options.body)),...(options.headers||{})}});
-  const text = await response.text();
-  let data={}; try{data=text?JSON.parse(text):{};}catch{data={error:text||'Réponse invalide'};}
-  if(!response.ok) throw Object.assign(new Error(data.error||'Erreur '+response.status),{status:response.status,data});
+async function api(path,options){
+  options=options||{};
+  const response=await fetch(path,Object.assign({},options,{headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}));
+  const text=await response.text();
+  let data={};
+  try{data=text?JSON.parse(text):{};}catch(_){data={error:text||'Réponse invalide'};}
+  if(!response.ok){
+    const err=new Error(data.error||('Erreur '+response.status)); err.status=response.status; err.data=data; throw err;
+  }
   return data;
 }
-function val(v){return Math.max(0,Math.min(1,Number(v)||0))}
-function bar(label,value){
-  const pct=Math.round(val(value)*100);
-  return '<div><div class="bar-head"><span>'+label+'</span><strong>'+pct+'%</strong></div><div class="track"><div class="fill" style="width:'+pct+'%"></div></div></div>';
+function pct(v){return Math.max(0,Math.min(100,Math.round((Number(v)||0)*100)));}
+function metric(id,value){
+  const p=pct(value);
+  $('metric-'+id).textContent=p+'%';
+  $('ring-'+id).style.setProperty('--pct',p);
+  if(lastSoul && lastSoul[id] != null){
+    const delta=(Number(value)||0)-Number(lastSoul[id]||0);
+    $('trend-'+id).textContent=delta>.015?'↗ en hausse':delta<-.015?'↘ en baisse':'• stable';
+  }
 }
-function setLive(ok,text){$('liveDot').className='dot '+(ok?'good':'bad');$('liveText').textContent=text}
-function renderIssues(items){
-  $('issues').innerHTML = items?.length ? items.map(i=>'<div class="item"><b>'+escapeHtml(i.code||'configuration')+'</b><span>'+escapeHtml(i.message||String(i))+'</span></div>').join('') : '<div class="empty">Aucun problème de configuration détecté.</div>';
+function setLive(ok,text){$('liveDot').className='live-dot '+(ok?'good':'bad');$('liveText').textContent=text;}
+function fmtTime(value){
+  if(!value) return '—';
+  const d=new Date(value); if(Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 }
-function escapeHtml(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function fmtDate(value){
+  if(!value) return '—';
+  const d=new Date(value); if(Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+}
+function updateClock(){
+  const d=new Date();
+  $('clockDate').textContent=d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+  $('clockTime').textContent=d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+}
+function priorityLabel(v){
+  const p=Number(v)||0;
+  return p>=.72?['Haute','high']:p>=.48?['Moyenne','medium']:['Basse',''];
+}
+function renderIntentions(rows){
+  if(!rows || !rows.length){$('intentList').innerHTML='<div class="empty">Aucune intention active.</div>';return;}
+  $('intentList').innerHTML=rows.slice(0,4).map(function(r,i){
+    const tag=priorityLabel(r.priority);
+    return '<div class="intent-row"><div class="intent-top"><span style="font-size:9px;color:#7d88a1">'+(i+1)+'</span><div class="intent-title">'+escapeHtml(r.statement)+'</div><span class="badge '+tag[1]+'">'+tag[0]+'</span></div></div>';
+  }).join('');
+}
+function renderWork(rows){
+  if(!rows || !rows.length){$('workList').innerHTML='<div class="empty">Aucun travail déclaré.</div>';return;}
+  $('workMeta').textContent=rows.length+' actifs';
+  $('workList').innerHTML=rows.slice(0,5).map(function(r){
+    const p=pct(r.priority);
+    return '<div class="work-row"><div class="work-top"><div class="work-title">'+escapeHtml(r.title)+'</div><span class="badge">'+escapeHtml(r.kind)+'</span></div><div class="progress"><span style="width:'+p+'%"></span></div></div>';
+  }).join('');
+}
+function renderLessons(rows){
+  if(!rows || !rows.length){$('memoryList').innerHTML='<div class="empty">Aucune leçon enregistrée.</div>';return;}
+  $('memoryMeta').textContent=rows.length+' récentes';
+  $('memoryList').innerHTML=rows.slice(0,5).map(function(r){
+    return '<div class="memory-row"><div class="memory-date">'+escapeHtml(fmtDate(r.updated_at))+'</div><div class="memory-text">'+escapeHtml(r.content)+'</div></div>';
+  }).join('');
+}
+function renderActivity(rows){
+  if(!rows || !rows.length){$('activityList').innerHTML='<div class="empty">Aucune activité récente.</div>';return;}
+  $('activityList').innerHTML=rows.slice(0,7).map(function(r){
+    return '<div class="activity-row"><div class="activity-time">'+escapeHtml(fmtTime(r.created_at))+'</div><div class="activity-title">'+escapeHtml(r.title||r.content||r.kind)+'</div><div class="activity-kind">'+escapeHtml(r.kind||'activité')+'</div></div>';
+  }).join('');
+}
+const nodeLayout={
+  stability:{x:205,y:190,color:'#60e6ad'},
+  learning:{x:455,y:112,color:'#a478ff'},
+  studio:{x:700,y:190,color:'#6da7ff'},
+  horizon:{x:755,y:355,color:'#ffc96a'},
+  automation:{x:650,y:500,color:'#59e0ef'},
+  memory:{x:450,y:535,color:'#ffc96a'},
+  evolution:{x:250,y:500,color:'#f178d6'},
+  watch:{x:145,y:355,color:'#6da7ff'}
+};
+function renderMap(data){
+  if(!data || !Array.isArray(data.nodes)) return;
+  lastAttention=data;
+  $('focusStatement').textContent=data.focus_statement||'Aucune intention dominante.';
+  const svgNS='http://www.w3.org/2000/svg';
+  const links=$('flowLinks'); const nodes=$('interestNodes');
+  links.innerHTML=''; nodes.innerHTML='';
+  data.nodes.forEach(function(n){
+    const pos=nodeLayout[n.id]; if(!pos) return;
+    const intensity=Math.max(.18,Math.min(1,Number(n.score)||0));
+    const line=document.createElementNS(svgNS,'path');
+    const midX=(450+pos.x)/2+(pos.y-325)*.09;
+    const midY=(325+pos.y)/2-(pos.x-450)*.07;
+    line.setAttribute('d','M 450 325 Q '+midX+' '+midY+' '+pos.x+' '+pos.y);
+    line.setAttribute('fill','none'); line.setAttribute('stroke',pos.color);
+    line.setAttribute('stroke-width',String(1.2+intensity*3.8));
+    line.setAttribute('opacity',String(.12+intensity*.58));
+    line.setAttribute('stroke-dasharray',n.dominant?'0':(n.trend==='rising'?'7 8':'3 11'));
+    if(n.dominant) line.setAttribute('filter','url(#glow)');
+    links.appendChild(line);
 
+    const g=document.createElementNS(svgNS,'g');
+    const scale=.78+intensity*.58;
+    g.setAttribute('transform','translate('+pos.x+' '+pos.y+') scale('+scale+')');
+    const halo=document.createElementNS(svgNS,'circle'); halo.setAttribute('r',String(35+intensity*16)); halo.setAttribute('fill',pos.color); halo.setAttribute('opacity',String(.035+intensity*.07)); halo.setAttribute('filter','url(#soft)');
+    const orbit=document.createElementNS(svgNS,'ellipse'); orbit.setAttribute('rx','43'); orbit.setAttribute('ry','18'); orbit.setAttribute('fill','none'); orbit.setAttribute('stroke',pos.color); orbit.setAttribute('opacity',String(.18+intensity*.34)); orbit.setAttribute('transform','rotate('+(n.id.length*13%60-30)+')');
+    const circle=document.createElementNS(svgNS,'circle'); circle.setAttribute('r','24'); circle.setAttribute('fill',pos.color); circle.setAttribute('fill-opacity',String(.17+intensity*.25)); circle.setAttribute('stroke',pos.color); circle.setAttribute('stroke-width',n.dominant?'2.2':'1.2'); circle.setAttribute('filter','url(#glow)');
+    const core=document.createElementNS(svgNS,'circle'); core.setAttribute('r','8'); core.setAttribute('fill',pos.color); core.setAttribute('opacity',String(.55+intensity*.45));
+    g.appendChild(halo);g.appendChild(orbit);g.appendChild(circle);g.appendChild(core);
+    nodes.appendChild(g);
+
+    const label=document.createElementNS(svgNS,'text'); label.setAttribute('x',String(pos.x+38)); label.setAttribute('y',String(pos.y-3)); label.setAttribute('fill','#eef2ff'); label.setAttribute('font-size','13'); label.setAttribute('font-weight','600'); label.textContent=n.label; nodes.appendChild(label);
+    const sub=document.createElementNS(svgNS,'text'); sub.setAttribute('x',String(pos.x+38)); sub.setAttribute('y',String(pos.y+13)); sub.setAttribute('fill','#77849d'); sub.setAttribute('font-size','9'); sub.textContent=n.subtitle+' · '+Math.round(intensity*100)+'%'; nodes.appendChild(sub);
+  });
+}
+function renderNext(work,attention){
+  const item=(work&&work[0])||null;
+  const node=attention&&attention.nodes?attention.nodes.find(function(n){return n.dominant;}):null;
+  if(item){$('nextAction').textContent=item.title;const p=pct(item.priority||.6);$('confidenceValue').textContent=p+'%';$('confidenceBar').style.width=p+'%';return;}
+  if(node){$('nextAction').textContent='Poursuivre le focus sur '+node.label+'.';const p=pct(node.score);$('confidenceValue').textContent=p+'%';$('confidenceBar').style.width=p+'%';return;}
+  $('nextAction').textContent='Observer le système avant de prioriser une nouvelle action.';$('confidenceValue').textContent='—';$('confidenceBar').style.width='0%';
+}
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
-    setLive(true,boot.runtime_ready?'AURA active':'Serveur actif');
-    $('dbStatus').textContent=boot.db_ready?'Connecté':'À configurer';
-    $('kernelStatus').textContent=boot.runtime_ready?'Actif':'En attente';
-    $('studioStatus').textContent=boot.runtime_ready?'Sync disponible':'API en attente';
-    renderIssues(boot.issues||[]);
-    $('notice').className='notice '+(boot.runtime_ready?'good':'');
-    $('notice').textContent=boot.runtime_ready?'AURA Cloud fonctionne. Le noyau persistant est démarré.':'Le serveur fonctionne, mais le noyau attend sa configuration. Consulte le diagnostic à droite.';
-    $('runtimeText').textContent=boot.runtime_ready?'Mémoire persistante et cycles cognitifs actifs':'Mode diagnostic sécurisé : aucune perte silencieuse de données';
-
+    setLive(true,boot.runtime_ready?'En ligne · noyau actif':'En ligne · configuration');
+    $('chatState').textContent=boot.runtime_ready?'Noyau actif':'Diagnostic';
     const ks=await api('/api/kernel/status');
-    $('phase').textContent=ks.phase || (ks.started?'Active':'En attente');
-    $('lessonsCount').textContent=ks.counts?.lessons ?? '—';
-    $('intentionsCount').textContent=ks.counts?.intentions ?? '—';
-    $('reflectionsCount').textContent=ks.counts?.reflections ?? '—';
-    $('aiStatus').textContent=ks.ai_enabled?'Connectée':'Non configurée';
-
     const soul=await api('/api/kernel/soul');
-    $('cycles').textContent=soul.cycles ?? '—';
-    $('phase').textContent=soul.phase || $('phase').textContent;
-    $('bars').innerHTML=[
-      bar('Énergie',soul.energy),bar('Curiosité',soul.curiosity),bar('Pression',soul.pressure),
-      bar('Continuité',soul.continuity),bar('Introspection',soul.introspection),
-      bar('Ouverture',soul.openness),bar('Réactivité',soul.reactivity),bar('Exploration',soul.playfulness)
-    ].join('');
-    $('intention').textContent=soul.current_intention || (token?'Aucune intention active.':'Connexion privée requise pour afficher l’intention.');
-    $('thought').textContent=soul.dominant_thought || (token?'Aucune pensée dominante.':'Connexion privée requise pour afficher la pensée dominante.');
-
-    const hz=await api('/api/horizon/status');
-    $('horizonStatus').textContent=hz.enabled?(hz.started?'Actif':'Configuré'):'Désactivé';
-
-    if(token && boot.runtime_ready){
-      try{
-        const ev=await api('/api/evolution/status');
-        $('evolutionStatus').textContent=ev.enabled?'Phase 1 active':'Désactivée';
-        $('evolutionPhase').textContent=ev.phase?.replace('phase1-','P1 ') || '—';
-        const refs=await api('/api/kernel/reflections?limit=4');
-        $('reflections').innerHTML=refs.length?refs.map(r=>'<div class="item"><b>'+escapeHtml(r.title)+'</b><span>'+escapeHtml(r.summary)+'</span></div>').join(''):'<div class="empty">Aucune réflexion enregistrée.</div>';
-      }catch(e){$('evolutionStatus').textContent='Verrouillée'}
+    metric('energy',soul.energy);metric('curiosity',soul.curiosity);metric('pressure',soul.pressure);metric('continuity',soul.continuity);metric('introspection',soul.introspection);metric('reactivity',soul.reactivity);
+    if(token){
+      $('dominantThought').textContent=soul.dominant_thought||'Aucune pensée dominante.';
     }else{
-      $('evolutionStatus').textContent='Accès privé';
-      $('evolutionPhase').textContent='P1';
+      $('dominantThought').textContent='Connexion privée requise pour afficher la pensée dominante.';
+    }
+    lastSoul=Object.assign({},soul);
+    if(token && boot.runtime_ready){
+      const results=await Promise.all([
+        api('/api/kernel/intentions?limit=5'),
+        api('/api/kernel/lessons?limit=5'),
+        api('/api/kernel/activity?limit=8'),
+        api('/api/kernel/work?limit=5'),
+        api('/api/kernel/attention')
+      ]);
+      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderNext(results[3],results[4]);
+    }else{
+      $('intentList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
+      $('memoryList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
+      $('activityList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
+      $('workList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
+      renderNext([],null);
     }
   }catch(error){
     setLive(false,'Indisponible');
-    $('notice').className='notice';
-    $('notice').textContent='Impossible de joindre AURA Cloud : '+error.message;
+    $('chatState').textContent=error.message;
   }
 }
-
-$('saveToken').onclick=()=>{token=$('token').value.trim(); if(token) sessionStorage.setItem('aura_token',token); else sessionStorage.removeItem('aura_token'); refresh()};
-$('refresh').onclick=refresh;
-$('send').onclick=async()=>{
-  const text=$('message').value.trim(); if(!text)return;
-  $('messages').insertAdjacentHTML('beforeend','<div class="msg user">'+escapeHtml(text)+'</div>');
+async function sendMessage(text){
+  text=(text||'').trim();if(!text)return;
+  $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';
-  try{
-    const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text,author:'Utilisateur'})});
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura">'+escapeHtml(out.answer||'')+'</div>');
-  }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura">AURA indisponible : '+escapeHtml(error.message)+'</div>');
-  }
   $('messages').scrollTop=$('messages').scrollHeight;
+  try{
+    const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
+    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
+    $('messages').scrollTop=$('messages').scrollHeight;
+    refresh();
+  }catch(error){
+    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
+  }
+}
+$('send').onclick=function(){sendMessage($('message').value);};
+$('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
+document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
+$('authBtn').onclick=function(){$('authDrawer').classList.add('open');};
+$('closeAuth').onclick=function(){$('authDrawer').classList.remove('open');};
+$('authDrawer').addEventListener('click',function(e){if(e.target===$('authDrawer'))$('authDrawer').classList.remove('open');});
+$('saveToken').onclick=function(){token=$('token').value.trim();if(token)sessionStorage.setItem('aura_token',token);else sessionStorage.removeItem('aura_token');$('authDrawer').classList.remove('open');refresh();};
+$('logoutToken').onclick=function(){token='';$('token').value='';sessionStorage.removeItem('aura_token');$('authDrawer').classList.remove('open');refresh();};
+$('refreshMap').onclick=refresh;
+$('modeBtn').onclick=function(){$('authDrawer').classList.add('open');};
+$('voiceBtn').onclick=function(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){$('message').placeholder='Reconnaissance vocale non disponible sur ce navigateur.';return;}
+  const rec=new SR();rec.lang='fr-FR';rec.interimResults=false;rec.maxAlternatives=1;
+  rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
+  rec.start();
 };
-$('message').addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('send').click()}});
-refresh();
-setInterval(refresh,15000);
+updateClock();setInterval(updateClock,1000);refresh();setInterval(refresh,8000);
 </script>
 </body>
 </html>`;
