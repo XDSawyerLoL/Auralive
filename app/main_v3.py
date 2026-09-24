@@ -227,6 +227,10 @@ async def models_pull_v3(
     model = str(payload.get("model") or "").strip()
     if not model:
         raise HTTPException(status_code=422, detail="Nom de modèle requis")
+    if str(settings.ai_mode or "").casefold() != "ollama":
+        _write_runtime_env({"AI_MODE": "ollama"})
+        os.environ["AI_MODE"] = "ollama"
+        settings.ai_mode = "ollama"
     try:
         return await aura.ai.constellation.pull(model)
     except Exception as exc:  # noqa: BLE001
