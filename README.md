@@ -213,6 +213,26 @@ POST /api/kernel/agents/swarm
 POST /api/chat
 ```
 
+## AURA Evolution — phase 1 active
+
+AURA Evolution démarre désormais en mode **`observe`** par défaut. Dans ce mode, AURA peut effectuer sa veille sur les sources HTTPS autorisées, confronter ces informations à ses erreurs/leçons persistantes et produire un diagnostic d'amélioration. **Elle ne crée, ne modifie, ne soumet et ne fusionne aucun patch dans ce mode**, même si des options d'auto-promotion ont été configurées par erreur.
+
+```env
+AURA_EVOLUTION_ENABLED=true
+AURA_EVOLUTION_MODE=observe
+AURA_EVOLUTION_AUTO_SUBMIT=false
+AURA_EVOLUTION_AUTO_MERGE=false
+```
+
+Pour passer ultérieurement au sas de correction, un checkout source complet doit être fourni explicitement :
+
+```env
+AURA_EVOLUTION_MODE=sandbox
+AURA_EVOLUTION_SOURCE_ROOT=C:\\chemin\\vers\\Auralive
+```
+
+Le statut privé `GET /api/evolution/status` indique la phase active et si le checkout contient bien `app/`, `tests/` et `requirements.txt`. La soumission GitHub et la fusion automatique restent des niveaux séparés et désactivés par défaut.
+
 ## Quantic Studio Core
 
 Quantic Studio utilise désormais **Quantic Studio Core 0.4.1** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
