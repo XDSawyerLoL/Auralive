@@ -192,6 +192,29 @@ class EvolutionLab:
         )
         return {item.strip() for item in raw.split(",") if item.strip()}
 
+    @property
+    def source_ready(self) -> bool:
+        return (
+            not IS_FROZEN
+            and (self.source_root / "app").is_dir()
+            and (self.source_root / "tests").is_dir()
+            and (self.source_root / "requirements.txt").is_file()
+        )
+
+    @property
+    def canary_required(self) -> bool:
+        return bool(getattr(self.settings, "evolution_canary_required", True))
+
+    @property
+    def canary_min_observations(self) -> int:
+        return max(
+            1,
+            min(
+                int(getattr(self.settings, "evolution_canary_min_observations", 3)),
+                1000,
+            ),
+        )
+
     async def initialize(self) -> None:
         self.workspaces.mkdir(parents=True, exist_ok=True)
         self.artifacts.mkdir(parents=True, exist_ok=True)
@@ -233,6 +256,19 @@ class EvolutionLab:
                 details TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS aura_evolution_canary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cycle_id TEXT NOT NULL,
+                passed INTEGER NOT NULL,
+                observations INTEGER NOT NULL DEFAULT 0,
+                metrics TEXT NOT NULL DEFAULT '{}',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_aura_evolution_canary_cycle
+            ON aura_evolution_canary(cycle_id, created_at DESC);
             """
         )
 
@@ -1018,7 +1054,7 @@ socket.create_connection = _guard_create
         rows = await self.db.fetchall(
             """
             SELECT id,promotion FROM aura_evolution_cycles
-            WHERE status='remote-validation'
+            WHERE status IN ('remote-validation','awaiting-canary')
             ORDER BY updated_at ASC LIMIT 10
             """
         )
@@ -1092,20 +1128,25 @@ socket.create_connection = _guard_create
         }
 
         if successful and self.auto_merge:
-            merge = self._github_request(
-                "PUT",
-                f"/repos/{repo}/pulls/{number}/merge",
-                payload={
-                    "commit_title": f"AURA Evolution validated: {cycle_id}",
-                    "merge_method": "squash",
-                    "sha": head_sha,
-                },
-            )
-            result["merge"] = merge
-            if bool(merge.get("merged")):
-                self._sync_db_status(cycle_id, "promoted", result)
+            canary = self._latest_canary_sync(cycle_id)
+            result["canary"] = canary
+            if self.canary_required and not bool(canary.get("ready")):
+                self._sync_db_status(cycle_id, "awaiting-canary", result)
             else:
-                self._sync_db_status(cycle_id, "promotion-blocked", result)
+                merge = self._github_request(
+                    "PUT",
+                    f"/repos/{repo}/pulls/{number}/merge",
+                    payload={
+                        "commit_title": f"AURA Evolution validated: {cycle_id}",
+                        "merge_method": "squash",
+                        "sha": head_sha,
+                    },
+                )
+                result["merge"] = merge
+                if bool(merge.get("merged")):
+                    self._sync_db_status(cycle_id, "promoted", result)
+                else:
+                    self._sync_db_status(cycle_id, "promotion-blocked", result)
         elif successful:
             self._sync_db_status(cycle_id, "validated-remote", result)
         elif failed:
@@ -1113,6 +1154,98 @@ socket.create_connection = _guard_create
         else:
             self._sync_db_status(cycle_id, "remote-validation", result)
         return result
+
+    def _latest_canary_sync(self, cycle_id: str) -> dict[str, Any]:
+        import sqlite3
+
+        with sqlite3.connect(self.db.path, timeout=20) as connection:
+            connection.row_factory = sqlite3.Row
+            row = connection.execute(
+                """
+                SELECT passed,observations,metrics,notes,created_at
+                FROM aura_evolution_canary
+                WHERE cycle_id=?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (cycle_id,),
+            ).fetchone()
+        if not row:
+            return {
+                "ready": not self.canary_required,
+                "passed": False,
+                "observations": 0,
+                "required_observations": self.canary_min_observations,
+            }
+        try:
+            metrics = json.loads(row["metrics"])
+        except (TypeError, json.JSONDecodeError):
+            metrics = {}
+        observations = int(row["observations"] or 0)
+        passed = bool(row["passed"])
+        return {
+            "ready": passed and observations >= self.canary_min_observations,
+            "passed": passed,
+            "observations": observations,
+            "required_observations": self.canary_min_observations,
+            "metrics": metrics,
+            "notes": str(row["notes"] or ""),
+            "created_at": str(row["created_at"] or ""),
+        }
+
+    async def record_canary(
+        self,
+        cycle_id: str,
+        *,
+        passed: bool,
+        observations: int,
+        metrics: dict[str, Any] | None = None,
+        notes: str = "",
+    ) -> dict[str, Any]:
+        cycle = await self.db.fetchone(
+            "SELECT id,status FROM aura_evolution_cycles WHERE id=?",
+            (cycle_id,),
+        )
+        if not cycle:
+            raise EvolutionPolicyError("cycle d'évolution inconnu")
+        allowed_statuses = {"remote-validation", "validated-remote", "awaiting-canary"}
+        if str(cycle.get("status") or "") not in allowed_statuses:
+            raise EvolutionPolicyError(
+                "le canary n'est accepté qu'après soumission distante du candidat"
+            )
+        observation_count = max(0, min(int(observations), 1_000_000))
+        payload = dict(metrics or {})
+        await self.db.execute(
+            """
+            INSERT INTO aura_evolution_canary(
+                cycle_id,passed,observations,metrics,notes,created_at
+            ) VALUES(?,?,?,?,?,?)
+            """,
+            (
+                cycle_id,
+                int(bool(passed)),
+                observation_count,
+                json.dumps(payload, ensure_ascii=False, default=str)[:20000],
+                str(notes)[:4000],
+                utcnow(),
+            ),
+        )
+        result = {
+            "cycle_id": cycle_id,
+            "passed": bool(passed),
+            "observations": observation_count,
+            "required_observations": self.canary_min_observations,
+            "ready": bool(passed) and observation_count >= self.canary_min_observations,
+            "metrics": payload,
+        }
+        await self.automation.dispatch(
+            "aura.evolution.canary",
+            result,
+            source="evolution-canary",
+        )
+        return result
+
+    async def canary_status(self, cycle_id: str) -> dict[str, Any]:
+        return await asyncio.to_thread(self._latest_canary_sync, cycle_id)
 
     def _sync_db_status(self, cycle_id: str, status: str, details: dict[str, Any]) -> None:
         # Les appels réseau sont synchrones; cette écriture utilise une connexion
@@ -1165,6 +1298,19 @@ socket.create_connection = _guard_create
                         "status": "no-change",
                         "research": research,
                         "diagnosis": diagnosis,
+                    }
+
+                if not self.source_ready:
+                    await self._set_cycle(cycle_id, status="research-only")
+                    return {
+                        "id": cycle_id,
+                        "status": "research-only",
+                        "research": research,
+                        "diagnosis": diagnosis,
+                        "reason": (
+                            "arbre source complet indisponible; AURA peut rechercher et "
+                            "diagnostiquer mais ne génère aucun patch dans ce runtime"
+                        ),
                     }
 
                 candidate = await self.propose_candidate(
@@ -1267,6 +1413,12 @@ socket.create_connection = _guard_create
             "interval_seconds": self.interval_seconds,
             "source_mode": "frozen" if IS_FROZEN else "source",
             "source_root": str(self.source_root),
+            "source_ready": self.source_ready,
+            "phase": (
+                "phase1-research-diagnosis-sandbox"
+                if self.source_ready
+                else "phase1-research-diagnosis-only"
+            ),
             "auto_submit": self.auto_submit,
             "auto_merge": self.auto_merge,
             "github_configured": bool(self.github_token),
@@ -1274,6 +1426,8 @@ socket.create_connection = _guard_create
             "base_branch": self.base_branch,
             "allowed_domains": sorted(self.allowed_domains),
             "required_checks": sorted(self.required_checks),
+            "canary_required": self.canary_required,
+            "canary_min_observations": self.canary_min_observations,
             "protected_paths": sorted(_PROTECTED_EXACT),
             "last_cycle_at": self.last_cycle_at,
             "last_error": self.last_error,
@@ -1290,6 +1444,7 @@ socket.create_connection = _guard_create
                 "candidate compile + pytest",
                 "GitHub PR",
                 "remote CI",
-                "merge only after all checks succeed",
+                "independent canary + before/after metrics",
+                "merge only after all checks and canary succeed",
             ],
         }
