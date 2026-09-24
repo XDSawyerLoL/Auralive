@@ -17,6 +17,8 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 - agents planner/research/dev/security/operator/critic
 - swarm multi-agents
 - `/api/chat`
+- fournisseur Gemini natif ou endpoint OpenAI-compatible distant
+- diagnostic IA sûr via `GET /api/ai/runtime`
 - pont HORIZON avec préservation stricte du statut épistémique
 - ingestion des événements et résultats Quantic Studio
 - apprentissage des échecs répétés
@@ -38,6 +40,15 @@ Le cloud est volontairement **plan-only** pour les actions. Il ne pilote pas dir
 6. Commande de démarrage : `npm start`
 7. Vérifier `GET /healthz`.
 
+Pour Gemini natif, utiliser au minimum :
+
+```env
+AI_MODE=gemini
+AI_API_KEY=...
+```
+
+`AI_BASE_URL` et `AI_MODEL` peuvent être omis : AURA applique alors les valeurs Gemini par défaut. Pour un fournisseur OpenAI-compatible ou Ollama distant, renseigner explicitement `AI_BASE_URL` et `AI_MODEL`.
+
 Hostinger fournit `PORT`; AURA l’utilise automatiquement.
 
 ## Endpoints principaux
@@ -45,6 +56,7 @@ Hostinger fournit `PORT`; AURA l’utilise automatiquement.
 Publics :
 - `GET /`
 - `GET /healthz`
+- `GET /api/ai/runtime` (diagnostic sans secret)
 - `GET /api/kernel/status`
 - `GET /api/kernel/soul` (vue publique expurgée)
 - `POST /api/chat` (contexte privé uniquement avec token)

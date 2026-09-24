@@ -19,6 +19,14 @@ function csv(name, fallback = '') {
     .filter(Boolean);
 }
 
+const AI_MODE = String(process.env.AI_MODE || 'off').trim().toLowerCase();
+const AI_DEFAULT_BASE_URL = AI_MODE === 'gemini'
+  ? 'https://generativelanguage.googleapis.com/v1beta'
+  : 'http://localhost:11434';
+const AI_DEFAULT_MODEL = AI_MODE === 'gemini'
+  ? 'gemini-3.5-flash-lite'
+  : 'gemma3:12b';
+
 export const config = Object.freeze({
   host: process.env.AURA_HOST || '0.0.0.0',
   // Hostinger Node.js Web Apps proxy vers le port 3000. On ignore PORT pour éviter
@@ -39,9 +47,9 @@ export const config = Object.freeze({
   dbConnectionLimit: int('DB_CONNECTION_LIMIT', 10, 1, 30),
   dbConnectTimeoutMs: int('DB_CONNECT_TIMEOUT_MS', 5000, 1000, 30000),
 
-  aiMode: String(process.env.AI_MODE || 'off').toLowerCase(),
-  aiBaseUrl: String(process.env.AI_BASE_URL || 'http://localhost:11434').replace(/\/$/, ''),
-  aiModel: process.env.AI_MODEL || 'gemma3:12b',
+  aiMode: AI_MODE,
+  aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
+  aiModel: process.env.AI_MODEL || AI_DEFAULT_MODEL,
   aiApiKey: process.env.AI_API_KEY || '',
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
@@ -97,6 +105,12 @@ export function productionConfigIssues() {
     issues.push({
       code: 'canary_token_missing',
       message: 'AURA_EVOLUTION_CANARY_TOKEN est absent. Le canary indépendant reste verrouillé.',
+    });
+  }
+  if (config.aiMode === 'gemini' && !config.aiApiKey) {
+    issues.push({
+      code: 'gemini_api_key_missing',
+      message: 'AI_MODE=gemini exige AI_API_KEY.',
     });
   }
   return issues;
