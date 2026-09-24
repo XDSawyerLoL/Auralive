@@ -64,3 +64,10 @@ test('living AURA map includes animated visual layers', () => {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
 });
+
+
+test('dashboard speaks through the private Mairaiy voice bridge', () => {
+  assert.equal(DASHBOARD_HTML.includes('/api/voice/speak'), true);
+  assert.equal(DASHBOARD_HTML.includes('audio_base64'), true);
+  assert.equal(DASHBOARD_HTML.includes('aura-speaking'), true);
+});
