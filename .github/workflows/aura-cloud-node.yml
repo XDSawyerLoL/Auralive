@@ -1,0 +1,36 @@
+name: AURA Cloud Node validation
+
+on:
+  pull_request:
+    paths:
+      - "cloud-node/**"
+      - ".github/workflows/aura-cloud-node.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "cloud-node/**"
+      - ".github/workflows/aura-cloud-node.yml"
+  workflow_dispatch:
+
+jobs:
+  node-cloud:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud-node/package.json
+      - name: Install pinned dependencies
+        run: npm install --ignore-scripts
+      - name: Syntax check
+        run: npm run check
+      - name: Policy tests
+        run: npm test
+      - name: Dependency production tree
+        run: npm ls --omit=dev
