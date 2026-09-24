@@ -37,6 +37,7 @@ export const config = Object.freeze({
   dbPassword: process.env.DB_PASSWORD || '',
   dbName: process.env.DB_NAME || '',
   dbConnectionLimit: int('DB_CONNECTION_LIMIT', 10, 1, 30),
+  dbConnectTimeoutMs: int('DB_CONNECT_TIMEOUT_MS', 5000, 1000, 30000),
 
   aiMode: String(process.env.AI_MODE || 'off').toLowerCase(),
   aiBaseUrl: String(process.env.AI_BASE_URL || 'http://localhost:11434').replace(/\/$/, ''),

@@ -28,7 +28,6 @@ function launch(extraEnv = {}) {
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
       PORT: '49999',
       AURA_GATEWAY_PORT: String(GATEWAY_PORT),
-      AURA_INTERNAL_PORT: String(GATEWAY_PORT + 1),
       DB_HOST: '',
       DB_USER: '',
       DB_PASSWORD: '',
@@ -60,11 +59,11 @@ test('native gateway stays online even when full runtime is disabled', async (t)
   assert.equal(root.status, 200);
   const html = await root.text();
   assert.match(html, /AURA CLOUD/);
-  assert.match(html, /Gateway Hostinger actif/);
+  assert.match(html, /Hostinger · processus unique/);
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('gateway proxies to AURA dashboard without MySQL', async (t) => {
+test('single-process gateway serves AURA dashboard without MySQL', async (t) => {
   const child = launch();
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -82,6 +81,8 @@ test('gateway proxies to AURA dashboard without MySQL', async (t) => {
   const gatewayText = await waitFor('/__aura_gateway', (text) => text.includes('"gateway_ready":true'));
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.gateway_ready, true);
+  assert.equal(gateway.application_ready, true);
+  assert.equal(gateway.application_state, 'ready');
 
   assert.equal(child.exitCode, null, stderr);
 });

@@ -422,8 +422,28 @@ app.setErrorHandler((error, _request, reply) => {
     });
 });
 
-async function shutdown(signal) {
-  app.log.info({ signal }, 'Arrêt AURA Cloud');
+let retryTimer = null;
+
+export function startRuntimeLoop() {
+  startRuntime().catch((error) => {
+    bootstrap.startupError = safeError(error);
+  });
+  if (retryTimer) return;
+  retryTimer = setInterval(() => {
+    if (!bootstrap.runtimeReady && databaseConfigured()) {
+      startRuntime().catch((error) => {
+        bootstrap.startupError = safeError(error);
+      });
+    }
+  }, 60_000);
+  retryTimer.unref?.();
+}
+
+export async function stopAura() {
+  if (retryTimer) {
+    clearInterval(retryTimer);
+    retryTimer = null;
+  }
   evolution.stop();
   horizon.stop();
   kernel.stop();
@@ -433,20 +453,6 @@ async function shutdown(signal) {
       await closeDb();
     } catch {}
   }
-  process.exit(0);
 }
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-
-await app.listen({ host: config.host, port: config.port });
-await startRuntime();
-
-const retryTimer = setInterval(() => {
-  if (!bootstrap.runtimeReady && databaseConfigured()) {
-    startRuntime().catch((error) => {
-      bootstrap.startupError = safeError(error);
-    });
-  }
-}, 60_000);
-retryTimer.unref?.();
+export { app, bootstrap, startRuntime };

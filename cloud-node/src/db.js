@@ -6,7 +6,7 @@ let pool;
 export function getDb() {
   if (pool) return pool;
   pool = config.dbUrl
-    ? mysql.createPool({ uri: config.dbUrl, connectionLimit: config.dbConnectionLimit, charset: 'utf8mb4' })
+    ? mysql.createPool({ uri: config.dbUrl, connectionLimit: config.dbConnectionLimit, connectTimeout: config.dbConnectTimeoutMs, charset: 'utf8mb4' })
     : mysql.createPool({
         host: config.dbHost,
         port: config.dbPort,
@@ -14,6 +14,7 @@ export function getDb() {
         password: config.dbPassword,
         database: config.dbName,
         connectionLimit: config.dbConnectionLimit,
+        connectTimeout: config.dbConnectTimeoutMs,
         charset: 'utf8mb4',
         timezone: 'Z',
       });
