@@ -110,6 +110,15 @@ jobs:
           if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) {
             throw "Le FFmpeg Aura embarque est absent du package."
           }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\app\cognitive\evolution.py")) {
+            throw "L'arbre source AURA Evolution est absent du package."
+          }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\tests")) {
+            throw "Les tests AURA Evolution sont absents du package."
+          }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\requirements.txt")) {
+            throw "requirements.txt AURA Evolution est absent du package."
+          }
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") {
             throw "Le FFmpeg livre ne contient pas gfxcapture."
