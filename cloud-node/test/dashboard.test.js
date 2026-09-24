@@ -78,9 +78,10 @@ test('living AURA visuals are driven by the organism state', () => {
     'id="organismMood"',
     'id="organismDot"',
     'scene.organism',
-    'organism.tension',
-    'organism.pression_de_reve',
-    'organism.fatigue_cognitive',
+    'const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}',
+    'const tension=Number(o.tension||0)',
+    'const dream=Number(o.pression_de_reve||0)',
+    'const fatigue=Number(o.fatigue_cognitive||0)',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
