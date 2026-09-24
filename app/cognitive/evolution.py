@@ -1023,6 +1023,29 @@ socket.create_connection = _guard_create
         if not base_sha:
             raise RuntimeError("SHA de base GitHub introuvable")
 
+        # Vérifie AVANT de créer une branche que le candidat repose toujours sur
+        # les mêmes fichiers que lors de sa génération. Cela évite même de laisser
+        # une branche orpheline si un humain a modifié la cible entre-temps.
+        checked_paths: set[str] = set()
+        for edit in candidate.get("edits", []):
+            rel = str(edit["path"])
+            if rel in checked_paths:
+                continue
+            checked_paths.add(rel)
+            current_base = self._github_request(
+                "GET",
+                f"/repos/{repo}/contents/{urllib.parse.quote(rel, safe='/')}?ref={urllib.parse.quote(base, safe='')}",
+            )
+            encoded_base = str(current_base.get("content") or "").replace("\n", "")
+            if str(current_base.get("encoding") or "").casefold() == "base64" and encoded_base:
+                base_source = base64.b64decode(encoded_base).decode("utf-8")
+                base_sha256 = hashlib.sha256(base_source.encode("utf-8")).hexdigest()
+                expected_before = str(edit.get("before_sha256") or "")
+                if expected_before and base_sha256 != expected_before:
+                    raise EvolutionPolicyError(
+                        f"{rel}: source distante modifiée depuis la création du candidat"
+                    )
+
         branch = _SAFE_BRANCH.sub(
             "-",
             f"aura-evolution/{datetime.now(timezone.utc).strftime('%Y%m%d')}-{cycle_id[:8]}",
