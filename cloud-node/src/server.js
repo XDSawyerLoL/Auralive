@@ -188,7 +188,14 @@ app.post('/api/bridge/heartbeat', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
-  return bridge.heartbeat(workerId, request.body || {});
+  const result = await bridge.heartbeat(workerId, request.body || {});
+  if (request.body?.organism && typeof request.body.organism === 'object') {
+    await kernel.importOrganismState(request.body.organism);
+  }
+  return {
+    ...result,
+    organism: await kernel.organismState({ publicView: false }),
+  };
 });
 
 app.post('/api/bridge/claim', async (request, reply) => {
@@ -337,6 +344,11 @@ app.get('/api/kernel/status', async () => {
 app.get('/api/kernel/soul', async (request) => {
   if (!bootstrap.runtimeReady) return publicFallbackSoul(isPrivate(request));
   return kernel.soul({ privateView: isPrivate(request) });
+});
+
+app.get('/api/kernel/organism', async (request) => {
+  if (!bootstrap.runtimeReady) return { ready: false };
+  return kernel.organismState({ publicView: !isPrivate(request) });
 });
 
 app.post('/api/kernel/tick', async (request, reply) => {
