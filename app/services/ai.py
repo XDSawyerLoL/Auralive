@@ -11,6 +11,7 @@ import aiohttp
 
 from app.config import Settings
 from app.core.identity import AuraIdentity
+from app.services.model_constellation import ModelConstellation
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,17 @@ class AuraAI:
         self.degraded_until = 0.0
         self.last_error = ""
         self.last_latency_ms = 0
+        self.constellation = ModelConstellation(settings)
+        self.last_role = "general"
+        self.last_model = ""
 
     async def start(self) -> None:
         if not self.session:
             self.session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=max(10, self.settings.ai_timeout_seconds))
             )
+        if self.settings.ai_constellation_enabled:
+            await self.constellation.start(self.session)
         if self.enabled and self.settings.ai_warmup_enabled and not self.warmup_task:
             self.warmup_task = asyncio.create_task(self._warmup(), name="mairaiy-ai-warmup")
 
@@ -78,6 +84,7 @@ class AuraAI:
             except asyncio.CancelledError:
                 pass
             self.warmup_task = None
+        await self.constellation.close()
         if self.session:
             await self.session.close()
             self.session = None
@@ -126,6 +133,10 @@ class AuraAI:
             "last_error": self.last_error,
             "last_latency_ms": self.last_latency_ms,
             "request_timeout_seconds": self.settings.ai_request_timeout_seconds,
+            "constellation_enabled": self.settings.ai_constellation_enabled,
+            "last_role": self.last_role,
+            "last_model": self.last_model,
+            "last_route": dict(self.constellation.last_route),
         }
 
     async def reply(
@@ -206,7 +217,11 @@ class AuraAI:
         messages.append({"role": "user", "content": message})
 
         try:
-            answer = await self._chat(messages, self.settings.ai_chat_max_tokens)
+            answer = await self._chat(
+                messages,
+                self.settings.ai_chat_max_tokens,
+                task_role="auto",
+            )
             self._register_success()
             return self._validate_answer(answer, viewer_name)
         except asyncio.TimeoutError as exc:
@@ -233,6 +248,8 @@ class AuraAI:
         max_tokens: int = 120,
         *,
         system_is_complete: bool = False,
+        task_role: str = "auto",
+        preferred_model: str = "",
     ) -> str:
         if not self.enabled:
             return "Le moteur IA est désactivé."
@@ -246,30 +263,74 @@ class AuraAI:
                 else ""
             )
         )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ]
         answer = await self._chat(
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
+            messages,
             max_tokens,
+            task_role=task_role,
+            preferred_model=preferred_model,
         )
         self._register_success()
         return answer
 
-    async def _chat(self, messages: list[dict[str, str]], max_tokens: int) -> str:
+    async def _chat(
+        self,
+        messages: list[dict[str, str]],
+        max_tokens: int,
+        *,
+        task_role: str = "auto",
+        preferred_model: str = "",
+    ) -> str:
         await self.start()
+        role = (
+            self.constellation.infer_role(messages, explicit=task_role)
+            if self.settings.ai_constellation_enabled
+            else str(task_role or "general")
+        )
+        self.last_role = role
+
         if self.settings.ai_mode == "ollama":
             await self._prepare_runtime_model()
-            primary = self.active_model
+            if self.settings.ai_constellation_enabled:
+                route = await self.constellation.choose(
+                    role,
+                    preferred=preferred_model,
+                )
+                primary = str(route.get("name") or self.active_model)
+            else:
+                primary = preferred_model or self.active_model
+
+            self.last_model = primary
             try:
-                return await self._ollama(
+                first = await self._ollama(
                     messages,
                     max_tokens,
                     model=primary,
                     timeout_seconds=self.settings.ai_request_timeout_seconds,
                 )
+                if self._should_multi_review(role, max_tokens):
+                    reviewed = await self._multi_model_review(
+                        messages,
+                        first,
+                        primary,
+                        max_tokens=max_tokens,
+                        role=role,
+                    )
+                    return reviewed or first
+                return first
             except asyncio.TimeoutError:
-                fallback = await self._secondary_model(primary)
+                fallback = ""
+                if self.settings.ai_constellation_enabled:
+                    route = await self.constellation.choose(
+                        role,
+                        exclude={primary},
+                    )
+                    fallback = str(route.get("name") or "")
+                if not fallback:
+                    fallback = await self._secondary_model(primary)
                 if not self.settings.ai_retry_on_timeout or not fallback:
                     raise
                 logger.warning(
@@ -278,16 +339,79 @@ class AuraAI:
                     fallback,
                 )
                 self.runtime_model = fallback
+                self.last_model = fallback
                 return await self._ollama(
                     messages,
-                    min(max_tokens, 80),
+                    min(max_tokens, 160),
                     model=fallback,
                     timeout_seconds=max(
-                        12, min(30, self.settings.ai_request_timeout_seconds)
+                        12, min(45, self.settings.ai_request_timeout_seconds)
                     ),
-                    context_window=min(self.settings.ai_context_window, 3072),
+                    context_window=min(self.settings.ai_context_window, 4096),
                 )
+        self.last_model = self.settings.ai_fast_model or self.settings.ai_model
         return await self._openai_compatible(messages, max_tokens)
+
+    def _should_multi_review(self, role: str, max_tokens: int) -> bool:
+        return bool(
+            self.settings.ai_constellation_enabled
+            and self.settings.ai_constellation_multi_review
+            and role in {"critic", "security", "evolution", "reasoning"}
+            and int(max_tokens) >= max(120, self.settings.ai_constellation_review_min_tokens)
+        )
+
+    async def _multi_model_review(
+        self,
+        messages: list[dict[str, str]],
+        first_answer: str,
+        primary: str,
+        *,
+        max_tokens: int,
+        role: str,
+    ) -> str:
+        route = await self.constellation.choose(
+            "critic",
+            exclude={primary},
+        )
+        critic = str(route.get("name") or "")
+        if not critic or critic == primary:
+            return first_answer
+
+        review_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es un second moteur de vérification pour AURA. "
+                    "AURA a déjà fixé la mission. Vérifie les erreurs factuelles, logiques, "
+                    "techniques ou les omissions de la réponse candidate. "
+                    "Réponds avec une version finale corrigée, sans commentaire méta."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "MISSION ET CONTEXTE\n"
+                    + "\n".join(
+                        f"{item.get('role','user')}: {str(item.get('content') or '')[:6000]}"
+                        for item in messages[-5:]
+                    )
+                    + "\n\nRÉPONSE CANDIDATE\n"
+                    + first_answer[:8000]
+                ),
+            },
+        ]
+        try:
+            checked = await self._ollama(
+                review_messages,
+                min(max_tokens, 900),
+                model=critic,
+                timeout_seconds=max(20, self.settings.ai_request_timeout_seconds),
+                context_window=min(max(self.settings.ai_context_window, 4096), 8192),
+            )
+            return checked or first_answer
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Révision multi-modèle non bloquante impossible: %s", exc)
+            return first_answer
 
     async def _prepare_runtime_model(self, *, force: bool = False) -> None:
         if self.settings.ai_mode != "ollama":
@@ -378,6 +502,7 @@ class AuraAI:
             response.raise_for_status()
             payload = await response.json()
         self.last_latency_ms = round((monotonic() - started) * 1000)
+        self.constellation.record_latency(model, self.last_latency_ms)
         return self._clean(payload["message"]["content"])
 
     async def _openai_compatible(
