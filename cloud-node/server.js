@@ -31,7 +31,7 @@ try {
 
     const safeMessage = message.replace(/[&<>"']/g, '');
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end(\`<!doctype html>
+    response.end(`<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
@@ -47,11 +47,11 @@ h1{margin:0 0 8px;font-size:28px}p{color:#aeb7c9;line-height:1.55}.ok{color:#66d
 <h1>AURA Cloud</h1>
 <p class="ok">Le serveur Node Hostinger répond.</p>
 <p>Le runtime complet n'a pas pu démarrer. Cette page de secours empêche un 503 et confirme que Node écoute correctement.</p>
-<div class="box">AURA_FULL_RUNTIME_START_FAILED<br>\${safeMessage}</div>
-</main></body></html>\`);
+<div class="box">AURA_FULL_RUNTIME_START_FAILED<br>${safeMessage}</div>
+</main></body></html>`);
   });
 
   server.listen(port, host, () => {
-    console.log(\`[AURA bootstrap] Diagnostic fallback listening on \${host}:\${port}\`);
+    console.log(`[AURA bootstrap] Diagnostic fallback listening on ${host}:${port}`);
   });
 }
