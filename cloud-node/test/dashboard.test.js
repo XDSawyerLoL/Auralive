@@ -59,7 +59,7 @@ test('living AURA map includes animated visual layers', () => {
     'id="energyPulses"',
     'initLivingAuraScene()',
     'requestAnimationFrame(frame)',
-    'class=\'energy-pulse\'',
+    "pulse.setAttribute('class','energy-pulse')",
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
