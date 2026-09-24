@@ -1451,11 +1451,20 @@ class CognitiveKernel:
         if role is None:
             raise ValueError(f"Agent inconnu: {name}")
         context = await self.context_for_ai()
+        model_role = {
+            "planner": "reasoning",
+            "research": "research",
+            "dev": "code",
+            "security": "security",
+            "operator": "tools",
+            "critic": "critic",
+        }.get(name, "general")
         answer = await self.aura.ai.generate(
             f"Mission:\n{str(task)[:6000]}\n\nContexte AURA:\n{context[:6000]}",
             role,
             700,
             system_is_complete=True,
+            task_role=model_role,
         )
         await self._trace("agent", name, answer[:4000], {"task": str(task)[:2000]})
         return {"agent": name, "answer": answer}
@@ -1481,6 +1490,7 @@ class CognitiveKernel:
             "Tu es l'orchestrateur collectif d'AURA. Tu arbitres les agents sans inventer de faits.",
             900,
             system_is_complete=True,
+            task_role="critic",
         )
         await self._trace("swarm", "collective", synthesis[:4000], {"agents": selected})
         return {"agents": outputs, "synthesis": synthesis}
