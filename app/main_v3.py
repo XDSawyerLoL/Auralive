@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.config import BASE_DIR, RUNTIME_DIR
 from app.main_v2 import app, aura, db, response_sync, settings, voice_input
+from app.services.aura_cloud_worker import AuraCloudWorker
 from app.services.native_broadcast import NativeBroadcastService
 from app.services.update_manager import update_manager
 from app.services.voice_identity_lock import install_voice_identity_lock
@@ -24,6 +25,8 @@ logger = logging.getLogger("aura-live-v3")
 install_voice_identity_lock(aura)
 voice_realtime = install_voice_realtime(aura, db, voice_input)
 native_broadcast = NativeBroadcastService(settings)
+cloud_worker = AuraCloudWorker(aura, settings)
+aura.cloud_worker = cloud_worker
 
 
 async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
@@ -143,6 +146,45 @@ async def dashboard_v3() -> HTMLResponse:
     response = HTMLResponse(content)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
+
+
+@app.get("/api/cloud-worker/status")
+async def cloud_worker_status_v3() -> dict[str, Any]:
+    return cloud_worker.diagnostic()
+
+
+@app.post("/api/cloud-worker/configure")
+async def cloud_worker_configure_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Configuration Cloud disponible uniquement depuis ce PC")
+
+    base_url = str(payload.get("base_url") or settings.aura_cloud_base_url or "").strip().rstrip("/")
+    token = str(payload.get("token") or "").strip()
+    if not base_url.startswith("https://"):
+        raise HTTPException(status_code=422, detail="AURA Cloud exige une URL HTTPS")
+    if not token:
+        raise HTTPException(status_code=422, detail="Jeton AURA Cloud requis")
+
+    _write_runtime_env(
+        {
+            "AURA_CLOUD_BASE_URL": base_url,
+            "AURA_CLOUD_TOKEN": token,
+            "AURA_CLOUD_WORKER_ENABLED": "true",
+        }
+    )
+    os.environ["AURA_CLOUD_BASE_URL"] = base_url
+    os.environ["AURA_CLOUD_TOKEN"] = token
+    settings.aura_cloud_base_url = base_url
+    settings.aura_cloud_token = token
+    settings.aura_cloud_worker_enabled = True
+
+    await cloud_worker.close()
+    await cloud_worker.start()
+    return {"ok": True, **cloud_worker.diagnostic()}
 
 
 @app.get("/api/voice/status")
@@ -882,6 +924,7 @@ async def _prewarm_kokoro() -> None:
 async def _v3_lifespan(application):
     async with _original_v3_lifespan(application):
         aura.overlay.subscribe(_native_overlay_audio_listener)
+        await cloud_worker.start()
         kokoro_warmup = asyncio.create_task(_prewarm_kokoro(), name="kokoro-voice-warmup")
         if settings.broadcast_engine == "native" and settings.native_engine_autostart:
             try:
@@ -898,6 +941,7 @@ async def _v3_lifespan(application):
                 except asyncio.CancelledError:
                     pass
             aura.overlay.unsubscribe(_native_overlay_audio_listener)
+            await cloud_worker.close()
             await voice_realtime.close()
             await asyncio.to_thread(native_broadcast.close)
 
