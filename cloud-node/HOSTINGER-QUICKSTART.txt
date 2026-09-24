@@ -1,17 +1,26 @@
-AURA Cloud Node — Hostinger 1.1
+AURA Cloud Node — Hostinger 1.2
 
-Réglages :
-- Node.js : 22.x
-- Port applicatif : 3000 (imposé par Hostinger; AURA l'utilise par défaut)
+Réglages recommandés :
 - Framework : Other
+- Node.js : 22.x
 - Répertoire racine : ./
 - Entry File : server.js
 - Installation : npm install --omit=dev
 - Démarrage : npm start
+- Output directory : vide
 
-Le site doit afficher le dashboard AURA même si MySQL n'est pas encore configuré.
+Architecture de démarrage :
+- server.js = gateway Node natif sans dépendance, public sur 0.0.0.0:3000
+- AURA/Fastify = runtime interne sur 127.0.0.1:3001
+- si Fastify/MySQL échoue, le gateway reste en ligne et affiche le diagnostic au lieu d'un 503
 
-Variables recommandées :
+Après déploiement :
+- /                -> dashboard AURA ou page gateway de diagnostic
+- /healthz         -> santé AURA/gateway
+- /__aura_gateway  -> diagnostic garanti du gateway public
+- /api/bootstrap/status -> état du noyau AURA
+
+Variables fonctionnelles (pour activer le noyau complet) :
 NODE_ENV=production
 DB_HOST=...
 DB_PORT=3306
@@ -20,11 +29,3 @@ DB_PASSWORD=...
 DB_NAME=...
 AURA_CLOUD_TOKEN=...
 AURA_EVOLUTION_CANARY_TOKEN=...
-
-Après déploiement :
-- /              -> dashboard AURA
-- /healthz       -> serveur vivant + état MySQL/noyau
-- /api/bootstrap/status -> diagnostic lisible
-- /api/kernel/status    -> état du noyau
-
-Si MySQL manque, le serveur reste en ligne en mode diagnostic au lieu de quitter.
