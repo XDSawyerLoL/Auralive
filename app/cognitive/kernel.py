@@ -361,6 +361,78 @@ class CognitiveKernel:
         state = self.organism.migrate(self._soul_cache)
         return self.organism.public_state(state) if public else state
 
+    async def _observe_surprise(
+        self,
+        kind: str,
+        *,
+        content: str = "",
+        context: dict[str, Any] | None = None,
+    ) -> float:
+        label = str(kind or "unknown")[:240]
+        row = await self.db.fetchone(
+            "SELECT count FROM aura_surprise_events WHERE kind=?",
+            (label,),
+        )
+        totals = await self.db.fetchone(
+            "SELECT COALESCE(SUM(count),0) AS total, COUNT(*) AS kinds FROM aura_surprise_events"
+        )
+        count = int((row or {}).get("count") or 0)
+        total = int((totals or {}).get("total") or 0)
+        kinds = int((totals or {}).get("kinds") or 0)
+        prior = (count + 1.0) / max(2.0, total + max(8, kinds + 1))
+        surprise = self.active_inference.surprise(prior)
+        stamp = utcnow()
+        await self.db.execute(
+            """
+            INSERT INTO aura_surprise_events(kind,count,last_surprise,updated_at)
+            VALUES(?,1,?,?)
+            ON CONFLICT(kind) DO UPDATE SET
+                count=count+1,
+                last_surprise=excluded.last_surprise,
+                updated_at=excluded.updated_at
+            """,
+            (label, surprise, stamp),
+        )
+        if surprise >= 0.62:
+            await self.db.execute(
+                """
+                INSERT INTO aura_surprise_memory(kind,content,surprise,context,created_at)
+                VALUES(?,?,?,?,?)
+                """,
+                (
+                    label,
+                    str(content or "")[:3000],
+                    surprise,
+                    json.dumps(context or {}, ensure_ascii=False, default=str)[:12000],
+                    stamp,
+                ),
+            )
+            await self.db.execute(
+                """
+                DELETE FROM aura_surprise_memory
+                WHERE id IN (
+                    SELECT id FROM aura_surprise_memory
+                    ORDER BY id DESC LIMIT -1 OFFSET 1500
+                )
+                """
+            )
+        return surprise
+
+    def inference_assessment(
+        self,
+        *,
+        novelty: float = 0.0,
+        risk: float = 0.0,
+    ) -> dict[str, Any]:
+        organism = self.organism.migrate(self._soul_cache)
+        assessment = self.active_inference.assess(
+            organism,
+            novelty=novelty,
+            risk=risk,
+        )
+        self.last_inference_assessment = assessment
+        return assessment
+
     async def import_organism_state(self, candidate: dict[str, Any]) -> bool:
         if not isinstance(candidate, dict) or not candidate:
             return False
