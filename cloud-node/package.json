@@ -1,6 +1,6 @@
 {
   "name": "aura-cloud-hostinger",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "private": true,
   "type": "module",
   "description": "AURA Cloud Node.js runtime for Hostinger",
