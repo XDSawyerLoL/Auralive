@@ -165,21 +165,26 @@ gateway.listen(port, host, () => {
   console.log(`[AURA gateway] listening on ${host}:${port}`);
 });
 
-setImmediate(async () => {
-  try {
-    auraModule = await import('./src/server.js');
-    await auraModule.app.ready();
-    auraApp = auraModule.app;
-    appState = 'ready';
-    appError = '';
-    auraModule.startRuntimeLoop();
-    console.log('[AURA gateway] Fastify embedded in-process; second listener removed.');
-  } catch (error) {
-    appState = 'failed';
-    appError = cleanError(error);
-    console.error('[AURA gateway] application bootstrap failed:', error);
-  }
-});
+if (process.env.AURA_GATEWAY_ONLY === 'true') {
+  appState = 'disabled';
+  appError = 'AURA_GATEWAY_ONLY=true — application interne volontairement désactivée.';
+} else {
+  setImmediate(async () => {
+    try {
+      auraModule = await import('./src/server.js');
+      await auraModule.app.ready();
+      auraApp = auraModule.app;
+      appState = 'ready';
+      appError = '';
+      auraModule.startRuntimeLoop();
+      console.log('[AURA gateway] Fastify embedded in-process; second listener removed.');
+    } catch (error) {
+      appState = 'failed';
+      appError = cleanError(error);
+      console.error('[AURA gateway] application bootstrap failed:', error);
+    }
+  });
+}
 
 async function shutdown(signal) {
   console.log(`[AURA gateway] stopping on ${signal}`);
