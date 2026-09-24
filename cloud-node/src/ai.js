@@ -45,17 +45,22 @@ function extractGeminiText(payload) {
 }
 
 export class AiClient {
-  constructor() {
+  constructor(bridge = null) {
+    this.bridge = bridge;
     this.lastError = '';
     this.lastLatencyMs = 0;
+    this.lastBackend = '';
   }
 
   get provider() {
+    if (this.bridge?.enabled && this.bridge?.preferLocalAi) return 'quantic-studio-local-preferred';
+    if (config.aiMode === 'bridge') return 'quantic-studio-local';
     return config.aiMode === 'gemini' ? 'google-gemini' : 'openai-compatible';
   }
 
   get enabled() {
-    if (config.aiMode === 'off') return false;
+    if (this.bridge?.enabled) return true;
+    if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (config.aiMode === 'gemini') {
       return Boolean(config.aiApiKey && geminiBaseUrl() && geminiModel());
     }
@@ -71,6 +76,9 @@ export class AiClient {
       model: config.aiMode === 'gemini' ? geminiModel() : config.aiModel,
       api_key_configured: Boolean(config.aiApiKey),
       timeout_ms: config.aiTimeoutMs,
+      local_bridge_configured: Boolean(this.bridge?.enabled),
+      local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
+      last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
     };
@@ -149,11 +157,38 @@ export class AiClient {
     if (!this.enabled) return '';
 
     const started = Date.now();
+    let localError = null;
     try {
-      const answer = config.aiMode === 'gemini'
-        ? await this.#generateGemini(prompt, system, maxTokens)
-        : await this.#generateOpenAiCompatible(prompt, system, maxTokens);
-      this.lastError = '';
+      const wantsLocal = Boolean(
+        this.bridge?.enabled
+        && (this.bridge.preferLocalAi || config.aiMode === 'bridge'),
+      );
+      if (wantsLocal && await this.bridge.workerOnline()) {
+        try {
+          const answer = await this.bridge.infer(prompt, system, maxTokens);
+          this.lastBackend = 'quantic-studio-local';
+          this.lastError = '';
+          this.lastLatencyMs = Date.now() - started;
+          return answer;
+        } catch (error) {
+          localError = error;
+          if (config.aiMode === 'bridge') throw error;
+        }
+      } else if (config.aiMode === 'bridge') {
+        throw new Error('Quantic Studio local hors ligne');
+      }
+
+      let answer = '';
+      if (config.aiMode === 'gemini') {
+        answer = await this.#generateGemini(prompt, system, maxTokens);
+        this.lastBackend = 'google-gemini-fallback';
+      } else if (config.aiMode !== 'off') {
+        answer = await this.#generateOpenAiCompatible(prompt, system, maxTokens);
+        this.lastBackend = 'openai-compatible-fallback';
+      } else if (localError) {
+        throw localError;
+      }
+      this.lastError = localError ? `local fallback: ${safeError(localError)}` : '';
       this.lastLatencyMs = Date.now() - started;
       return answer;
     } catch (error) {
