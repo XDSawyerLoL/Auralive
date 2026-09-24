@@ -13,9 +13,17 @@ class FakeAI:
     def diagnostic(self):
         return {"mode": "ollama", "runtime_model": "gemma3:12b"}
 
-    async def generate(self, prompt, system_instruction="", max_tokens=120, *, system_is_complete=False):
+    async def generate(
+        self,
+        prompt,
+        system_instruction="",
+        max_tokens=120,
+        *,
+        system_is_complete=False,
+        task_role="auto",
+    ):
         assert system_is_complete is True
-        return "réponse locale"
+        return f"réponse locale:{task_role}"
 
 
 class FakeCognitive:
@@ -41,11 +49,17 @@ class FakeAvatar:
         }
 
 
+class FakeImage:
+    async def generate(self, prompt, **kwargs):
+        return {"ok": True, "path": "", "prompt": prompt, "backend": "fake"}
+
+
 class FakeAura:
     def __init__(self):
         self.ai = FakeAI()
         self.cognitive = FakeCognitive()
         self.avatar_audio = FakeAvatar()
+        self.image = FakeImage()
         self.evolution = None
 
 
@@ -58,6 +72,9 @@ def settings():
         aura_cloud_worker_heartbeat_seconds=15,
         aura_cloud_worker_timeout_seconds=95,
         ai_model="gemma3:12b",
+        image_default_width=1024,
+        image_default_height=1024,
+        image_default_steps=8,
     )
 
 
@@ -65,9 +82,14 @@ def settings():
 async def test_worker_runs_local_language_engine():
     worker = AuraCloudWorker(FakeAura(), settings())
     result = await worker._run_inference(
-        {"prompt": "Bonjour", "system": "Couche de langage", "max_tokens": 120}
+        {
+            "prompt": "Bonjour",
+            "system": "Couche de langage",
+            "max_tokens": 120,
+            "task_role": "conversation",
+        }
     )
-    assert result["answer"] == "réponse locale"
+    assert result["answer"] == "réponse locale:conversation"
     assert result["diagnostic"]["mode"] == "ollama"
 
 
@@ -80,3 +102,13 @@ async def test_cloud_job_cannot_expand_local_operator_policy():
     )
     assert result["requested_risks"] == ["network", "safe"]
     assert result["source"] == "aura-cloud-worker"
+
+
+@pytest.mark.asyncio
+async def test_worker_can_execute_local_image_job():
+    worker = AuraCloudWorker(FakeAura(), settings())
+    result = await worker._run_image(
+        {"prompt": "une nébuleuse", "width": 1024, "height": 1024, "steps": 8}
+    )
+    assert result["backend"] == "fake"
+    assert result["prompt"] == "une nébuleuse"
