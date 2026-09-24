@@ -36,7 +36,8 @@ jobs:
         shell: bash
         env:
           NODE_ENV: production
-          PORT: "3987"
+          PORT: "49999"
+          AURA_PORT: "3987"
         run: |
           set -euo pipefail
           node server.js > /tmp/aura-cloud.log 2>&1 &
