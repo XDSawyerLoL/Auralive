@@ -78,7 +78,7 @@ jobs:
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.7.4-Windows-Native-LITE-2026-09-20") {
+          if ($buildId -ne "QuanticStudio-2.8.0-Windows-Native-LITE-2026-09-24") {
             throw "Build ID inattendu: $buildId"
           }
           $envContent = Get-Content "dist\QuanticStudio\.env" -Raw
@@ -179,7 +179,7 @@ jobs:
       - name: Upload Windows Lite application
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Windows-Native-2.7.4-LITE
+          name: QuanticStudio-Windows-Native-2.8.0-LITE
           path: dist/QuanticStudio
           if-no-files-found: error
           include-hidden-files: true
