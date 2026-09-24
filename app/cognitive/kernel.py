@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.automation.models import ActionSpec, Automation, Event, ExecutionReport
+from app.cognitive.native_cognition import NativeCognitionEngine
 from app.database import Database, utcnow
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class CognitiveKernel:
     le code de production.
     """
 
-    VERSION = "aura-unified-kernel-v1"
+    VERSION = "aura-unified-kernel-v2"
 
     AGENT_ROLES = {
         "planner": (
@@ -86,6 +87,7 @@ class CognitiveKernel:
         self.automation = automation
         self.horizon = horizon
         self.settings = settings
+        self.native_cognition = NativeCognitionEngine()
         self.started = False
         self.task: asyncio.Task[None] | None = None
         self._wired = False
@@ -810,45 +812,15 @@ class CognitiveKernel:
                 }
 
             bundle = await self._context_bundle(text)
-            prompt = (
-                "Produit une capsule de réflexion opérationnelle d'AURA à partir du contexte JSON ci-dessous. "
-                "Ne révèle pas de raisonnement détaillé étape par étape. Retourne uniquement un objet JSON valide avec "
-                "les clés title, summary, hypothesis, next_action, memory, intention, confidence. "
-                "summary décrit le constat utile en 1-3 phrases. hypothesis est vide si aucune hypothèse n'est nécessaire. "
-                "next_action est une proposition vérifiable, jamais une exécution cachée. memory contient seulement un "
-                "enseignement durable réellement soutenu par des résultats observés. intention contient une intention "
-                "durable à ajouter seulement si elle est utile. confidence est entre 0 et 1. "
-                "Respecte les statuts HORIZON : une hypothèse non confirmée reste une hypothèse et un score n'est pas une probabilité.\n\n"
-                + json.dumps(bundle, ensure_ascii=False, default=str)[:18000]
+            # L'intention et la décision sont produites par le noyau AURA lui-même.
+            # Un LLM n'est plus consulté pour créer une réflexion, modifier le Soul
+            # ou décider qu'une mémoire/intention doit exister.
+            parsed = self.native_cognition.reflect(
+                bundle,
+                self._soul_cache,
+                trigger=trigger,
+                text=text,
             )
-            system = (
-                "Tu es le noyau cognitif privé d'AURA. Tu transformes événements, résultats, mémoire, intentions et "
-                "signaux HORIZON en résumés de réflexion auditables. Tu n'exécutes aucune action depuis cette étape. "
-                "Tu ne modifies pas ton propre code. Tu distingues faits, hypothèses, intentions et leçons apprises."
-            )
-            raw = ""
-            try:
-                raw = await self.aura.ai.generate(
-                    prompt,
-                    system,
-                    520,
-                    system_is_complete=True,
-                )
-                parsed = _json_object(raw)
-            except Exception as exc:  # noqa: BLE001
-                self.last_error = f"{exc.__class__.__name__}: {exc}"[:500]
-                parsed = {}
-
-            if not parsed:
-                parsed = {
-                    "title": "Continuité cognitive",
-                    "summary": text.strip()[:800] or "AURA maintient son état et attend un signal plus informatif.",
-                    "hypothesis": "",
-                    "next_action": "",
-                    "memory": "",
-                    "intention": "",
-                    "confidence": 0.35,
-                }
 
             try:
                 confidence = _clamp(float(parsed.get("confidence", 0.5)))
@@ -862,18 +834,17 @@ class CognitiveKernel:
             next_action = str(parsed.get("next_action") or "")[:4000]
             memory = str(parsed.get("memory") or "").strip()[:4000]
             intention = str(parsed.get("intention") or "").strip()[:3000]
-            restricted_authority = any(
-                str(item.get("type") or "") == "horizon.world.emerging"
-                or str((item.get("payload") or {}).get("autonomy_hint") or "") == "notify_or_verify_only"
-                for item in (bundle.get("stimuli") or [])
-                if isinstance(item, dict)
-            )
+            basis = dict(parsed.get("basis") or {})
+            restricted_authority = bool(basis.get("restricted_authority"))
             context = {
                 "trigger": trigger,
+                "cognition_version": self.native_cognition.VERSION,
+                "language_model_used_for_decision": False,
                 "horizon_used": bool(bundle.get("horizon")),
                 "stimuli_count": len(bundle.get("stimuli") or []),
                 "lesson_count": len(bundle.get("lessons") or []),
                 "restricted_authority": restricted_authority,
+                "basis": basis,
             }
             await self.db.execute(
                 """
@@ -901,7 +872,7 @@ class CognitiveKernel:
                 await self.add_intention(
                     intention,
                     priority=max(0.4, confidence),
-                    source="reflection",
+                    source="native-reflection",
                     context={"reflection_id": reflection_id},
                 )
             if memory and confidence >= 0.6:
@@ -910,7 +881,7 @@ class CognitiveKernel:
                     lesson_key=f"reflection:{normalized or reflection_id}",
                     content=memory,
                     confidence=confidence,
-                    source="reflection",
+                    source="native-reflection",
                 )
             await self._save_soul()
             self._stimuli.clear()
@@ -923,11 +894,16 @@ class CognitiveKernel:
                 "hypothesis": hypothesis,
                 "next_action": next_action,
                 "confidence": confidence,
-                "autonomy_hint": (
-                    "notify_or_verify_only"
-                    if restricted_authority
-                    else "personal_relevance_gate_then_propose"
+                "autonomy_hint": str(
+                    parsed.get("autonomy_hint")
+                    or (
+                        "notify_or_verify_only"
+                        if restricted_authority
+                        else "native_cognition_then_policy_gate"
+                    )
                 ),
+                "cognition_version": self.native_cognition.VERSION,
+                "language_model_used_for_decision": False,
             }
             await self._trace("reflection", title, summary, payload)
             await self.automation.dispatch(
@@ -1273,41 +1249,14 @@ class CognitiveKernel:
         content = " ".join(str(text).split()).strip()
         if not content:
             raise ValueError("Message vide")
+
         await self.db.execute(
             "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES(?,'user',?,?)",
             (author[:120], content[:8000], utcnow()),
         )
-        history = await self.db.fetchall(
-            """
-            SELECT author,role,content,created_at
-            FROM aura_cloud_messages
-            ORDER BY id DESC LIMIT 14
-            """
-        )
-        history.reverse()
-        context = await self.context_for_ai(private=private)
-        prompt = (
-            "Conversation récente:\n"
-            + "\n".join(f"{row['role']}({row['author']}): {row['content']}" for row in history)
-            + "\n\nDernier message:\n"
-            + content
-            + "\n\nContexte du noyau:\n"
-            + context[:10000]
-        )
-        answer = await self.aura.ai.generate(
-            prompt,
-            (
-                "Tu es AURA, présence numérique persistante. Réponds directement et utilement. "
-                "Tu disposes d'un état Soul, d'une mémoire de leçons et de HORIZON. "
-                "Ne récite pas tes journaux internes. Ne présente jamais une hypothèse comme un fait."
-            ),
-            700,
-            system_is_complete=True,
-        )
-        await self.db.execute(
-            "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
-            (answer[:12000], utcnow()),
-        )
+
+        # Perception d'abord : la conversation devient un stimulus du noyau avant
+        # toute formulation linguistique.
         self._stimuli.append(
             {
                 "type": "aura.cloud.chat",
@@ -1316,7 +1265,121 @@ class CognitiveKernel:
                 "payload": {"author": author, "text": content[:1000]},
             }
         )
-        return {"ok": True, "answer": answer}
+        self._adjust_soul(continuity=0.002, energy=0.003)
+        await self._save_soul()
+
+        soul = await self.soul()
+        intentions = await self.intentions(6)
+        lessons = await self.lessons(6)
+        reflections = await self.reflections(4)
+        work = []
+        try:
+            improvements = await self.improvements(4)
+            work.extend(
+                {
+                    "title": str(row.get("proposal") or row.get("diagnosis") or row.get("target") or ""),
+                    "kind": "improvement",
+                }
+                for row in improvements
+                if str(row.get("status") or "proposed") in {"proposed", "accepted"}
+            )
+        except Exception:
+            pass
+
+        plan = self.native_cognition.plan_reply(
+            text=content,
+            soul=soul,
+            intentions=intentions,
+            lessons=lessons,
+            reflections=reflections,
+            work=work,
+            private=private,
+        )
+
+        semantic_support = ""
+        if bool(plan.get("needs_semantic_support")) and bool(getattr(self.aura.ai, "enabled", False)):
+            semantic_prompt = (
+                "QUESTION UTILISATEUR\n"
+                + str(plan.get("semantic_query") or "")[:5000]
+                + "\n\nCONTEXTE AURA\n"
+                + (await self.context_for_ai(private=private))[:9000]
+                + "\n\nFournis uniquement un appui sémantique factuel pour AURA. "
+                "Ne parle pas à la première personne au nom d'AURA. "
+                "Ne crée aucune intention, mémoire, émotion, priorité ou décision pour AURA. "
+                "Si l'information n'est pas connue, indique l'incertitude."
+            )
+            try:
+                semantic_support = await self.aura.ai.generate(
+                    semantic_prompt,
+                    (
+                        "Tu es un outil sémantique utilisé par AURA. "
+                        "Tu proposes des informations candidates; tu ne décides jamais à sa place."
+                    ),
+                    700,
+                    system_is_complete=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self.last_error = f"{exc.__class__.__name__}: {exc}"[:500]
+
+        plan = self.native_cognition.integrate_semantic_support(plan, semantic_support)
+        fallback = self.native_cognition.deterministic_reply(plan)
+        answer = fallback
+
+        # Le moteur de langage reçoit un plan déjà décidé. Il peut uniquement le
+        # verbaliser; son indisponibilité n'interrompt donc jamais AURA.
+        if bool(getattr(self.aura.ai, "enabled", False)):
+            try:
+                expression_payload = {
+                    "act": plan.get("act"),
+                    "goal": plan.get("goal"),
+                    "facts": plan.get("facts"),
+                    "semantic_support": plan.get("semantic_support") or "",
+                    "current_intention": plan.get("current_intention") or "",
+                    "dominant_thought": plan.get("dominant_thought") or "",
+                }
+                candidate = await self.aura.ai.generate(
+                    (
+                        "Transforme ce plan de parole AURA en une réponse française naturelle. "
+                        "Tu n'as aucun droit de changer les faits, l'intention ou la décision. "
+                        "N'ajoute aucun souvenir, état, capacité ou action absent du plan. "
+                        "Tu peux seulement reformuler et condenser.\n\n"
+                        + json.dumps(expression_payload, ensure_ascii=False)
+                    ),
+                    (
+                        "Tu es la couche de langage d'AURA, pas son cerveau. "
+                        "Tu verbalises une décision déjà prise par le noyau."
+                    ),
+                    700,
+                    system_is_complete=True,
+                )
+                if str(candidate).strip():
+                    answer = str(candidate).strip()
+            except Exception as exc:  # noqa: BLE001
+                self.last_error = f"{exc.__class__.__name__}: {exc}"[:500]
+
+        await self.db.execute(
+            "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
+            (answer[:12000], utcnow()),
+        )
+        await self._trace(
+            "expression",
+            str(plan.get("act") or "respond"),
+            answer[:3000],
+            {
+                "author": author[:120],
+                "cognition_version": self.native_cognition.VERSION,
+                "language_model_used_for_decision": False,
+                "semantic_support_used": bool(str(plan.get("semantic_support") or "").strip()),
+            },
+        )
+        return {
+            "ok": True,
+            "answer": answer,
+            "act": plan.get("act") or "respond",
+            "cognition_version": self.native_cognition.VERSION,
+            "language_model_used_for_decision": False,
+            "semantic_support_used": bool(str(plan.get("semantic_support") or "").strip()),
+        }
 
     async def context_for_ai(self, *, private: bool = True) -> str:
         soul = await self.soul()
@@ -1385,6 +1448,11 @@ class CognitiveKernel:
             "counts": counts,
             "stimuli_buffered": len(self._stimuli),
             "self_learning": True,
+            "native_cognition": {
+                "version": self.native_cognition.VERSION,
+                "independent_from_language_model": True,
+            },
+            "language_model_role": "semantic-support-and-verbalisation-only",
             "self_modifying_code": False,
             "improvement_mode": "observe-learn-propose-validate",
         }
