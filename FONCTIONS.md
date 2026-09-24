@@ -122,6 +122,23 @@
 - [x] Historique persistant de chaque cycle d'évolution et de ses preuves
 - [x] Pas d'écriture directe dans le runtime actif pendant la génération/test
 
+## AURA Evolution — phase 1
+
+- [x] Recherche continue activée par défaut
+- [x] Diagnostic d'amélioration continu
+- [x] Mode research-only automatique sur runtime Windows packagé
+- [x] Génération de patch uniquement avec arbre source complet
+- [x] Sas local avec compilation + pytest baseline/candidat
+- [x] Réseau externe bloqué pendant les tests du sas
+- [x] Secrets, .env, DB et data exclus des workspaces
+- [x] Chemins sécurité/politique protégés contre l'auto-promotion
+- [x] CI GitHub complète exigée avant promotion
+- [x] Canary indépendant avec mesures avant/après
+- [x] Token canary séparé du token AURA Cloud
+- [x] Nombre minimal d'observations avant validation canary
+- [ ] Auto-submit activé par défaut
+- [ ] Auto-merge activé par défaut
+
 ## Statistiques et automatisation
 
 - [x] Journal d'activité
