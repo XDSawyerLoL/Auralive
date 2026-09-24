@@ -165,8 +165,13 @@ app.get('/api/bootstrap/status', async () => ({
   cloud_token_configured: Boolean(config.cloudToken),
   canary_token_configured: Boolean(config.canaryToken),
   ai_mode: config.aiMode,
+  ai_enabled: ai.enabled,
+  ai_provider: ai.provider,
+  ai_api_key_configured: Boolean(config.aiApiKey),
   horizon_configured: Boolean(config.horizonEnabled && config.horizonBaseUrl),
 }));
+
+app.get('/api/ai/runtime', async () => ai.diagnostic());
 
 app.get('/healthz', async () => {
   let databaseAlive = false;
