@@ -158,7 +158,11 @@ class AuraOrganism:
         else:
             for key, value in defaults["dream"].items():
                 state["dream"].setdefault(key, deepcopy(value))
-        return self.recompute(state, reason=_clean(state.get("last_reason")) or "migration")
+        return self.recompute(
+            state,
+            reason=_clean(state.get("last_reason")) or "migration",
+            touch=False,
+        )
 
     @staticmethod
     def _numeric_keys() -> tuple[str, ...]:
@@ -301,7 +305,13 @@ class AuraOrganism:
             return "claire"
         return "calme"
 
-    def recompute(self, state: dict[str, Any], *, reason: str = "") -> dict[str, Any]:
+    def recompute(
+        self,
+        state: dict[str, Any],
+        *,
+        reason: str = "",
+        touch: bool = True,
+    ) -> dict[str, Any]:
         for key in self._numeric_keys():
             state[key] = round(_clamp(float(state.get(key, 0.0))), 4)
         state["version"] = self.VERSION
@@ -316,7 +326,8 @@ class AuraOrganism:
         state["mood"] = self._mood(state)
         if reason:
             state["last_reason"] = _clean(reason)[:500]
-        state["updated_at"] = _utcnow()
+        if touch or not state.get("updated_at"):
+            state["updated_at"] = _utcnow()
         return state
 
     def before_interaction(self, state: dict[str, Any], text: str) -> dict[str, Any]:
