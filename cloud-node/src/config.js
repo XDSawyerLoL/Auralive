@@ -76,12 +76,29 @@ export const config = Object.freeze({
   cloudOperatorMode: 'plan-only',
 });
 
-export function assertProductionConfig() {
-  const missing = [];
-  if (!config.dbUrl && (!config.dbUser || !config.dbName)) missing.push('DATABASE_URL ou DB_USER+DB_NAME');
-  if (process.env.NODE_ENV === 'production' && !config.cloudToken) missing.push('AURA_CLOUD_TOKEN');
-  if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && !config.canaryToken) {
-    missing.push('AURA_EVOLUTION_CANARY_TOKEN');
+export function productionConfigIssues() {
+  const issues = [];
+  if (!config.dbUrl && (!config.dbUser || !config.dbName)) {
+    issues.push({
+      code: 'database_not_configured',
+      message: 'MySQL n’est pas encore configuré. Renseigne DATABASE_URL ou DB_USER + DB_NAME.',
+    });
   }
-  if (missing.length) throw new Error(`Configuration AURA Cloud incomplète: ${missing.join(', ')}`);
+  if (process.env.NODE_ENV === 'production' && !config.cloudToken) {
+    issues.push({
+      code: 'cloud_token_missing',
+      message: 'AURA_CLOUD_TOKEN est absent. Les fonctions privées restent verrouillées.',
+    });
+  }
+  if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && !config.canaryToken) {
+    issues.push({
+      code: 'canary_token_missing',
+      message: 'AURA_EVOLUTION_CANARY_TOKEN est absent. Le canary indépendant reste verrouillé.',
+    });
+  }
+  return issues;
+}
+
+export function databaseConfigured() {
+  return Boolean(config.dbUrl || (config.dbUser && config.dbName));
 }
