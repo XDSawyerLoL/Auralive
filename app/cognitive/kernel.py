@@ -471,16 +471,24 @@ class CognitiveKernel:
         if event.source != "cognitive":
             self._stimuli.append(stimulus)
 
-        if event.source == "horizon":
-            self._adjust_soul(curiosity=0.025, introspection=0.01)
-            if event.type == "horizon.world.emerging":
-                self._adjust_soul(pressure=0.015)
-        elif event.type == "stream.online":
-            self._adjust_soul(energy=0.04, reactivity=0.02)
-        elif event.type == "stream.offline":
-            self._adjust_soul(energy=-0.02, introspection=0.02)
-        elif event.type == "channel.chat.message":
-            self._adjust_soul(continuity=0.002, energy=0.003)
+        organism_result = self.organism.apply_event(
+            self.organism.migrate(self._soul_cache),
+            event.type,
+            event.source,
+        )
+        self._soul_cache["organism"] = organism_result["state"]
+        self._sync_legacy_from_organism()
+        if organism_result.get("delta"):
+            await self._record_organism_event(
+                "event",
+                reason=str(organism_result["state"].get("last_reason") or event.type),
+                payload={
+                    "event_type": event.type,
+                    "source": event.source,
+                    "delta": organism_result.get("delta") or {},
+                },
+            )
+            await self._save_soul()
 
         if important:
             await self._trace(
@@ -543,11 +551,28 @@ class CognitiveKernel:
             """
         )
 
+        organism_result = self.organism.apply_outcome(
+            self.organism.migrate(self._soul_cache),
+            ok=bool(report.ok),
+        )
+        self._soul_cache["organism"] = organism_result["state"]
+        self._sync_legacy_from_organism()
+        await self._record_organism_event(
+            "outcome",
+            reason="action réussie" if report.ok else "action échouée",
+            payload={
+                "automation_id": report.automation_id,
+                "event_type": report.event_type,
+                "signature": signature,
+                "ok": bool(report.ok),
+                "delta": organism_result.get("delta") or {},
+            },
+        )
+        await self._save_soul()
+
         if report.ok:
-            self._adjust_soul(pressure=-0.008, energy=0.004)
             return
 
-        self._adjust_soul(pressure=0.035, introspection=0.025)
         self._stimuli.append(
             {
                 "type": "automation.failure",
