@@ -161,6 +161,32 @@ export async function initSchema() {
       created_at VARCHAR(40) NOT NULL,
       INDEX idx_aura_evolution_canary_cycle(cycle_id, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_execution_jobs (
+      id CHAR(36) PRIMARY KEY,
+      kind VARCHAR(40) NOT NULL,
+      payload LONGTEXT NOT NULL,
+      requested_risks LONGTEXT NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'queued',
+      attempts INT NOT NULL DEFAULT 0,
+      lease_owner VARCHAR(160) NOT NULL DEFAULT '',
+      lease_until BIGINT NOT NULL DEFAULT 0,
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_execution_jobs_status(status, created_at),
+      INDEX idx_aura_execution_jobs_lease(lease_until)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_execution_workers (
+      worker_id VARCHAR(160) PRIMARY KEY,
+      capabilities LONGTEXT NOT NULL,
+      model VARCHAR(240) NOT NULL DEFAULT '',
+      voice VARCHAR(240) NOT NULL DEFAULT '',
+      version VARCHAR(120) NOT NULL DEFAULT '',
+      last_seen_at VARCHAR(40) NOT NULL,
+      last_seen_ms BIGINT NOT NULL DEFAULT 0,
+      INDEX idx_aura_execution_workers_seen(last_seen_ms)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   ];
   for (const sql of statements) await db.query(sql);
 }
