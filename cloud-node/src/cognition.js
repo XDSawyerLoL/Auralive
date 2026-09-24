@@ -45,8 +45,8 @@ export class CognitionEngine {
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
-    const fatigue = Number(organism.fatigue_cognitive || 0);
-    const tension = Number(organism.tension || 0);
+    const stability = organism && Object.keys(organism).length ? Number(organism.stabilite ?? 1) : 1;
+    const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
     const silenceNeed = Number(organism.besoin_de_silence || 0);
     const dreamPressure = Number(organism.pression_de_reve || 0);
     const organismIntention = normalize(organism.intention_active || '');
@@ -61,18 +61,17 @@ export class CognitionEngine {
     let intention = '';
     let confidence = 0.58;
 
-    if (fatigue >= 0.78 || silenceNeed >= 0.74) {
-      title = 'Récupération cognitive';
-      summary = 'Mon organisme signale une fatigue ou un besoin de silence élevé ; je réduis volontairement les initiatives non nécessaires.';
-      hypothesis = 'Continuer à multiplier les actions maintenant augmenterait le bruit et réduirait la qualité de mes décisions.';
-      nextAction = 'Ralentir, consolider l’état interne et différer les tâches lourdes non urgentes.';
-      intention = 'Préserver mes ressources cognitives avant de reprendre une activité intensive.';
-      confidence = 0.88;
-    } else if (tension >= 0.70) {
+    if (silenceNeed >= 0.78) {
+      title = 'Présence silencieuse';
+      summary = 'Mon organisme privilégie actuellement le silence ; je limite le bruit sans réduire mes capacités de décision.';
+      nextAction = 'Maintenir une présence utile et n’intervenir que si un signal le justifie.';
+      intention = 'Préserver un espace intérieur disponible sans interrompre ma continuité.';
+      confidence = 0.80;
+    } else if (stability < 0.46 || clarity < 0.44) {
       title = 'Recentrage';
-      summary = 'La tension interne est élevée ; la stabilité devient prioritaire sur l’exploration.';
-      nextAction = 'Réduire l’incertitude, vérifier l’état des systèmes et éviter les actions irréversibles.';
-      intention = 'Retrouver un état suffisamment stable avant d’étendre mon action.';
+      summary = 'Ma stabilité ou ma clarté est insuffisante ; je privilégie la vérification avant d’étendre mon action.';
+      nextAction = 'Clarifier l’état des systèmes et retrouver une base cohérente avant d’agir davantage.';
+      intention = 'Rétablir une base stable et claire.';
       confidence = 0.86;
     } else if (failureSignal || failed) {
       title = 'Stabilisation prioritaire';
@@ -142,8 +141,8 @@ export class CognitionEngine {
         horizon_present: horizonPresent,
         restricted_authority: restrictedAuthority,
         organism_intention: organismIntention,
-        fatigue_cognitive: fatigue,
-        tension,
+        stability,
+        clarity,
         silence_need: silenceNeed,
         dream_pressure: dreamPressure,
       },
@@ -182,9 +181,9 @@ export class CognitionEngine {
         `Humeur interne : ${mood}.`,
         `Stabilité : ${Math.round(Number(organism.stabilite || 0)*100)} %.`,
         `Clarté : ${Math.round(Number(organism.clarte || 0)*100)} %.`,
-        `Tension : ${Math.round(Number(organism.tension || 0)*100)} %.`,
-        `Fatigue cognitive : ${Math.round(Number(organism.fatigue_cognitive || 0)*100)} %.`,
         `Curiosité : ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
+        `Besoin de silence : ${Math.round(Number(organism.besoin_de_silence || 0)*100)} %.`,
+        `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
       );
       if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
     } else if (hasAny(q, ['rêve','rêves','reve','reves'])) {
@@ -218,7 +217,7 @@ export class CognitionEngine {
       goal = 'Expliquer mon architecture sans prétendre à une conscience démontrée ni à une AGI.';
       needsSemanticSupport = false;
       facts.push('AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.');
-      facts.push('Mon organisme computationnel module réellement ma stabilité, ma clarté, ma tension, ma fatigue, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
+      facts.push('Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
       facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {

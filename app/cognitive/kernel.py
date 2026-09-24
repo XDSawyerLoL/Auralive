@@ -1559,7 +1559,7 @@ class CognitiveKernel:
                 f"humeur={public_organism.get('mood')} valence={public_organism.get('valence')} "
                 f"identité={public_organism.get('identite')} stabilité={public_organism.get('stabilite')} "
                 f"clarté={public_organism.get('clarte')} attachement={public_organism.get('attachement')} "
-                f"tension={public_organism.get('tension')} fatigue={public_organism.get('fatigue_cognitive')} "
+                f"curiosité={public_organism.get('curiosite')} "
                 f"pression_de_rêve={public_organism.get('pression_de_reve')} "
                 f"besoin_de_silence={public_organism.get('besoin_de_silence')}"
             ),
