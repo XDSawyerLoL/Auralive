@@ -10,7 +10,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import Body, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
 from app.config import BASE_DIR, RUNTIME_DIR
 from app.main_v2 import app, aura, db, response_sync, settings, voice_input
@@ -65,7 +65,7 @@ async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
 
 
 aura.overlay.subscribe(_native_overlay_audio_listener)
-app.version = "2.7.4"
+app.version = "2.8.0"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -176,6 +176,98 @@ async function refresh(){try{const r=await fetch('/api/cloud-worker/status');con
 document.getElementById('save').onclick=async()=>{s.textContent='Connexion…';try{const r=await fetch('/api/cloud-worker/configure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_url:document.getElementById('url').value,token:document.getElementById('token').value,github_token:document.getElementById('github').value})});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error||'Erreur');document.getElementById('token').value='';document.getElementById('github').value='';await refresh()}catch(e){s.className='status bad';s.textContent=String(e)}};refresh();setInterval(refresh,5000);
 </script></main></body></html>"""
     )
+
+
+@app.get("/models", response_class=HTMLResponse)
+async def models_page_v3(request: Request) -> HTMLResponse:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Constellation locale uniquement")
+    return HTMLResponse(
+        """<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AURA · Constellation IA</title><style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#060913;color:#edf4ff;font:14px system-ui,Segoe UI,sans-serif;padding:26px}
+main{max-width:1100px;margin:auto}h1{font-size:30px;margin:0 0 8px}.sub{color:#95a7c6;margin-bottom:22px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.card{background:#0d1423;border:1px solid #253652;border-radius:18px;padding:16px}.tag{display:inline-block;font-size:11px;border:1px solid #344867;border-radius:999px;padding:4px 8px;margin:3px 4px 3px 0;color:#bdd0ef}
+.ok{color:#71efb7}.off{color:#9aa8be}.warn{color:#ffd18d}button{border:0;border-radius:10px;padding:9px 12px;background:#725cff;color:white;font-weight:700;cursor:pointer;margin-top:10px}button:disabled{opacity:.45}
+pre{white-space:pre-wrap;background:#080d18;border:1px solid #253652;padding:12px;border-radius:12px;color:#aecaee}.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 22px}
+</style></head><body><main><h1>Constellation IA d'AURA</h1>
+<div class="sub">AURA reste le cerveau. Les modèles sont des spécialistes remplaçables, sélectionnés selon la tâche, la vitesse et la licence.</div>
+<div class="top"><button onclick="load()">Actualiser</button><span id="status"></span></div>
+<div id="grid" class="grid"></div><h2>Dernier routage</h2><pre id="route">—</pre>
+<script>
+const g=document.getElementById('grid'),s=document.getElementById('status'),rt=document.getElementById('route');
+async function pull(model,btn){btn.disabled=true;btn.textContent='Installation…';try{const r=await fetch('/api/models/pull',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model})});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error||'Erreur');await load()}catch(e){alert(String(e))}finally{btn.disabled=false}}
+async function load(){s.textContent='Lecture…';const r=await fetch('/api/models/constellation');const j=await r.json();s.textContent=j.last_error?j.last_error:'Prête';rt.textContent=JSON.stringify(j.last_route||{},null,2);g.innerHTML='';
+for(const m of (j.recommendations||[])){const d=document.createElement('div');d.className='card';const cls=m.installed?'ok':(m.legal_class==='permissive'?'off':'warn');d.innerHTML='<b>'+m.key+'</b><div class="'+cls+'">'+(m.installed?'● installé':'○ disponible')+'</div><div>'+m.notes+'</div><div><span class="tag">'+m.license+'</span><span class="tag">'+m.legal_class+'</span></div><div>'+Object.keys(m.roles||{}).slice(0,6).map(x=>'<span class="tag">'+x+'</span>').join('')+'</div>';
+if(!m.installed&&m.install_hint&&!m.install_hint.includes('/')){const b=document.createElement('button');b.textContent='Installer via Ollama';b.onclick=()=>pull(m.install_hint,b);d.appendChild(b)}g.appendChild(d)}}
+load();
+</script></main></body></html>"""
+    )
+
+
+@app.get("/api/models/constellation")
+async def models_constellation_v3(request: Request) -> dict[str, Any]:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Constellation locale uniquement")
+    return await aura.ai.constellation.catalog()
+
+
+@app.post("/api/models/pull")
+async def models_pull_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Installation locale uniquement")
+    model = str(payload.get("model") or "").strip()
+    if not model:
+        raise HTTPException(status_code=422, detail="Nom de modèle requis")
+    try:
+        return await aura.ai.constellation.pull(model)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/image/status")
+async def image_status_v3() -> dict[str, Any]:
+    return await aura.image.diagnostic()
+
+
+@app.post("/api/image/generate")
+async def image_generate_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Génération locale uniquement")
+    try:
+        return await aura.image.generate(
+            str(payload.get("prompt") or ""),
+            negative_prompt=str(payload.get("negative_prompt") or ""),
+            width=int(payload.get("width") or settings.image_default_width),
+            height=int(payload.get("height") or settings.image_default_height),
+            steps=int(payload.get("steps") or settings.image_default_steps),
+            seed=int(payload["seed"]) if payload.get("seed") is not None else None,
+            model=str(payload.get("model") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/image/files/{filename}")
+async def image_file_v3(filename: str) -> FileResponse:
+    safe = Path(filename).name
+    path = Path(settings.image_output_dir) / safe
+    if safe != filename or not path.is_file():
+        raise HTTPException(status_code=404, detail="Image inconnue")
+    return FileResponse(path, media_type="image/png", filename=safe)
 
 
 @app.get("/api/cloud-worker/status")
