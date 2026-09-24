@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.automation.models import ActionSpec, Automation, Event, ExecutionReport
+from app.cognitive.active_inference import ActiveInferenceEngine
 from app.cognitive.native_cognition import NativeCognitionEngine
 from app.cognitive.organism import AuraOrganism
 from app.database import Database, utcnow
@@ -90,6 +91,8 @@ class CognitiveKernel:
         self.settings = settings
         self.native_cognition = NativeCognitionEngine()
         self.organism = AuraOrganism()
+        self.active_inference = ActiveInferenceEngine()
+        self.last_inference_assessment: dict[str, Any] = {}
         self.started = False
         self.task: asyncio.Task[None] | None = None
         self._wired = False
@@ -251,6 +254,25 @@ class CognitiveKernel:
 
             CREATE INDEX IF NOT EXISTS idx_aura_organism_events_created
             ON aura_organism_events(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS aura_surprise_events (
+                kind TEXT PRIMARY KEY,
+                count INTEGER NOT NULL DEFAULT 0,
+                last_surprise REAL NOT NULL DEFAULT 0.0,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS aura_surprise_memory (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                content TEXT NOT NULL DEFAULT '',
+                surprise REAL NOT NULL,
+                context TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_aura_surprise_memory_score
+            ON aura_surprise_memory(surprise DESC, created_at DESC);
             """
         )
         routine_columns = await self.db.fetchall("PRAGMA table_info(aura_routines)")
