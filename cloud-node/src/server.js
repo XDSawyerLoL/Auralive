@@ -296,6 +296,21 @@ app.get('/api/kernel/improvements', async (request, reply) =>
     ? kernel.improvements(request.query?.limit)
     : undefined);
 
+app.get('/api/kernel/activity', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.activity(request.query?.limit)
+    : undefined);
+
+app.get('/api/kernel/work', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.workItems(request.query?.limit)
+    : undefined);
+
+app.get('/api/kernel/attention', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.attentionMap()
+    : undefined);
+
 app.post('/api/kernel/agents/run', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   try {
