@@ -21,7 +21,9 @@ function csv(name, fallback = '') {
 
 export const config = Object.freeze({
   host: process.env.AURA_HOST || '0.0.0.0',
-  port: int('PORT', int('AURA_PORT', 3000, 1, 65535), 1, 65535),
+  // Hostinger Node.js Web Apps proxy vers le port 3000. On ignore PORT pour éviter
+  // qu'une variable injectée par l'environnement détourne le listener.
+  port: int('AURA_PORT', 3000, 1, 65535),
   publicBaseUrl: String(process.env.AURA_PUBLIC_BASE_URL || '').replace(/\/$/, ''),
   logLevel: process.env.LOG_LEVEL || 'info',
 

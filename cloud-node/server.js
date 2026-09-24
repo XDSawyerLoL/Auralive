@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 try {
   await import('./src/server.js');
 } catch (error) {
-  const port = Number.parseInt(process.env.PORT || '3000', 10) || 3000;
+  const port = Number.parseInt(process.env.AURA_PORT || '3000', 10) || 3000;
   const host = '0.0.0.0';
   const message = String(error?.message || error || 'unknown startup error')
     .replace(/\s+/g, ' ')
