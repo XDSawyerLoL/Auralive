@@ -45,8 +45,8 @@ export class CognitionEngine {
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
-    const stability = Number(organism.stabilite || 0);
-    const clarity = Number(organism.clarte || 0);
+    const stability = organism && Object.keys(organism).length ? Number(organism.stabilite ?? 1) : 1;
+    const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
     const silenceNeed = Number(organism.besoin_de_silence || 0);
     const dreamPressure = Number(organism.pression_de_reve || 0);
     const organismIntention = normalize(organism.intention_active || '');
