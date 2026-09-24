@@ -14,6 +14,8 @@ from app.automation.models import ActionSpec, Automation, Event, ExecutionReport
 from app.cognitive.active_inference import ActiveInferenceEngine
 from app.cognitive.native_cognition import NativeCognitionEngine
 from app.cognitive.organism import AuraOrganism
+from app.cognitive.relational import RelationalSignalEngine
+from app.cognitive.world_model import CounterfactualWorldModel
 from app.database import Database, utcnow
 
 logger = logging.getLogger(__name__)
@@ -92,7 +94,10 @@ class CognitiveKernel:
         self.native_cognition = NativeCognitionEngine()
         self.organism = AuraOrganism()
         self.active_inference = ActiveInferenceEngine()
+        self.world_model = CounterfactualWorldModel()
+        self.relational = RelationalSignalEngine(db)
         self.last_inference_assessment: dict[str, Any] = {}
+        self.last_world_forecast: dict[str, Any] = {}
         self.started = False
         self.task: asyncio.Task[None] | None = None
         self._wired = False
@@ -292,6 +297,7 @@ class CognitiveKernel:
 
         self._soul_cache["organism"] = self.organism.migrate(self._soul_cache)
         self._sync_legacy_from_organism()
+        await self.relational.initialize()
         await self._save_soul()
 
     def _default_soul(self) -> dict[str, Any]:
@@ -1565,7 +1571,15 @@ class CognitiveKernel:
             private=private,
         )
 
-        inference = self.inference_assessment()
+        relational_state = await self.relational.observe(author, content)
+        relational_guidance = self.relational.response_guidance(relational_state)
+        plan["relational_guidance"] = relational_guidance
+        novelty = max(
+            float(relational_state.get("correction_signal", 0.0)),
+            float(relational_state.get("uncertainty_signal", 0.0)),
+            float(relational_state.get("urgency_signal", 0.0)),
+        )
+        inference = self.inference_assessment(novelty=novelty)
         semantic_support = ""
         if bool(plan.get("needs_semantic_support")) and bool(getattr(self.aura.ai, "enabled", False)):
             semantic_prompt = (
@@ -1573,6 +1587,8 @@ class CognitiveKernel:
                 + str(plan.get("semantic_query") or "")[:5000]
                 + "\n\nCONTEXTE AURA\n"
                 + (await self.context_for_ai(private=private))[:9000]
+                + "\n\nGUIDE RELATIONNEL CALIBRÉ\n"
+                + relational_guidance[:1000]
                 + "\n\nFournis uniquement un appui sémantique factuel pour AURA. "
                 "Ne parle pas à la première personne au nom d'AURA. "
                 "Ne crée aucune intention, mémoire, émotion, priorité ou décision pour AURA. "
@@ -1607,6 +1623,8 @@ class CognitiveKernel:
                     "semantic_support": plan.get("semantic_support") or "",
                     "current_intention": plan.get("current_intention") or "",
                     "dominant_thought": plan.get("dominant_thought") or "",
+                    "relational_guidance": relational_guidance,
+                    "relational_basis": "conversation-observation-not-mind-reading",
                 }
                 candidate = await self.aura.ai.generate(
                     (
@@ -1669,6 +1687,8 @@ class CognitiveKernel:
             "cognition_version": self.native_cognition.VERSION,
             "language_model_used_for_decision": False,
             "semantic_support_used": bool(str(plan.get("semantic_support") or "").strip()),
+            "compute": inference,
+            "relational": relational_state,
             "organism": self.organism.public_state(
                 self.organism.migrate(self._soul_cache)
             ),
@@ -1765,6 +1785,14 @@ class CognitiveKernel:
             "active_inference": {
                 **self.inference_assessment(),
                 "version": self.active_inference.VERSION,
+            },
+            "world_model": {
+                "version": self.world_model.VERSION,
+                "last_forecast": dict(self.last_world_forecast),
+            },
+            "relational_signals": {
+                "version": self.relational.VERSION,
+                "claim": "calibrated conversation signals, not mind-reading",
             },
             "self_modifying_code": False,
             "improvement_mode": "observe-learn-propose-validate",
