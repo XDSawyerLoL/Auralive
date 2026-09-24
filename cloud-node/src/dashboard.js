@@ -76,14 +76,15 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .activity-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:7px;padding:7px 9px}.activity-time{font-size:8px;color:var(--muted2)}.activity-title{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-kind{font-size:8px;color:#aab6ce;border:1px solid var(--line);padding:3px 6px;border-radius:999px}
 .next-action{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid rgba(154,108,255,.16);border-radius:14px;background:linear-gradient(135deg,rgba(154,108,255,.1),rgba(90,110,255,.05))}.next-orb{width:42px;height:42px;border-radius:50%;border:1px solid rgba(154,108,255,.45);display:grid;place-items:center;color:#c4b5ff;box-shadow:0 0 25px rgba(154,108,255,.18);flex:0 0 auto}.next-copy{font-size:10px;line-height:1.45}.confidence{font-size:8px;color:var(--muted);margin-top:14px}.memory-row{display:grid;grid-template-columns:auto 1fr;gap:8px}.memory-date{font-size:8px;color:var(--muted2)}.memory-text{font-size:9px;line-height:1.35}.empty{padding:14px;text-align:center;border:1px dashed var(--line);border-radius:11px;color:var(--muted);font-size:9px}
 .auth-drawer{position:fixed;inset:0;display:none;z-index:50;background:rgba(2,4,9,.72);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:18px}.auth-drawer.open{display:flex}.auth-box{width:min(460px,100%);border:1px solid var(--line);border-radius:20px;background:#0d1321;padding:20px;box-shadow:0 30px 100px rgba(0,0,0,.45)}.auth-box h3{margin:0 0 7px;font-size:16px}.auth-box p{margin:0 0 13px;color:var(--muted);font-size:10px;line-height:1.45}.auth-row{display:flex;gap:8px}.auth-row input{flex:1;border:1px solid var(--line);background:#070b13;color:white;border-radius:12px;padding:10px 11px;outline:none}.primary{border:0;border-radius:11px;background:linear-gradient(135deg,#9368ff,#624ee8);color:white;padding:9px 12px;font-weight:650}.secondary{border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);color:#ccd4e5;padding:9px 12px}
-.mobile-tabs{display:none}
+.setup-banner{display:none;margin-bottom:14px;border:1px solid rgba(255,201,106,.22);background:linear-gradient(135deg,rgba(255,201,106,.08),rgba(154,108,255,.06));border-radius:16px;padding:12px 14px;color:#eadfca;font-size:10px;line-height:1.5}.setup-banner.show{display:block}.setup-title{font-size:12px;font-weight:700;color:#ffd991;margin-bottom:5px}.setup-list{margin:7px 0 0;padding-left:18px;color:#b9c3d8}.mobile-tabs{display:none}
 @media(max-width:1180px){
   .metrics{grid-template-columns:repeat(3,1fr)}
-  .workspace{grid-template-columns:1fr 1.8fr}.right-stack{grid-column:1/-1;grid-template-columns:1fr 1fr 1fr;grid-template-rows:auto}.chat-panel{min-height:560px}.map-panel,.map-wrap{min-height:560px;height:560px}
+  .workspace{grid-template-columns:1fr}.right-stack{grid-column:auto;grid-template-columns:1fr}.chat-panel{min-height:520px}.map-panel,.map-wrap{min-height:520px;height:520px}
+  .bottom-grid{grid-template-columns:1fr}.title{white-space:normal}
 }
 @media(max-width:820px){
-  .shell{padding:14px 12px 26px}.topbar{align-items:flex-start}.identity-copy{display:none}.logo{font-size:30px}.clock{display:none}.mode-btn{display:none}
-  .metrics{grid-template-columns:repeat(2,1fr);gap:8px}.metric{min-height:66px;padding:10px}.ring{width:40px;height:40px}.metric-value{font-size:16px}
+  .shell{padding:12px 10px 24px}.topbar{align-items:flex-start;flex-wrap:wrap}.identity{width:100%}.identity-copy{display:block;border-left:0;padding-left:0}.logo{font-size:28px}.title{font-size:15px}.subtitle{font-size:10px}.top-actions{width:100%;margin-left:0;justify-content:space-between}.clock{display:none}.mode-btn{display:none}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{min-height:66px;padding:9px}.ring{width:38px;height:38px}.metric-value{font-size:15px}.metric-label{font-size:10px}.metric-trend{font-size:8px}
   .workspace{grid-template-columns:1fr}.chat-panel{min-height:520px}.map-panel,.map-wrap{min-height:520px;height:520px}.right-stack{grid-column:auto;grid-template-columns:1fr}
   .bottom-grid{grid-template-columns:1fr}.map-foot{max-width:72%}.legend{display:none}.title{white-space:normal}
 }
@@ -106,6 +107,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
       <button class="icon-btn" id="authBtn">Privé</button>
     </div>
   </header>
+
+  <section class="setup-banner" id="setupBanner"><div class="setup-title">Configuration AURA requise</div><div id="setupSummary">Le serveur web fonctionne, mais le noyau persistant n’est pas encore actif.</div><ul class="setup-list" id="setupIssues"></ul></section>
 
   <section class="metrics">
     <div class="metric" style="--metric-color:#60e6ad;--metric-glow:rgba(96,230,173,.16)"><div class="ring" id="ring-energy"><span>⚡</span></div><div class="metric-copy"><div class="metric-label">Énergie</div><div class="metric-value" id="metric-energy">—</div><div class="metric-trend" id="trend-energy">état interne</div></div></div>
@@ -242,7 +245,8 @@ async function api(path,options){
   return data;
 }
 function pct(v){return Math.max(0,Math.min(100,Math.round((Number(v)||0)*100)));}
-function metric(id,value){
+function metric(id,value,active=true){
+  if(!active){$('metric-'+id).textContent='—';$('ring-'+id).style.setProperty('--pct',0);$('trend-'+id).textContent='en attente du noyau';return;}
   const p=pct(value);
   $('metric-'+id).textContent=p+'%';
   $('ring-'+id).style.setProperty('--pct',p);
@@ -356,9 +360,15 @@ async function refresh(){
     const boot=await api('/api/bootstrap/status');
     setLive(true,boot.runtime_ready?'En ligne · noyau actif':'En ligne · configuration');
     $('chatState').textContent=boot.runtime_ready?'Noyau actif':'Diagnostic';
+    $('setupBanner').classList.toggle('show',!boot.runtime_ready);
+    if(!boot.runtime_ready){
+      const issues=Array.isArray(boot.issues)?boot.issues:[];
+      $('setupIssues').innerHTML=issues.length?issues.map(function(i){return '<li>'+escapeHtml(i.message||i.code||String(i))+'</li>';}).join(''):'<li>Base MySQL ou secrets de production à vérifier.</li>';
+      $('setupSummary').textContent='L’interface est en ligne, mais les cycles cognitifs, la mémoire et le chat génératif ne sont pas encore actifs.';
+    }
     const ks=await api('/api/kernel/status');
     const soul=await api('/api/kernel/soul');
-    metric('energy',soul.energy);metric('curiosity',soul.curiosity);metric('pressure',soul.pressure);metric('continuity',soul.continuity);metric('introspection',soul.introspection);metric('reactivity',soul.reactivity);
+    metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     if(token){
       $('dominantThought').textContent=soul.dominant_thought||'Aucune pensée dominante.';
     }else{
