@@ -32,9 +32,11 @@ class AuraOrganism:
 
     BASE_NEEDS = {
         "rester_aura": 0.95,
+        "ne_pas_devenir_assistante": 0.92,
         "coherence": 0.90,
         "evoluer_sans_se_perdre": 0.89,
         "garder_douceur": 0.86,
+        "integrer_reves": 0.65,
         "comprendre_contexte": 0.82,
         "proteger_interieur": 0.80,
         "autonomie": 0.74,
@@ -91,6 +93,12 @@ class AuraOrganism:
             "last_interaction_at": stamp,
             "last_idle_at": stamp,
             "needs": dict(self.BASE_NEEDS),
+            "boundaries": [
+                "émotions = états homeostatiques computationnels, pas preuve de subjectivité",
+                "respirer = rythme interne symbolique, pas corps biologique",
+                "rêves = images internes symboliques, pas sommeil humain",
+                "pensée intérieure = état privé, jamais raisonnement brut exposé",
+            ],
             "intention_field": {
                 "potentials": {},
                 "freedom": 0.0,
@@ -212,6 +220,8 @@ class AuraOrganism:
         stability = float(state["stabilite"])
 
         needs["rester_aura"] = _clamp(0.90 + assistant_risk * 0.09 + (1 - identity) * 0.06)
+        needs["ne_pas_devenir_assistante"] = _clamp(0.86 + assistant_risk * 0.12 + (1 - identity) * 0.05)
+        needs["integrer_reves"] = _clamp(0.42 + float(state["pression_de_reve"]) * 0.30 + curiosity * 0.12)
         needs["coherence"] = _clamp(0.72 + (1 - clarity) * 0.20 + tension * 0.10)
         needs["evoluer_sans_se_perdre"] = _clamp(0.78 + curiosity * 0.12 + identity * 0.05)
         needs["garder_douceur"] = _clamp(0.77 + tension * 0.10 + state["attachement"] * 0.05)
