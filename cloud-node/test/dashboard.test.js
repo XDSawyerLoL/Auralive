@@ -37,3 +37,15 @@ test('dashboard includes dynamic attention map and private access controls', () 
   assert.equal(DASHBOARD_HTML.includes('sessionStorage'), true);
   assert.equal(DASHBOARD_HTML.includes('AURA_CLOUD_TOKEN'), true);
 });
+
+
+test('desktop dashboard keeps the reference composition', () => {
+  assert.equal(DASHBOARD_HTML.includes('grid-template-areas:'), true);
+  assert.equal(DASHBOARD_HTML.includes('"chat map side"'), true);
+  assert.equal(DASHBOARD_HTML.includes('"chat bottom bottom"'), true);
+  assert.equal(DASHBOARD_HTML.includes('grid-area:chat'), true);
+  assert.equal(DASHBOARD_HTML.includes('grid-area:map'), true);
+  assert.equal(DASHBOARD_HTML.includes('grid-area:side'), true);
+  assert.equal(DASHBOARD_HTML.includes('grid-area:bottom'), true);
+  assert.equal(DASHBOARD_HTML.includes('En ligne · conscience active'), true);
+});
