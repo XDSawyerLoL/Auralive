@@ -33,6 +33,7 @@ const settings = Object.freeze({
   operatorWaitMs: intEnv('AURA_BRIDGE_OPERATOR_WAIT_MS', 18_000, 1_000, 55_000),
   inferenceTimeoutMs: intEnv('AURA_BRIDGE_INFERENCE_TIMEOUT_MS', 90_000, 5_000, 180_000),
   voiceTimeoutMs: intEnv('AURA_BRIDGE_VOICE_TIMEOUT_MS', 60_000, 5_000, 120_000),
+  imageTimeoutMs: intEnv('AURA_BRIDGE_IMAGE_TIMEOUT_MS', 300_000, 10_000, 600_000),
   operatorMaxSteps: intEnv('AURA_BRIDGE_OPERATOR_MAX_STEPS', 6, 1, 8),
   preferLocalAi: boolEnv('AURA_LOCAL_AI_PREFERRED', true),
 });
@@ -195,7 +196,7 @@ export class ExecutionBridge {
     throw new Error('AURA bridge timeout');
   }
 
-  async infer(prompt, system, maxTokens = 700) {
+  async infer(prompt, system, maxTokens = 700, taskRole = 'auto') {
     if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
     const job = await this.enqueue(
       'inference',
@@ -203,6 +204,7 @@ export class ExecutionBridge {
         prompt: String(prompt || '').slice(0, 50_000),
         system: String(system || '').slice(0, 20_000),
         max_tokens: Math.max(64, Math.min(Number(maxTokens) || 700, 8000)),
+        task_role: String(taskRole || 'auto').slice(0, 80),
       },
       ['ai'],
     );
@@ -254,6 +256,26 @@ export class ExecutionBridge {
       ['safe'],
     );
     return this.wait(job.id, settings.voiceTimeoutMs);
+  }
+
+  async generateImage(options = {}) {
+    if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    const prompt = String(options.prompt || '').trim();
+    if (!prompt) throw new Error('Prompt image vide');
+    const job = await this.enqueue(
+      'image',
+      {
+        prompt: prompt.slice(0, 6000),
+        negative_prompt: String(options.negative_prompt || '').slice(0, 3000),
+        width: Number(options.width || 1024),
+        height: Number(options.height || 1024),
+        steps: Number(options.steps || 8),
+        seed: options.seed == null ? null : Number(options.seed),
+        model: String(options.model || '').slice(0, 240),
+      },
+      ['local-write'],
+    );
+    return this.wait(job.id, settings.imageTimeoutMs);
   }
 
   async evolve(objective) {
