@@ -49,3 +49,18 @@ test('desktop dashboard keeps the reference composition', () => {
   assert.equal(DASHBOARD_HTML.includes('grid-area:bottom'), true);
   assert.equal(DASHBOARD_HTML.includes('En ligne · conscience active'), true);
 });
+
+
+test('living AURA map includes animated visual layers', () => {
+  for (const token of [
+    'id="nebulaFx"',
+    'id="particleFx"',
+    'class="aurora-vignette"',
+    'id="energyPulses"',
+    'initLivingAuraScene()',
+    'requestAnimationFrame(frame)',
+    "pulse.setAttribute('class','energy-pulse')",
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
+});
