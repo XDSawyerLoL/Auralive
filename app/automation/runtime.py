@@ -43,7 +43,7 @@ class AutomationStudioRuntime:
                 "twitch": aura.twitch,
                 "obs": aura.obs,
                 "ai": aura.ai,
-                "image": aura.image,
+                "image": getattr(aura, "image", None),
                 "overlay": aura.overlay,
                 "files_root": str(settings.database_path.parent / "automation-files"),
             },
