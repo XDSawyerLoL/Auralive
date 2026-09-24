@@ -102,6 +102,11 @@
 - [x] Perception `live_awareness` réellement installée au runtime
 - [x] Garde-fous Automation Studio conservés comme autorité d'exécution
 - [x] Aucune auto-modification silencieuse du code de production
+- [x] AURA Evolution phase 1 active par défaut sur runtime source
+- [x] Canary d'import baseline/candidat dans le sas
+- [x] Garde de régression de durée des tests
+- [x] Refus des candidats périmés si GitHub a changé entre-temps
+- [x] Rejet isolé : aucun candidat en échec n'écrit dans le runtime actif
 
 ## Auto-évolution AURA
 
