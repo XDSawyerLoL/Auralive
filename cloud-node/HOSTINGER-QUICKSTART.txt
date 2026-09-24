@@ -2,6 +2,7 @@ AURA Cloud Node — Hostinger 1.1
 
 Réglages :
 - Node.js : 22.x
+- Port applicatif : 3000 (imposé par Hostinger; AURA l'utilise par défaut)
 - Framework : Other
 - Répertoire racine : ./
 - Entry File : server.js
