@@ -76,3 +76,12 @@ test('native cognition uses organism fatigue before external language', () => {
   assert.equal(result.language_model_used_for_decision, undefined);
   assert.match(result.next_action, /Ralentir/i);
 });
+
+
+test('reading or migrating the organism does not create a fake newer state', () => {
+  const organism = new AuraOrganism();
+  const state = organism.defaultState();
+  state.updated_at = '2026-09-24T20:00:00.000Z';
+  const migrated = organism.migrate({ organism: state });
+  assert.equal(migrated.updated_at, '2026-09-24T20:00:00.000Z');
+});
