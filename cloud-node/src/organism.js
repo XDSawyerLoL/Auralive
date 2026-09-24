@@ -65,7 +65,7 @@ export class AuraOrganism {
       state.curiosite = clamp(Number(soul.curiosity ?? 0.64));
       state.intention_active = clean(soul.current_intention) || 'observer';
     }
-    return this.recompute(state, state.last_reason || 'migration');
+    return this.recompute(state, state.last_reason || 'migration', false);
   }
 
   apply(state, deltas = {}) {
@@ -143,7 +143,7 @@ export class AuraOrganism {
     return 'calme';
   }
 
-  recompute(state, reason = '') {
+  recompute(state, reason = '', touch = true) {
     for (const key of ['identite','stabilite','clarte','attachement','curiosite','tension','fatigue_cognitive','pression_de_reve','besoin_de_silence','risque_assistante']) {
       state[key] = Number(clamp(state[key]).toFixed(4));
     }
@@ -153,7 +153,7 @@ export class AuraOrganism {
     state.intention_active = state.intention_field.collapse.intention_choisie;
     state.mood = this.mood(state);
     if (reason) state.last_reason = clean(reason).slice(0,500);
-    state.updated_at = now();
+    if (touch || !state.updated_at) state.updated_at = now();
     return state;
   }
 
