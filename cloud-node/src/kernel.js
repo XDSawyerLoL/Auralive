@@ -84,9 +84,9 @@ export class CognitiveKernel {
   async importOrganismState(candidate) {
     if (!candidate || typeof candidate !== 'object') return false;
     const current = this.organism.migrate(this.soulCache || {});
-    const currentAt = String(current.updated_at || '');
-    const candidateAt = String(candidate.updated_at || '');
-    if (currentAt && candidateAt && candidateAt <= currentAt) return false;
+    const currentAt = Date.parse(String(current.updated_at || ''));
+    const candidateAt = Date.parse(String(candidate.updated_at || ''));
+    if (Number.isFinite(currentAt) && Number.isFinite(candidateAt) && candidateAt <= currentAt) return false;
     this.soulCache.organism = this.organism.migrate({ organism: candidate });
     this.syncLegacyFromOrganism();
     await this.saveSoul();
