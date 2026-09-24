@@ -5,6 +5,7 @@ import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js'
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
+import { ActiveInferenceEngine } from './active_inference.js';
 
 const now = () => new Date().toISOString();
 
@@ -27,6 +28,8 @@ export class CognitiveKernel {
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.organism = new AuraOrganism();
+    this.activeInference = new ActiveInferenceEngine();
+    this.lastInferenceAssessment = {};
     this.started = false;
     this.timer = null;
     this.soulCache = null;
@@ -79,6 +82,40 @@ export class CognitiveKernel {
   async organismState({ publicView = false } = {}) {
     const state = this.organism.migrate(this.soulCache || {});
     return publicView ? this.organism.publicState(state) : state;
+  }
+
+  async observeSurprise(kind, content = '', context = {}) {
+    const label = String(kind || 'unknown').slice(0, 240);
+    const [row, totals] = await Promise.all([
+      one('SELECT count FROM aura_surprise_events WHERE kind=?', [label]),
+      one('SELECT COALESCE(SUM(count),0) AS total, COUNT(*) AS kinds FROM aura_surprise_events'),
+    ]);
+    const count = Number(row?.count || 0);
+    const total = Number(totals?.total || 0);
+    const kinds = Number(totals?.kinds || 0);
+    const prior = (count + 1) / Math.max(2, total + Math.max(8, kinds + 1));
+    const surprise = this.activeInference.surprise(prior);
+    const stamp = now();
+    await query(
+      `INSERT INTO aura_surprise_events(kind,count,last_surprise,updated_at)
+       VALUES(?,1,?,?)
+       ON DUPLICATE KEY UPDATE count=count+1,last_surprise=VALUES(last_surprise),updated_at=VALUES(updated_at)`,
+      [label, surprise, stamp],
+    );
+    if (surprise >= 0.62) {
+      await query(
+        'INSERT INTO aura_surprise_memory(kind,content,surprise,context,created_at) VALUES(?,?,?,?,?)',
+        [label, String(content || '').slice(0,3000), surprise, JSON.stringify(context || {}).slice(0,12000), stamp],
+      );
+    }
+    return surprise;
+  }
+
+  inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
+    const organism = this.organism.migrate(this.soulCache || {});
+    const assessment = this.activeInference.assess(organism, { novelty, risk });
+    this.lastInferenceAssessment = assessment;
+    return assessment;
   }
 
   async importOrganismState(candidate) {
@@ -173,8 +210,21 @@ export class CognitiveKernel {
       });
     }
     await this.saveSoul();
+    const surprise = await this.observeSurprise(
+      `event:${source}:${type}`,
+      String(payload?.title || payload?.text || '').slice(0,1000),
+      { source },
+    );
+    if (surprise >= 0.62 && source !== 'cognitive') {
+      this.pushStimulus({
+        type: 'aura.surprise',
+        source: 'cognitive-math',
+        occurred_at: now(),
+        payload: { event_type: type, surprise },
+      });
+    }
     if (source === 'horizon' || type.startsWith('aura.') || type.startsWith('stream.')) {
-      await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source });
+      await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source, surprise });
     }
     return { ok: true };
   }
