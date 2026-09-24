@@ -72,6 +72,9 @@ jobs:
           if (-not (Test-Path "dist\QuanticStudio\BUILD-ID.txt")) { throw "BUILD-ID.txt absent." }
           if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) { throw "QuanticStudioCore.exe absent." }
           if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\app\cognitive\evolution.py")) { throw "Source AURA Evolution absente." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\tests")) { throw "Tests AURA Evolution absents." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\requirements.txt")) { throw "Requirements AURA Evolution absents." }
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
