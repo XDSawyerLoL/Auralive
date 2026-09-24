@@ -210,7 +210,20 @@ app.post('/api/bridge/jobs/:id/complete', async (request, reply) => {
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   try {
-    return await bridge.complete(request.params.id, workerId, request.body || {});
+    const job = await bridge.complete(request.params.id, workerId, request.body || {});
+    if (job?.kind === 'operator') {
+      const resultPayload = job.result && typeof job.result === 'object' ? job.result : {};
+      const ok = String(job.status || '') === 'completed' && resultPayload.ok !== false;
+      await kernel.recordOutcome({
+        automation_id: `cloud-worker:${job.id}`,
+        event_type: 'aura.bridge.operator',
+        ok,
+        signature: ok ? 'success' : String(job.error || resultPayload.error || 'worker-failure'),
+        report: resultPayload,
+        created_at: job.updated_at || new Date().toISOString(),
+      });
+    }
+    return job;
   } catch (error) {
     return reply.code(409).send({ error: String(error?.message || error) });
   }
@@ -241,6 +254,10 @@ app.get('/api/capabilities', async (request) => {
     : [];
   return {
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
+    organism: {
+      ready: Boolean(bootstrap.runtimeReady),
+      version: bootstrap.runtimeReady ? (await kernel.organismState({ publicView: true })).version : '',
+    },
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
       ready: Boolean(ai.enabled),
@@ -267,7 +284,8 @@ app.get('/api/capabilities', async (request) => {
 });
 
 app.get('/api/kernel/architecture', async () => ({
-  identity_owner: 'AURA Soul + persistent memory + intentions',
+  identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
+  organism: 'homeostasie_v6_sovereign',
   cognition_owner: 'AURA native cognitive kernel',
   language_model_role: 'semantic-support-and-verbalisation-only',
   cognition_independent_from_language_model: true,
