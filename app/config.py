@@ -129,20 +129,29 @@ class Settings:
     cognitive_reflection_seconds: int = _int("AURA_COGNITIVE_REFLECTION_SECONDS", 300)
     cognitive_max_reflections_per_hour: int = _int("AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR", 6)
     aura_cloud_token: str = os.getenv("AURA_CLOUD_TOKEN", "")
-    # Le planificateur Sovereign ne peut exécuter que les classes de risque
-    # explicitement présentes ici. Par défaut : actions locales sans effet
-    # irréversible et appels IA. Une installation peut élargir consciemment.
+    aura_cloud_base_url: str = os.getenv(
+        "AURA_CLOUD_BASE_URL",
+        "https://antiquewhite-dolphin-780448.hostingersite.com",
+    ).rstrip("/")
+    aura_cloud_worker_enabled: bool = _bool("AURA_CLOUD_WORKER_ENABLED", True)
+    aura_cloud_worker_poll_seconds: float = _float("AURA_CLOUD_WORKER_POLL_SECONDS", 1.5)
+    aura_cloud_worker_heartbeat_seconds: int = _int("AURA_CLOUD_WORKER_HEARTBEAT_SECONDS", 15)
+    aura_cloud_worker_timeout_seconds: int = _int("AURA_CLOUD_WORKER_TIMEOUT_SECONDS", 95)
+
+    # Mode Sovereign : toutes les familles d'actions déjà enregistrées peuvent
+    # être planifiées. Les garde-fous internes restent actifs : programmes
+    # explicitement autorisés, HORIZON épistémique, rollbacks et journaux.
     cognitive_operator_allowed_risks: str = os.getenv(
-        "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS", "safe,ai"
+        "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS",
+        "safe,ai,network,local-write,process,twitch-write,obs-write,moderation,local-control",
     )
 
-    # AURA Evolution phase 1: recherche + diagnostic continus sont actifs par
-    # défaut. La modification de code reste conditionnée à un arbre source
-    # complet; auto-submit et auto-merge restent désactivés.
+    # AURA Evolution peut proposer, tester et soumettre ses améliorations.
+    # L'auto-merge reste conditionné aux checks CI et au canary indépendant.
     evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", True)
     evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
-    evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
-    evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)
+    evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", True)
+    evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", True)
     evolution_github_token: str = os.getenv("AURA_EVOLUTION_GITHUB_TOKEN", "")
     evolution_github_repository: str = os.getenv(
         "AURA_EVOLUTION_GITHUB_REPOSITORY", "XDSawyerLoL/Auralive"
