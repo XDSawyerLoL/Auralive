@@ -356,6 +356,28 @@ function renderMap(data){
   const svgNS='http://www.w3.org/2000/svg';
   const links=$('flowLinks'); const nodes=$('interestNodes');
   links.innerHTML=''; nodes.innerHTML='';
+
+  const visibleNodes=data.nodes.filter(function(n){return Boolean(nodeLayout[n.id]);});
+  visibleNodes.forEach(function(n,i){
+    [1,2].forEach(function(offset){
+      const other=visibleNodes[(i+offset)%visibleNodes.length];
+      if(!other || other===n) return;
+      if(offset===2 && i%2) return;
+      const a=nodeLayout[n.id]; const b=nodeLayout[other.id];
+      const web=document.createElementNS(svgNS,'path');
+      const bend=(i%2===0?1:-1)*(18+offset*8);
+      const mx=(a.x+b.x)/2+(b.y-a.y)*.035*bend/8;
+      const my=(a.y+b.y)/2-(b.x-a.x)*.035*bend/8;
+      web.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
+      web.setAttribute('fill','none');
+      web.setAttribute('stroke',offset===1?a.color:'#7b78c8');
+      web.setAttribute('stroke-width',offset===1?'1.15':'.75');
+      web.setAttribute('opacity',offset===1?'.16':'.085');
+      web.setAttribute('stroke-dasharray',offset===1?'2 8':'1 12');
+      links.appendChild(web);
+    });
+  });
+
   data.nodes.forEach(function(n){
     const pos=nodeLayout[n.id]; if(!pos) return;
     const intensity=Math.max(.18,Math.min(1,Number(n.score)||0));
