@@ -145,6 +145,48 @@ def install_native_nodes(registry: AutomationRegistry) -> None:
         return answer
 
     @registry.action(
+        "aura.image.generate",
+        title="Générer une image locale",
+        category="AURA Création",
+        description=(
+            "Génère une image avec le moteur local détecté (Forge/A1111 ou ComfyUI). "
+            "Le modèle d'image est remplaçable et peut rester entièrement local."
+        ),
+        config_schema={
+            "prompt": "string",
+            "negative_prompt": "string",
+            "width": "number",
+            "height": "number",
+            "steps": "number",
+            "seed": "number",
+            "model": "string",
+            "overlay": "boolean",
+        },
+        risk="local-write",
+        supports_simulation=False,
+    )
+    async def image_generate(config: dict[str, Any], event: Event, context: dict[str, Any]) -> Any:
+        services = _services(context)
+        result = await services["image"].generate(
+            str(config.get("prompt", "")),
+            negative_prompt=str(config.get("negative_prompt", "")),
+            width=int(config.get("width") or services["image"].settings.image_default_width),
+            height=int(config.get("height") or services["image"].settings.image_default_height),
+            steps=int(config.get("steps") or services["image"].settings.image_default_steps),
+            seed=int(config["seed"]) if config.get("seed") is not None else None,
+            model=str(config.get("model") or ""),
+        )
+        if config.get("overlay", False):
+            await services["overlay"].emit(
+                {
+                    "type": "aura_generated_image",
+                    "path": result.get("path"),
+                    "prompt": result.get("prompt"),
+                }
+            )
+        return result
+
+    @registry.action(
         "aura.points.adjust",
         title="Modifier les Écumes",
         category="Communauté",
