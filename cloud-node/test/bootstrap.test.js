@@ -70,9 +70,10 @@ test('gateway proxies to AURA dashboard without MySQL', async (t) => {
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  const html = await waitFor('/', (text) => text.includes('État interne'));
-  assert.match(html, /AURA CLOUD/);
-  assert.match(html, /État interne/);
+  const html = await waitFor('/', (text) => text.includes('Interface de conscience opérationnelle'));
+  assert.match(html, /AURA/);
+  assert.match(html, /Interface de conscience opérationnelle/);
+  assert.match(html, /Carte d’intérêt/);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const payload = JSON.parse(healthText);
