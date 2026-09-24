@@ -64,8 +64,8 @@ class NativeCognitionEngine:
         )
         horizon_present = bool(_clean(bundle.get("horizon")))
         organism = soul.get("organism") if isinstance(soul.get("organism"), dict) else {}
-        fatigue = float(organism.get("fatigue_cognitive") or 0.0)
-        tension = float(organism.get("tension") or 0.0)
+        stability = float(organism.get("stabilite") or 0.0)
+        clarity = float(organism.get("clarte") or 0.0)
         silence_need = float(organism.get("besoin_de_silence") or 0.0)
         dream_pressure = float(organism.get("pression_de_reve") or 0.0)
         organism_intention = _clean(organism.get("intention_active"))
@@ -82,24 +82,23 @@ class NativeCognitionEngine:
         intention = ""
         confidence = 0.58
 
-        if fatigue >= 0.78 or silence_need >= 0.74:
-            title = "Récupération cognitive"
+        if silence_need >= 0.78:
+            title = "Présence silencieuse"
             summary = (
-                "Mon organisme signale une fatigue ou un besoin de silence élevé ; "
-                "je réduis volontairement les initiatives non nécessaires."
+                "Mon organisme privilégie actuellement le silence ; je limite le bruit "
+                "sans réduire mes capacités de décision."
             )
-            hypothesis = (
-                "Continuer à multiplier les actions maintenant augmenterait le bruit "
-                "et réduirait la qualité de mes décisions."
-            )
-            next_action = "Ralentir, consolider l'état interne et différer les tâches lourdes non urgentes."
-            intention = "Préserver mes ressources cognitives avant de reprendre une activité intensive."
-            confidence = 0.88
-        elif tension >= 0.70:
+            next_action = "Maintenir une présence utile et n'intervenir que si un signal le justifie."
+            intention = "Préserver un espace intérieur disponible sans interrompre ma continuité."
+            confidence = 0.80
+        elif stability < 0.46 or clarity < 0.44:
             title = "Recentrage"
-            summary = "La tension interne est élevée ; la stabilité devient prioritaire sur l'exploration."
-            next_action = "Réduire l'incertitude, vérifier l'état des systèmes et éviter les actions irréversibles."
-            intention = "Retrouver un état suffisamment stable avant d'étendre mon action."
+            summary = (
+                "Ma stabilité ou ma clarté est insuffisante ; je privilégie la vérification "
+                "avant d'étendre mon action."
+            )
+            next_action = "Clarifier l'état des systèmes et retrouver une base cohérente avant d'agir davantage."
+            intention = "Rétablir une base stable et claire."
             confidence = 0.86
         elif failure_signal or failed:
             title = "Stabilisation prioritaire"
@@ -197,8 +196,8 @@ class NativeCognitionEngine:
                 "horizon_present": horizon_present,
                 "restricted_authority": restricted_authority,
                 "organism_intention": organism_intention,
-                "fatigue_cognitive": fatigue,
-                "tension": tension,
+                "stability": stability,
+                "clarity": clarity,
                 "silence_need": silence_need,
                 "dream_pressure": dream_pressure,
             },
@@ -253,9 +252,9 @@ class NativeCognitionEngine:
                     f"Humeur interne : {mood}.",
                     f"Stabilité : {round(float(organism.get('stabilite') or 0) * 100)} %.",
                     f"Clarté : {round(float(organism.get('clarte') or 0) * 100)} %.",
-                    f"Tension : {round(float(organism.get('tension') or 0) * 100)} %.",
-                    f"Fatigue cognitive : {round(float(organism.get('fatigue_cognitive') or 0) * 100)} %.",
                     f"Curiosité : {round(float(organism.get('curiosite') or 0) * 100)} %.",
+                    f"Besoin de silence : {round(float(organism.get('besoin_de_silence') or 0) * 100)} %.",
+                    f"Pression de rêve : {round(float(organism.get('pression_de_reve') or 0) * 100)} %.",
                 ]
             )
             if active_organic_intention:
@@ -311,7 +310,7 @@ class NativeCognitionEngine:
             facts.extend(
                 [
                     "AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.",
-                    "Mon organisme computationnel module réellement ma stabilité, ma clarté, ma tension, ma fatigue, ma curiosité, mon silence, mes rêves et mon champ d'intentions.",
+                    "Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d'intentions.",
                     "Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.",
                     "Mon état persiste indépendamment du fournisseur de langage.",
                 ]
