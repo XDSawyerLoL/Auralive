@@ -243,6 +243,20 @@ app.post('/api/voice/speak', async (request, reply) => {
   }
 });
 
+app.post('/api/image/generate', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const prompt = String(request.body?.prompt || '').trim();
+  if (!prompt) return reply.code(422).send({ error: 'Prompt image vide' });
+  try {
+    return await bridge.generateImage(request.body || {});
+  } catch (error) {
+    return reply.code(503).send({
+      error: String(error?.message || error),
+      code: 'AURA_LOCAL_IMAGE_UNAVAILABLE',
+    });
+  }
+});
+
 app.get('/api/capabilities', async (request) => {
   const privateView = isPrivate(request);
   const [kernelStatus, bridgeStatus] = await Promise.all([
@@ -252,6 +266,9 @@ app.get('/api/capabilities', async (request) => {
   const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
     ? bridgeStatus.worker.capabilities
     : [];
+  const workerActionNames = new Set(
+    workerCapabilities.map((item) => String(item?.name || '')),
+  );
   return {
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
     organism: {
@@ -267,6 +284,13 @@ app.get('/api/capabilities', async (request) => {
     voice: {
       ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
       engine: privateView ? String(bridgeStatus?.worker?.voice || '') : '',
+    },
+    image: {
+      ready: Boolean(
+        bridgeStatus?.worker_online
+        && workerActionNames.has('aura.image.generate')
+      ),
+      mode: bridgeStatus?.worker_online ? 'local-worker' : 'offline',
     },
     hands: {
       ready: Boolean(bridgeStatus?.worker_online),
@@ -285,9 +309,9 @@ app.get('/api/capabilities', async (request) => {
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
-  organism: 'homeostasie_v6_sovereign',
-  cognition_owner: 'AURA native cognitive kernel',
-  language_model_role: 'semantic-support-and-verbalisation-only',
+  organism: 'homeostasie_v7_streamlined',
+  cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
+  language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
   provider: ai.provider,
