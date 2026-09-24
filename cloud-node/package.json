@@ -1,6 +1,6 @@
 {
   "name": "aura-cloud-hostinger",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "description": "AURA Cloud Node.js runtime for Hostinger",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check src/config.js && node --check src/policy.js && node --check src/db.js && node --check src/ai.js && node --check src/cognition.js && node --check src/expression.js && node --check src/horizon.js && node --check src/kernel.js && node --check src/evolution.js && node --check src/dashboard.js && node --check src/server.js"
+    "check": "node --check server.js && node --check src/config.js && node --check src/policy.js && node --check src/db.js && node --check src/ai.js && node --check src/cognition.js && node --check src/expression.js && node --check src/bridge.js && node --check src/horizon.js && node --check src/kernel.js && node --check src/evolution.js && node --check src/dashboard.js && node --check src/server.js"
   },
   "dependencies": {
     "dotenv": "18.0.3",
