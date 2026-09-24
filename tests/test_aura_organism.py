@@ -89,3 +89,13 @@ def test_native_cognition_obeys_organism_fatigue_before_language():
 
     assert result["title"] == "Récupération cognitive"
     assert "Ralentir" in result["next_action"]
+
+
+def test_migration_preserves_organism_revision_timestamp():
+    organism = AuraOrganism()
+    state = organism.default_state()
+    state["updated_at"] = "2026-09-24T20:00:00+00:00"
+
+    migrated = organism.migrate({"organism": state})
+
+    assert migrated["updated_at"] == "2026-09-24T20:00:00+00:00"
