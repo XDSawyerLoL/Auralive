@@ -4,6 +4,7 @@ import { one, query } from './db.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
+import { AuraOrganism } from './organism.js';
 
 const now = () => new Date().toISOString();
 
@@ -25,6 +26,7 @@ export class CognitiveKernel {
     this.bridge = bridge;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
+    this.organism = new AuraOrganism();
     this.started = false;
     this.timer = null;
     this.soulCache = null;
@@ -37,6 +39,7 @@ export class CognitiveKernel {
   }
 
   defaultSoul() {
+    const organism = this.organism.defaultState();
     return {
       name: 'AURA',
       kernel_version: CognitiveKernel.VERSION,
@@ -44,19 +47,51 @@ export class CognitiveKernel {
       born_at: now(),
       phase: 'genesis',
       cycles: 0,
-      energy: 0.72,
-      curiosity: 0.64,
-      pressure: 0.18,
-      continuity: 1.0,
+      ...this.organism.legacyMetrics(organism),
       introspection: 0.68,
       openness: 0.72,
       reactivity: 0.58,
       playfulness: 0.52,
       dominant_thought: 'Maintenir une présence utile sans produire de bruit.',
       current_intention: 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.',
+      organism,
       last_tick_at: '',
       last_reflection_at: '',
     };
+  }
+
+  syncLegacyFromOrganism() {
+    const organism = this.organism.migrate(this.soulCache || {});
+    this.soulCache.organism = organism;
+    Object.assign(this.soulCache, this.organism.legacyMetrics(organism));
+    this.soulCache.mood = organism.mood || 'calme';
+    this.soulCache.active_intention = organism.intention_active || 'observer';
+  }
+
+  async recordOrganismEvent(kind, reason = '', payload = {}) {
+    const organism = this.organism.migrate(this.soulCache || {});
+    await query(
+      'INSERT INTO aura_organism_events(kind,reason,payload,state,created_at) VALUES(?,?,?,?,?)',
+      [String(kind).slice(0,80),String(reason).slice(0,500),JSON.stringify(payload).slice(0,16000),JSON.stringify(organism).slice(0,30000),now()],
+    );
+  }
+
+  async organismState({ publicView = false } = {}) {
+    const state = this.organism.migrate(this.soulCache || {});
+    return publicView ? this.organism.publicState(state) : state;
+  }
+
+  async importOrganismState(candidate) {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const current = this.organism.migrate(this.soulCache || {});
+    const currentAt = String(current.updated_at || '');
+    const candidateAt = String(candidate.updated_at || '');
+    if (currentAt && candidateAt && candidateAt <= currentAt) return false;
+    this.soulCache.organism = this.organism.migrate({ organism: candidate });
+    this.syncLegacyFromOrganism();
+    await this.saveSoul();
+    await this.recordOrganismEvent('sync','synchronisation organisme');
+    return true;
   }
 
   async init() {
@@ -64,10 +99,10 @@ export class CognitiveKernel {
     if (row?.state) {
       try { this.soulCache = JSON.parse(row.state); } catch { this.soulCache = null; }
     }
-    if (!this.soulCache) {
-      this.soulCache = this.defaultSoul();
-      await this.saveSoul();
-    }
+    if (!this.soulCache) this.soulCache = this.defaultSoul();
+    this.soulCache.organism = this.organism.migrate(this.soulCache);
+    this.syncLegacyFromOrganism();
+    await this.saveSoul();
   }
 
   async start() {
@@ -123,11 +158,20 @@ export class CognitiveKernel {
   async observeEvent(type, payload = {}, source = 'cloud') {
     const stimulus = { type: String(type), source: String(source), occurred_at: now(), payload: { ...(payload || {}) } };
     if (source !== 'cognitive') this.pushStimulus(stimulus);
-    if (source === 'horizon') {
-      this.adjustSoul({ curiosity: 0.025, introspection: 0.01, pressure: type === 'horizon.world.emerging' ? 0.015 : 0 });
-    } else if (type === 'stream.online') this.adjustSoul({ energy: 0.04, reactivity: 0.02 });
-    else if (type === 'stream.offline') this.adjustSoul({ energy: -0.02, introspection: 0.02 });
-    else if (type === 'aura.cloud.chat') this.adjustSoul({ continuity: 0.002, energy: 0.003 });
+    const organ = this.organism.applyEvent(
+      this.organism.migrate(this.soulCache || {}),
+      type,
+      source,
+    );
+    this.soulCache.organism = organ.state;
+    this.syncLegacyFromOrganism();
+    if (Object.keys(organ.delta || {}).length) {
+      await this.recordOrganismEvent('event', organ.state.last_reason || type, {
+        event_type: type,
+        source,
+        delta: organ.delta || {},
+      });
+    }
     await this.saveSoul();
     if (source === 'horizon' || type.startsWith('aura.') || type.startsWith('stream.')) {
       await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source });
@@ -257,8 +301,19 @@ export class CognitiveKernel {
       this.soulCache.cycles = Number(this.soulCache.cycles || 0) + 1;
       this.soulCache.phase = phaseForCycles(this.soulCache.cycles);
       this.soulCache.last_tick_at = timestamp;
-      this.soulCache.energy = Number(clamp(Number(this.soulCache.energy || 0.7) + (0.7 - Number(this.soulCache.energy || 0.7)) * 0.03).toFixed(4));
-      this.soulCache.pressure = Number(clamp(Number(this.soulCache.pressure || 0.2) * 0.96).toFixed(4));
+      const idle = this.organism.idleTick(
+        this.organism.migrate(this.soulCache || {}),
+        config.cognitiveTickSeconds,
+      );
+      this.soulCache.organism = idle.state;
+      this.syncLegacyFromOrganism();
+      if (idle.activity !== 'presence' || idle.dream) {
+        await this.recordOrganismEvent('idle-life', idle.activity_label || 'vie intérieure', {
+          activity: idle.activity,
+          effect: idle.effect || {},
+          dream: idle.dream || null,
+        });
+      }
 
       const dueByTime = Date.now() - this.lastReflectionAtMs >= config.cognitiveReflectionSeconds * 1000;
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
@@ -329,12 +384,22 @@ export class CognitiveKernel {
     const signature = String(payload.signature || (ok ? 'success' : payload.error || 'failure')).replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 500);
     const timestamp = String(payload.created_at || now());
     await query('INSERT INTO aura_outcomes(automation_id,event_type,ok,signature,report,created_at) VALUES(?,?,?,?,?,?)', [automationId, eventType, ok ? 1 : 0, signature, JSON.stringify(payload).slice(0, 20000), timestamp]);
-    if (ok) {
-      this.adjustSoul({ pressure: -0.008, energy: 0.004 });
-      await this.saveSoul();
-      return { ok: true, learned: false };
-    }
-    this.adjustSoul({ pressure: 0.035, introspection: 0.025 });
+    const organ = this.organism.applyOutcome(
+      this.organism.migrate(this.soulCache || {}),
+      ok,
+    );
+    this.soulCache.organism = organ.state;
+    this.syncLegacyFromOrganism();
+    await this.recordOrganismEvent('outcome', ok ? 'action réussie' : 'action échouée', {
+      automation_id: automationId,
+      event_type: eventType,
+      signature,
+      ok,
+      delta: organ.delta || {},
+    });
+    await this.saveSoul();
+    if (ok) return { ok: true, learned: false };
+
     this.pushStimulus({ type: 'automation.failure', source: 'automation', occurred_at: timestamp, payload: { automation_id: automationId, event_type: eventType, signature } });
     const countRow = await one('SELECT COUNT(*) AS total FROM aura_outcomes WHERE automation_id=? AND ok=0 AND signature=?', [automationId, signature]);
     const count = Number(countRow?.total || 0);
