@@ -289,7 +289,9 @@ app.get('/healthz', async () => {
     cognition_native: true,
     cognition_independent_from_language_model: true,
     horizon: horizon.status().enabled,
-    bridge: await bridge.status(),
+    bridge: bootstrap.dbReady
+      ? await bridge.status()
+      : { enabled: bridge.enabled, worker_online: false, mode: bridge.enabled ? 'waiting-for-runtime' : 'disabled' },
     evolution: config.evolutionEnabled,
     issues: bootstrap.issues.map((item) => item.code),
     startup_error: bootstrap.startupError,
