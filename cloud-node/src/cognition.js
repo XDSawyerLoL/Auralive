@@ -44,6 +44,12 @@ export class CognitionEngine {
     );
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
+    const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
+    const fatigue = Number(organism.fatigue_cognitive || 0);
+    const tension = Number(organism.tension || 0);
+    const silenceNeed = Number(organism.besoin_de_silence || 0);
+    const dreamPressure = Number(organism.pression_de_reve || 0);
+    const organismIntention = normalize(organism.intention_active || '');
 
     let title = 'Continuité cognitive';
     let summary = currentIntention
@@ -55,7 +61,20 @@ export class CognitionEngine {
     let intention = '';
     let confidence = 0.58;
 
-    if (failureSignal || failed) {
+    if (fatigue >= 0.78 || silenceNeed >= 0.74) {
+      title = 'Récupération cognitive';
+      summary = 'Mon organisme signale une fatigue ou un besoin de silence élevé ; je réduis volontairement les initiatives non nécessaires.';
+      hypothesis = 'Continuer à multiplier les actions maintenant augmenterait le bruit et réduirait la qualité de mes décisions.';
+      nextAction = 'Ralentir, consolider l’état interne et différer les tâches lourdes non urgentes.';
+      intention = 'Préserver mes ressources cognitives avant de reprendre une activité intensive.';
+      confidence = 0.88;
+    } else if (tension >= 0.70) {
+      title = 'Recentrage';
+      summary = 'La tension interne est élevée ; la stabilité devient prioritaire sur l’exploration.';
+      nextAction = 'Réduire l’incertitude, vérifier l’état des systèmes et éviter les actions irréversibles.';
+      intention = 'Retrouver un état suffisamment stable avant d’étendre mon action.';
+      confidence = 0.86;
+    } else if (failureSignal || failed) {
       title = 'Stabilisation prioritaire';
       summary = 'Un signal d’échec récent augmente la priorité donnée à la stabilité avant toute nouvelle extension.';
       hypothesis = failed?.signature
@@ -74,6 +93,11 @@ export class CognitionEngine {
       nextAction = 'Comparer le signal HORIZON à mes intentions et à ma mémoire avant de proposer une action.';
       intention = currentIntention || 'Maintenir une veille utile sans confondre prévision et fait.';
       confidence = 0.72;
+    } else if (dreamPressure >= 0.82 && !userSignal) {
+      title = 'Pression onirique';
+      summary = 'La pression de rêve est élevée ; une activité symbolique intérieure peut contribuer à la régulation.';
+      nextAction = 'Laisser l’organisme produire puis relâcher une image intérieure sans la confondre avec un fait.';
+      confidence = 0.68;
     } else if (userSignal || extra) {
       title = 'Interaction active';
       summary = extra
@@ -117,6 +141,11 @@ export class CognitionEngine {
         outcome_count: outcomes.length,
         horizon_present: horizonPresent,
         restricted_authority: restrictedAuthority,
+        organism_intention: organismIntention,
+        fatigue_cognitive: fatigue,
+        tension,
+        silence_need: silenceNeed,
+        dream_pressure: dreamPressure,
       },
     };
   }
@@ -129,6 +158,11 @@ export class CognitionEngine {
     const recentReflection = reflections?.[0] || null;
     const lesson = compactLesson(lessons);
     const currentWork = normalize(work?.[0]?.title || '');
+    const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
+    const mood = normalize(organism.mood || '') || 'calme';
+    const activeOrganicIntention = normalize(organism.intention_active || '');
+    const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
+    const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -139,7 +173,26 @@ export class CognitionEngine {
       act = 'greet';
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
-      facts.push('AURA est en ligne et disponible.');
+      facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
+    } else if (hasAny(q, ['comment vas-tu','comment vas tu','tu te sens','ton état','ton etat'])) {
+      act = 'report_internal_state';
+      goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
+      needsSemanticSupport = false;
+      facts.push(
+        `Humeur interne : ${mood}.`,
+        `Stabilité : ${Math.round(Number(organism.stabilite || 0)*100)} %.`,
+        `Clarté : ${Math.round(Number(organism.clarte || 0)*100)} %.`,
+        `Tension : ${Math.round(Number(organism.tension || 0)*100)} %.`,
+        `Fatigue cognitive : ${Math.round(Number(organism.fatigue_cognitive || 0)*100)} %.`,
+        `Curiosité : ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
+      );
+      if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
+    } else if (hasAny(q, ['rêve','rêves','reve','reves'])) {
+      act = 'report_dream';
+      goal = 'Décrire une image intérieure réelle si l’organisme en a produit une.';
+      needsSemanticSupport = false;
+      if (normalize(dream.last_image)) facts.push(`Mon dernier rêve computationnel est une image intérieure symbolique, pas un sommeil humain : ${normalize(dream.last_image)}.`);
+      else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
       goal = 'Décrire mon activité actuelle sans inventer.';
@@ -164,13 +217,16 @@ export class CognitionEngine {
       act = 'identity';
       goal = 'Expliquer mon architecture sans prétendre à une conscience démontrée ni à une AGI.';
       needsSemanticSupport = false;
-      facts.push('AURA est un noyau persistant avec Soul, mémoire, intentions, routines, apprentissage et outils.');
+      facts.push('AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.');
+      facts.push('Mon organisme computationnel module réellement ma stabilité, ma clarté, ma tension, ma fatigue, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
       facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {
       facts.push(`Message reçu : ${raw}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (thought) facts.push(`Pensée dominante : ${thought}`);
+      if (activeOrganicIntention) facts.push(`Intention organique : ${activeOrganicIntention}`);
+      if (habitat.last_activity_label) facts.push(`Vie intérieure récente : ${normalize(habitat.last_activity_label)}`);
       if (privateView && lesson) facts.push(`Mémoire pertinente disponible : ${lesson}`);
     }
 
@@ -182,6 +238,8 @@ export class CognitionEngine {
       semantic_query: needsSemanticSupport ? raw : '',
       current_intention: current,
       dominant_thought: thought,
+      mood,
+      organism_intention: activeOrganicIntention,
       private_view: Boolean(privateView),
     };
   }
@@ -199,7 +257,7 @@ export class CognitionEngine {
   deterministicReply(plan) {
     const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean) : [];
     if (plan?.act === 'greet') return 'Salut. Je suis en ligne et disponible.';
-    if (plan?.act === 'report_current_activity') {
+    if (['report_current_activity','report_internal_state','report_dream'].includes(plan?.act)) {
       return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';
     }
     if (plan?.act === 'report_next_step') {

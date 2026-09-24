@@ -30,6 +30,10 @@ def build_cognitive_router(kernel: Any, settings: Any) -> APIRouter:
     async def kernel_soul() -> dict[str, Any]:
         return await kernel.soul()
 
+    @router.get("/api/kernel/organism")
+    async def kernel_organism(request: Request) -> dict[str, Any]:
+        return await kernel.organism_state(public=not _authorized(request))
+
     @router.post("/api/kernel/tick")
     async def kernel_tick(
         request: Request,

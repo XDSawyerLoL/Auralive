@@ -102,11 +102,14 @@ async def test_unified_kernel_persists_soul_and_creates_reflection(tmp_path: Pat
     lessons = await kernel.lessons()
 
     assert result["ok"] is True
-    assert reflections[0]["title"] == "Lecture du contexte"
-    assert any("Vérifier une dépendance" in row["content"] for row in lessons)
+    assert reflections[0]["title"] == "Interaction active"
+    assert lessons == []
     assert status["soul"]["cycles"] >= 1
     assert status["self_learning"] is True
+    assert status["native_cognition"]["independent_from_language_model"] is True
+    assert status["language_model_role"] == "semantic-support-and-verbalisation-only"
     assert status["self_modifying_code"] is False
+    assert aura.ai.calls == []
     assert any(event[0] == "aura.cognitive.reflection" for event in automation.events)
 
     await kernel.close()
@@ -183,3 +186,21 @@ def test_cohost_wrapper_accepts_world_context():
 
     signature = inspect.signature(CohostService.wrapped_ai_reply)
     assert "world_context" in signature.parameters
+
+
+@pytest.mark.asyncio
+async def test_chat_can_express_aura_identity_without_language_model(tmp_path: Path):
+    db = Database(tmp_path / "aura.db")
+    await db.initialize()
+    automation = FakeAutomation()
+    aura = SimpleNamespace(ai=FakeAI())
+    kernel = CognitiveKernel(aura, db, automation, FakeHorizon(), make_settings())
+    await kernel.initialize()
+
+    result = await kernel.chat("Qui es-tu ?", private=True)
+
+    assert result["ok"] is True
+    assert result["language_model_used_for_decision"] is False
+    assert result["semantic_support_used"] is False
+    assert "modèle de langage" in result["answer"].casefold()
+    assert aura.ai.calls == []

@@ -27,6 +27,12 @@ const AI_DEFAULT_MODEL = AI_MODE === 'gemini'
   ? 'gemini-3.5-flash-lite'
   : 'gemma3:12b';
 
+function configBridgeMode() {
+  return (process.env.AURA_BRIDGE_TOKEN || process.env.AURA_CLOUD_TOKEN)
+    ? 'remote-execute'
+    : 'plan-only';
+}
+
 export const config = Object.freeze({
   host: process.env.AURA_HOST || '0.0.0.0',
   // Hostinger Node.js Web Apps proxy vers le port 3000. On ignore PORT pour éviter
@@ -53,6 +59,7 @@ export const config = Object.freeze({
   aiApiKey: process.env.AI_API_KEY || '',
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
+  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
@@ -84,7 +91,7 @@ export const config = Object.freeze({
   evolutionAutoSubmit: false,
   evolutionAutoMerge: false,
 
-  cloudOperatorMode: 'plan-only',
+  cloudOperatorMode: configBridgeMode(),
 });
 
 export function productionConfigIssues() {
@@ -111,6 +118,12 @@ export function productionConfigIssues() {
     issues.push({
       code: 'gemini_api_key_missing',
       message: 'AI_MODE=gemini exige AI_API_KEY.',
+    });
+  }
+  if (config.aiMode === 'bridge' && !config.cloudToken && !process.env.AURA_BRIDGE_TOKEN) {
+    issues.push({
+      code: 'bridge_token_missing',
+      message: 'AI_MODE=bridge exige AURA_CLOUD_TOKEN ou AURA_BRIDGE_TOKEN.',
     });
   }
   return issues;

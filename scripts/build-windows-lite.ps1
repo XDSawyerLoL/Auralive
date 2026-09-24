@@ -53,6 +53,16 @@ Copy-Item ".env.example" "dist\QuanticStudio\.env.example" -Force
 Copy-Item ".env.example" "dist\QuanticStudio\.env" -Force
 Copy-Item "README.md" "dist\QuanticStudio\README.md" -Force
 Copy-Item "LISEZ-MOI.txt" "dist\QuanticStudio\LISEZ-MOI.txt" -Force
+
+# Source contrôlée pour AURA Evolution : le runtime actif reste immuable,
+# les candidats sont produits dans un workspace séparé puis passent tests/CI/canary.
+$AuraSource = "dist\QuanticStudio\aura-source"
+if (Test-Path $AuraSource) { Remove-Item -Recurse -Force $AuraSource }
+New-Item -ItemType Directory -Force -Path $AuraSource | Out-Null
+Copy-Item "app" "$AuraSource\app" -Recurse -Force
+Copy-Item "tests" "$AuraSource\tests" -Recurse -Force
+Copy-Item "requirements.txt" "$AuraSource\requirements.txt" -Force
+
 New-Item -ItemType Directory -Force -Path "dist\QuanticStudio\data\media" | Out-Null
 New-Item -ItemType Directory -Force -Path "dist\QuanticStudio\data\voices\kokoro" | Out-Null
 
