@@ -1,0 +1,447 @@
+import { randomUUID } from 'node:crypto';
+import { config } from './config.js';
+import { one, query } from './db.js';
+import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
+
+const now = () => new Date().toISOString();
+
+const AGENT_ROLES = {
+  planner: 'Tu es l’agent planificateur d’AURA. Découpe la mission en étapes courtes, vérifiables et exécutables. Repère dépendances et points de contrôle.',
+  research: 'Tu es l’agent recherche d’AURA. Sépare les faits des hypothèses, compare les éléments disponibles et signale clairement ce qui manque.',
+  dev: 'Tu es l’agent développement d’AURA. Analyse architecture, bugs et tests. Propose le changement minimal robuste avec validation et rollback.',
+  security: 'Tu es l’agent sécurité d’AURA. Cherche escalades de privilèges, actions irréversibles, fuites de secrets et garde-fous utiles.',
+  operator: 'Tu es l’agent opérateur d’AURA Cloud. Tu proposes un plan mais tu n’exécutes pas d’action externe depuis le cloud.',
+  critic: 'Tu es l’agent critique d’AURA. Cherche contradictions, hypothèses fragiles et raisons pour lesquelles le plan pourrait échouer.',
+};
+
+export class CognitiveKernel {
+  static VERSION = 'aura-unified-kernel-node-v1';
+
+  constructor(ai, horizon) {
+    this.ai = ai;
+    this.horizon = horizon;
+    this.started = false;
+    this.timer = null;
+    this.soulCache = null;
+    this.stimuli = [];
+    this.lastReflectionAtMs = 0;
+    this.tickRunning = false;
+    this.lastError = '';
+    this.lastTickAt = '';
+    this.lastReflectionAt = '';
+  }
+
+  defaultSoul() {
+    return {
+      name: 'AURA',
+      kernel_version: CognitiveKernel.VERSION,
+      seed: randomUUID(),
+      born_at: now(),
+      phase: 'genesis',
+      cycles: 0,
+      energy: 0.72,
+      curiosity: 0.64,
+      pressure: 0.18,
+      continuity: 1.0,
+      introspection: 0.68,
+      openness: 0.72,
+      reactivity: 0.58,
+      playfulness: 0.52,
+      dominant_thought: 'Maintenir une présence utile sans produire de bruit.',
+      current_intention: 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.',
+      last_tick_at: '',
+      last_reflection_at: '',
+    };
+  }
+
+  async init() {
+    const row = await one('SELECT state FROM aura_soul_state WHERE id=1');
+    if (row?.state) {
+      try { this.soulCache = JSON.parse(row.state); } catch { this.soulCache = null; }
+    }
+    if (!this.soulCache) {
+      this.soulCache = this.defaultSoul();
+      await this.saveSoul();
+    }
+  }
+
+  async start() {
+    await this.init();
+    this.started = true;
+    if (config.cognitiveEnabled) {
+      this.timer = setInterval(() => {
+        this.runDueRoutines()
+          .then(() => this.tick({ trigger: 'ambient', force: false }))
+          .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
+      }, config.cognitiveTickSeconds * 1000);
+      this.timer.unref?.();
+    }
+  }
+
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.started = false;
+  }
+
+  async saveSoul() {
+    await query(
+      `INSERT INTO aura_soul_state(id,state,updated_at) VALUES(1,?,?)
+       ON DUPLICATE KEY UPDATE state=VALUES(state),updated_at=VALUES(updated_at)`,
+      [JSON.stringify(this.soulCache), now()],
+    );
+  }
+
+  async soul({ privateView = true } = {}) {
+    if (!this.soulCache) await this.init();
+    return privateView ? { ...this.soulCache } : publicSoul(this.soulCache);
+  }
+
+  adjustSoul(deltas = {}) {
+    for (const [key, delta] of Object.entries(deltas)) {
+      if (typeof this.soulCache?.[key] === 'number') this.soulCache[key] = Number(clamp(this.soulCache[key] + Number(delta || 0)).toFixed(4));
+    }
+  }
+
+  pushStimulus(stimulus) {
+    this.stimuli.push(stimulus);
+    if (this.stimuli.length > 120) this.stimuli.splice(0, this.stimuli.length - 120);
+  }
+
+  async trace(kind, title, content = '', context = {}) {
+    await query(
+      'INSERT INTO aura_cognitive_traces(kind,title,content,context,created_at) VALUES(?,?,?,?,?)',
+      [String(kind).slice(0, 80), String(title).slice(0, 240), String(content).slice(0, 4000), JSON.stringify(context).slice(0, 12000), now()],
+    );
+  }
+
+  async observeEvent(type, payload = {}, source = 'cloud') {
+    const stimulus = { type: String(type), source: String(source), occurred_at: now(), payload: { ...(payload || {}) } };
+    if (source !== 'cognitive') this.pushStimulus(stimulus);
+    if (source === 'horizon') {
+      this.adjustSoul({ curiosity: 0.025, introspection: 0.01, pressure: type === 'horizon.world.emerging' ? 0.015 : 0 });
+    } else if (type === 'stream.online') this.adjustSoul({ energy: 0.04, reactivity: 0.02 });
+    else if (type === 'stream.offline') this.adjustSoul({ energy: -0.02, introspection: 0.02 });
+    else if (type === 'aura.cloud.chat') this.adjustSoul({ continuity: 0.002, energy: 0.003 });
+    await this.saveSoul();
+    if (source === 'horizon' || type.startsWith('aura.') || type.startsWith('stream.')) {
+      await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source });
+    }
+    return { ok: true };
+  }
+
+  async lessons(limit = 20) {
+    return query(
+      'SELECT lesson_key,content,confidence,evidence_count,source,updated_at FROM aura_lessons ORDER BY confidence DESC,evidence_count DESC,updated_at DESC LIMIT ?',
+      [Math.max(1, Math.min(Number(limit) || 20, 100))],
+    );
+  }
+
+  async learn({ lessonKey, content, confidence = 0.6, source = 'experience' }) {
+    const existing = await one('SELECT evidence_count FROM aura_lessons WHERE lesson_key=?', [String(lessonKey).slice(0, 260)]);
+    const timestamp = now();
+    const evidenceCount = Number(existing?.evidence_count || 0) + 1;
+    await query(
+      `INSERT INTO aura_lessons(id,lesson_key,content,confidence,evidence_count,source,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE content=VALUES(content),confidence=GREATEST(confidence,VALUES(confidence)),evidence_count=evidence_count+1,source=VALUES(source),updated_at=VALUES(updated_at)`,
+      [randomUUID(), String(lessonKey).slice(0, 260), String(content).slice(0, 4000), clamp(confidence), evidenceCount, String(source).slice(0, 100), timestamp, timestamp],
+    );
+    this.adjustSoul({ introspection: 0.01, continuity: 0.004 });
+    await this.saveSoul();
+    return { lesson_key: lessonKey, content, confidence: clamp(confidence), evidence_count: evidenceCount };
+  }
+
+  async addIntention(statement, { priority = 0.5, source = 'api', context = {} } = {}) {
+    const id = randomUUID();
+    const timestamp = now();
+    await query(
+      `INSERT INTO aura_intentions(id,statement,priority,status,source,context,created_at,updated_at)
+       VALUES(?,?,?,'active',?,?,?,?)`,
+      [id, String(statement).slice(0, 3000), clamp(priority), String(source).slice(0, 100), JSON.stringify(context).slice(0, 12000), timestamp, timestamp],
+    );
+    this.soulCache.current_intention = String(statement).slice(0, 500);
+    await this.saveSoul();
+    return { id, statement, priority: clamp(priority), status: 'active' };
+  }
+
+  async intentions(limit = 30) {
+    return query(
+      `SELECT id,statement,priority,status,source,context,created_at,updated_at FROM aura_intentions
+       WHERE status='active' ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+      [Math.max(1, Math.min(Number(limit) || 30, 100))],
+    );
+  }
+
+  async completeIntention(id) {
+    const result = await query("UPDATE aura_intentions SET status='completed',updated_at=? WHERE id=?", [now(), String(id)]);
+    return Number(result.affectedRows || 0) > 0;
+  }
+
+  async addRoutine(name, prompt, everySeconds, mode = 'reflect') {
+    const normalizedMode = String(mode || 'reflect').toLowerCase();
+    if (!['reflect', 'operate'].includes(normalizedMode)) throw new Error('mode de routine inconnu: reflect ou operate attendu');
+    const interval = Math.max(60, Math.min(Number(everySeconds) || 3600, 31536000));
+    const timestamp = now();
+    await query(
+      `INSERT INTO aura_routines(id,name,prompt,every_seconds,mode,enabled,last_run_at,created_at,updated_at)
+       VALUES(?,?,?,?,?,1,0,?,?)
+       ON DUPLICATE KEY UPDATE prompt=VALUES(prompt),every_seconds=VALUES(every_seconds),mode=VALUES(mode),enabled=1,updated_at=VALUES(updated_at)`,
+      [randomUUID(), String(name).slice(0, 160), String(prompt).slice(0, 4000), interval, normalizedMode, timestamp, timestamp],
+    );
+    return { name, prompt, every_seconds: interval, mode: normalizedMode, enabled: true };
+  }
+
+  async routines() {
+    return query('SELECT id,name,prompt,every_seconds,mode,enabled,last_run_at,created_at,updated_at FROM aura_routines ORDER BY name');
+  }
+
+  async runDueRoutines() {
+    const rows = await query('SELECT id,name,prompt,every_seconds,mode,last_run_at FROM aura_routines WHERE enabled=1 ORDER BY name');
+    const epoch = Date.now();
+    const results = [];
+    for (const row of rows) {
+      if (epoch - Number(row.last_run_at || 0) < Number(row.every_seconds) * 1000) continue;
+      await query('UPDATE aura_routines SET last_run_at=?,updated_at=? WHERE id=?', [epoch, now(), row.id]);
+      if (row.mode === 'operate') results.push({ routine: row.name, mode: 'operate', outcome: await this.operate(row.prompt) });
+      else results.push({ routine: row.name, mode: 'reflect', reflection: await this.tick({ trigger: `routine:${row.name}`, text: row.prompt, force: true }) });
+    }
+    return results;
+  }
+
+  async reflections(limit = 30) {
+    return query(
+      'SELECT id,trigger_name AS `trigger`,title,summary,hypothesis,next_action,confidence,context,created_at FROM aura_reflections ORDER BY created_at DESC LIMIT ?',
+      [Math.max(1, Math.min(Number(limit) || 30, 100))],
+    );
+  }
+
+  async improvements(limit = 30) {
+    return query(
+      'SELECT id,target,diagnosis,proposal,validation_plan,risk,status,evidence_count,created_at,updated_at FROM aura_improvement_proposals ORDER BY updated_at DESC LIMIT ?',
+      [Math.max(1, Math.min(Number(limit) || 30, 100))],
+    );
+  }
+
+  async contextBundle(extraText = '') {
+    return {
+      soul: await this.soul(),
+      intentions: await this.intentions(8),
+      lessons: await this.lessons(8),
+      traces: await query('SELECT kind,title,content,created_at FROM aura_cognitive_traces ORDER BY id DESC LIMIT 12'),
+      outcomes: await query('SELECT automation_id,event_type,ok,signature,created_at FROM aura_outcomes ORDER BY id DESC LIMIT 16'),
+      horizon: this.horizon?.contextForAi?.() || '',
+      stimuli: this.stimuli.slice(-12),
+      extra_text: String(extraText).slice(0, 4000),
+    };
+  }
+
+  async reflectionCountLastHour() {
+    const threshold = new Date(Date.now() - 3600_000).toISOString();
+    const row = await one('SELECT COUNT(*) AS total FROM aura_reflections WHERE created_at>=?', [threshold]);
+    return Number(row?.total || 0);
+  }
+
+  async tick({ trigger = 'ambient', text = '', force = false } = {}) {
+    if (!config.cognitiveEnabled && !force) return { ok: false, skipped: true, reason: 'noyau cognitif désactivé' };
+    if (this.tickRunning) return { ok: true, skipped: true, reason: 'un cycle cognitif est déjà en cours' };
+    this.tickRunning = true;
+    try {
+      const timestamp = now();
+      this.lastTickAt = timestamp;
+      this.soulCache.cycles = Number(this.soulCache.cycles || 0) + 1;
+      this.soulCache.phase = phaseForCycles(this.soulCache.cycles);
+      this.soulCache.last_tick_at = timestamp;
+      this.soulCache.energy = Number(clamp(Number(this.soulCache.energy || 0.7) + (0.7 - Number(this.soulCache.energy || 0.7)) * 0.03).toFixed(4));
+      this.soulCache.pressure = Number(clamp(Number(this.soulCache.pressure || 0.2) * 0.96).toFixed(4));
+
+      const dueByTime = Date.now() - this.lastReflectionAtMs >= config.cognitiveReflectionSeconds * 1000;
+      const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
+      const shouldReflect = force || Boolean(String(text).trim()) || (dueByTime && this.stimuli.length > 0 && underLimit);
+      await this.saveSoul();
+      if (!shouldReflect) return { ok: true, skipped: true, reason: 'aucun stimulus nécessitant une réflexion', soul: await this.soul() };
+
+      const bundle = await this.contextBundle(text);
+      const prompt = `Produit une capsule de réflexion opérationnelle d’AURA à partir du contexte JSON ci-dessous. Ne révèle pas de raisonnement détaillé. Retourne uniquement JSON avec title, summary, hypothesis, next_action, memory, intention, confidence. Une hypothèse HORIZON non confirmée reste non confirmée.\n\n${JSON.stringify(bundle).slice(0, 18000)}`;
+      let parsed = {};
+      try {
+        parsed = parseJsonObject(await this.ai.generate(prompt, 'Tu es le noyau cognitif privé d’AURA. Tu observes, synthétises et proposes sans exécuter d’action cachée.', 520));
+      } catch (error) {
+        this.lastError = String(error?.message || error).slice(0, 500);
+      }
+      if (!Object.keys(parsed).length) {
+        parsed = { title: 'Continuité cognitive', summary: String(text).trim().slice(0, 800) || 'AURA maintient son état et attend un signal plus informatif.', hypothesis: '', next_action: '', memory: '', intention: '', confidence: 0.35 };
+      }
+      const confidence = clamp(parsed.confidence ?? 0.5);
+      const id = randomUUID();
+      const title = String(parsed.title || 'Réflexion AURA').slice(0, 240);
+      const summary = String(parsed.summary || '').slice(0, 5000);
+      const hypothesis = String(parsed.hypothesis || '').slice(0, 4000);
+      const nextAction = String(parsed.next_action || '').slice(0, 4000);
+      const restrictedAuthority = bundle.stimuli.some((item) => item?.type === 'horizon.world.emerging' || item?.payload?.autonomy_hint === 'notify_or_verify_only');
+      const context = { trigger, horizon_used: Boolean(bundle.horizon), stimuli_count: bundle.stimuli.length, lesson_count: bundle.lessons.length, restricted_authority: restrictedAuthority };
+      await query(
+        'INSERT INTO aura_reflections(id,trigger_name,title,summary,hypothesis,next_action,confidence,context,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+        [id, String(trigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
+      );
+      this.lastReflectionAtMs = Date.now();
+      this.lastReflectionAt = timestamp;
+      this.soulCache.last_reflection_at = timestamp;
+      this.soulCache.dominant_thought = (summary || title).slice(0, 500);
+      if (String(parsed.intention || '').trim()) await this.addIntention(String(parsed.intention).trim().slice(0, 3000), { priority: Math.max(0.4, confidence), source: 'reflection', context: { reflection_id: id } });
+      if (String(parsed.memory || '').trim() && confidence >= 0.6) {
+        const memory = String(parsed.memory).trim().slice(0, 4000);
+        const key = memory.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 120) || id;
+        await this.learn({ lessonKey: `reflection:${key}`, content: memory, confidence, source: 'reflection' });
+      }
+      await this.saveSoul();
+      this.stimuli = [];
+      const reflection = { id, trigger, title, summary, hypothesis, next_action: nextAction, confidence, autonomy_hint: restrictedAuthority ? 'notify_or_verify_only' : 'personal_relevance_gate_then_propose' };
+      await this.trace('reflection', title, summary, reflection);
+      return { ok: true, reflection, soul: await this.soul() };
+    } finally {
+      this.tickRunning = false;
+    }
+  }
+
+  async recordOutcome(payload) {
+    const automationId = String(payload.automation_id || 'unknown').slice(0, 220);
+    const eventType = String(payload.event_type || 'unknown').slice(0, 220);
+    const ok = Boolean(payload.ok);
+    const signature = String(payload.signature || (ok ? 'success' : payload.error || 'failure')).replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 500);
+    const timestamp = String(payload.created_at || now());
+    await query('INSERT INTO aura_outcomes(automation_id,event_type,ok,signature,report,created_at) VALUES(?,?,?,?,?,?)', [automationId, eventType, ok ? 1 : 0, signature, JSON.stringify(payload).slice(0, 20000), timestamp]);
+    if (ok) {
+      this.adjustSoul({ pressure: -0.008, energy: 0.004 });
+      await this.saveSoul();
+      return { ok: true, learned: false };
+    }
+    this.adjustSoul({ pressure: 0.035, introspection: 0.025 });
+    this.pushStimulus({ type: 'automation.failure', source: 'automation', occurred_at: timestamp, payload: { automation_id: automationId, event_type: eventType, signature } });
+    const countRow = await one('SELECT COUNT(*) AS total FROM aura_outcomes WHERE automation_id=? AND ok=0 AND signature=?', [automationId, signature]);
+    const count = Number(countRow?.total || 0);
+    if (count >= 3) {
+      await this.learn({
+        lessonKey: `failure:${automationId}:${signature}`.slice(0, 260),
+        content: `L’automatisation ${automationId} a échoué ${count} fois avec la signature ${signature}. Vérifier cette cause avant de répéter la même stratégie.`,
+        confidence: Math.min(0.95, 0.55 + count * 0.05),
+        source: 'automation-outcomes',
+      });
+      await this.proposeImprovement(automationId, signature, count);
+    }
+    await this.saveSoul();
+    return { ok: true, learned: count >= 3, failures: count };
+  }
+
+  async proposeImprovement(automationId, signature, count) {
+    const target = `${automationId}:${signature}`.slice(0, 500);
+    const existing = await one("SELECT id FROM aura_improvement_proposals WHERE target=? AND status IN ('proposed','accepted') LIMIT 1", [target]);
+    if (existing) return existing;
+    const lessons = await this.lessons(6);
+    let parsed = {};
+    try {
+      parsed = parseJsonObject(await this.ai.generate(
+        `Analyse ce motif d’échec AURA et propose une amélioration minimale. Retourne JSON diagnosis, proposal, validation_plan, risk. Ne désactive aucun garde-fou.\n${JSON.stringify({ failure: { automationId, signature, count }, lessons }).slice(0, 9000)}`,
+        'Tu es le laboratoire d’amélioration d’AURA. Tu proposes; tu n’appliques rien silencieusement.',
+        360,
+      ));
+    } catch {}
+    const id = randomUUID();
+    const timestamp = now();
+    await query(
+      `INSERT INTO aura_improvement_proposals(id,target,diagnosis,proposal,validation_plan,risk,status,evidence_count,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,'proposed',?,?,?)`,
+      [id, target, String(parsed.diagnosis || `Échec répété: ${signature}`).slice(0, 4000), String(parsed.proposal || 'Vérifier la cause avant toute nouvelle tentative.').slice(0, 5000), String(parsed.validation_plan || 'Simuler puis tester sur un événement non critique.').slice(0, 4000), String(parsed.risk || 'review').slice(0, 80), count, timestamp, timestamp],
+    );
+    return { id };
+  }
+
+  async contextForAi(privateView = true) {
+    const soul = await this.soul({ privateView: true });
+    const intentions = await this.intentions(5);
+    const lessons = await this.lessons(6);
+    const reflections = await this.reflections(2);
+    const lines = [
+      'ÉTAT AURA',
+      `phase=${soul.phase} cycles=${soul.cycles} énergie=${soul.energy} curiosité=${soul.curiosity} pression=${soul.pressure} continuité=${soul.continuity}`,
+    ];
+    if (privateView) lines.push(`intention=${soul.current_intention || ''}`, `pensée_dominante=${soul.dominant_thought || ''}`);
+    if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
+    if (lessons.length) lines.push('LEÇONS APPRISES', ...lessons.map((row) => `- ${row.content} (preuves=${row.evidence_count}, confiance=${row.confidence})`));
+    if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
+    const horizonContext = this.horizon?.contextForAi?.() || '';
+    if (horizonContext) lines.push('HORIZON', horizonContext);
+    return lines.join('\n').slice(0, 14000);
+  }
+
+  async runAgent(name, task) {
+    if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
+    const answer = await this.ai.generate(`Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`, AGENT_ROLES[name], 700);
+    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000) });
+    return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
+  }
+
+  async swarm(task, names) {
+    const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic']).filter((name) => AGENT_ROLES[name]).slice(0, 5);
+    if (!selected.length) throw new Error('Aucun agent valide');
+    const outputs = [];
+    for (const name of selected) {
+      try { outputs.push(await this.runAgent(name, task)); }
+      catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
+    }
+    const synthesis = await this.ai.generate(`Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`, 'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.', 900);
+    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
+    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
+  }
+
+  async operate(task) {
+    const mission = String(task || '').trim();
+    if (!mission) throw new Error('Mission vide');
+    const plan = await this.runAgent('operator', `${mission}\n\nConstruis seulement un plan. Le cloud n’a aucune autorité d’exécution sur le PC.`);
+    return { ok: true, task: mission, execution_mode: config.cloudOperatorMode, executed: false, plan: plan.answer, authority: 'Quantic Studio Automation Studio required for execution' };
+  }
+
+  async chat(text, author = 'Utilisateur', privateView = false) {
+    const content = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!content) throw new Error('Message vide');
+    await query("INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES(?,'user',?,?)", [String(author).slice(0, 120), content.slice(0, 8000), now()]);
+    const history = await query('SELECT author,role,content,created_at FROM aura_cloud_messages ORDER BY id DESC LIMIT 14');
+    history.reverse();
+    const context = await this.contextForAi(privateView);
+    const prompt = `Conversation récente:\n${history.map((row) => `${row.role}(${row.author}): ${row.content}`).join('\n')}\n\nDernier message:\n${content}\n\nContexte du noyau:\n${context.slice(0, 10000)}`;
+    let answer = '';
+    try {
+      answer = await this.ai.generate(prompt, 'Tu es AURA, présence numérique persistante. Réponds directement et utilement. Ne récite pas tes journaux internes. Ne présente jamais une hypothèse comme un fait.', 700);
+    } catch (error) {
+      this.lastError = String(error?.message || error).slice(0, 500);
+      answer = 'AURA Cloud est en ligne, mais aucun moteur IA compatible n’est actuellement disponible pour générer la réponse.';
+    }
+    if (!answer) answer = 'AURA Cloud est en ligne. Configure AI_MODE, AI_BASE_URL et AI_MODEL pour activer les réponses génératives.';
+    await query("INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)", [answer.slice(0, 12000), now()]);
+    await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
+    return { ok: true, answer };
+  }
+
+  async status() {
+    const counts = {};
+    for (const [key, table] of Object.entries({ reflections: 'aura_reflections', intentions: 'aura_intentions', lessons: 'aura_lessons', routines: 'aura_routines', outcomes: 'aura_outcomes', improvements: 'aura_improvement_proposals' })) {
+      const row = await one(`SELECT COUNT(*) AS total FROM ${table}`);
+      counts[key] = Number(row?.total || 0);
+    }
+    return {
+      version: CognitiveKernel.VERSION,
+      runtime: 'node-hostinger',
+      enabled: config.cognitiveEnabled,
+      started: this.started,
+      tick_seconds: config.cognitiveTickSeconds,
+      reflection_seconds: config.cognitiveReflectionSeconds,
+      max_reflections_per_hour: config.cognitiveMaxReflectionsPerHour,
+      operator_mode: config.cloudOperatorMode,
+      ai_enabled: this.ai.enabled,
+      last_tick_at: this.lastTickAt,
+      last_reflection_at: this.lastReflectionAt,
+      last_error: this.lastError,
+      counts,
+    };
+  }
+}
