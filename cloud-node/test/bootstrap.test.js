@@ -23,6 +23,9 @@ test('Hostinger runtime stays online without MySQL and renders dashboard', async
     env: {
       ...process.env,
       NODE_ENV: 'production',
+      // Simule une variable HOST potentiellement injectée par l'hébergeur.
+      // AURA doit l'ignorer et écouter sur 0.0.0.0.
+      HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
       PORT: String(PORT),
       DB_HOST: '',
       DB_USER: '',
