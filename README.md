@@ -195,6 +195,31 @@ AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR=6
 AURA_CLOUD_TOKEN=<secret-long-et-aleatoire>
 ```
 
+## AURA Evolution — phase 1 active
+
+Sur un runtime lancé depuis un checkout source complet, AURA Evolution démarre désormais en **phase 1** : recherche, diagnostic, génération de candidat et validation dans un workspace isolé. Les PR et les merges automatiques restent désactivés par défaut.
+
+Le sas applique maintenant quatre niveaux avant toute promotion :
+
+- compilation + suite pytest sur la baseline ;
+- canary d'import ciblé sur les modules modifiés ;
+- compilation + suite pytest sur le candidat ;
+- garde de régression temporelle pour refuser une modification qui ralentit fortement la suite ;
+- vérification que les fichiers GitHub distants n'ont pas changé depuis la création du candidat.
+
+Un candidat rejeté n'écrit jamais dans le runtime actif. Un binaire Windows frozen n'active pas automatiquement Evolution, car il ne constitue pas à lui seul un workspace source/test complet.
+
+Configuration :
+
+```env
+AURA_EVOLUTION_ENABLED=true
+AURA_EVOLUTION_AUTO_SUBMIT=false
+AURA_EVOLUTION_AUTO_MERGE=false
+AURA_EVOLUTION_CANARY_TIMEOUT_SECONDS=90
+AURA_EVOLUTION_MAX_TEST_REGRESSION_RATIO=1.75
+AURA_EVOLUTION_MAX_TEST_REGRESSION_SECONDS=5
+```
+
 Endpoints principaux :
 
 ```text

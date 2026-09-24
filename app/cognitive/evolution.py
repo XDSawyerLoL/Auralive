@@ -192,6 +192,22 @@ class EvolutionLab:
         )
         return {item.strip() for item in raw.split(",") if item.strip()}
 
+    @property
+    def canary_timeout_seconds(self) -> int:
+        return max(15, min(int(getattr(self.settings, "evolution_canary_timeout_seconds", 90)), 300))
+
+    @property
+    def max_test_regression_ratio(self) -> float:
+        try:
+            value = float(getattr(self.settings, "evolution_max_test_regression_ratio", 1.75))
+        except (TypeError, ValueError):
+            value = 1.75
+        return max(1.0, min(value, 5.0))
+
+    @property
+    def max_test_regression_seconds(self) -> int:
+        return max(0, min(int(getattr(self.settings, "evolution_max_test_regression_seconds", 5)), 120))
+
     async def initialize(self) -> None:
         self.workspaces.mkdir(parents=True, exist_ok=True)
         self.artifacts.mkdir(parents=True, exist_ok=True)
@@ -813,6 +829,52 @@ socket.create_connection = _guard_create
             "duration_ms": round((time.monotonic() - started) * 1000, 2),
         }
 
+    @staticmethod
+    def _module_name_for_path(rel: str) -> str | None:
+        normalized = str(rel or "").replace("\\", "/")
+        if not normalized.startswith("app/") or not normalized.endswith(".py"):
+            return None
+        module = normalized[:-3].replace("/", ".")
+        if module.endswith(".__init__"):
+            module = module[: -len(".__init__")]
+        return module or None
+
+    def _canary_command(self, changed_paths: list[str]) -> list[str]:
+        modules = [
+            module
+            for module in (self._module_name_for_path(path) for path in changed_paths)
+            if module
+        ]
+        modules = sorted(dict.fromkeys(modules))
+        script = (
+            "import importlib,json;"
+            f"mods=json.loads({json.dumps(json.dumps(modules))});"
+            "[importlib.import_module(m) for m in mods];"
+            "import app.config,app.database,app.automation.engine;"
+            "print('AURA_EVOLUTION_CANARY_OK')"
+        )
+        return [sys.executable, "-c", script]
+
+    def _performance_gate(
+        self,
+        baseline_tests: dict[str, Any],
+        candidate_tests: dict[str, Any],
+    ) -> dict[str, Any]:
+        baseline_ms = float(baseline_tests.get("duration_ms") or 0.0)
+        candidate_ms = float(candidate_tests.get("duration_ms") or 0.0)
+        allowed_ms = (
+            baseline_ms * self.max_test_regression_ratio
+            + self.max_test_regression_seconds * 1000
+        )
+        return {
+            "ok": candidate_ms <= allowed_ms,
+            "baseline_ms": round(baseline_ms, 2),
+            "candidate_ms": round(candidate_ms, 2),
+            "allowed_ms": round(allowed_ms, 2),
+            "ratio_limit": self.max_test_regression_ratio,
+            "slack_seconds": self.max_test_regression_seconds,
+        }
+
     async def validate_candidate(self, candidate: dict[str, Any]) -> dict[str, Any]:
         return await asyncio.to_thread(self._validate_candidate_sync, candidate)
 
@@ -839,6 +901,11 @@ socket.create_connection = _guard_create
             [sys.executable, "-m", "compileall", "-q", "app", "tests"],
             timeout=120,
         )
+        baseline_canary = self._run_validation_command(
+            self.source_root,
+            self._canary_command(changed_paths),
+            timeout=self.canary_timeout_seconds,
+        )
         baseline_tests = self._run_validation_command(
             self.source_root,
             [sys.executable, "-m", "pytest", "-q"],
@@ -849,29 +916,43 @@ socket.create_connection = _guard_create
             [sys.executable, "-m", "compileall", "-q", "app", "tests"],
             timeout=120,
         )
+        candidate_canary = self._run_validation_command(
+            workspace,
+            self._canary_command(changed_paths),
+            timeout=self.canary_timeout_seconds,
+        )
         candidate_tests = self._run_validation_command(
             workspace,
             [sys.executable, "-m", "pytest", "-q"],
             timeout=900,
         )
+        performance = self._performance_gate(baseline_tests, candidate_tests)
         ok = all(
             item["ok"]
             for item in (
                 baseline_compile,
+                baseline_canary,
                 baseline_tests,
                 candidate_compile,
+                candidate_canary,
                 candidate_tests,
+                performance,
             )
         )
         return {
             "ok": ok,
-            "gate": "local-sandbox",
+            "gate": "local-sandbox+canary",
             "baseline_compile": baseline_compile,
+            "baseline_canary": baseline_canary,
             "baseline_tests": baseline_tests,
             "candidate_compile": candidate_compile,
+            "candidate_canary": candidate_canary,
             "candidate_tests": candidate_tests,
+            "performance": performance,
             "changed_paths": changed_paths,
             "external_network_blocked_during_tests": True,
+            "candidate_isolated_from_active_runtime": True,
+            "failed_candidate_policy": "discard-workspace-no-runtime-write",
             "validated_at": utcnow(),
         }
 
@@ -942,6 +1023,29 @@ socket.create_connection = _guard_create
         if not base_sha:
             raise RuntimeError("SHA de base GitHub introuvable")
 
+        # Vérifie AVANT de créer une branche que le candidat repose toujours sur
+        # les mêmes fichiers que lors de sa génération. Cela évite même de laisser
+        # une branche orpheline si un humain a modifié la cible entre-temps.
+        checked_paths: set[str] = set()
+        for edit in candidate.get("edits", []):
+            rel = str(edit["path"])
+            if rel in checked_paths:
+                continue
+            checked_paths.add(rel)
+            current_base = self._github_request(
+                "GET",
+                f"/repos/{repo}/contents/{urllib.parse.quote(rel, safe='/')}?ref={urllib.parse.quote(base, safe='')}",
+            )
+            encoded_base = str(current_base.get("content") or "").replace("\n", "")
+            if str(current_base.get("encoding") or "").casefold() == "base64" and encoded_base:
+                base_source = base64.b64decode(encoded_base).decode("utf-8")
+                base_sha256 = hashlib.sha256(base_source.encode("utf-8")).hexdigest()
+                expected_before = str(edit.get("before_sha256") or "")
+                if expected_before and base_sha256 != expected_before:
+                    raise EvolutionPolicyError(
+                        f"{rel}: source distante modifiée depuis la création du candidat"
+                    )
+
         branch = _SAFE_BRANCH.sub(
             "-",
             f"aura-evolution/{datetime.now(timezone.utc).strftime('%Y%m%d')}-{cycle_id[:8]}",
@@ -966,6 +1070,15 @@ socket.create_connection = _guard_create
             blob_sha = str(current.get("sha") or "")
             if not blob_sha:
                 raise RuntimeError(f"Blob GitHub introuvable: {rel}")
+            encoded_current = str(current.get("content") or "").replace("\n", "")
+            if str(current.get("encoding") or "").casefold() == "base64" and encoded_current:
+                remote_source = base64.b64decode(encoded_current).decode("utf-8")
+                remote_sha256 = hashlib.sha256(remote_source.encode("utf-8")).hexdigest()
+                expected_before = str(edit.get("before_sha256") or "")
+                if expected_before and remote_sha256 != expected_before:
+                    raise EvolutionPolicyError(
+                        f"{rel}: source distante modifiée depuis la création du candidat"
+                    )
             result = self._github_request(
                 "PUT",
                 f"/repos/{repo}/contents/{urllib.parse.quote(rel, safe='/')}",
@@ -993,7 +1106,7 @@ socket.create_connection = _guard_create
                 "body": (
                     "Candidat généré par le sas AURA Evolution.\n\n"
                     f"Cycle: {cycle_id}\n"
-                    "Gates locaux: compileall + suite pytest complète sur baseline et candidat.\n"
+                    "Gates locaux: compileall + canary d'import + suite pytest complète + garde de régression sur baseline et candidat.\n"
                     "Aucun fichier de politique/sécurité protégé n'est auto-promouvable.\n"
                     "La CI GitHub constitue le second sas avant toute fusion."
                 ),
@@ -1267,6 +1380,13 @@ socket.create_connection = _guard_create
             "interval_seconds": self.interval_seconds,
             "source_mode": "frozen" if IS_FROZEN else "source",
             "source_root": str(self.source_root),
+            "phase": (
+                "phase-3-auto-merge"
+                if self.auto_merge
+                else "phase-2-auto-submit"
+                if self.auto_submit
+                else "phase-1-research-sandbox"
+            ),
             "auto_submit": self.auto_submit,
             "auto_merge": self.auto_merge,
             "github_configured": bool(self.github_token),
@@ -1286,8 +1406,10 @@ socket.create_connection = _guard_create
                 "exact anchored patch",
                 "protected-path policy",
                 "sensitive-primitive scan",
-                "baseline compile + pytest",
-                "candidate compile + pytest",
+                "baseline compile + canary + pytest",
+                "candidate compile + canary + pytest",
+                "test-duration regression gate",
+                "remote source freshness check",
                 "GitHub PR",
                 "remote CI",
                 "merge only after all checks succeed",
