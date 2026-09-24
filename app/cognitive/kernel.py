@@ -345,7 +345,13 @@ class CognitiveKernel:
         current = self.organism.migrate(self._soul_cache)
         current_at = str(current.get("updated_at") or "")
         candidate_at = str(candidate.get("updated_at") or "")
-        if current_at and candidate_at and candidate_at <= current_at:
+        try:
+            current_dt = datetime.fromisoformat(current_at.replace("Z", "+00:00")) if current_at else None
+            candidate_dt = datetime.fromisoformat(candidate_at.replace("Z", "+00:00")) if candidate_at else None
+        except ValueError:
+            current_dt = None
+            candidate_dt = None
+        if current_dt is not None and candidate_dt is not None and candidate_dt <= current_dt:
             return False
         self._soul_cache["organism"] = self.organism.migrate({"organism": candidate})
         self._sync_legacy_from_organism()
