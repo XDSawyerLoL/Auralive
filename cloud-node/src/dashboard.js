@@ -111,6 +111,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 @keyframes auraVignette{0%,100%{opacity:.72;transform:scale(.98) rotate(-1deg)}50%{opacity:1;transform:scale(1.055) rotate(1deg)}}
 @keyframes energyFlow{from{stroke-dashoffset:0}to{stroke-dashoffset:-170}}
 @keyframes webDrift{from{stroke-dashoffset:0}to{stroke-dashoffset:-90}}
+@keyframes auraSpeakingLight{0%,100%{opacity:.72;filter:saturate(1.2) brightness(1)}35%{opacity:1;filter:saturate(1.8) brightness(1.35)}65%{opacity:.86;filter:saturate(1.5) brightness(1.18)}}
+body.aura-speaking .aurora-vignette{animation:auraSpeakingLight .58s ease-in-out infinite}
+body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 22px rgba(177,128,255,.85)) drop-shadow(0 0 42px rgba(78,222,255,.34))}
+body.aura-speaking .energy-pulse{animation-duration:1.6s}
 @media(prefers-reduced-motion:reduce){.aurora-vignette,.energy-pulse,.web-link{animation:none!important}}
 .map-toolbar{display:flex;gap:6px}.map-toolbar button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b8c1d5;border-radius:999px;padding:6px 9px;font-size:9px}
 .legend{position:absolute;right:14px;bottom:13px;background:rgba(7,10,18,.78);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:8px;color:#aab5ca;backdrop-filter:blur(12px);display:grid;gap:5px}.legend-row{display:flex;align-items:center;gap:7px}.legend-line{width:22px;height:2px;border-radius:4px;background:linear-gradient(90deg,var(--violet),#fff)}.legend-line.rise{background:linear-gradient(90deg,var(--cyan),#fff)}.legend-line.stable{background:rgba(255,255,255,.3)}
@@ -633,6 +637,28 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
+async function speakAura(text){
+  if(!token||!text)return;
+  try{
+    const out=await api('/api/voice/speak',{
+      method:'POST',
+      body:JSON.stringify({text:text,context:'aura-cloud-chat',rate:1,pitch:1,volume:1})
+    });
+    if(!out||!out.audio_base64)return;
+    const raw=atob(out.audio_base64);
+    const bytes=new Uint8Array(raw.length);
+    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    const blob=new Blob([bytes],{type:out.mime_type||'audio/wav'});
+    const url=URL.createObjectURL(blob);
+    const audio=new Audio(url);
+    audio.onplay=function(){document.body.classList.add('aura-speaking');};
+    const stop=function(){document.body.classList.remove('aura-speaking');URL.revokeObjectURL(url);};
+    audio.onended=stop;audio.onerror=stop;
+    await audio.play();
+  }catch(error){
+    console.debug('Voix AURA locale indisponible',error);
+  }
+}
 async function sendMessage(text){
   text=(text||'').trim();if(!text)return;
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
@@ -642,6 +668,7 @@ async function sendMessage(text){
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
+    speakAura(out.answer||'');
     refresh();
   }catch(error){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
