@@ -691,7 +691,7 @@ class CognitiveKernel:
                 outcome = await self.operate(
                     str(row["prompt"]),
                     max_steps=3,
-                    requested_risks={"safe", "ai"},
+                    requested_risks=self.operator_allowed_risks,
                     source=f"routine:{row['name']}",
                 )
                 results.append({"routine": row["name"], "mode": "operate", "outcome": outcome})
