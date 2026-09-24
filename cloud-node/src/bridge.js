@@ -1,9 +1,24 @@
 import { randomUUID } from 'node:crypto';
-import { config } from './config.js';
 import { one, query } from './db.js';
 
 const nowIso = () => new Date().toISOString();
 const nowMs = () => Date.now();
+
+const intEnv = (name, fallback, min, max) => {
+  const parsed = Number.parseInt(process.env[name] || '', 10);
+  const value = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.max(min, Math.min(max, value));
+};
+const bridgeConfig = Object.freeze({
+  token: String(process.env.AURA_BRIDGE_TOKEN || ''),
+  leaseSeconds: intEnv('AURA_BRIDGE_LEASE_SECONDS', 90, 15, 900),
+  workerOnlineMs: intEnv('AURA_BRIDGE_WORKER_ONLINE_MS', 45000, 5000, 300000),
+  operatorWaitMs: intEnv('AURA_BRIDGE_OPERATOR_WAIT_MS', 15000, 1000, 55000),
+  inferenceTimeoutMs: intEnv('AURA_BRIDGE_INFERENCE_TIMEOUT_MS', 90000, 5000, 180000),
+  voiceTimeoutMs: intEnv('AURA_BRIDGE_VOICE_TIMEOUT_MS', 60000, 5000, 120000),
+  operatorMaxSteps: intEnv('AURA_BRIDGE_OPERATOR_MAX_STEPS', 6, 1, 8),
+  allowedRisks: new Set(String(process.env.AURA_CLOUD_OPERATOR_ALLOWED_RISKS || 'safe,ai').split(',').map((v) => v.trim()).filter(Boolean)),
+});
 
 function parseJson(value, fallback = {}) {
   if (!value) return fallback;
@@ -24,7 +39,7 @@ export class ExecutionBridge {
   }
 
   get enabled() {
-    return Boolean(config.bridgeToken);
+    return Boolean(bridgeConfig.token);
   }
 
   async enqueue(kind, payload = {}, requestedRisks = []) {
@@ -72,7 +87,7 @@ export class ExecutionBridge {
     const worker = String(workerId || '').trim().slice(0, 160);
     if (!worker) throw new Error('worker_id requis');
 
-    const leaseUntil = nowMs() + config.bridgeLeaseSeconds * 1000;
+    const leaseUntil = nowMs() + bridgeConfig.leaseSeconds * 1000;
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const candidate = await one(
         `SELECT id FROM aura_execution_jobs
@@ -143,7 +158,7 @@ export class ExecutionBridge {
     return { ok: true, worker_id: worker, server_time: timestamp };
   }
 
-  async wait(id, timeoutMs = config.bridgeInferenceTimeoutMs) {
+  async wait(id, timeoutMs = bridgeConfig.inferenceTimeoutMs) {
     const deadline = nowMs() + Math.max(1000, Number(timeoutMs || 0));
     while (nowMs() < deadline) {
       const job = await this.getJob(id);
@@ -161,7 +176,7 @@ export class ExecutionBridge {
       system: String(system || '').slice(0, 20_000),
       max_tokens: Math.max(64, Math.min(Number(maxTokens) || 700, 8000)),
     }, ['ai']);
-    const result = await this.wait(job.id, config.bridgeInferenceTimeoutMs);
+    const result = await this.wait(job.id, bridgeConfig.inferenceTimeoutMs);
     const answer = String(result?.answer || '').trim();
     if (!answer) throw new Error('Le worker local n’a renvoyé aucune réponse IA');
     return answer;
@@ -170,11 +185,11 @@ export class ExecutionBridge {
   async operate(task, requestedRisks = []) {
     const job = await this.enqueue('operator', {
       task: String(task || '').slice(0, 12_000),
-      max_steps: config.bridgeOperatorMaxSteps,
+      max_steps: bridgeConfig.operatorMaxSteps,
     }, requestedRisks);
 
     try {
-      const result = await this.wait(job.id, config.bridgeOperatorWaitMs);
+      const result = await this.wait(job.id, bridgeConfig.operatorWaitMs);
       return { executed: true, job_id: job.id, result };
     } catch (error) {
       const latest = await this.getJob(job.id);
@@ -199,7 +214,7 @@ export class ExecutionBridge {
       volume: Number(options.volume || 1),
       context: String(options.context || 'aura-cloud').slice(0, 120),
     }, ['safe']);
-    return this.wait(job.id, config.bridgeVoiceTimeoutMs);
+    return this.wait(job.id, bridgeConfig.voiceTimeoutMs);
   }
 
   async evolve(objective) {
@@ -209,6 +224,8 @@ export class ExecutionBridge {
     }, ['ai', 'local-write', 'network', 'process']);
     return { ...job, delegated: true };
   }
+
+  get allowedRisks() { return new Set(bridgeConfig.allowedRisks); }
 
   async status() {
     const counts = await one(`SELECT
@@ -221,7 +238,7 @@ export class ExecutionBridge {
       `SELECT worker_id,capabilities,model,version,last_seen_at,last_seen_ms
        FROM aura_execution_workers ORDER BY last_seen_ms DESC LIMIT 1`,
     );
-    const workerOnline = Boolean(worker && nowMs() - Number(worker.last_seen_ms || 0) <= config.bridgeWorkerOnlineMs);
+    const workerOnline = Boolean(worker && nowMs() - Number(worker.last_seen_ms || 0) <= bridgeConfig.workerOnlineMs);
     return {
       version: ExecutionBridge.VERSION,
       enabled: this.enabled,
@@ -234,7 +251,7 @@ export class ExecutionBridge {
         version: worker.version || '',
         last_seen_at: worker.last_seen_at || '',
       } : null,
-      allowed_risks: [...config.cloudOperatorAllowedRisks],
+      allowed_risks: [...bridgeConfig.allowedRisks],
       counts: {
         queued: Number(counts?.queued || 0),
         leased: Number(counts?.leased || 0),
