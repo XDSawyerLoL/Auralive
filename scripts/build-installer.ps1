@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "2.7.4",
+    [string]$Version = "2.8.0",
     [string]$SourceDir = "dist\\QuanticStudio"
 )
 
