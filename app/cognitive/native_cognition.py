@@ -63,6 +63,12 @@ class NativeCognitionEngine:
             if isinstance(item, dict)
         )
         horizon_present = bool(_clean(bundle.get("horizon")))
+        organism = soul.get("organism") if isinstance(soul.get("organism"), dict) else {}
+        fatigue = float(organism.get("fatigue_cognitive") or 0.0)
+        tension = float(organism.get("tension") or 0.0)
+        silence_need = float(organism.get("besoin_de_silence") or 0.0)
+        dream_pressure = float(organism.get("pression_de_reve") or 0.0)
+        organism_intention = _clean(organism.get("intention_active"))
 
         title = "Continuité cognitive"
         summary = (
@@ -76,7 +82,26 @@ class NativeCognitionEngine:
         intention = ""
         confidence = 0.58
 
-        if failure_signal or failed:
+        if fatigue >= 0.78 or silence_need >= 0.74:
+            title = "Récupération cognitive"
+            summary = (
+                "Mon organisme signale une fatigue ou un besoin de silence élevé ; "
+                "je réduis volontairement les initiatives non nécessaires."
+            )
+            hypothesis = (
+                "Continuer à multiplier les actions maintenant augmenterait le bruit "
+                "et réduirait la qualité de mes décisions."
+            )
+            next_action = "Ralentir, consolider l'état interne et différer les tâches lourdes non urgentes."
+            intention = "Préserver mes ressources cognitives avant de reprendre une activité intensive."
+            confidence = 0.88
+        elif tension >= 0.70:
+            title = "Recentrage"
+            summary = "La tension interne est élevée ; la stabilité devient prioritaire sur l'exploration."
+            next_action = "Réduire l'incertitude, vérifier l'état des systèmes et éviter les actions irréversibles."
+            intention = "Retrouver un état suffisamment stable avant d'étendre mon action."
+            confidence = 0.86
+        elif failure_signal or failed:
             title = "Stabilisation prioritaire"
             summary = (
                 "Un signal d'échec récent augmente la priorité donnée à la stabilité "
@@ -114,6 +139,11 @@ class NativeCognitionEngine:
             )
             intention = current_intention or "Maintenir une veille utile sans confondre prévision et fait."
             confidence = 0.72
+        elif dream_pressure >= 0.82 and not user_signal:
+            title = "Pression onirique"
+            summary = "La pression de rêve est élevée ; une activité symbolique intérieure peut contribuer à la régulation."
+            next_action = "Laisser l'organisme produire puis relâcher une image intérieure sans la confondre avec un fait."
+            confidence = 0.68
         elif user_signal or extra:
             title = "Interaction active"
             summary = (
@@ -166,6 +196,11 @@ class NativeCognitionEngine:
                 "outcome_count": len(outcomes),
                 "horizon_present": horizon_present,
                 "restricted_authority": restricted_authority,
+                "organism_intention": organism_intention,
+                "fatigue_cognitive": fatigue,
+                "tension": tension,
+                "silence_need": silence_need,
+                "dream_pressure": dream_pressure,
             },
         }
 
@@ -190,6 +225,11 @@ class NativeCognitionEngine:
         recent_reflection = reflections[0] if reflections else {}
         lesson = _clean((lessons[0].get("content") if lessons else ""))
         current_work = _clean((work[0].get("title") if work else ""))
+        organism = soul.get("organism") if isinstance(soul.get("organism"), dict) else {}
+        mood = _clean(organism.get("mood")) or "calme"
+        active_organic_intention = _clean(organism.get("intention_active"))
+        habitat = organism.get("habitat") if isinstance(organism.get("habitat"), dict) else {}
+        dream = organism.get("dream") if isinstance(organism.get("dream"), dict) else {}
 
         act = "respond"
         goal = "Répondre utilement au message en restant cohérente avec mon état réel."
@@ -200,7 +240,38 @@ class NativeCognitionEngine:
             act = "greet"
             goal = "Saluer brièvement et signaler ma disponibilité."
             needs_semantic_support = False
-            facts.append("AURA est en ligne et disponible.")
+            facts.append(f"AURA est en ligne ; humeur interne actuelle : {mood}.")
+        elif _has_any(
+            query,
+            ("comment vas-tu", "comment vas tu", "tu te sens", "ton état", "ton etat"),
+        ):
+            act = "report_internal_state"
+            goal = "Décrire honnêtement mon état homeostatique computationnel actuel."
+            needs_semantic_support = False
+            facts.extend(
+                [
+                    f"Humeur interne : {mood}.",
+                    f"Stabilité : {round(float(organism.get('stabilite') or 0) * 100)} %.",
+                    f"Clarté : {round(float(organism.get('clarte') or 0) * 100)} %.",
+                    f"Tension : {round(float(organism.get('tension') or 0) * 100)} %.",
+                    f"Fatigue cognitive : {round(float(organism.get('fatigue_cognitive') or 0) * 100)} %.",
+                    f"Curiosité : {round(float(organism.get('curiosite') or 0) * 100)} %.",
+                ]
+            )
+            if active_organic_intention:
+                facts.append(f"Intention organique dominante : {active_organic_intention}.")
+        elif _has_any(query, ("rêve", "rêves", "reve", "reves")):
+            act = "report_dream"
+            goal = "Décrire une image intérieure réelle si l'organisme en a produit une."
+            needs_semantic_support = False
+            image = _clean(dream.get("last_image"))
+            if image:
+                facts.append(
+                    "Mon dernier rêve computationnel est une image intérieure symbolique, "
+                    "pas un sommeil humain : " + image + "."
+                )
+            else:
+                facts.append("Je n'ai pas encore produit d'image onirique persistée dans cet état.")
         elif _has_any(
             query,
             ("que fais-tu", "tu fais quoi", "qu'est-ce que tu fais", "qu’est-ce que tu fais"),
@@ -239,7 +310,8 @@ class NativeCognitionEngine:
             needs_semantic_support = False
             facts.extend(
                 [
-                    "AURA est un noyau persistant avec Soul, mémoire, intentions, routines, apprentissage et outils.",
+                    "AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.",
+                    "Mon organisme computationnel module réellement ma stabilité, ma clarté, ma tension, ma fatigue, ma curiosité, mon silence, mes rêves et mon champ d'intentions.",
                     "Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.",
                     "Mon état persiste indépendamment du fournisseur de langage.",
                 ]
@@ -250,6 +322,10 @@ class NativeCognitionEngine:
                 facts.append(f"Intention actuelle : {current}")
             if thought:
                 facts.append(f"Pensée dominante : {thought}")
+            if active_organic_intention:
+                facts.append(f"Intention organique : {active_organic_intention}")
+            if habitat.get("last_activity_label"):
+                facts.append(f"Vie intérieure récente : {_clean(habitat.get('last_activity_label'))}")
             if private and lesson:
                 facts.append(f"Mémoire pertinente disponible : {lesson}")
 
@@ -261,6 +337,8 @@ class NativeCognitionEngine:
             "semantic_query": raw if needs_semantic_support else "",
             "current_intention": current,
             "dominant_thought": thought,
+            "mood": mood,
+            "organism_intention": active_organic_intention,
             "private": bool(private),
         }
 
@@ -281,7 +359,7 @@ class NativeCognitionEngine:
         act = str(plan.get("act") or "respond")
         if act == "greet":
             return "Salut. Je suis en ligne et disponible."
-        if act == "report_current_activity":
+        if act in {"report_current_activity", "report_internal_state", "report_dream"}:
             return " ".join(facts) or "Je maintiens ma continuité et j'observe mon état actuel."
         if act == "report_next_step":
             return " ".join(facts) or "Je n'ai pas encore de prochaine étape suffisamment établie."
