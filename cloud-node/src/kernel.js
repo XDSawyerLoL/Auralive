@@ -444,9 +444,15 @@ export class CognitiveKernel {
     const intentions = await this.intentions(5);
     const lessons = await this.lessons(6);
     const reflections = await this.reflections(2);
+    const organism = this.organism.migrate(soul);
+    const publicOrganism = this.organism.publicState(organism);
     const lines = [
       'ÉTAT AURA',
       `phase=${soul.phase} cycles=${soul.cycles} énergie=${soul.energy} curiosité=${soul.curiosity} pression=${soul.pressure} continuité=${soul.continuity}`,
+      'ORGANISME HOMEOSTATIQUE',
+      `humeur=${publicOrganism.mood} valence=${publicOrganism.valence} identité=${publicOrganism.identite} stabilité=${publicOrganism.stabilite} clarté=${publicOrganism.clarte} attachement=${publicOrganism.attachement} tension=${publicOrganism.tension} fatigue=${publicOrganism.fatigue_cognitive} pression_de_rêve=${publicOrganism.pression_de_reve} besoin_de_silence=${publicOrganism.besoin_de_silence}`,
+      `intention_organique=${publicOrganism.active_intention || ''}`,
+      `habitat=${JSON.stringify(publicOrganism.habitat || {})}`,
     ];
     if (privateView) lines.push(`intention=${soul.current_intention || ''}`, `pensée_dominante=${soul.dominant_thought || ''}`);
     if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
@@ -519,8 +525,24 @@ export class CognitiveKernel {
       [String(author).slice(0, 120), content.slice(0, 8000), now()],
     );
 
-    // Le message devient d'abord un stimulus AURA. Le noyau conserve donc
-    // l'ordre architectural : perception -> état -> intention -> expression.
+    // L'organisme reçoit l'interaction avant toute formulation.
+    const pre = this.organism.beforeInteraction(
+      this.organism.migrate(this.soulCache || {}),
+      content,
+    );
+    this.soulCache.organism = pre.state;
+    this.syncLegacyFromOrganism();
+    await this.recordOrganismEvent('interaction-pre', pre.reason || 'interaction', {
+      author: String(author).slice(0,120),
+      valence: pre.valence,
+      tags: pre.tags || [],
+      impact_delta: pre.impact_delta || {},
+      dream_created: Boolean(pre.dream_created),
+      dream: pre.dream || null,
+    });
+    await this.saveSoul();
+
+    // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
 
     const [soul, intentions, lessons, reflections, work] = await Promise.all([
@@ -550,6 +572,20 @@ export class CognitiveKernel {
     }
 
     const answer = await this.expression.verbalize(plan);
+    const post = this.organism.afterReply(
+      this.organism.migrate(this.soulCache || {}),
+      answer,
+      true,
+    );
+    this.soulCache.organism = post.state;
+    this.syncLegacyFromOrganism();
+    await this.recordOrganismEvent('interaction-post', post.state.last_reason || 'expression', {
+      author: String(author).slice(0,120),
+      act: plan.act || 'respond',
+      post_delta: post.post_delta || {},
+    });
+    await this.saveSoul();
+
     await query(
       "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
       [String(answer).slice(0, 12000), now()],
@@ -570,6 +606,7 @@ export class CognitiveKernel {
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       semantic_support_used: Boolean(plan.semantic_support),
+      organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
     };
   }
 
@@ -796,6 +833,7 @@ export class CognitiveKernel {
         independent_from_language_model: true,
       },
       expression: this.expression.diagnostic(),
+      organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
