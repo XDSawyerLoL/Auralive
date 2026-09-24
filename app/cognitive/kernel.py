@@ -1197,6 +1197,7 @@ class CognitiveKernel:
                 "Tu es le laboratoire d'amélioration d'AURA. Tu proposes; tu n'appliques rien silencieusement.",
                 360,
                 system_is_complete=True,
+                task_role="evolution",
             )
             parsed = _json_object(raw)
         except Exception:
@@ -1340,6 +1341,7 @@ class CognitiveKernel:
                 ),
                 800,
                 system_is_complete=True,
+                task_role="tools",
             )
             plan = _json_object(raw)
             if not plan:
@@ -1563,6 +1565,7 @@ class CognitiveKernel:
             private=private,
         )
 
+        inference = self.inference_assessment()
         semantic_support = ""
         if bool(plan.get("needs_semantic_support")) and bool(getattr(self.aura.ai, "enabled", False)):
             semantic_prompt = (
@@ -1582,8 +1585,9 @@ class CognitiveKernel:
                         "Tu es un outil sémantique utilisé par AURA. "
                         "Tu proposes des informations candidates; tu ne décides jamais à sa place."
                     ),
-                    700,
+                    max(180, int(inference.get("token_budget") or 700)),
                     system_is_complete=True,
+                    task_role=str(inference.get("model_role") or "conversation"),
                 )
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"{exc.__class__.__name__}: {exc}"[:500]
@@ -1618,6 +1622,7 @@ class CognitiveKernel:
                     ),
                     700,
                     system_is_complete=True,
+                    task_role="conversation",
                 )
                 if str(candidate).strip():
                     answer = str(candidate).strip()
@@ -1757,6 +1762,10 @@ class CognitiveKernel:
                 "independent_from_language_model": True,
             },
             "language_model_role": "semantic-support-and-verbalisation-only",
+            "active_inference": {
+                **self.inference_assessment(),
+                "version": self.active_inference.VERSION,
+            },
             "self_modifying_code": False,
             "improvement_mode": "observe-learn-propose-validate",
         }
