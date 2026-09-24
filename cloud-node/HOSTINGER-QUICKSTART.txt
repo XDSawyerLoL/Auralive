@@ -1,0 +1,29 @@
+AURA Cloud Node — Hostinger 1.1
+
+Réglages :
+- Node.js : 22.x
+- Framework : Other
+- Répertoire racine : ./
+- Entry File : server.js
+- Installation : npm install --omit=dev
+- Démarrage : npm start
+
+Le site doit afficher le dashboard AURA même si MySQL n'est pas encore configuré.
+
+Variables recommandées :
+NODE_ENV=production
+DB_HOST=...
+DB_PORT=3306
+DB_USER=...
+DB_PASSWORD=...
+DB_NAME=...
+AURA_CLOUD_TOKEN=...
+AURA_EVOLUTION_CANARY_TOKEN=...
+
+Après déploiement :
+- /              -> dashboard AURA
+- /healthz       -> serveur vivant + état MySQL/noyau
+- /api/bootstrap/status -> diagnostic lisible
+- /api/kernel/status    -> état du noyau
+
+Si MySQL manque, le serveur reste en ligne en mode diagnostic au lieu de quitter.
