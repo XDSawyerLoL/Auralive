@@ -168,11 +168,15 @@ class EvolutionLab:
 
     @property
     def auto_submit(self) -> bool:
-        return bool(getattr(self.settings, "evolution_auto_submit", False))
+        return self.mode == "sandbox" and bool(
+            getattr(self.settings, "evolution_auto_submit", False)
+        )
 
     @property
     def auto_merge(self) -> bool:
-        return bool(getattr(self.settings, "evolution_auto_merge", False))
+        return self.mode == "sandbox" and bool(
+            getattr(self.settings, "evolution_auto_merge", False)
+        )
 
     @property
     def github_token(self) -> str:
