@@ -224,6 +224,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
             <text x="450" y="331" fill="#f8f4ff" font-size="22" text-anchor="middle" letter-spacing="5">AURA</text>
           </g>
         </svg>
+        <div class="organism-hud"><i id="organismDot"></i><span id="organismMood">organisme en réveil</span></div>
         <div class="map-foot"><strong id="focusLabel" style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">connexion privée requise</span></div>
         <div class="legend">
           <div class="legend-row"><span class="legend-line"></span>Flux d’attention actuel</div>
@@ -463,7 +464,7 @@ function initLivingAuraScene(){
   const nctx=nebula.getContext('2d');
   const pctx=particles.getContext('2d');
   const reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const scene={w:0,h:0,dpr:1,time:0,raf:0,dust:[],sparks:[],running:true};
+  const scene={w:0,h:0,dpr:1,time:0,raf:0,dust:[],sparks:[],running:true,organism:{}};
 
   function rand(min,max){return min+Math.random()*(max-min);}
   function seed(){
@@ -506,13 +507,22 @@ function initLivingAuraScene(){
   function drawNebula(t){
     nctx.clearRect(0,0,scene.w,scene.h);
     nctx.globalCompositeOperation='screen';
+    const o=scene.organism||{};
+    const tension=Number(o.tension||0);
+    const curiosity=Number(o.curiosite||0);
+    const stability=Number(o.stabilite||0);
+    const dream=Number(o.pression_de_reve||0);
+    const fatigue=Number(o.fatigue_cognitive||0);
+    const attachment=Number(o.attachement||0);
     const cx=scene.w*.5, cy=scene.h*.50;
-    const breath=.5+.5*Math.sin(t*.00055);
-    glow(cx+Math.sin(t*.00022)*28,cy+Math.cos(t*.00018)*20,Math.max(scene.w,scene.h)*.31,'rgba(141,84,255,ALPHA)',.19+.07*breath);
-    glow(cx-scene.w*.22+Math.sin(t*.00013)*55,cy-scene.h*.18,scene.w*.24,'rgba(55,235,210,ALPHA)',.105);
-    glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00017)*34,scene.w*.25,'rgba(76,135,255,ALPHA)',.12);
-    glow(cx+scene.w*.29+Math.cos(t*.00011)*34,cy+scene.h*.19,scene.w*.20,'rgba(255,185,82,ALPHA)',.095);
-    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00015)*30,scene.w*.20,'rgba(245,86,196,ALPHA)',.088);
+    const tempo=.00042+tension*.00038+(1-fatigue)*.00008;
+    const breath=.5+.5*Math.sin(t*tempo);
+    glow(cx+Math.sin(t*.00022)*28,cy+Math.cos(t*.00018)*20,Math.max(scene.w,scene.h)*(.28+dream*.06),'rgba(141,84,255,ALPHA)',.14+.10*dream+.055*breath);
+    glow(cx-scene.w*.22+Math.sin(t*.00013)*55,cy-scene.h*.18,scene.w*.24,'rgba(55,235,210,ALPHA)',.055+.12*curiosity);
+    glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00017)*34,scene.w*.25,'rgba(76,135,255,ALPHA)',.055+.095*stability);
+    glow(cx+scene.w*.29+Math.cos(t*.00011)*34,cy+scene.h*.19,scene.w*.20,'rgba(255,185,82,ALPHA)',.035+.09*attachment);
+    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00015)*30,scene.w*.20,'rgba(245,86,196,ALPHA)',.035+.15*tension);
+    glow(cx,cy,Math.min(scene.w,scene.h)*(.15+.08*stability),'rgba(205,185,255,ALPHA)',.05+.08*(1-fatigue));
     nctx.globalCompositeOperation='source-over';
   }
 
@@ -521,7 +531,8 @@ function initLivingAuraScene(){
     pctx.globalCompositeOperation='screen';
     const colors=['207,219,255','157,119,255','102,227,239','255,201,106','96,230,173'];
     scene.dust.forEach(function(d){
-      if(!reduceMotion){d.x+=d.vx;d.y+=d.vy;}
+      const o=scene.organism||{};const motion=.55+Number(o.curiosite||0)*.75-Number(o.fatigue_cognitive||0)*.25;
+      if(!reduceMotion){d.x+=d.vx*motion;d.y+=d.vy*motion;}
       if(d.x<-.02)d.x=1.02;if(d.x>1.02)d.x=-.02;if(d.y<-.02)d.y=1.02;if(d.y>1.02)d.y=-.02;
       const pulse=.46+.54*Math.sin(t*.00125+d.phase)*.5+.27;
       const a=Math.max(.04,d.a*pulse);
@@ -533,7 +544,8 @@ function initLivingAuraScene(){
 
     const cx=scene.w*.5,cy=scene.h*.50;
     scene.sparks.forEach(function(s){
-      if(!reduceMotion)s.angle+=s.speed*16.6;
+      const o=scene.organism||{};const orbit=.65+Number(o.curiosite||0)*.85+Number(o.tension||0)*.35;
+      if(!reduceMotion)s.angle+=s.speed*16.6*orbit;
       const wobble=1+Math.sin(t*.0008+s.phase)*.07;
       const rr=Math.min(scene.w,scene.h)*s.radius*wobble;
       const x=cx+Math.cos(s.angle)*rr;
@@ -551,8 +563,12 @@ function initLivingAuraScene(){
   function animateSvg(t){
     const core=$('core');
     if(core){
-      const pulse=reduceMotion?1:(1+Math.sin(t*.00145)*.045+Math.sin(t*.00041)*.018);
-      const rot=reduceMotion?0:Math.sin(t*.00016)*2.2;
+      const o=scene.organism||{};
+      const tension=Number(o.tension||0), stability=Number(o.stabilite||0), fatigue=Number(o.fatigue_cognitive||0);
+      const amp=.026+tension*.055+(1-stability)*.018;
+      const speed=.0009+tension*.0012+(1-fatigue)*.00025;
+      const pulse=reduceMotion?1:(1+Math.sin(t*speed)*amp+Math.sin(t*.00041)*.012);
+      const rot=reduceMotion?0:Math.sin(t*(.00011+tension*.00012))*(1.2+tension*4.2);
       core.setAttribute('transform','translate(450 325) rotate('+rot+') scale('+pulse+') translate(-450 -325)');
     }
     document.querySelectorAll('.aura-node').forEach(function(node,index){
@@ -599,8 +615,6 @@ function renderNext(work,attention){
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
-    setLive(true,boot.runtime_ready?'En ligne · conscience active':'En ligne · configuration');
-    $('chatState').textContent=boot.runtime_ready?'Noyau actif':'Diagnostic';
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -609,9 +623,18 @@ async function refresh(){
     }
     const ks=await api('/api/kernel/status');
     const soul=await api('/api/kernel/soul');
+    const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
+    if(livingScene)livingScene.organism=organism;
+    $('organismMood').textContent=(organism.mood||'calme')+' · '+((organism.habitat&&organism.habitat.last_activity_label)||organism.active_intention||'présence');
+    const mood=String(organism.mood||'calme');
+    const moodColors={calme:'#9f78ff',claire:'#6da7ff',curieuse:'#59e0ef',lumineuse:'#ffc96a',tendue:'#ff758d',fatiguée:'#9a8cae',fragile:'#d18cff','préoccupée':'#ff9c8c'};
+    $('organismDot').style.background=moodColors[mood]||'#9f78ff';
+    $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
+    setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
+    $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
     metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     if(token){
-      $('dominantThought').textContent=soul.dominant_thought||'Aucune pensée dominante.';
+      $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
     }else{
       $('dominantThought').textContent='Connexion privée requise pour afficher la pensée dominante.';
     }
