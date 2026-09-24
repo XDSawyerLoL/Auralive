@@ -855,6 +855,35 @@ socket.create_connection = _guard_create
     async def validate_candidate(self, candidate: dict[str, Any]) -> dict[str, Any]:
         return await asyncio.to_thread(self._validate_candidate_sync, candidate)
 
+    @staticmethod
+    def _compile_source_tree(root: Path) -> dict[str, Any]:
+        errors: list[str] = []
+        checked = 0
+        for base_name in ("app", "tests"):
+            base = root / base_name
+            if not base.is_dir():
+                continue
+            for path in base.rglob("*.py"):
+                checked += 1
+                try:
+                    source = path.read_text(encoding="utf-8")
+                    compile(source, str(path), "exec")
+                except Exception as exc:  # noqa: BLE001
+                    try:
+                        rel = path.relative_to(root).as_posix()
+                    except ValueError:
+                        rel = str(path)
+                    errors.append(f"{rel}: {exc.__class__.__name__}: {exc}"[:1200])
+                    if len(errors) >= 40:
+                        break
+            if len(errors) >= 40:
+                break
+        return {
+            "ok": not errors and checked > 0,
+            "checked_files": checked,
+            "errors": errors,
+        }
+
     def _validate_candidate_sync(self, candidate: dict[str, Any]) -> dict[str, Any]:
         if not candidate.get("auto_promotable"):
             return {
@@ -872,6 +901,21 @@ socket.create_connection = _guard_create
             ok, reason = self._path_policy(rel, auto=True)
             if not ok:
                 return {"ok": False, "gate": "policy", "reason": f"{rel}: {reason}"}
+
+        if IS_FROZEN:
+            baseline_compile = self._compile_source_tree(self.source_root)
+            candidate_compile = self._compile_source_tree(workspace)
+            ok = bool(baseline_compile["ok"] and candidate_compile["ok"])
+            return {
+                "ok": ok,
+                "gate": "packaged-static-then-github-ci",
+                "baseline_compile": baseline_compile,
+                "candidate_compile": candidate_compile,
+                "changed_paths": changed_paths,
+                "github_ci_required_before_merge": True,
+                "canary_required_before_merge": bool(self.canary_required),
+                "validated_at": utcnow(),
+            }
 
         baseline_compile = self._run_validation_command(
             self.source_root,
