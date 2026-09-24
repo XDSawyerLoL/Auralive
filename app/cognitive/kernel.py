@@ -1310,6 +1310,14 @@ class CognitiveKernel:
             raise RuntimeError("Aucune capacité opérateur autorisée par la politique AURA")
 
         context = await self.context_for_ai()
+        inference = self.inference_assessment(risk=0.18)
+        organism_state = self.organism.migrate(self._soul_cache)
+        policy_forecast = self.world_model.forecast_policy(
+            organism_state,
+            uncertainty=float(inference.get("uncertainty") or 0.0),
+            explicit_mission=True,
+        )
+        self.last_world_forecast = {"policy": policy_forecast}
         feedback = ""
         reports: list[dict[str, Any]] = []
         spoken: list[str] = []
@@ -1323,6 +1331,13 @@ class CognitiveKernel:
                 + json.dumps(catalog, ensure_ascii=False, default=str)[:18000]
                 + "\n\nContexte:\n"
                 + context[:9000]
+                + "\n\nPrévision native AURA:\n"
+                + json.dumps(policy_forecast, ensure_ascii=False)[:2000]
+                + (
+                    "\nPolitique: privilégie une vérification d'état avant une écriture/action si un outil de lecture adapté existe."
+                    if policy_forecast.get("selected") == "verify_first"
+                    else "\nPolitique: action directe minimale, puis vérification du résultat."
+                )
             )
             if feedback:
                 prompt += (
@@ -1396,6 +1411,22 @@ class CognitiveKernel:
                 feedback = feedback or "Aucune action valide exécutée."
                 continue
 
+            catalog_by_name = {row["name"]: row for row in catalog}
+            forecast_actions = [
+                catalog_by_name.get(spec.type, {"name": spec.type, "risk": "safe"})
+                for spec in action_specs
+            ]
+            plan_forecast = self.world_model.forecast_plan(
+                forecast_actions,
+                organism=organism_state,
+                uncertainty=float(inference.get("uncertainty") or 0.0),
+            )
+            self.last_world_forecast = {
+                "policy": policy_forecast,
+                "plan": plan_forecast,
+                "step": step_index + 1,
+            }
+
             trigger = f"aura.operator.{uuid4()}"
             automation_id = f"cognitive-operator-{uuid4()}"
             ephemeral = Automation(
@@ -1440,6 +1471,8 @@ class CognitiveKernel:
             "say": "\n".join(spoken).strip(),
             "reports": reports,
             "steps": len(reports),
+            "forecast": dict(self.last_world_forecast),
+            "compute": inference,
         }
         await self._trace(
             "operator",
