@@ -1,4 +1,4 @@
-export const DASHBOARD_HTML = \`<!doctype html>
+export const DASHBOARD_HTML = `<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
@@ -216,4 +216,4 @@ refresh();
 setInterval(refresh,15000);
 </script>
 </body>
-</html>\`;
+</html>`;
