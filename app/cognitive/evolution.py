@@ -134,7 +134,12 @@ class EvolutionLab:
 
     @property
     def enabled(self) -> bool:
-        return bool(getattr(self.settings, "evolution_enabled", False))
+        return bool(getattr(self.settings, "evolution_enabled", True))
+
+    @property
+    def mode(self) -> str:
+        value = str(getattr(self.settings, "evolution_mode", "observe") or "observe").casefold()
+        return value if value in {"observe", "sandbox", "submit", "promote"} else "observe"
 
     @property
     def interval_seconds(self) -> int:
@@ -142,11 +147,13 @@ class EvolutionLab:
 
     @property
     def auto_submit(self) -> bool:
-        return bool(getattr(self.settings, "evolution_auto_submit", False))
+        configured = bool(getattr(self.settings, "evolution_auto_submit", False))
+        return configured and self.mode in {"submit", "promote"}
 
     @property
     def auto_merge(self) -> bool:
-        return bool(getattr(self.settings, "evolution_auto_merge", False))
+        configured = bool(getattr(self.settings, "evolution_auto_merge", False))
+        return configured and self.mode == "promote"
 
     @property
     def github_token(self) -> str:
@@ -1160,11 +1167,40 @@ socket.create_connection = _guard_create
                 await self._set_cycle(cycle_id, status="diagnosed", diagnosis=diagnosis)
                 if not bool(diagnosis.get("worth_changing")):
                     await self._set_cycle(cycle_id, status="no-change")
+                    self.last_cycle_at = utcnow()
                     return {
                         "id": cycle_id,
                         "status": "no-change",
+                        "mode": self.mode,
                         "research": research,
                         "diagnosis": diagnosis,
+                    }
+
+                if self.mode == "observe":
+                    await self._set_cycle(cycle_id, status="proposal-ready")
+                    self.last_cycle_at = utcnow()
+                    await self.automation.dispatch(
+                        "aura.evolution.cycle",
+                        {
+                            "cycle_id": cycle_id,
+                            "status": "proposal-ready",
+                            "mode": self.mode,
+                            "objective": str(objective)[:1200],
+                            "target_files": list(diagnosis.get("target_files") or [])[:8],
+                            "expected_gain": str(diagnosis.get("expected_gain") or "")[:1200],
+                        },
+                        source="evolution",
+                    )
+                    return {
+                        "id": cycle_id,
+                        "status": "proposal-ready",
+                        "mode": self.mode,
+                        "research": research,
+                        "diagnosis": diagnosis,
+                        "message": (
+                            "Phase observe: diagnostic mémorisé. Aucun fichier n'a été copié, "
+                            "modifié, testé ou soumis."
+                        ),
                     }
 
                 candidate = await self.propose_candidate(
@@ -1187,7 +1223,8 @@ socket.create_connection = _guard_create
                 status = "validated-local" if validation.get("ok") else "rejected-local"
                 await self._set_cycle(cycle_id, status=status, validation=validation)
                 promotion: dict[str, Any] = {}
-                wants_submit = self.auto_submit if submit is None else bool(submit)
+                requested_submit = self.auto_submit if submit is None else bool(submit)
+                wants_submit = requested_submit and self.mode in {"submit", "promote"}
                 if validation.get("ok") and wants_submit:
                     promotion = await self.submit_candidate(
                         cycle_id,
@@ -1264,6 +1301,13 @@ socket.create_connection = _guard_create
             "version": self.VERSION,
             "enabled": self.enabled,
             "started": self.started,
+            "mode": self.mode,
+            "phase_policy": {
+                "observe": "recherche + diagnostic uniquement",
+                "sandbox": "candidat local + tests isolés, aucune PR",
+                "submit": "PR autorisée après sas local, aucun merge automatique",
+                "promote": "merge possible uniquement après tous les contrôles locaux et CI requis",
+            },
             "interval_seconds": self.interval_seconds,
             "source_mode": "frozen" if IS_FROZEN else "source",
             "source_root": str(self.source_root),
@@ -1281,7 +1325,16 @@ socket.create_connection = _guard_create
                 key: int((rows or {}).get(key) or 0)
                 for key in ("total", "promoted", "rejected", "remote_pending")
             },
+            "effective_capabilities": {
+                "research": True,
+                "diagnose": True,
+                "patch_workspace": self.mode in {"sandbox", "submit", "promote"},
+                "local_validation": self.mode in {"sandbox", "submit", "promote"},
+                "remote_submit": self.auto_submit,
+                "remote_merge": self.auto_merge,
+            },
             "gates": [
+                "explicit evolution mode",
                 "research provenance",
                 "exact anchored patch",
                 "protected-path policy",

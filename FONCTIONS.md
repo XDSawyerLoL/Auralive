@@ -122,6 +122,17 @@
 - [x] Historique persistant de chaque cycle d'évolution et de ses preuves
 - [x] Pas d'écriture directe dans le runtime actif pendant la génération/test
 
+## AURA Evolution progressive
+
+- [x] Phase 1 `observe` active par défaut
+- [x] Recherche externe limitée aux domaines autorisés
+- [x] Diagnostic persistant à partir des erreurs, leçons et évolutions documentées
+- [x] Zéro patch / zéro PR / zéro merge en mode `observe`
+- [x] Niveau `sandbox` pour candidat local + tests isolés
+- [x] Niveau `submit` pour PR après validation locale
+- [x] Niveau `promote` pour fusion uniquement après tous les checks CI requis
+- [x] Autorité effective visible via `/api/evolution/status`
+
 ## Statistiques et automatisation
 
 - [x] Journal d'activité
