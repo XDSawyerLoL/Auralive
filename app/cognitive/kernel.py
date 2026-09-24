@@ -877,16 +877,23 @@ class CognitiveKernel:
             self._soul_cache["phase"] = self._phase_for_cycles(int(self._soul_cache["cycles"]))
             self._soul_cache["last_tick_at"] = now_iso
 
-            # Homéostasie légère : l'état interne revient progressivement vers une
-            # zone stable sans simuler des émotions humaines.
-            self._soul_cache["energy"] = round(
-                _clamp(float(self._soul_cache.get("energy", 0.7)) + (0.7 - float(self._soul_cache.get("energy", 0.7))) * 0.03),
-                4,
+            # Vie intérieure : l'organisme évolue même sans interaction.
+            idle = self.organism.idle_tick(
+                self.organism.migrate(self._soul_cache),
+                seconds=float(self.tick_seconds),
             )
-            self._soul_cache["pressure"] = round(
-                _clamp(float(self._soul_cache.get("pressure", 0.2)) * 0.96),
-                4,
-            )
+            self._soul_cache["organism"] = idle["state"]
+            self._sync_legacy_from_organism()
+            if idle.get("activity") != "presence" or idle.get("dream"):
+                await self._record_organism_event(
+                    "idle-life",
+                    reason=str(idle.get("activity_label") or "vie intérieure"),
+                    payload={
+                        "activity": idle.get("activity"),
+                        "effect": idle.get("effect") or {},
+                        "dream": idle.get("dream"),
+                    },
+                )
 
             due_by_time = now_mono - self._last_reflection_monotonic >= self.reflection_seconds
             has_stimulus = bool(self._stimuli)
@@ -1369,7 +1376,24 @@ class CognitiveKernel:
                 "payload": {"author": author, "text": content[:1000]},
             }
         )
-        self._adjust_soul(continuity=0.002, energy=0.003)
+        pre = self.organism.before_interaction(
+            self.organism.migrate(self._soul_cache),
+            content,
+        )
+        self._soul_cache["organism"] = pre["state"]
+        self._sync_legacy_from_organism()
+        await self._record_organism_event(
+            "interaction-pre",
+            reason=str(pre.get("reason") or "interaction"),
+            payload={
+                "author": author[:120],
+                "valence": pre.get("valence"),
+                "tags": pre.get("tags") or [],
+                "impact_delta": pre.get("impact_delta") or {},
+                "dream_created": bool(pre.get("dream_created")),
+                "dream": pre.get("dream"),
+            },
+        )
         await self._save_soul()
 
         soul = await self.soul()
@@ -1461,6 +1485,24 @@ class CognitiveKernel:
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"{exc.__class__.__name__}: {exc}"[:500]
 
+        post = self.organism.after_reply(
+            self.organism.migrate(self._soul_cache),
+            answer,
+            success=True,
+        )
+        self._soul_cache["organism"] = post["state"]
+        self._sync_legacy_from_organism()
+        await self._record_organism_event(
+            "interaction-post",
+            reason=str(post["state"].get("last_reason") or "expression"),
+            payload={
+                "author": author[:120],
+                "act": plan.get("act") or "respond",
+                "post_delta": post.get("post_delta") or {},
+            },
+        )
+        await self._save_soul()
+
         await self.db.execute(
             "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
             (answer[:12000], utcnow()),
@@ -1483,6 +1525,9 @@ class CognitiveKernel:
             "cognition_version": self.native_cognition.VERSION,
             "language_model_used_for_decision": False,
             "semantic_support_used": bool(str(plan.get("semantic_support") or "").strip()),
+            "organism": self.organism.public_state(
+                self.organism.migrate(self._soul_cache)
+            ),
         }
 
     async def context_for_ai(self, *, private: bool = True) -> str:
@@ -1497,10 +1542,23 @@ class CognitiveKernel:
             except Exception:
                 pass
 
+        organism = self.organism.migrate(soul)
+        public_organism = self.organism.public_state(organism)
         lines = [
             "ÉTAT AURA",
             f"phase={soul.get('phase')} cycles={soul.get('cycles')} énergie={soul.get('energy')} "
             f"curiosité={soul.get('curiosity')} pression={soul.get('pressure')} continuité={soul.get('continuity')}",
+            "ORGANISME HOMEOSTATIQUE",
+            (
+                f"humeur={public_organism.get('mood')} valence={public_organism.get('valence')} "
+                f"identité={public_organism.get('identite')} stabilité={public_organism.get('stabilite')} "
+                f"clarté={public_organism.get('clarte')} attachement={public_organism.get('attachement')} "
+                f"tension={public_organism.get('tension')} fatigue={public_organism.get('fatigue_cognitive')} "
+                f"pression_de_rêve={public_organism.get('pression_de_reve')} "
+                f"besoin_de_silence={public_organism.get('besoin_de_silence')}"
+            ),
+            f"intention_organique={public_organism.get('active_intention')}",
+            f"habitat={json.dumps(public_organism.get('habitat') or {}, ensure_ascii=False)}",
         ]
         if private:
             lines.extend(
@@ -1549,6 +1607,9 @@ class CognitiveKernel:
             "last_reflection_at": self.last_reflection_at,
             "last_error": self.last_error,
             "soul": await self.soul(),
+            "organism": self.organism.public_state(
+                self.organism.migrate(self._soul_cache)
+            ),
             "counts": counts,
             "stimuli_buffered": len(self._stimuli),
             "self_learning": True,
