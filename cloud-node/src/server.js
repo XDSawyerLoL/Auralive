@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
+import { ExecutionBridge } from './bridge.js';
 import {
   config,
   databaseConfigured,
@@ -51,14 +52,15 @@ const app = Fastify({
   trustProxy: true,
 });
 
-const ai = new AiClient();
+const bridge = new ExecutionBridge();
+const ai = new AiClient(bridge);
 let kernel;
 const horizon = new HorizonBridge(async (type, payload, source) => {
   if (bootstrap.runtimeReady) {
     await kernel.observeEvent(type, payload, source);
   }
 });
-kernel = new CognitiveKernel(ai, horizon);
+kernel = new CognitiveKernel(ai, horizon, bridge);
 const evolution = new EvolutionLab(ai, kernel);
 const fallbackSoul = kernel.defaultSoul();
 
@@ -168,6 +170,7 @@ app.get('/api/bootstrap/status', async () => ({
   ai_enabled: ai.enabled,
   ai_provider: ai.provider,
   ai_api_key_configured: Boolean(config.aiApiKey),
+  local_bridge_configured: bridge.enabled,
   cognition_native: true,
   cognition_independent_from_language_model: true,
   language_role: 'semantic-support-and-verbalisation-only',
@@ -175,6 +178,86 @@ app.get('/api/bootstrap/status', async () => ({
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
+
+app.get('/api/bridge/status', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return bridge.status();
+});
+
+app.post('/api/bridge/heartbeat', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const workerId = String(request.body?.worker_id || '').trim();
+  if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
+  return bridge.heartbeat(workerId, request.body || {});
+});
+
+app.post('/api/bridge/claim', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const workerId = String(request.body?.worker_id || '').trim();
+  if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
+  return { job: await bridge.claim(workerId) };
+});
+
+app.post('/api/bridge/jobs/:id/complete', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const workerId = String(request.body?.worker_id || '').trim();
+  if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
+  try {
+    return await bridge.complete(request.params.id, workerId, request.body || {});
+  } catch (error) {
+    return reply.code(409).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/voice/speak', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const text = String(request.body?.text || '').trim();
+  if (!text) return reply.code(422).send({ error: 'Texte vide' });
+  try {
+    return await bridge.synthesize(text, request.body || {});
+  } catch (error) {
+    return reply.code(503).send({
+      error: String(error?.message || error),
+      code: 'AURA_LOCAL_VOICE_UNAVAILABLE',
+    });
+  }
+});
+
+app.get('/api/capabilities', async (request) => {
+  const privateView = isPrivate(request);
+  const [kernelStatus, bridgeStatus] = await Promise.all([
+    bootstrap.runtimeReady ? kernel.status() : Promise.resolve(null),
+    bootstrap.dbReady ? bridge.status() : Promise.resolve({ enabled: bridge.enabled, worker_online: false }),
+  ]);
+  const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
+    ? bridgeStatus.worker.capabilities
+    : [];
+  return {
+    cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
+    memory: { ready: Boolean(bootstrap.dbReady) },
+    language: {
+      ready: Boolean(ai.enabled),
+      provider: privateView ? ai.provider : (bridgeStatus?.worker_online ? 'local-or-fallback' : 'configured'),
+      local_worker: Boolean(bridgeStatus?.worker_online),
+    },
+    voice: {
+      ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
+      engine: privateView ? String(bridgeStatus?.worker?.voice || '') : '',
+    },
+    hands: {
+      ready: Boolean(bridgeStatus?.worker_online),
+      mode: bridgeStatus?.worker_online ? 'quantic-studio-real' : 'offline',
+      capabilities: privateView ? workerCapabilities : [],
+    },
+    horizon: { ready: Boolean(horizon.status().enabled) },
+    evolution: {
+      ready: Boolean(bridgeStatus?.worker_online),
+      cloud_enabled: Boolean(config.evolutionEnabled),
+      delegated_to_local: Boolean(bridgeStatus?.worker_online),
+    },
+    kernel: privateView ? kernelStatus : undefined,
+  };
+});
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + persistent memory + intentions',
@@ -206,6 +289,7 @@ app.get('/healthz', async () => {
     cognition_native: true,
     cognition_independent_from_language_model: true,
     horizon: horizon.status().enabled,
+    bridge: await bridge.status(),
     evolution: config.evolutionEnabled,
     issues: bootstrap.issues.map((item) => item.code),
     startup_error: bootstrap.startupError,
@@ -351,7 +435,10 @@ app.post('/api/kernel/operator', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   const task = String(request.body?.task || '').trim();
   if (!task) return reply.code(422).send({ error: 'Mission vide' });
-  return kernel.operate(task);
+  const risks = Array.isArray(request.body?.allowed_risks)
+    ? request.body.allowed_risks.map((item) => String(item))
+    : [];
+  return kernel.operate(task, risks);
 });
 
 app.post('/api/chat', async (request, reply) => {
@@ -419,6 +506,9 @@ app.post('/api/evolution/run', async (request, reply) => {
   const objective = String(
     request.body?.objective || 'Chercher une optimisation faible risque du noyau AURA Cloud Node.',
   );
+  if (bridge.enabled && await bridge.workerOnline()) {
+    return bridge.evolve(objective);
+  }
   return evolution.runCycle(objective, String(request.body?.trigger || 'private-api'));
 });
 
