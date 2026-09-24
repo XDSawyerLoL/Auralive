@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
+import { CognitionEngine } from './cognition.js';
+import { ExpressionLayer } from './expression.js';
 
 const now = () => new Date().toISOString();
 
@@ -15,11 +17,13 @@ const AGENT_ROLES = {
 };
 
 export class CognitiveKernel {
-  static VERSION = 'aura-unified-kernel-node-v1';
+  static VERSION = 'aura-unified-kernel-node-v2';
 
   constructor(ai, horizon) {
     this.ai = ai;
     this.horizon = horizon;
+    this.cognition = new CognitionEngine();
+    this.expression = new ExpressionLayer(ai, this.cognition);
     this.started = false;
     this.timer = null;
     this.soulCache = null;
@@ -262,24 +266,26 @@ export class CognitiveKernel {
       if (!shouldReflect) return { ok: true, skipped: true, reason: 'aucun stimulus nécessitant une réflexion', soul: await this.soul() };
 
       const bundle = await this.contextBundle(text);
-      const prompt = `Produit une capsule de réflexion opérationnelle d’AURA à partir du contexte JSON ci-dessous. Ne révèle pas de raisonnement détaillé. Retourne uniquement JSON avec title, summary, hypothesis, next_action, memory, intention, confidence. Une hypothèse HORIZON non confirmée reste non confirmée.\n\n${JSON.stringify(bundle).slice(0, 18000)}`;
-      let parsed = {};
-      try {
-        parsed = parseJsonObject(await this.ai.generate(prompt, 'Tu es le noyau cognitif privé d’AURA. Tu observes, synthétises et proposes sans exécuter d’action cachée.', 520));
-      } catch (error) {
-        this.lastError = String(error?.message || error).slice(0, 500);
-      }
-      if (!Object.keys(parsed).length) {
-        parsed = { title: 'Continuité cognitive', summary: String(text).trim().slice(0, 800) || 'AURA maintient son état et attend un signal plus informatif.', hypothesis: '', next_action: '', memory: '', intention: '', confidence: 0.35 };
-      }
+      // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
+      // les intentions ne dépendent d’aucun fournisseur de langage.
+      const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger, text });
       const confidence = clamp(parsed.confidence ?? 0.5);
       const id = randomUUID();
       const title = String(parsed.title || 'Réflexion AURA').slice(0, 240);
       const summary = String(parsed.summary || '').slice(0, 5000);
       const hypothesis = String(parsed.hypothesis || '').slice(0, 4000);
       const nextAction = String(parsed.next_action || '').slice(0, 4000);
-      const restrictedAuthority = bundle.stimuli.some((item) => item?.type === 'horizon.world.emerging' || item?.payload?.autonomy_hint === 'notify_or_verify_only');
-      const context = { trigger, horizon_used: Boolean(bundle.horizon), stimuli_count: bundle.stimuli.length, lesson_count: bundle.lessons.length, restricted_authority: restrictedAuthority };
+      const restrictedAuthority = Boolean(parsed?.basis?.restricted_authority);
+      const context = {
+        trigger,
+        cognition_version: CognitionEngine.VERSION,
+        language_model_used_for_decision: false,
+        horizon_used: Boolean(bundle.horizon),
+        stimuli_count: bundle.stimuli.length,
+        lesson_count: bundle.lessons.length,
+        restricted_authority: restrictedAuthority,
+        basis: parsed.basis || {},
+      };
       await query(
         'INSERT INTO aura_reflections(id,trigger_name,title,summary,hypothesis,next_action,confidence,context,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
         [id, String(trigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
@@ -296,7 +302,18 @@ export class CognitiveKernel {
       }
       await this.saveSoul();
       this.stimuli = [];
-      const reflection = { id, trigger, title, summary, hypothesis, next_action: nextAction, confidence, autonomy_hint: restrictedAuthority ? 'notify_or_verify_only' : 'personal_relevance_gate_then_propose' };
+      const reflection = {
+        id,
+        trigger,
+        title,
+        summary,
+        hypothesis,
+        next_action: nextAction,
+        confidence,
+        autonomy_hint: parsed.autonomy_hint || (restrictedAuthority ? 'notify_or_verify_only' : 'native_cognition_then_policy_gate'),
+        cognition_version: CognitionEngine.VERSION,
+        language_model_used_for_decision: false,
+      };
       await this.trace('reflection', title, summary, reflection);
       return { ok: true, reflection, soul: await this.soul() };
     } finally {
@@ -404,22 +421,64 @@ export class CognitiveKernel {
   async chat(text, author = 'Utilisateur', privateView = false) {
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
-    await query("INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES(?,'user',?,?)", [String(author).slice(0, 120), content.slice(0, 8000), now()]);
-    const history = await query('SELECT author,role,content,created_at FROM aura_cloud_messages ORDER BY id DESC LIMIT 14');
-    history.reverse();
-    const context = await this.contextForAi(privateView);
-    const prompt = `Conversation récente:\n${history.map((row) => `${row.role}(${row.author}): ${row.content}`).join('\n')}\n\nDernier message:\n${content}\n\nContexte du noyau:\n${context.slice(0, 10000)}`;
-    let answer = '';
-    try {
-      answer = await this.ai.generate(prompt, 'Tu es AURA, présence numérique persistante. Réponds directement et utilement. Ne récite pas tes journaux internes. Ne présente jamais une hypothèse comme un fait.', 700);
-    } catch (error) {
-      this.lastError = String(error?.message || error).slice(0, 500);
-      answer = 'AURA Cloud est en ligne, mais aucun moteur IA compatible n’est actuellement disponible pour générer la réponse.';
-    }
-    if (!answer) answer = 'AURA Cloud est en ligne. Configure AI_MODE, AI_BASE_URL et AI_MODEL pour activer les réponses génératives.';
-    await query("INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)", [answer.slice(0, 12000), now()]);
+
+    await query(
+      "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES(?,'user',?,?)",
+      [String(author).slice(0, 120), content.slice(0, 8000), now()],
+    );
+
+    // Le message devient d'abord un stimulus AURA. Le noyau conserve donc
+    // l'ordre architectural : perception -> état -> intention -> expression.
     await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
-    return { ok: true, answer };
+
+    const [soul, intentions, lessons, reflections, work] = await Promise.all([
+      this.soul({ privateView: true }),
+      this.intentions(6),
+      this.lessons(6),
+      this.reflections(4),
+      this.workItems(5),
+    ]);
+
+    let plan = this.cognition.planReply({
+      text: content,
+      soul,
+      intentions,
+      lessons,
+      reflections,
+      work,
+      privateView,
+    });
+
+    // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
+    // le droit de créer l'intention ni de modifier le Soul. Son résultat reste
+    // un élément consultatif injecté dans un plan déjà décidé par AURA.
+    if (plan.needs_semantic_support) {
+      const support = await this.expression.semanticSupport(plan, await this.contextForAi(privateView));
+      plan = this.cognition.integrateSemanticSupport(plan, support);
+    }
+
+    const answer = await this.expression.verbalize(plan);
+    await query(
+      "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
+      [String(answer).slice(0, 12000), now()],
+    );
+    await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
+      author: String(author).slice(0, 120),
+      cognition_version: CognitionEngine.VERSION,
+      expression_version: ExpressionLayer.VERSION,
+      semantic_support_used: Boolean(plan.semantic_support),
+      language_model_used_for_decision: false,
+    });
+
+    return {
+      ok: true,
+      answer,
+      act: plan.act,
+      cognition_version: CognitionEngine.VERSION,
+      expression_version: ExpressionLayer.VERSION,
+      language_model_used_for_decision: false,
+      semantic_support_used: Boolean(plan.semantic_support),
+    };
   }
 
   async activity(limit = 12) {
@@ -640,6 +699,11 @@ export class CognitiveKernel {
       reflection_seconds: config.cognitiveReflectionSeconds,
       max_reflections_per_hour: config.cognitiveMaxReflectionsPerHour,
       operator_mode: config.cloudOperatorMode,
+      cognition: {
+        version: CognitionEngine.VERSION,
+        independent_from_language_model: true,
+      },
+      expression: this.expression.diagnostic(),
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
       last_reflection_at: this.lastReflectionAt,
