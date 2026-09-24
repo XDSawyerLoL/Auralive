@@ -2,34 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
-const PORT = 34567;
-const base = `http://127.0.0.1:${PORT}`;
+const GATEWAY_PORT = 34567;
+const base = `http://127.0.0.1:${GATEWAY_PORT}`;
 
-async function waitForServer(timeoutMs = 12000) {
+async function waitFor(path, matcher, timeoutMs = 15000) {
   const started = Date.now();
+  let last = '';
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await fetch(base + '/healthz');
-      if (response.ok) return response;
+      const response = await fetch(base + path);
+      last = await response.text();
+      if (response.ok && matcher(last)) return last;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
-  throw new Error('AURA Cloud did not start in diagnostic mode');
+  throw new Error(`AURA Cloud did not become ready for ${path}. Last response: ${last}`);
 }
 
-test('Hostinger runtime stays online without MySQL and renders dashboard', async (t) => {
-  const child = spawn(process.execPath, ['server.js'], {
+function launch(extraEnv = {}) {
+  return spawn(process.execPath, ['server.js'], {
     cwd: new URL('..', import.meta.url).pathname,
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      // Simule une variable HOST potentiellement injectée par l'hébergeur.
-      // AURA doit l'ignorer et écouter sur 0.0.0.0.
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
-      // Hostinger peut injecter PORT; AURA doit l'ignorer et utiliser AURA_PORT
-      // (3000 par défaut en production).
       PORT: '49999',
-      AURA_PORT: String(PORT),
+      AURA_GATEWAY_PORT: String(GATEWAY_PORT),
+      AURA_INTERNAL_PORT: String(GATEWAY_PORT + 1),
       DB_HOST: '',
       DB_USER: '',
       DB_PASSWORD: '',
@@ -39,38 +38,49 @@ test('Hostinger runtime stays online without MySQL and renders dashboard', async
       AURA_EVOLUTION_CANARY_TOKEN: '',
       AI_MODE: 'off',
       HORIZON_ENABLED: 'false',
+      ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+}
 
+test('native gateway stays online even when full runtime is disabled', async (t) => {
+  const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
-  t.after(() => {
-    if (!child.killed) child.kill('SIGTERM');
-  });
+  t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  await waitForServer();
+  const healthText = await waitFor('/healthz', (text) => text.includes('"gateway_ready":true'));
+  const health = JSON.parse(healthText);
+  assert.equal(health.ok, true);
+  assert.equal(health.gateway_ready, true);
+  assert.equal(health.runtime_ready, false);
 
   const root = await fetch(base + '/');
   assert.equal(root.status, 200);
   const html = await root.text();
   assert.match(html, /AURA CLOUD/);
+  assert.match(html, /Gateway Hostinger actif/);
+  assert.equal(child.exitCode, null, stderr);
+});
+
+test('gateway proxies to AURA dashboard without MySQL', async (t) => {
+  const child = launch();
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+  t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
+
+  const html = await waitFor('/', (text) => text.includes('État interne'));
+  assert.match(html, /AURA CLOUD/);
   assert.match(html, /État interne/);
 
-  const health = await fetch(base + '/healthz');
-  assert.equal(health.status, 200);
-  const payload = await health.json();
+  const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
+  const payload = JSON.parse(healthText);
   assert.equal(payload.ok, true);
-  assert.equal(payload.ready, false);
-  assert.equal(payload.status, 'diagnostic');
-  assert.equal(payload.db, false);
 
-  const bootstrap = await fetch(base + '/api/bootstrap/status');
-  assert.equal(bootstrap.status, 200);
-  const status = await bootstrap.json();
-  assert.equal(status.server_ready, true);
-  assert.equal(status.runtime_ready, false);
-  assert.equal(status.db_configured, false);
+  const gatewayText = await waitFor('/__aura_gateway', (text) => text.includes('"gateway_ready":true'));
+  const gateway = JSON.parse(gatewayText);
+  assert.equal(gateway.gateway_ready, true);
 
   assert.equal(child.exitCode, null, stderr);
 });
