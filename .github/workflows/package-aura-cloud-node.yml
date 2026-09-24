@@ -21,7 +21,7 @@ jobs:
           mkdir -p "$ROOT"
           cp -R cloud-node/src "$ROOT/src"
           cp -R cloud-node/test "$ROOT/test"
-          cp cloud-node/package.json cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md "$ROOT/"
+          cp cloud-node/server.js cloud-node/package.json cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md cloud-node/HOSTINGER-QUICKSTART.txt "$ROOT/"
           cat > "$ROOT/DEPLOYMENT.json" <<EOF
           {
             "product": "AURA Cloud",
@@ -35,8 +35,8 @@ jobs:
           }
           EOF
           (
-            cd "$RUNNER_TEMP"
-            zip -qr aura-cloud-node-hostinger.zip aura-cloud-node-hostinger
+            cd "$ROOT"
+            zip -qr "$RUNNER_TEMP/aura-cloud-node-hostinger.zip" .
           )
       - uses: actions/upload-artifact@v4
         with:

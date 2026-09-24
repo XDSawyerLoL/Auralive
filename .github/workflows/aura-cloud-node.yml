@@ -32,5 +32,24 @@ jobs:
         run: npm run check
       - name: Policy tests
         run: npm test
+      - name: Diagnostic startup smoke test
+        shell: bash
+        env:
+          NODE_ENV: production
+          PORT: "3987"
+        run: |
+          set -euo pipefail
+          node server.js > /tmp/aura-cloud.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:3987/ > /tmp/aura-dashboard.html; then
+              break
+            fi
+            sleep 0.5
+          done
+          grep -q "AURA CLOUD" /tmp/aura-dashboard.html
+          curl -fsS http://127.0.0.1:3987/healthz | grep -q '"ok":true'
+          curl -fsS http://127.0.0.1:3987/api/bootstrap/status | grep -q '"server_ready":true'
       - name: Dependency production tree
         run: npm ls --omit=dev
