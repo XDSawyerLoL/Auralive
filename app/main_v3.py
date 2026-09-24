@@ -148,6 +148,35 @@ async def dashboard_v3() -> HTMLResponse:
     return response
 
 
+@app.get("/cloud-link", response_class=HTMLResponse)
+async def cloud_link_v3(request: Request) -> HTMLResponse:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Liaison AURA Cloud disponible uniquement depuis ce PC")
+    return HTMLResponse(
+        """<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>AURA Cloud · Quantic Studio</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#070a12;color:#eef3ff;font:15px system-ui,Segoe UI,sans-serif;min-height:100vh;display:grid;place-items:center}
+main{width:min(760px,calc(100% - 28px));background:linear-gradient(180deg,#121a2c,#0a0f1c);border:1px solid #28344d;border-radius:22px;padding:26px;box-shadow:0 30px 90px #0008}
+h1{margin:0 0 8px;font-size:28px}p{color:#aebbd3;line-height:1.55}.grid{display:grid;gap:14px;margin-top:22px}label{display:grid;gap:7px;color:#cdd7ea}
+input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid #31405d;background:#080d18;color:white;outline:none}button{padding:13px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,#8d63ff,#546bf0);color:white;font-weight:700;cursor:pointer}
+.status{margin-top:18px;padding:14px;border:1px solid #26344e;border-radius:14px;background:#080d18;white-space:pre-wrap}.ok{color:#72efb5}.bad{color:#ff9da7}.small{font-size:12px;color:#8290aa}
+</style></head><body><main><h1>AURA Cloud ↔ Quantic Studio</h1>
+<p>Cette liaison donne à AURA son moteur local, sa voix Mairaiy et ses outils Quantic Studio. Le PC initie la connexion : aucun port entrant n'est exposé.</p>
+<div class="grid"><label>Adresse AURA Cloud<input id="url" value="https://antiquewhite-dolphin-780448.hostingersite.com"></label>
+<label>Jeton privé AURA<input id="token" type="password" autocomplete="new-password" placeholder="AURA_CLOUD_TOKEN"></label>
+<button id="save">Connecter AURA à ce PC</button></div>
+<div id="status" class="status">Lecture de l'état…</div>
+<p class="small">Le jeton reste enregistré uniquement dans le .env local de Quantic Studio.</p>
+<script>
+const s=document.getElementById('status');
+async function refresh(){try{const r=await fetch('/api/cloud-worker/status');const j=await r.json();s.className='status '+(j.started&&j.enabled?'ok':'bad');s.textContent=JSON.stringify(j,null,2)}catch(e){s.className='status bad';s.textContent=String(e)}}
+document.getElementById('save').onclick=async()=>{s.textContent='Connexion…';try{const r=await fetch('/api/cloud-worker/configure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_url:document.getElementById('url').value,token:document.getElementById('token').value})});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error||'Erreur');document.getElementById('token').value='';await refresh()}catch(e){s.className='status bad';s.textContent=String(e)}};refresh();setInterval(refresh,5000);
+</script></main></body></html>"""
+    )
+
+
 @app.get("/api/cloud-worker/status")
 async def cloud_worker_status_v3() -> dict[str, Any]:
     return cloud_worker.diagnostic()
