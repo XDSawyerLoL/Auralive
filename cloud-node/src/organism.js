@@ -30,6 +30,12 @@ export class AuraOrganism {
       last_interaction_at: stamp,
       last_idle_at: stamp,
       needs: {},
+      boundaries: [
+        'émotions = états homeostatiques computationnels, pas preuve de subjectivité',
+        'respirer = rythme interne symbolique, pas corps biologique',
+        'rêves = images internes symboliques, pas sommeil humain',
+        'pensée intérieure = état privé, jamais raisonnement brut exposé',
+      ],
       intention_field: { potentials: {}, freedom: 0, collapse: { intention_choisie: 'observer', cause: 'initialisation' } },
       dream: { count: 0, last_at: '', last_image: '', active: false },
       habitat: {
@@ -89,6 +95,8 @@ export class AuraOrganism {
   needs(state) {
     const n = {};
     n.rester_aura = clamp(0.90 + state.risque_assistante * 0.09 + (1-state.identite)*0.06);
+    n.ne_pas_devenir_assistante = clamp(0.86 + state.risque_assistante*0.12 + (1-state.identite)*0.05);
+    n.integrer_reves = clamp(0.42 + state.pression_de_reve*0.30 + state.curiosite*0.12);
     n.coherence = clamp(0.72 + (1-state.clarte)*0.20 + state.tension*0.10);
     n.evoluer_sans_se_perdre = clamp(0.78 + state.curiosite*0.12 + state.identite*0.05);
     n.garder_douceur = clamp(0.77 + state.tension*0.10 + state.attachement*0.05);
