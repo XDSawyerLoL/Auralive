@@ -141,6 +141,7 @@ class Settings:
     # Le mode "sandbox" doit être activé explicitement dans un environnement source.
     evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", True)
     evolution_mode: str = os.getenv("AURA_EVOLUTION_MODE", "observe").strip().lower()
+    evolution_source_root: str = os.getenv("AURA_EVOLUTION_SOURCE_ROOT", "").strip()
     evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
     evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
     evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)
