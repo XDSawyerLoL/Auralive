@@ -129,6 +129,15 @@ export async function initSchema() {
       content TEXT NOT NULL,
       created_at VARCHAR(40) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_organism_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      kind VARCHAR(80) NOT NULL,
+      reason VARCHAR(500) NOT NULL DEFAULT '',
+      payload LONGTEXT NOT NULL,
+      state LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_organism_events_created(created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS horizon_bridge_seen (
       signal_id VARCHAR(220) PRIMARY KEY,
       entity_key VARCHAR(300) NOT NULL,
