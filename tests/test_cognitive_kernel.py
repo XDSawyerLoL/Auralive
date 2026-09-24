@@ -186,3 +186,21 @@ def test_cohost_wrapper_accepts_world_context():
 
     signature = inspect.signature(CohostService.wrapped_ai_reply)
     assert "world_context" in signature.parameters
+
+
+@pytest.mark.asyncio
+async def test_chat_can_express_aura_identity_without_language_model(tmp_path: Path):
+    db = Database(tmp_path / "aura.db")
+    await db.initialize()
+    automation = FakeAutomation()
+    aura = SimpleNamespace(ai=FakeAI())
+    kernel = CognitiveKernel(aura, db, automation, FakeHorizon(), make_settings())
+    await kernel.initialize()
+
+    result = await kernel.chat("Qui es-tu ?", private=True)
+
+    assert result["ok"] is True
+    assert result["language_model_used_for_decision"] is False
+    assert result["semantic_support_used"] is False
+    assert "modèle de langage" in result["answer"].casefold()
+    assert aura.ai.calls == []
