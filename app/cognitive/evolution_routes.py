@@ -22,6 +22,19 @@ def build_evolution_router(evolution: Any, settings: Any) -> APIRouter:
         if not _authorized(request):
             raise HTTPException(status_code=401, detail="Accès privé AURA requis")
 
+    def _authorized_canary(request: Request) -> bool:
+        expected = str(getattr(settings, "evolution_canary_token", "") or "")
+        header = str(request.headers.get("authorization") or "")
+        token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+        if expected:
+            return bool(token) and hmac.compare_digest(token, expected)
+        host = str(request.client.host if request.client else "")
+        return host in {"127.0.0.1", "::1", "localhost", "testclient"}
+
+    def _require_canary(request: Request) -> None:
+        if not _authorized_canary(request):
+            raise HTTPException(status_code=401, detail="Validation canary indépendante requise")
+
     @router.get("/api/evolution/status")
     async def evolution_status(request: Request) -> dict[str, Any]:
         _require_private(request)
@@ -52,5 +65,30 @@ def build_evolution_router(evolution: Any, settings: Any) -> APIRouter:
         _require_private(request)
         results = await evolution.reconcile_remote_candidates()
         return {"ok": True, "results": results}
+
+    @router.get("/api/evolution/canary/{cycle_id}")
+    async def evolution_canary_status(request: Request, cycle_id: str) -> dict[str, Any]:
+        _require_private(request)
+        return await evolution.canary_status(cycle_id)
+
+    @router.post("/api/evolution/canary/{cycle_id}")
+    async def evolution_canary_record(
+        request: Request,
+        cycle_id: str,
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        _require_canary(request)
+        try:
+            return await evolution.record_canary(
+                cycle_id,
+                passed=bool(payload.get("passed", False)),
+                observations=int(payload.get("observations", 0)),
+                metrics=dict(payload.get("metrics") or {}),
+                notes=str(payload.get("notes") or ""),
+            )
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return router
