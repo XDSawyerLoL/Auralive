@@ -64,8 +64,8 @@ class NativeCognitionEngine:
         )
         horizon_present = bool(_clean(bundle.get("horizon")))
         organism = soul.get("organism") if isinstance(soul.get("organism"), dict) else {}
-        stability = float(organism.get("stabilite") or 0.0)
-        clarity = float(organism.get("clarte") or 0.0)
+        stability = float(organism.get("stabilite", 1.0) if organism else 1.0)
+        clarity = float(organism.get("clarte", 1.0) if organism else 1.0)
         silence_need = float(organism.get("besoin_de_silence") or 0.0)
         dream_pressure = float(organism.get("pression_de_reve") or 0.0)
         organism_intention = _clean(organism.get("intention_active"))
