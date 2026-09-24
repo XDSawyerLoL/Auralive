@@ -590,12 +590,31 @@ class CognitiveKernel:
             )
             await self._save_soul()
 
+        surprise = await self._observe_surprise(
+            f"event:{event.source}:{event.type}",
+            content=str(event.payload.get("title") or event.payload.get("text") or "")[:1000],
+            context={"source": event.source, "event_id": event.id},
+        )
+        if surprise >= 0.62 and event.source != "cognitive":
+            self._stimuli.append(
+                {
+                    "type": "aura.surprise",
+                    "source": "cognitive-math",
+                    "occurred_at": event.occurred_at,
+                    "payload": {"event_type": event.type, "surprise": surprise},
+                }
+            )
+
         if important:
             await self._trace(
                 "event",
                 event.type,
                 str(event.payload.get("title") or event.payload.get("text") or "")[:1000],
-                {"source": event.source, "event_id": event.id},
+                {
+                    "source": event.source,
+                    "event_id": event.id,
+                    "surprise": surprise,
+                },
             )
 
     @staticmethod
@@ -669,6 +688,16 @@ class CognitiveKernel:
             },
         )
         await self._save_soul()
+
+        report_surprise = await self._observe_surprise(
+            f"outcome:{report.event_type}:{signature}",
+            content=str(report.reason or signature),
+            context={
+                "automation_id": report.automation_id,
+                "ok": bool(report.ok),
+                "signature": signature,
+            },
+        )
 
         if report.ok:
             return
