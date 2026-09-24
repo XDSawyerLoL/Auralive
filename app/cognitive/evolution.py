@@ -130,7 +130,11 @@ class EvolutionLab:
         self.workspaces = self.root / "workspaces"
         self.artifacts = self.root / "artifacts"
         self.backups = self.root / "backups"
-        self.source_root = Path(BASE_DIR)
+        self.source_root = (
+            Path(RUNTIME_DIR) / "aura-source"
+            if IS_FROZEN
+            else Path(BASE_DIR)
+        )
 
     @property
     def enabled(self) -> bool:
@@ -195,8 +199,7 @@ class EvolutionLab:
     @property
     def source_ready(self) -> bool:
         return (
-            not IS_FROZEN
-            and (self.source_root / "app").is_dir()
+            (self.source_root / "app").is_dir()
             and (self.source_root / "tests").is_dir()
             and (self.source_root / "requirements.txt").is_file()
         )
@@ -1411,7 +1414,10 @@ socket.create_connection = _guard_create
             "enabled": self.enabled,
             "started": self.started,
             "interval_seconds": self.interval_seconds,
-            "source_mode": "frozen" if IS_FROZEN else "source",
+            "source_mode": (
+                "bundled-source" if IS_FROZEN and self.source_ready
+                else ("frozen-no-source" if IS_FROZEN else "source")
+            ),
             "source_root": str(self.source_root),
             "source_ready": self.source_ready,
             "phase": (
