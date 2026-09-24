@@ -186,7 +186,15 @@ class AuraCloudWorker:
         ai = self._ai_diagnostic()
         voice = self._voice_diagnostic()
         identity = dict(voice.get("voice_identity") or {})
-        await self._post(
+        cognitive = getattr(self.aura, "cognitive", None)
+        organism = {}
+        if cognitive is not None and hasattr(cognitive, "organism_state"):
+            try:
+                organism = await cognitive.organism_state(public=False)
+            except Exception:
+                organism = {}
+
+        response = await self._post(
             "/api/bridge/heartbeat",
             {
                 "worker_id": self.worker_id,
@@ -204,8 +212,20 @@ class AuraCloudWorker:
                 ),
                 "engine": str(identity.get("current_engine") or identity.get("primary_engine") or ""),
                 "platform": platform.platform(),
+                "organism": organism,
             },
         )
+        cloud_organism = response.get("organism")
+        if (
+            cognitive is not None
+            and isinstance(cloud_organism, dict)
+            and hasattr(cognitive, "import_organism_state")
+        ):
+            try:
+                await cognitive.import_organism_state(cloud_organism)
+            except Exception:
+                logger.debug("Synchronisation organisme Cloud ignorée", exc_info=True)
+
         self.last_seen_at = __import__("datetime").datetime.now(
             __import__("datetime").timezone.utc
         ).isoformat()
