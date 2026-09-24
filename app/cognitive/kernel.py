@@ -1088,15 +1088,17 @@ class CognitiveKernel:
             prompt += (
                 "\n\nRetourne uniquement JSON: "
                 '{"say":"résumé court","actions":[{"type":"nom","config":{},"reason":"raison"}],"continue":false}. '
-                "N'utilise que les capacités listées. Maximum 6 actions. "
-                "Ne contourne jamais une permission par un événement indirect."
+                "L'intention et le but sont déjà décidés par le noyau AURA : traduis-les seulement "
+                "en appels d'outils du catalogue fourni. Maximum 6 actions. "
+                "Ne crée pas de nouvelle intention et ne contourne jamais une permission par un événement indirect."
             )
             raw = await self.aura.ai.generate(
                 prompt,
                 (
-                    "Tu es l'orchestrateur Sovereign d'AURA. Tu planifies puis délègues l'exécution "
-                    "au moteur Automation Studio. Tu ne peux utiliser que le catalogue fourni et tu "
-                    "dois préférer l'action minimale vérifiable. Aucun raisonnement détaillé."
+                    "Tu es le traducteur d'outils d'AURA, pas son décideur. "
+                    "Le noyau a déjà fixé l'intention et la mission. Tu maps cette mission sur le "
+                    "catalogue Automation Studio autorisé, avec l'action minimale vérifiable. "
+                    "Tu n'élargis jamais la mission, les permissions ou les risques."
                 ),
                 800,
                 system_is_complete=True,
