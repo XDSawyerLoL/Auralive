@@ -136,10 +136,10 @@ class Settings:
         "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS", "safe,ai"
     )
 
-    # AURA Evolution: recherche continue + sas local + CI GitHub distante.
-    # Désactivé par défaut tant qu'un environnement source et un jeton GitHub
-    # finement scoped n'ont pas été configurés.
-    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", False)
+    # AURA Evolution phase 1: recherche + diagnostic continus sont actifs par
+    # défaut. La modification de code reste conditionnée à un arbre source
+    # complet; auto-submit et auto-merge restent désactivés.
+    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", True)
     evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
     evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
     evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)
@@ -156,6 +156,13 @@ class Settings:
     evolution_required_checks: str = os.getenv(
         "AURA_EVOLUTION_REQUIRED_CHECKS",
         "validate,build-engine,build-windows-lite,build-windows",
+    )
+    # Le canary est un troisième sas indépendant de la CI. Le jeton dédié
+    # empêche le noyau AURA d'approuver lui-même sa propre évolution distante.
+    evolution_canary_required: bool = _bool("AURA_EVOLUTION_CANARY_REQUIRED", True)
+    evolution_canary_token: str = os.getenv("AURA_EVOLUTION_CANARY_TOKEN", "")
+    evolution_canary_min_observations: int = _int(
+        "AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS", 3
     )
 
     obs_auto_connect: bool = _bool("OBS_AUTO_CONNECT", True)

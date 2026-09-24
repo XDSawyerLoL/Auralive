@@ -213,6 +213,44 @@ POST /api/kernel/agents/swarm
 POST /api/chat
 ```
 
+## AURA Evolution — phase 1 active
+
+AURA Evolution démarre désormais en **phase 1** par défaut. Le comportement dépend du runtime :
+
+- avec un arbre source complet (`app/`, `tests/`, `requirements.txt`) : recherche, diagnostic, génération de candidat et validation dans le sas local ;
+- dans une application Windows packagée : recherche + diagnostic seulement, sans génération de patch depuis l'arbre PyInstaller ;
+- `AURA_EVOLUTION_AUTO_SUBMIT=false` et `AURA_EVOLUTION_AUTO_MERGE=false` restent les valeurs par défaut.
+
+Une promotion automatique future devra franchir trois sas indépendants :
+
+1. **sas local** : politique de chemins, scan des primitives sensibles, compilation et suite pytest baseline/candidat avec réseau externe coupé ;
+2. **CI GitHub** : `validate`, `build-engine`, `build-windows-lite` et `build-windows` doivent tous réussir ;
+3. **canary indépendant** : mesures avant/après et nombre minimal d'observations. Le canary utilise un secret distinct de `AURA_CLOUD_TOKEN`.
+
+Configuration :
+
+```env
+AURA_EVOLUTION_ENABLED=true
+AURA_EVOLUTION_AUTO_SUBMIT=false
+AURA_EVOLUTION_AUTO_MERGE=false
+AURA_EVOLUTION_CANARY_REQUIRED=true
+AURA_EVOLUTION_CANARY_TOKEN=
+AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS=3
+```
+
+API privée :
+
+```text
+GET  /api/evolution/status
+GET  /api/evolution/cycles
+POST /api/evolution/run
+POST /api/evolution/reconcile
+GET  /api/evolution/canary/{cycle_id}
+POST /api/evolution/canary/{cycle_id}
+```
+
+Le token canary est volontairement indépendant : AURA ne doit pas pouvoir approuver seule le troisième sas avec son token cloud.
+
 ## Quantic Studio Core
 
 Quantic Studio utilise désormais **Quantic Studio Core 0.4.1** comme moteur de diffusion Windows par défaut. OBS reste disponible comme mode de compatibilité manuel, mais n’est plus requis pour le fonctionnement normal du Studio.
