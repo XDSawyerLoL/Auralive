@@ -1,0 +1,3 @@
+AURA Cloud Hostinger v1.2
+Fix: force bind on 0.0.0.0 and ignore generic HOST injected by hosting platform.
+Validated with Hostinger-like HOST + PORT environment.
