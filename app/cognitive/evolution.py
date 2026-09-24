@@ -130,11 +130,37 @@ class EvolutionLab:
         self.workspaces = self.root / "workspaces"
         self.artifacts = self.root / "artifacts"
         self.backups = self.root / "backups"
-        self.source_root = Path(BASE_DIR)
+        configured_source = str(getattr(settings, "evolution_source_root", "") or "").strip()
+        self.source_root = (
+            Path(configured_source).expanduser().resolve()
+            if configured_source
+            else Path(BASE_DIR)
+        )
 
     @property
     def enabled(self) -> bool:
         return bool(getattr(self.settings, "evolution_enabled", False))
+
+    @property
+    def mode(self) -> str:
+        value = str(getattr(self.settings, "evolution_mode", "observe") or "observe").casefold()
+        return value if value in {"observe", "sandbox"} else "observe"
+
+    def sandbox_readiness(self) -> dict[str, Any]:
+        missing: list[str] = []
+        for relative in ("app", "tests", "requirements.txt"):
+            path = self.source_root / relative
+            if relative.endswith(".txt"):
+                if not path.is_file():
+                    missing.append(relative)
+            elif not path.is_dir():
+                missing.append(relative)
+        return {
+            "ready": not missing,
+            "source_root": str(self.source_root),
+            "missing": missing,
+            "frozen_runtime": IS_FROZEN,
+        }
 
     @property
     def interval_seconds(self) -> int:
@@ -142,11 +168,15 @@ class EvolutionLab:
 
     @property
     def auto_submit(self) -> bool:
-        return bool(getattr(self.settings, "evolution_auto_submit", False))
+        return self.mode == "sandbox" and bool(
+            getattr(self.settings, "evolution_auto_submit", False)
+        )
 
     @property
     def auto_merge(self) -> bool:
-        return bool(getattr(self.settings, "evolution_auto_merge", False))
+        return self.mode == "sandbox" and bool(
+            getattr(self.settings, "evolution_auto_merge", False)
+        )
 
     @property
     def github_token(self) -> str:
@@ -1158,6 +1188,50 @@ socket.create_connection = _guard_create
 
                 diagnosis = await self.diagnose(objective, research)
                 await self._set_cycle(cycle_id, status="diagnosed", diagnosis=diagnosis)
+
+                if self.mode == "observe":
+                    await self._set_cycle(cycle_id, status="observed")
+                    self.last_cycle_at = utcnow()
+                    await self.automation.dispatch(
+                        "aura.evolution.cycle",
+                        {
+                            "cycle_id": cycle_id,
+                            "status": "observed",
+                            "objective": str(objective)[:1200],
+                            "worth_changing": bool(diagnosis.get("worth_changing")),
+                            "changed_paths": [],
+                            "pr_url": "",
+                        },
+                        source="evolution",
+                    )
+                    return {
+                        "id": cycle_id,
+                        "status": "observed",
+                        "mode": self.mode,
+                        "research": research,
+                        "diagnosis": diagnosis,
+                        "candidate": {},
+                        "validation": {},
+                        "promotion": {},
+                    }
+
+                readiness = self.sandbox_readiness()
+                if not readiness["ready"]:
+                    await self._set_cycle(
+                        cycle_id,
+                        status="sandbox-unavailable",
+                        promotion={"readiness": readiness},
+                    )
+                    self.last_cycle_at = utcnow()
+                    return {
+                        "id": cycle_id,
+                        "status": "sandbox-unavailable",
+                        "mode": self.mode,
+                        "research": research,
+                        "diagnosis": diagnosis,
+                        "readiness": readiness,
+                    }
+
                 if not bool(diagnosis.get("worth_changing")):
                     await self._set_cycle(cycle_id, status="no-change")
                     return {
@@ -1264,9 +1338,20 @@ socket.create_connection = _guard_create
             "version": self.VERSION,
             "enabled": self.enabled,
             "started": self.started,
+            "mode": self.mode,
+            "phase": (
+                "phase-1-observe"
+                if self.mode == "observe"
+                else "phase-3-auto-merge"
+                if self.auto_merge
+                else "phase-2-auto-submit"
+                if self.auto_submit
+                else "sandbox-manual-promotion"
+            ),
             "interval_seconds": self.interval_seconds,
             "source_mode": "frozen" if IS_FROZEN else "source",
             "source_root": str(self.source_root),
+            "sandbox": self.sandbox_readiness(),
             "auto_submit": self.auto_submit,
             "auto_merge": self.auto_merge,
             "github_configured": bool(self.github_token),

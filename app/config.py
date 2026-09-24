@@ -136,10 +136,12 @@ class Settings:
         "AURA_COGNITIVE_OPERATOR_ALLOWED_RISKS", "safe,ai"
     )
 
-    # AURA Evolution: recherche continue + sas local + CI GitHub distante.
-    # Désactivé par défaut tant qu'un environnement source et un jeton GitHub
-    # finement scoped n'ont pas été configurés.
-    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", False)
+    # AURA Evolution: actif par défaut en phase 1 "observe".
+    # Ce mode recherche et diagnostique mais ne modifie aucun fichier.
+    # Le mode "sandbox" doit être activé explicitement dans un environnement source.
+    evolution_enabled: bool = _bool("AURA_EVOLUTION_ENABLED", True)
+    evolution_mode: str = os.getenv("AURA_EVOLUTION_MODE", "observe").strip().lower()
+    evolution_source_root: str = os.getenv("AURA_EVOLUTION_SOURCE_ROOT", "").strip()
     evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
     evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", False)
     evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", False)

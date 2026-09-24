@@ -105,6 +105,11 @@
 
 ## Auto-évolution AURA
 
+- [x] Phase 1 `observe` active par défaut : recherche + diagnostic sans mutation
+- [x] `AUTO_SUBMIT` et `AUTO_MERGE` techniquement neutralisés en mode `observe`
+- [x] Mode `sandbox` séparé, activable uniquement avec un checkout source complet
+- [x] Diagnostic de disponibilité du sandbox (`app/`, `tests/`, `requirements.txt`)
+
 - [x] Recherche périodique des améliorations documentées sur sources HTTPS autorisées
 - [x] Veille du dépôt GitHub officiel et des versions PyPI
 - [x] Analyse des erreurs récurrentes et des leçons du noyau
