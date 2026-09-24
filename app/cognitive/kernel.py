@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from app.automation.models import ActionSpec, Automation, Event, ExecutionReport
 from app.cognitive.native_cognition import NativeCognitionEngine
+from app.cognitive.organism import AuraOrganism
 from app.database import Database, utcnow
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ class CognitiveKernel:
         self.horizon = horizon
         self.settings = settings
         self.native_cognition = NativeCognitionEngine()
+        self.organism = AuraOrganism()
         self.started = False
         self.task: asyncio.Task[None] | None = None
         self._wired = False
@@ -237,6 +239,18 @@ class CognitiveKernel:
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS aura_organism_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                payload TEXT NOT NULL DEFAULT '{}',
+                state TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_aura_organism_events_created
+            ON aura_organism_events(created_at DESC);
             """
         )
         routine_columns = await self.db.fetchall("PRAGMA table_info(aura_routines)")
@@ -253,10 +267,15 @@ class CognitiveKernel:
                 self._soul_cache = {}
         if not self._soul_cache:
             self._soul_cache = self._default_soul()
-            await self._save_soul()
+
+        self._soul_cache["organism"] = self.organism.migrate(self._soul_cache)
+        self._sync_legacy_from_organism()
+        await self._save_soul()
 
     def _default_soul(self) -> dict[str, Any]:
         now = utcnow()
+        organism = self.organism.default_state(now=now)
+        metrics = self.organism.legacy_metrics(organism)
         return {
             "name": "AURA",
             "kernel_version": self.VERSION,
@@ -264,19 +283,75 @@ class CognitiveKernel:
             "born_at": now,
             "phase": "genesis",
             "cycles": 0,
-            "energy": 0.72,
-            "curiosity": 0.64,
-            "pressure": 0.18,
-            "continuity": 1.0,
+            **metrics,
             "introspection": 0.68,
             "openness": 0.72,
             "reactivity": 0.58,
             "playfulness": 0.52,
             "dominant_thought": "Maintenir une présence utile sans produire de bruit.",
             "current_intention": "Observer, comprendre, anticiper et n'agir qu'avec une autorité suffisante.",
+            "organism": organism,
             "last_tick_at": "",
             "last_reflection_at": "",
         }
+
+    def _sync_legacy_from_organism(self) -> None:
+        organism = self.organism.migrate(self._soul_cache)
+        self._soul_cache["organism"] = organism
+        self._soul_cache.update(self.organism.legacy_metrics(organism))
+        self._soul_cache["mood"] = str(organism.get("mood") or "calme")
+        self._soul_cache["active_intention"] = str(
+            organism.get("intention_active") or "observer"
+        )
+
+    async def _record_organism_event(
+        self,
+        kind: str,
+        *,
+        reason: str = "",
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        organism = self.organism.migrate(self._soul_cache)
+        await self.db.execute(
+            """
+            INSERT INTO aura_organism_events(kind,reason,payload,state,created_at)
+            VALUES(?,?,?,?,?)
+            """,
+            (
+                str(kind)[:80],
+                str(reason)[:500],
+                json.dumps(payload or {}, ensure_ascii=False, default=str)[:16000],
+                json.dumps(organism, ensure_ascii=False, default=str)[:30000],
+                utcnow(),
+            ),
+        )
+        await self.db.execute(
+            """
+            DELETE FROM aura_organism_events
+            WHERE id IN (
+                SELECT id FROM aura_organism_events
+                ORDER BY id DESC LIMIT -1 OFFSET 5000
+            )
+            """
+        )
+
+    async def organism_state(self, *, public: bool = False) -> dict[str, Any]:
+        state = self.organism.migrate(self._soul_cache)
+        return self.organism.public_state(state) if public else state
+
+    async def import_organism_state(self, candidate: dict[str, Any]) -> bool:
+        if not isinstance(candidate, dict) or not candidate:
+            return False
+        current = self.organism.migrate(self._soul_cache)
+        current_at = str(current.get("updated_at") or "")
+        candidate_at = str(candidate.get("updated_at") or "")
+        if current_at and candidate_at and candidate_at <= current_at:
+            return False
+        self._soul_cache["organism"] = self.organism.migrate({"organism": candidate})
+        self._sync_legacy_from_organism()
+        await self._save_soul()
+        await self._record_organism_event("sync", reason="synchronisation organisme")
+        return True
 
     async def start(self) -> None:
         if self.started:
@@ -343,6 +418,8 @@ class CognitiveKernel:
         for key, delta in deltas.items():
             if key in self._soul_cache and isinstance(self._soul_cache[key], (int, float)):
                 self._soul_cache[key] = round(_clamp(float(self._soul_cache[key]) + delta), 4)
+        # Les anciennes jauges restent compatibles, mais l'organisme devient la
+        # source principale dès qu'une transition homeostatique est appliquée.
 
     async def _trace(
         self,
