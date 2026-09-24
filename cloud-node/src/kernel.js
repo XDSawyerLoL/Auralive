@@ -19,9 +19,10 @@ const AGENT_ROLES = {
 export class CognitiveKernel {
   static VERSION = 'aura-unified-kernel-node-v2';
 
-  constructor(ai, horizon) {
+  constructor(ai, horizon, bridge = null) {
     this.ai = ai;
     this.horizon = horizon;
+    this.bridge = bridge;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.started = false;
@@ -411,11 +412,37 @@ export class CognitiveKernel {
     return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
   }
 
-  async operate(task) {
+  async operate(task, requestedRisks = []) {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
-    const plan = await this.runAgent('operator', `${mission}\n\nConstruis seulement un plan. Le cloud n’a aucune autorité d’exécution sur le PC.`);
-    return { ok: true, task: mission, execution_mode: config.cloudOperatorMode, executed: false, plan: plan.answer, authority: 'Quantic Studio Automation Studio required for execution' };
+
+    if (this.bridge?.enabled && await this.bridge.workerOnline()) {
+      const result = await this.bridge.operate(mission, requestedRisks);
+      await this.trace('operator', 'Quantic Studio execution', mission, {
+        delegated: true,
+        executed: Boolean(result?.executed),
+        job_id: result?.job_id || '',
+      });
+      return {
+        ok: true,
+        task: mission,
+        execution_mode: 'quantic-studio-real',
+        ...result,
+      };
+    }
+
+    const plan = await this.runAgent(
+      'operator',
+      `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
+    );
+    return {
+      ok: true,
+      task: mission,
+      execution_mode: 'plan-only-fallback',
+      executed: false,
+      plan: plan.answer,
+      authority: 'Quantic Studio worker offline',
+    };
   }
 
   async chat(text, author = 'Utilisateur', privateView = false) {
@@ -704,6 +731,7 @@ export class CognitiveKernel {
         independent_from_language_model: true,
       },
       expression: this.expression.diagnostic(),
+      bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
       last_reflection_at: this.lastReflectionAt,
