@@ -515,8 +515,21 @@ export class CognitiveKernel {
 
   async runAgent(name, task) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
-    const answer = await this.ai.generate(`Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`, AGENT_ROLES[name], 700);
-    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000) });
+    const taskRole = ({
+      planner: 'reasoning',
+      research: 'research',
+      dev: 'code',
+      security: 'security',
+      operator: 'tools',
+      critic: 'critic',
+    })[name] || 'general';
+    const answer = await this.ai.generate(
+      `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
+      AGENT_ROLES[name],
+      700,
+      taskRole,
+    );
+    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000), task_role: taskRole });
     return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
   }
 
@@ -528,7 +541,12 @@ export class CognitiveKernel {
       try { outputs.push(await this.runAgent(name, task)); }
       catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
     }
-    const synthesis = await this.ai.generate(`Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`, 'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.', 900);
+    const synthesis = await this.ai.generate(
+      `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
+      'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
+      900,
+      'critic',
+    );
     await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
     return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
   }
@@ -613,15 +631,28 @@ export class CognitiveKernel {
       privateView,
     });
 
+    // Allocation adaptative : le noyau choisit combien de calcul externe
+    // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
+    const inference = this.inferenceAssessment();
+
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
-    // le droit de créer l'intention ni de modifier le Soul. Son résultat reste
-    // un élément consultatif injecté dans un plan déjà décidé par AURA.
+    // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
-      const support = await this.expression.semanticSupport(plan, await this.contextForAi(privateView));
+      const support = await this.expression.semanticSupport(
+        plan,
+        await this.contextForAi(privateView),
+        {
+          maxTokens: Math.max(180, Number(inference.token_budget || 700)),
+          taskRole: inference.model_role || 'research',
+        },
+      );
       plan = this.cognition.integrateSemanticSupport(plan, support);
     }
 
-    const answer = await this.expression.verbalize(plan);
+    const answer = await this.expression.verbalize(plan, {
+      maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
+      taskRole: 'conversation',
+    });
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
@@ -656,6 +687,7 @@ export class CognitiveKernel {
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       semantic_support_used: Boolean(plan.semantic_support),
+      compute: inference,
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
     };
   }
@@ -884,6 +916,10 @@ export class CognitiveKernel {
       },
       expression: this.expression.diagnostic(),
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
+      active_inference: {
+        ...this.inferenceAssessment(),
+        version: ActiveInferenceEngine.VERSION,
+      },
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
