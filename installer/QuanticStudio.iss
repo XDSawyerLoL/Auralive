@@ -1,5 +1,5 @@
 #ifndef MyAppVersion
-  #define MyAppVersion "2.7.4"
+  #define MyAppVersion "2.8.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\dist\QuanticStudio"
