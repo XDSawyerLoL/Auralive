@@ -1,0 +1,64 @@
+name: Package AURA Cloud Hostinger
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "config/**"
+      - "tests/**"
+      - "requirements.txt"
+      - "pytest.ini"
+      - "deploy/hostinger/**"
+      - ".github/workflows/package-aura-cloud-hostinger.yml"
+  workflow_dispatch:
+
+jobs:
+  package-aura-cloud-hostinger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare sanitized server package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/aura-cloud-hostinger"
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT"
+
+          cp -R app "$ROOT/app"
+          cp -R config "$ROOT/config"
+          cp -R tests "$ROOT/tests"
+          cp -R docs "$ROOT/docs"
+          cp -R deploy "$ROOT/deploy"
+          cp requirements.txt pytest.ini README.md FONCTIONS.md SECURITY.md LICENSE "$ROOT/"
+
+          mkdir -p "$ROOT/data/media"
+          touch "$ROOT/data/.gitkeep" "$ROOT/data/media/.gitkeep"
+
+          cat > "$ROOT/DEPLOYMENT.json" <<EOF
+          {
+            "product": "AURA Cloud",
+            "target": "Hostinger/manual",
+            "git_sha": "$GITHUB_SHA",
+            "git_ref": "$GITHUB_REF",
+            "evolution_phase": 1,
+            "auto_submit_default": false,
+            "auto_merge_default": false
+          }
+          EOF
+
+          cp deploy/hostinger/.env.hostinger.example "$ROOT/.env.hostinger.example"
+
+          (
+            cd "$RUNNER_TEMP"
+            zip -qr aura-cloud-hostinger.zip aura-cloud-hostinger
+          )
+
+      - name: Upload deployment ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-cloud-hostinger
+          path: ${{ runner.temp }}/aura-cloud-hostinger.zip
+          if-no-files-found: error
+          retention-days: 14
