@@ -246,7 +246,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.7.5',
+  version: '1.7.6',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -490,14 +490,14 @@ app.get('/api/kernel/status', async () => {
   return { ...status, phase: (await kernel.soul()).phase };
 });
 
-app.get('/api/kernel/soul', async (request) => {
-  if (!bootstrap.runtimeReady) return publicFallbackSoul(isPrivate(request));
-  return kernel.soul({ privateView: isPrivate(request) });
+app.get('/api/kernel/soul', async () => {
+  if (!bootstrap.runtimeReady) return publicFallbackSoul(true);
+  return kernel.soul({ privateView: true });
 });
 
-app.get('/api/kernel/organism', async (request) => {
+app.get('/api/kernel/organism', async () => {
   if (!bootstrap.runtimeReady) return { ready: false };
-  return kernel.organismState({ publicView: !isPrivate(request) });
+  return kernel.organismState({ publicView: false });
 });
 
 app.post('/api/kernel/tick', async (request, reply) => {
@@ -515,14 +515,10 @@ app.get('/api/kernel/reflections', async (request, reply) =>
     : undefined);
 
 app.get('/api/kernel/lessons', async (request, reply) =>
-  requirePrivate(request, reply) && requireRuntime(reply)
-    ? kernel.lessons(request.query?.limit)
-    : undefined);
+  requireRuntime(reply) ? kernel.lessons(request.query?.limit) : undefined);
 
 app.get('/api/kernel/intentions', async (request, reply) =>
-  requirePrivate(request, reply) && requireRuntime(reply)
-    ? kernel.intentions(request.query?.limit)
-    : undefined);
+  requireRuntime(reply) ? kernel.intentions(request.query?.limit) : undefined);
 
 app.post('/api/kernel/intentions', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
@@ -564,19 +560,13 @@ app.get('/api/kernel/improvements', async (request, reply) =>
     : undefined);
 
 app.get('/api/kernel/activity', async (request, reply) =>
-  requirePrivate(request, reply) && requireRuntime(reply)
-    ? kernel.activity(request.query?.limit)
-    : undefined);
+  requireRuntime(reply) ? kernel.activity(request.query?.limit) : undefined);
 
 app.get('/api/kernel/work', async (request, reply) =>
-  requirePrivate(request, reply) && requireRuntime(reply)
-    ? kernel.workItems(request.query?.limit)
-    : undefined);
+  requireRuntime(reply) ? kernel.workItems(request.query?.limit) : undefined);
 
-app.get('/api/kernel/attention', async (request, reply) =>
-  requirePrivate(request, reply) && requireRuntime(reply)
-    ? kernel.attentionMap()
-    : undefined);
+app.get('/api/kernel/attention', async (_request, reply) =>
+  requireRuntime(reply) ? kernel.attentionMap() : undefined);
 
 app.post('/api/kernel/agents/run', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
@@ -608,7 +598,7 @@ app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
-  return kernel.chat(text, String(request.body?.author || 'Utilisateur'), isPrivate(request));
+  return kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
 });
 
 app.post('/api/cloud/events', async (request, reply) => {
