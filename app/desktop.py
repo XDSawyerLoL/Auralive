@@ -14,9 +14,12 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from app.versioning import build_id, studio_version
+
 
 _stdio_sink = None
-BUILD_ID = "QuanticStudio-2.8.1-Windows-Native-2026-09-25"
+BUILD_ID = build_id()
+STUDIO_VERSION = studio_version()
 
 
 def _startup_log_path() -> Path:
@@ -87,7 +90,7 @@ def _dashboard_url() -> str:
 
 
 def _request_text(url: str, timeout: float = 0.8) -> tuple[int, str]:
-    request = urllib.request.Request(url, headers={"User-Agent": "QuanticStudioDesktop/2.8.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": f"QuanticStudioDesktop/{STUDIO_VERSION}"})
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read(96_000).decode("utf-8", errors="ignore")
         return int(getattr(response, "status", 200)), body
