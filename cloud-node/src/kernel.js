@@ -137,6 +137,7 @@ export class CognitiveKernel {
       try { this.soulCache = JSON.parse(row.state); } catch { this.soulCache = null; }
     }
     if (!this.soulCache) this.soulCache = this.defaultSoul();
+    this.soulCache.kernel_version = CognitiveKernel.VERSION;
     this.soulCache.organism = this.organism.migrate(this.soulCache);
     this.syncLegacyFromOrganism();
     await this.saveSoul();
