@@ -645,10 +645,8 @@ app.post('/api/horizon/context/intents', async (request, reply) =>
     ? horizon.pushIntent(request.body || {})
     : undefined);
 
-app.get('/api/evolution/status', async (request, reply) =>
-  requirePrivate(request, reply) && requireRuntime(reply)
-    ? evolution.status()
-    : undefined);
+app.get('/api/evolution/status', async (_request, reply) =>
+  requireRuntime(reply) ? evolution.status() : undefined);
 
 app.get('/api/evolution/cycles', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
