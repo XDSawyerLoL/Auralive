@@ -233,6 +233,7 @@ export class ComputeMesh {
         peer.id,
       ],
     );
+    await this.rebalanceOpenTasks().catch(() => {});
     return { ok: true, peer_id: peer.id, next_heartbeat_seconds: config.computeMeshHeartbeatSeconds };
   }
 
@@ -269,6 +270,62 @@ export class ComputeMesh {
       }))
       .filter((peer) => Number.isFinite(peer.routing_score))
       .sort((a, b) => b.routing_score - a.routing_score);
+  }
+
+  async rebalanceTask(taskId) {
+    const task = await one(
+      `SELECT * FROM aura_mesh_tasks
+       WHERE id=? AND status IN ('queued','running','waiting') LIMIT 1`,
+      [String(taskId || '')],
+    );
+    if (!task || nowMs() >= Number(task.deadline_ms || 0)) return 0;
+
+    const existing = await query(
+      'SELECT peer_id,status FROM aura_mesh_assignments WHERE task_id=?',
+      [task.id],
+    );
+    const used = new Set(existing.map((row) => String(row.peer_id || '')));
+    const usableAssignments = existing.filter((row) =>
+      !['failed', 'rejected', 'cancelled'].includes(String(row.status || '')));
+    const missing = Math.max(0, Number(task.replicas || 1) - usableAssignments.length);
+    if (!missing) return 0;
+
+    const peers = await this.onlinePeers({
+      requiredTags: parseJson(task.required_tags, []),
+      modelHint: String(task.model_hint || ''),
+      dataClass: String(task.data_class || 'private'),
+      limit: Math.max(16, missing * 6),
+    });
+    const selected = peers.filter((peer) => !used.has(peer.id)).slice(0, missing);
+    const stamp = now();
+    for (const peer of selected) {
+      await query(
+        `INSERT IGNORE INTO aura_mesh_assignments(
+          id,task_id,peer_id,status,lease_expires_ms,result,result_hash,
+          latency_ms,error,created_at,updated_at
+        ) VALUES(?,?,?,'queued',0,'{}','',0,'',?,?)`,
+        [randomUUID(), task.id, peer.id, stamp, stamp],
+      );
+    }
+    if (selected.length) {
+      await query(
+        "UPDATE aura_mesh_tasks SET status='running',error='',updated_at=? WHERE id=?",
+        [now(), task.id],
+      );
+    }
+    return selected.length;
+  }
+
+  async rebalanceOpenTasks(limit = 24) {
+    const rows = await query(
+      `SELECT id FROM aura_mesh_tasks
+       WHERE status IN ('queued','running','waiting') AND deadline_ms > ?
+       ORDER BY created_at ASC LIMIT ?`,
+      [nowMs(), Math.max(1, Math.min(Number(limit || 24), 100))],
+    );
+    let assigned = 0;
+    for (const row of rows) assigned += await this.rebalanceTask(row.id);
+    return assigned;
   }
 
   async enqueueTask({
@@ -479,9 +536,27 @@ export class ComputeMesh {
     );
   }
 
+  async updatePeerAgreement(peerId, agreed) {
+    const peer = await one('SELECT agreement_rate,reputation FROM aura_mesh_peers WHERE id=?', [peerId]);
+    if (!peer) return;
+    const alpha = 0.12;
+    const agreement = clamp(
+      Number(peer.agreement_rate || 0.5) * (1 - alpha) + (agreed ? 1 : 0) * alpha,
+    );
+    const reputation = clamp(
+      Number(peer.reputation || 0.5) * (1 - alpha)
+        + (agreed ? 0.9 : 0.25) * alpha,
+    );
+    await query(
+      'UPDATE aura_mesh_peers SET agreement_rate=?,reputation=?,updated_at=? WHERE id=?',
+      [agreement, reputation, now(), peerId],
+    );
+  }
+
   async reconcileTask(taskId) {
     const task = await one('SELECT * FROM aura_mesh_tasks WHERE id=?', [String(taskId || '')]);
     if (!task) return null;
+    await this.rebalanceTask(task.id).catch(() => {});
     const rows = await query(
       `SELECT a.*,p.reputation,p.reliability
        FROM aura_mesh_assignments a
@@ -505,11 +580,7 @@ export class ComputeMesh {
       if (winner.length >= quorum) {
         const agreedPeers = new Set(winner.map((row) => row.peer_id));
         for (const row of completed) {
-          await this.updatePeerOutcome(row.peer_id, {
-            ok: true,
-            latencyMs: Number(row.latency_ms || 0),
-            agreed: agreedPeers.has(row.peer_id),
-          });
+          await this.updatePeerAgreement(row.peer_id, agreedPeers.has(row.peer_id));
         }
         const result = parseJson(winner[0].result, {});
         await query(
@@ -584,6 +655,7 @@ export class ComputeMesh {
   async waitForTask(taskId, timeoutMs = 12000) {
     const deadline = Date.now() + Math.max(250, Math.min(Number(timeoutMs || 12000), 60000));
     while (Date.now() < deadline) {
+      await this.rebalanceTask(taskId).catch(() => {});
       const task = await this.getTask(taskId);
       if (!task) throw new Error('tâche Mesh introuvable');
       if (['completed', 'failed', 'cancelled'].includes(task.status)) return task;
