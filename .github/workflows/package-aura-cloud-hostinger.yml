@@ -44,6 +44,8 @@ jobs:
             "git_ref": "$GITHUB_REF",
             "evolution_phase": 3,
             "cognition_native": true,
+            "command_center": 1,
+            "autonomous_initiatives": true,
             "promotion": "ci-and-canary-gated"
           }
           EOF
