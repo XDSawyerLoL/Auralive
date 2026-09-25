@@ -1,7 +1,5 @@
 export const DASHBOARD_SCRIPT = String.raw`
 const $ = function(id){ return document.getElementById(id); };
-let token = '';
-let privateConnected = false;
 let lastSoul = null;
 let lastAttention = null;
 let livingScene = null;
