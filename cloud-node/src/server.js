@@ -162,7 +162,7 @@ fabric.register({
   provider: 'aura-compute-mesh',
 }, async (input) => {
   const result = await moa.run(String(input?.objective || ''), {
-    dataClass: String(input?.data_class || 'private'),
+    dataClass: 'private',
     modelHint: String(input?.model_hint || ''),
     maxExperts: Number(input?.max_experts || 4),
   });
@@ -931,7 +931,7 @@ app.get('/api/mesh/status', async (request) => {
 
 app.post('/api/mesh/register', async (request, reply) => {
   if (!requireRuntime(reply)) return;
-  const trusted = isPrivate(request);
+  const trusted = tokenEquals(bearer(request), config.cloudToken);
   if (!trusted && !config.computeMeshPublicJoin) {
     return reply.code(403).send({ error: 'Inscription publique au Compute Mesh désactivée' });
   }
