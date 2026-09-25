@@ -119,13 +119,22 @@ jobs:
           if (-not (Test-Path "dist\QuanticStudio\aura-source\requirements.txt")) {
             throw "requirements.txt AURA Evolution est absent du package."
           }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\cloud-node\src\cognition.js")) {
+            throw "Le runtime Node AURA Evolution est absent du package."
+          }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\VERSION.json")) {
+            throw "VERSION.json est absent du package AURA Evolution."
+          }
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") {
             throw "Le FFmpeg livre ne contient pas gfxcapture."
           }
+          $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+          $buildDate = ([string]$version.updated_at).Replace("-", "")
+          $expectedBuildId = "QuanticStudio-$($version.studio)-Windows-Native-$buildDate"
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.8.1-Windows-Native-2026-09-25") {
-            throw "Identifiant de build inattendu: $buildId"
+          if ($buildId -ne $expectedBuildId) {
+            throw "Identifiant de build inattendu: $buildId (attendu: $expectedBuildId)"
           }
           if (-not (Test-Path "dist\QuanticStudio\.env")) {
             throw "La configuration locale .env est absente du package."
@@ -209,8 +218,11 @@ jobs:
               throw "QuanticStudio-startup.log n'a pas ete cree."
             }
             $startup = Get-Content $logPath -Raw
-            if ($startup -notmatch "QuanticStudio-2.8.1-Windows-Native-2026-09-25") {
-              throw "Le binaire lance n'est pas le build FastVoiceOAuth attendu."
+            $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+            $buildDate = ([string]$version.updated_at).Replace("-", "")
+            $expectedBuildId = "QuanticStudio-$($version.studio)-Windows-Native-$buildDate"
+            if ($startup -notmatch [regex]::Escape($expectedBuildId)) {
+              throw "Le binaire lance n'est pas le build attendu: $expectedBuildId"
             }
             if ($startup -notmatch "stdout=ok" -or $startup -notmatch "stderr=ok") {
               Get-Content $logPath
@@ -284,7 +296,7 @@ jobs:
             }
 
             $updateStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/update/status" -TimeoutSec 3
-            if ($updateStatus.current_version -ne "2.8.1") {
+            if ($updateStatus.current_version -ne [string]$version.studio) {
               $updateStatus | ConvertTo-Json -Depth 6 | Write-Host
               throw "Le centre de mise a jour n'annonce pas Quantic Studio 2.8.1."
             }
@@ -406,22 +418,29 @@ jobs:
 
       - name: Build Windows installer
         shell: pwsh
-        run: .\scripts\build-installer.ps1 -Version "2.8.1" -SourceDir "dist\QuanticStudio"
+        shell: pwsh
+        run: |
+          $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+          .\scripts\build-installer.ps1 -Version ([string]$version.studio) -SourceDir "dist\QuanticStudio"
 
       - name: Sign installer when certificate is configured
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
-        run: .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-2.8.1.exe")
+        run: |
+          $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+          .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-$($version.studio).exe")
 
       - name: Verify Windows installer
         shell: pwsh
         run: |
-          if (-not (Test-Path "release\QuanticStudio-Setup-2.8.1.exe")) {
+          $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+          $installer = "release\QuanticStudio-Setup-$($version.studio).exe"
+          if (-not (Test-Path $installer)) {
             throw "Installateur Quantic Studio absent."
           }
-          if ((Get-Item "release\QuanticStudio-Setup-2.8.1.exe").Length -lt 1000000) {
+          if ((Get-Item $installer).Length -lt 1000000) {
             throw "Installateur Quantic Studio anormalement petit."
           }
           if (-not (Select-String -Path "installer\QuanticStudio.iss" -Pattern "uninsneveruninstall" -Quiet)) {
@@ -431,15 +450,15 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Setup-2.8.1
-          path: release/QuanticStudio-Setup-2.8.1.exe
+          name: QuanticStudio-Setup
+          path: release/QuanticStudio-Setup-*.exe
           if-no-files-found: error
           retention-days: 30
 
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Windows-Native-2.8.1
+          name: QuanticStudio-Windows-Native
           path: dist/QuanticStudio
           if-no-files-found: error
           include-hidden-files: true
