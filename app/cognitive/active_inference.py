@@ -11,7 +11,7 @@ class ActiveInferenceEngine:
     d'intentions, la surprise et le compromis valeur/information/risque/coût.
     """
 
-    VERSION = "aura-active-inference-v1"
+    VERSION = "aura-active-inference-v1.1"
 
     @staticmethod
     def _softmax(values: list[float], temperature: float = 0.18) -> list[float]:
@@ -96,23 +96,27 @@ class ActiveInferenceEngine:
         novelty = max(0.0, min(1.0, float(novelty)))
         risk = max(0.0, min(1.0, float(risk)))
 
+        # L'entropie brute du champ d'intentions est naturellement élevée
+        # parce qu'AURA garde plusieurs intentions concurrentes actives. Elle ne doit
+        # donc pas, à elle seule, déclencher un gros modèle. La nouveauté et le risque
+        # pèsent davantage dans l'escalade de calcul.
         difficulty = (
-            uncertainty * 0.36
-            + (1.0 - clarity) * 0.22
-            + (1.0 - stability) * 0.14
-            + novelty * 0.18
-            + risk * 0.10
+            uncertainty * 0.18
+            + (1.0 - clarity) * 0.18
+            + (1.0 - stability) * 0.12
+            + novelty * 0.30
+            + risk * 0.22
         )
 
-        if difficulty < 0.20:
+        if difficulty < 0.16:
             tier = "native"
             model_role = "fast"
             budget = 0
-        elif difficulty < 0.42:
+        elif difficulty < 0.45:
             tier = "fast"
             model_role = "conversation"
             budget = 180
-        elif difficulty < 0.66:
+        elif difficulty < 0.72:
             tier = "deep"
             model_role = "reasoning"
             budget = 700

@@ -7,10 +7,10 @@ import pytest
 from app.services.model_constellation import ModelConstellation
 
 
-def settings():
+def settings(mode="ollama", base_url="http://127.0.0.1:11434"):
     return SimpleNamespace(
-        ai_mode="ollama",
-        ai_base_url="http://127.0.0.1:11434",
+        ai_mode=mode,
+        ai_base_url=base_url,
         ai_fast_model="",
         ai_model="gemma3:12b",
     )
@@ -66,3 +66,65 @@ async def test_installed_specialist_is_selected_without_downloading(monkeypatch)
     empathy = await router.choose("empathy")
     assert reasoning["name"] == "deepseek-r1:8b"
     assert empathy["name"] == "dolphin-mistral:7b"
+
+
+class _JsonResponse:
+    def __init__(self, payload, status=200):
+        self.payload = payload
+        self.status = status
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def raise_for_status(self):
+        if self.status >= 400:
+            raise RuntimeError(f"HTTP {self.status}")
+
+    async def json(self):
+        return self.payload
+
+
+class _TransitionSession:
+    def __init__(self):
+        self.pulled = False
+        self.urls = []
+
+    def get(self, url, **kwargs):
+        self.urls.append(url)
+        models = [{"name": "deepseek-r1:8b", "size": 5_000_000_000}] if self.pulled else []
+        return _JsonResponse({"models": models})
+
+    def post(self, url, **kwargs):
+        self.urls.append(url)
+        self.pulled = True
+        return _JsonResponse({"status": "success"})
+
+
+@pytest.mark.asyncio
+async def test_pull_can_validate_local_ollama_before_provider_switch():
+    router = ModelConstellation(
+        settings(mode="openai_compatible", base_url="https://provider.example/v1")
+    )
+    router.session = _TransitionSession()
+
+    result = await router.pull(
+        "deepseek-r1:8b",
+        base_url="http://127.0.0.1:11434",
+    )
+
+    assert result["ok"] is True
+    assert result["installed"] is True
+    assert result["base_url"] == "http://127.0.0.1:11434"
+    assert router.settings.ai_mode == "openai_compatible"
+    assert all("provider.example" not in url for url in router.session.urls)
+
+
+@pytest.mark.asyncio
+async def test_pull_refuses_non_local_install_endpoint():
+    router = ModelConstellation(settings())
+    router.session = _TransitionSession()
+    with pytest.raises(ValueError, match="Ollama doit être local"):
+        await router.pull("deepseek-r1:8b", base_url="https://remote.example")

@@ -13,7 +13,7 @@ from typing import Any
 
 from app.config import RUNTIME_DIR
 
-CURRENT_VERSION = "2.8.0"
+CURRENT_VERSION = "2.8.1"
 REPOSITORY = "XDSawyerLoL/Auralive"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 USER_AGENT = f"QuanticStudioUpdater/{CURRENT_VERSION}"

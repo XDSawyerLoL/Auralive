@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.cognitive.active_inference import ActiveInferenceEngine
+from app.cognitive.organism import AuraOrganism
 from app.cognitive.world_model import CounterfactualWorldModel
 
 
@@ -36,3 +37,12 @@ def test_world_model_prefers_verification_when_clarity_is_low():
         explicit_mission=True,
     )
     assert forecast["selected"] == "verify_first"
+
+
+def test_default_aura_organism_does_not_trigger_deep_compute():
+    engine = ActiveInferenceEngine()
+    organism = AuraOrganism().default_state()
+    assessment = engine.assess(organism)
+    assert assessment["compute_tier"] in {"native", "fast"}
+    assert assessment["token_budget"] <= 180
+    assert assessment["difficulty"] < 0.45

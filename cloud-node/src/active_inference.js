@@ -3,7 +3,7 @@ function clamp(value, low = 0, high = 1) {
 }
 
 export class ActiveInferenceEngine {
-  static VERSION = 'aura-active-inference-v1';
+  static VERSION = 'aura-active-inference-v1.1';
 
   softmax(values, temperature = 0.18) {
     if (!values.length) return [];
@@ -71,26 +71,29 @@ export class ActiveInferenceEngine {
     const stability = Number(organism?.stabilite ?? 0.7);
     const safeNovelty = clamp(novelty);
     const safeRisk = clamp(risk);
+    // AURA entretient volontairement plusieurs intentions concurrentes :
+    // leur entropie brute est donc élevée même au repos. Nouveauté et risque
+    // doivent être les principaux déclencheurs du calcul profond.
     const difficulty = (
-      uncertainty * 0.36
-      + (1 - clarity) * 0.22
-      + (1 - stability) * 0.14
-      + safeNovelty * 0.18
-      + safeRisk * 0.10
+      uncertainty * 0.18
+      + (1 - clarity) * 0.18
+      + (1 - stability) * 0.12
+      + safeNovelty * 0.30
+      + safeRisk * 0.22
     );
 
     let computeTier = 'native';
     let modelRole = 'fast';
     let tokenBudget = 0;
-    if (difficulty >= 0.66) {
+    if (difficulty >= 0.72) {
       computeTier = 'verified';
       modelRole = 'critic';
       tokenBudget = 1000;
-    } else if (difficulty >= 0.42) {
+    } else if (difficulty >= 0.45) {
       computeTier = 'deep';
       modelRole = 'reasoning';
       tokenBudget = 700;
-    } else if (difficulty >= 0.20) {
+    } else if (difficulty >= 0.16) {
       computeTier = 'fast';
       modelRole = 'conversation';
       tokenBudget = 180;

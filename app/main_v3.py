@@ -66,7 +66,7 @@ async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
 
 
 aura.overlay.subscribe(_native_overlay_audio_listener)
-app.version = "2.8.0"
+app.version = "2.8.1"
 
 
 def _remove_route(path: str, method: str) -> None:
@@ -227,14 +227,31 @@ async def models_pull_v3(
     model = str(payload.get("model") or "").strip()
     if not model:
         raise HTTPException(status_code=422, detail="Nom de modèle requis")
-    if str(settings.ai_mode or "").casefold() != "ollama":
-        _write_runtime_env({"AI_MODE": "ollama"})
-        os.environ["AI_MODE"] = "ollama"
-        settings.ai_mode = "ollama"
+    current_mode = str(settings.ai_mode or "").casefold()
+    target_url = str(
+        payload.get("base_url")
+        or (settings.ai_base_url if current_mode == "ollama" else "http://127.0.0.1:11434")
+    ).strip().rstrip("/")
     try:
-        return await aura.ai.constellation.pull(model)
+        # Le téléchargement et la présence du modèle sont validés avant de
+        # modifier le fournisseur actif. Une panne Ollama ne casse donc jamais
+        # une configuration Gemini/OpenAI-compatible existante.
+        result = await aura.ai.constellation.pull(model, base_url=target_url)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    _write_runtime_env({"AI_MODE": "ollama", "AI_BASE_URL": target_url})
+    os.environ["AI_MODE"] = "ollama"
+    os.environ["AI_BASE_URL"] = target_url
+    settings.ai_mode = "ollama"
+    settings.ai_base_url = target_url
+    aura.ai.runtime_model = model
+    return {
+        **result,
+        "provider_switched": current_mode != "ollama",
+        "active_mode": "ollama",
+        "active_base_url": target_url,
+    }
 
 
 @app.get("/api/image/status")
