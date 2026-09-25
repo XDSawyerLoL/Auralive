@@ -61,9 +61,13 @@ export class SignedWasmKernelRegistry {
   constructor({
     signerKeys = config.wasmSignerKeys,
     maxKernelBytes = config.wasmKernelMaxBytes,
+    allowedImports = config.wasmAllowedImports,
   } = {}) {
     this.signerKeys = signerKeys || {};
     this.maxKernelBytes = Math.max(1024, Number(maxKernelBytes || config.wasmKernelMaxBytes));
+    this.allowedImports = allowedImports instanceof Set
+      ? new Set(allowedImports)
+      : new Set(Array.isArray(allowedImports) ? allowedImports : []);
     this.lastError = '';
     this.lastVerifiedAt = '';
   }
@@ -94,8 +98,9 @@ export class SignedWasmKernelRegistry {
     const imports = WebAssembly.Module.imports(module)
       .map((item) => `${item.module}:${item.name}`)
       .sort();
-    const allowed = new Set(normalized.allowed_imports);
-    const forbidden = imports.filter((item) => !allowed.has(item));
+    const declared = new Set(normalized.allowed_imports);
+    const forbidden = imports.filter((item) =>
+      !declared.has(item) || !this.allowedImports.has(item));
     if (forbidden.length) {
       throw new Error('imports Wasm non autorisés: ' + forbidden.join(', '));
     }
@@ -196,6 +201,7 @@ export class SignedWasmKernelRegistry {
       version: SignedWasmKernelRegistry.VERSION,
       configured_signers: Object.keys(this.signerKeys || {}).length,
       max_kernel_bytes: this.maxKernelBytes,
+      globally_allowed_imports: [...this.allowedImports].sort(),
       signed_only: true,
       remote_side_effects: false,
       last_verified_at: this.lastVerifiedAt,
