@@ -237,6 +237,39 @@ class ModelConstellation:
                 return profile
         return None
 
+    def _decode_installed(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        installed: list[dict[str, Any]] = []
+        for row in rows:
+            name = str(row.get("name") or row.get("model") or "").strip()
+            if not name:
+                continue
+            profile = self.profile_for(name)
+            installed.append(
+                {
+                    "name": name,
+                    "size": int(row.get("size") or 0),
+                    "modified_at": row.get("modified_at"),
+                    "profile": profile.key if profile else "unknown",
+                    "family": profile.family if profile else "unknown",
+                    "license": profile.license if profile else "unknown",
+                    "legal_class": profile.legal_class if profile else "unknown",
+                    "roles": dict(profile.roles) if profile else {},
+                    "tags": list(profile.tags) if profile else [],
+                }
+            )
+        return installed
+
+    async def _read_tags(self, base_url: str, *, timeout: float = 5.0) -> list[dict[str, Any]]:
+        if self.session is None:
+            raise RuntimeError("Session Ollama indisponible")
+        async with self.session.get(
+            f"{str(base_url).rstrip('/')}/api/tags",
+            timeout=aiohttp.ClientTimeout(total=timeout),
+        ) as response:
+            response.raise_for_status()
+            payload = await response.json()
+        return list(payload.get("models") or [])
+
     async def refresh(self, *, force: bool = False) -> list[dict[str, Any]]:
         if str(getattr(self.settings, "ai_mode", "")).casefold() != "ollama":
             return self.installed
@@ -246,33 +279,8 @@ class ModelConstellation:
             return self.installed
 
         try:
-            async with self.session.get(
-                f"{self.settings.ai_base_url}/api/tags",
-                timeout=aiohttp.ClientTimeout(total=5),
-            ) as response:
-                response.raise_for_status()
-                payload = await response.json()
-            rows = list(payload.get("models") or [])
-            installed: list[dict[str, Any]] = []
-            for row in rows:
-                name = str(row.get("name") or row.get("model") or "").strip()
-                if not name:
-                    continue
-                profile = self.profile_for(name)
-                installed.append(
-                    {
-                        "name": name,
-                        "size": int(row.get("size") or 0),
-                        "modified_at": row.get("modified_at"),
-                        "profile": profile.key if profile else "unknown",
-                        "family": profile.family if profile else "unknown",
-                        "license": profile.license if profile else "unknown",
-                        "legal_class": profile.legal_class if profile else "unknown",
-                        "roles": dict(profile.roles) if profile else {},
-                        "tags": list(profile.tags) if profile else [],
-                    }
-                )
-            self.installed = installed
+            rows = await self._read_tags(self.settings.ai_base_url)
+            self.installed = self._decode_installed(rows)
             self.last_refresh = monotonic()
             self.last_error = ""
         except Exception as exc:  # noqa: BLE001
@@ -413,28 +421,47 @@ class ModelConstellation:
         if len(values) > 32:
             del values[:-32]
 
-    async def pull(self, model: str) -> dict[str, Any]:
-        if str(getattr(self.settings, "ai_mode", "")).casefold() != "ollama":
-            raise RuntimeError("Le téléchargement automatique exige AI_MODE=ollama")
+    async def pull(
+        self,
+        model: str,
+        *,
+        base_url: str | None = None,
+    ) -> dict[str, Any]:
         if self.session is None:
             raise RuntimeError("Session Ollama indisponible")
         wanted = str(model or "").strip()
         if not wanted or len(wanted) > 180 or not re.fullmatch(r"[A-Za-z0-9._:/-]+", wanted):
             raise ValueError("Nom de modèle invalide")
 
+        target = str(base_url or getattr(self.settings, "ai_base_url", "") or "").strip().rstrip("/")
+        if not target.startswith(("http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost")):
+            raise ValueError("Pour l'installation automatique, Ollama doit être local.")
+
+        # Valide l'endpoint AVANT de toucher à la configuration active.
+        await self._read_tags(target, timeout=5)
         async with self.session.post(
-            f"{self.settings.ai_base_url}/api/pull",
+            f"{target}/api/pull",
             timeout=aiohttp.ClientTimeout(total=3600),
             json={"name": wanted, "stream": False},
         ) as response:
             response.raise_for_status()
             payload = await response.json()
-        await self.refresh(force=True)
+
+        rows = await self._read_tags(target, timeout=10)
+        installed = self._decode_installed(rows)
+        present = any(row["name"].split(":")[0] == wanted.split(":")[0] for row in installed)
+        if not present:
+            raise RuntimeError("Ollama a répondu mais le modèle n'apparaît pas dans /api/tags.")
+
+        self.installed = installed
+        self.last_refresh = monotonic()
+        self.last_error = ""
         return {
             "ok": True,
             "model": wanted,
             "status": str(payload.get("status") or "success"),
-            "installed": any(row["name"].split(":")[0] == wanted.split(":")[0] for row in self.installed),
+            "installed": True,
+            "base_url": target,
         }
 
     async def catalog(self) -> dict[str, Any]:
