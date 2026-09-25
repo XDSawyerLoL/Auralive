@@ -399,12 +399,12 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
-async function speakAura(text){
-  if(!privateConnected||!text)return;
+async function speakAura(text,ticket){
+  if(!text||!ticket)return;
   try{
     const out=await api('/api/voice/speak',{
       method:'POST',
-      body:JSON.stringify({text:text,context:'aura-cloud-chat',rate:1,pitch:1,volume:1})
+      body:JSON.stringify({text:text,ticket:ticket,context:'aura-cloud-chat',rate:1,pitch:1,volume:1})
     });
     if(!out||!out.audio_base64)return;
     const raw=atob(out.audio_base64);
@@ -430,7 +430,7 @@ async function sendMessage(text){
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
-    speakAura(out.answer||'');
+    speakAura(out.answer||'',out.voice_ticket||'');
     refresh();
   }catch(error){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
