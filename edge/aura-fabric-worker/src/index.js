@@ -63,7 +63,7 @@ function json(data, status = 200) {
 
 function authorized(request, env) {
   const expected = String(env.AURA_FABRIC_TOKEN || '').trim();
-  if (!expected) return true;
+  if (!expected) return false;
   const value = String(request.headers.get('authorization') || '');
   return value === `Bearer ${expected}`;
 }
