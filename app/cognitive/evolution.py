@@ -211,7 +211,7 @@ class EvolutionLab:
             getattr(
                 self.settings,
                 "evolution_required_checks",
-                "node-cloud,python-core,rust-core,windows-smoke",
+                "gate-node-cloud,gate-python-core,gate-rust-core,gate-windows-smoke",
             )
             or ""
         )
