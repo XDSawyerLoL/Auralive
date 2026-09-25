@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { config } from './config.js';
@@ -567,77 +567,6 @@ export class WebSubstrate {
     ].join('\n').slice(0, 6000);
   }
 
-  async discoverRemoteCapabilities() {
-    const snapshot = [];
-    for (const base of config.webRemoteCapabilityEndpoints) {
-      try {
-        const url = await this.assertSafeUrl(String(base).replace(/\/$/, '') + '/v1/aura/capabilities');
-        const headers = { Accept: 'application/json', 'User-Agent': 'AURA-Web-Substrate/1.0' };
-        if (config.webRemoteCapabilityToken) headers.Authorization = 'Bearer ' + config.webRemoteCapabilityToken;
-        const response = await fetch(url, {
-          headers,
-          signal: AbortSignal.timeout(config.webRequestTimeoutMs),
-        });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        snapshot.push({
-          endpoint: String(base),
-          online: true,
-          capabilities: Array.isArray(body?.capabilities) ? body.capabilities : [],
-        });
-      } catch (error) {
-        snapshot.push({
-          endpoint: String(base),
-          online: false,
-          error: String(error?.message || error).slice(0, 300),
-          capabilities: [],
-        });
-      }
-    }
-    this.remoteSnapshot = snapshot;
-    return snapshot;
-  }
-
-  async dispatchRemote(kind, payload = {}) {
-    const capability = String(kind || '').trim().toLowerCase();
-    if (!config.webRemoteAllowedKinds.has(capability)) {
-      throw new Error('Capacité distante non autorisée: ' + capability);
-    }
-    const workers = await this.discoverRemoteCapabilities();
-    const worker = workers.find((item) =>
-      item.online
-      && item.capabilities.some((cap) => String(cap?.name || cap).toLowerCase() === capability));
-    if (!worker) throw new Error('Aucun worker réseau n’annonce la capacité ' + capability);
-    const target = await this.assertSafeUrl(worker.endpoint.replace(/\/$/, '') + '/v1/aura/jobs');
-    const body = {
-      id: randomUUID(),
-      kind: capability,
-      payload,
-      requested_at: now(),
-    };
-    const raw = JSON.stringify(body);
-    const headers = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'User-Agent': 'AURA-Web-Substrate/1.0',
-    };
-    if (config.webRemoteCapabilityToken) {
-      headers.Authorization = 'Bearer ' + config.webRemoteCapabilityToken;
-      headers['X-AURA-Signature'] = createHmac('sha256', config.webRemoteCapabilityToken)
-        .update(raw)
-        .digest('base64url');
-    }
-    const response = await fetch(target, {
-      method: 'POST',
-      headers,
-      body: raw,
-      signal: AbortSignal.timeout(config.webRemoteComputeTimeoutMs),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error('Worker distant HTTP ' + response.status);
-    return { ...data, worker: worker.endpoint, kind: capability };
-  }
-
   status() {
     return {
       version: WebSubstrate.VERSION,
@@ -650,14 +579,8 @@ export class WebSubstrate {
       last_error: this.lastError,
       total_research: this.totalResearch,
       total_sources: this.totalSources,
-      remote_compute_endpoints: config.webRemoteCapabilityEndpoints.length,
-      remote_allowed_kinds: [...config.webRemoteAllowedKinds],
-      remote_snapshot: this.remoteSnapshot.map((item) => ({
-        endpoint: item.endpoint,
-        online: item.online,
-        capabilities: item.online ? item.capabilities.length : 0,
-      })),
       epistemic_gate: 'independent-source-corroboration',
+      network_action_bus: 'Quantic Studio authenticated execution bridge',
       arbitrary_remote_shell: false,
     };
   }
