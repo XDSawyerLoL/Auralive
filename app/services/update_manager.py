@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from app.config import RUNTIME_DIR
+from app.versioning import studio_version
 
-CURRENT_VERSION = "2.8.1"
+CURRENT_VERSION = studio_version()
 REPOSITORY = "XDSawyerLoL/Auralive"
 LATEST_RELEASE_API = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 USER_AGENT = f"QuanticStudioUpdater/{CURRENT_VERSION}"
