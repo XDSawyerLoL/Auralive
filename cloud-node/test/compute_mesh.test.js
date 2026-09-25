@@ -145,3 +145,18 @@ test('AURA 2.1 exposes the mesh/MoA/kernel control plane and schema v6', () => {
   }
   assert.match(dbSource, /LATEST_SCHEMA_VERSION = 6/);
 });
+
+
+test('browser peer modules are packaged and expose only compiled task kinds', () => {
+  const peerSource = fs.readFileSync(new URL('../src/public/compute-mesh/peer.js', import.meta.url), 'utf8');
+  const adapterSource = fs.readFileSync(new URL('../src/public/compute-mesh/webllm-adapter.js', import.meta.url), 'utf8');
+  assert.match(serverSource, /\/mesh\/peer\.js/);
+  assert.match(serverSource, /\/mesh\/webllm-adapter\.js/);
+  assert.match(peerSource, /mesh\.hash\.sha256/);
+  assert.match(peerSource, /mesh\.benchmark/);
+  assert.match(peerSource, /llm\.chat/);
+  assert.doesNotMatch(peerSource, /\beval\s*\(/);
+  assert.doesNotMatch(peerSource, /new Function\s*\(/);
+  assert.match(adapterSource, /CreateMLCEngine/);
+  assert.match(adapterSource, /engine\.chat\.completions\.create/);
+});
