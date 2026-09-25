@@ -153,7 +153,7 @@ app.get('/', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.7.0',
+  version: '1.7.1',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
