@@ -69,7 +69,7 @@ test('MoA executes multiple independent expert roles and synthesizes them', asyn
   const ai = {
     enabled: true,
     async generate(prompt, system) {
-      if (system.includes('synthétiseur')) {
+      if (system.includes('agrèges') || prompt.includes('synthétiseur')) {
         return JSON.stringify({
           synthesis: 'Synthèse critique',
           confidence: 0.82,
