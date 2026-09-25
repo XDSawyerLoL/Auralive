@@ -36,7 +36,7 @@ jobs:
         with:
           workspaces: engine/quantic-live
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --locked
       - name: Package native engine
         shell: pwsh
         run: |
