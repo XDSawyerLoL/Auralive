@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
 from types import SimpleNamespace
 
 import pytest
@@ -112,3 +115,26 @@ async def test_worker_can_execute_local_image_job():
     )
     assert result["backend"] == "fake"
     assert result["prompt"] == "une nébuleuse"
+
+
+@pytest.mark.asyncio
+async def test_worker_renews_before_minimum_supported_lease_expires(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    worker.started = True
+    intervals = []
+
+    async def fake_sleep(value):
+        intervals.append(float(value))
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("app.services.aura_cloud_worker.asyncio.sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await worker._lease_renewer(
+            "job-1",
+            time.time() * 1000.0 + 15_000.0,
+        )
+
+    assert intervals
+    assert intervals[0] < 15.0
+    assert intervals[0] <= 7.0
