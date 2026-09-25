@@ -123,10 +123,43 @@ test('dashboard runtime is an independently testable module', () => {
 });
 
 
-test('dashboard exposes live Mairaiy readiness without a login drawer', () => {
+test('dashboard exposes always-online Mairaiy readiness without a login drawer', () => {
   assert.equal(DASHBOARD_HTML.includes('id="voiceDot"'), true);
   assert.equal(DASHBOARD_HTML.includes('id="voiceText"'), true);
   assert.equal(DASHBOARD_SCRIPT.includes("api('/api/capabilities')"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · prête"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Kokoro ff_siwis via Quantic Studio"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · en ligne"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Voix Mairaiy Cloud active"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('browserVoiceAvailable()'), true);
+});
+
+
+test('dashboard exposes a dedicated emotional state surface', () => {
+  for (const token of [
+    'État émotionnel',
+    'id="emotionMood"',
+    'id="emotionReason"',
+    'id="emotion-stability"',
+    'id="emotion-clarity"',
+    'id="emotion-attachment"',
+    'id="emotion-curiosity"',
+    'id="emotion-dream"',
+    'id="emotion-silence"',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
+  assert.equal(DASHBOARD_SCRIPT.includes('renderEmotion(organism)'), true);
+});
+
+test('mobile dashboard uses readable phone typography and viewport-sized panels', () => {
+  assert.equal(DASHBOARD_HTML.includes('@media(max-width:480px)'), true);
+  assert.equal(DASHBOARD_HTML.includes('.composer textarea{font-size:16px'), true);
+  assert.equal(DASHBOARD_HTML.includes('.msg{font-size:15px'), true);
+  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:70svh}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.top-actions{width:100%'), true);
+});
+
+test('mobile voice primes audio and falls back to device speech when needed', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes('primeVoice();'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("utterance.lang='fr-FR'"), true);
 });
