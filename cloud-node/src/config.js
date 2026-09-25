@@ -19,6 +19,12 @@ function csv(name, fallback = '') {
     .filter(Boolean);
 }
 
+function num(name, fallback, min = -Infinity, max = Infinity) {
+  const parsed = Number.parseFloat(process.env[name] ?? '');
+  const value = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
 const AI_MODE = String(process.env.AI_MODE || 'off').trim().toLowerCase();
 const AI_DEFAULT_BASE_URL = AI_MODE === 'gemini'
   ? 'https://generativelanguage.googleapis.com/v1beta'
@@ -78,6 +84,18 @@ export const config = Object.freeze({
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
+
+  commandCenterEnabled: bool('AURA_COMMAND_CENTER_ENABLED', true),
+  commandCenterAutoExecute: bool('AURA_COMMAND_CENTER_AUTO_EXECUTE', true),
+  commandCenterTickSeconds: int('AURA_COMMAND_CENTER_TICK_SECONDS', 60, 15, 86400),
+  commandCenterWarmupSeconds: int('AURA_COMMAND_CENTER_WARMUP_SECONDS', 20, 10, 300),
+  commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 4, 1, 24),
+  commandCenterCooldownSeconds: int('AURA_COMMAND_CENTER_COOLDOWN_SECONDS', 1800, 60, 86400),
+  commandCenterMinConfidence: num('AURA_COMMAND_CENTER_MIN_CONFIDENCE', 0.66, 0.1, 1),
+  commandCenterAllowedRisks: new Set(csv(
+    'AURA_COMMAND_CENTER_ALLOWED_RISKS',
+    'safe,ai,local-control,local-write',
+  )),
 
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
