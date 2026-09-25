@@ -18,6 +18,7 @@ const workerSource = fs.readFileSync(
   'utf8',
 );
 const dbSource = fs.readFileSync(new URL('../src/db.js', import.meta.url), 'utf8');
+const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 
 test('predictive peer routing rewards reliable low-latency warm-model peers', () => {
   const strong = peerRoutingScore({
@@ -159,4 +160,11 @@ test('browser peer modules are packaged and expose only compiled task kinds', ()
   assert.doesNotMatch(peerSource, /new Function\s*\(/);
   assert.match(adapterSource, /CreateMLCEngine/);
   assert.match(adapterSource, /engine\.chat\.completions\.create/);
+});
+
+
+test('public Mesh joining fails closed by default until an operator explicitly enables it', () => {
+  assert.match(configSource, /AURA_COMPUTE_MESH_PUBLIC_JOIN', false/);
+  assert.match(serverSource, /!trusted && !config\.computeMeshPublicJoin/);
+  assert.match(serverSource, /Inscription publique au Compute Mesh désactivée/);
 });
