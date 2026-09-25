@@ -709,7 +709,15 @@ app.post('/api/cloud/events', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   const type = String(request.body?.type || '').trim();
   if (!type) return reply.code(422).send({ error: 'type requis' });
-  return kernel.observeEvent(type, request.body?.payload || {}, String(request.body?.source || 'quantic-studio'));
+  const payload = request.body?.payload || {};
+  if (type === 'quantic.service.state' && payload?.service_id) {
+    await commandCenter.observeService(payload.service_id, {
+      state: payload.state,
+      detail: payload.detail || payload.message || '',
+      metadata: payload.metadata || {},
+    }).catch(() => {});
+  }
+  return kernel.observeEvent(type, payload, String(request.body?.source || 'quantic-studio'));
 });
 
 app.post('/api/cloud/outcomes', async (request, reply) =>
