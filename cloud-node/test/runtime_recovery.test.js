@@ -6,8 +6,8 @@ const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
-test('Hostinger runtime 1.7.4 starts AURA core before optional services', () => {
-  assert.equal(packageJson.version, '1.7.4');
+test('Hostinger runtime 1.7.5 starts AURA core before optional services', () => {
+  assert.equal(packageJson.version, '1.7.5');
   const kernelIndex = serverSource.indexOf('await kernel.start()');
   const readyIndex = serverSource.indexOf('bootstrap.runtimeReady = true');
   const horizonIndex = serverSource.indexOf('await horizon.start()');
@@ -32,6 +32,6 @@ test('Hostinger config accepts common MySQL environment aliases', () => {
   assert.match(configSource, /process\.env\.MYSQL_URL/);
 });
 
-test('bootstrap endpoint reports 1.7.4', () => {
+test('bootstrap endpoint reports 1.7.5', () => {
   assert.match(serverSource, /version:\s*'1\.7\.4'/);
 });
