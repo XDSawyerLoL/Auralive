@@ -342,6 +342,10 @@ app.get('/api/bootstrap/status', async () => ({
   command_center_auto_execute: Boolean(config.commandCenterAutoExecute),
   web_substrate_enabled: Boolean(config.webSubstrateEnabled),
   web_search_gateway_configured: Boolean(config.webSearchUrl),
+  fabric_enabled: Boolean(config.fabricEnabled),
+  fabric_started: Boolean(fabric.started),
+  fabric_capabilities: fabric.list().length,
+  fabric_discovery_configured: Boolean(config.fabricDiscoveryUrls.length),
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -540,9 +544,11 @@ app.get('/api/kernel/architecture', async () => ({
   command_center: 'continuous native initiative engine with bounded autonomous execution',
   initiative_owner: 'AURA command center',
   meta_reasoning: 'hypothesis -> external retrieval -> source criticism -> deterministic evidence gate -> revised conclusion',
-  external_memory: 'Web substrate with expiring source cache and persisted reasoning sessions',
-  network_action_model: 'typed authenticated capabilities; no arbitrary remote shell',
-  execution_arm: 'Quantic Studio through authenticated execution bridge',
+  external_memory: 'Web substrate + persisted evidence ledger + distributed capability topology',
+  distributed_compute: 'typed DAG -> Capability Fabric -> parallel Node/Rust swarm -> edge/API/local capabilities',
+  capability_router: 'trust + observed reliability + latency + cost + task tags',
+  network_action_model: 'typed authenticated capabilities; no arbitrary remote shell; remote edge side effects disabled',
+  execution_arm: 'Quantic Studio authenticated bridge for bounded side effects; edge fabric for read/compute',
   autonomous_risk_envelope: [...config.commandCenterAllowedRisks],
   provider: ai.provider,
   provider_enabled: ai.enabled,
@@ -575,6 +581,7 @@ app.get('/healthz', async () => {
     command_center: bootstrap.runtimeReady
       ? await commandCenter.status({ publicView: true })
       : { enabled: config.commandCenterEnabled, started: false },
+    fabric: fabric.status(),
     issues: bootstrap.issues.map((item) => item.code),
     startup_error: bootstrap.startupError,
   };
