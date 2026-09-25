@@ -115,6 +115,8 @@ async function applyMigrations(db) {
       priority DOUBLE NOT NULL DEFAULT 0.5,
       confidence DOUBLE NOT NULL DEFAULT 0.5,
       requested_risks LONGTEXT NOT NULL,
+      action_type VARCHAR(120) NOT NULL DEFAULT '',
+      action_payload LONGTEXT NOT NULL,
       status VARCHAR(40) NOT NULL DEFAULT 'queued',
       execution_mode VARCHAR(80) NOT NULL DEFAULT '',
       result LONGTEXT NOT NULL,
