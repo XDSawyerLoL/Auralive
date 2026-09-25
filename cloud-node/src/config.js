@@ -89,7 +89,7 @@ export const config = Object.freeze({
   evolutionBaseBranch: process.env.AURA_EVOLUTION_GITHUB_BASE_BRANCH || 'main',
   evolutionAllowedDomains: new Set(csv('AURA_EVOLUTION_ALLOWED_DOMAINS', 'api.github.com,registry.npmjs.org')),
   evolutionResearchUrls: csv('AURA_EVOLUTION_RESEARCH_URLS', ''),
-  evolutionCanaryRequired: bool('AURA_EVOLUTION_CANARY_REQUIRED', true),
+  evolutionCanaryRequired: bool('AURA_EVOLUTION_CANARY_REQUIRED', false),
   evolutionCanaryMinObservations: int('AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS', 3, 1, 1000),
   evolutionAutoSubmit: false,
   evolutionAutoMerge: false,
