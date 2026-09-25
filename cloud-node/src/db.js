@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 2;
+export const LATEST_SCHEMA_VERSION = 3;
 
 export function getDb() {
   if (pool) return pool;
@@ -82,6 +82,62 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(2,?,?)',
       ['resilience-snapshots-and-metrics', new Date().toISOString()],
+    );
+    current = 2;
+  }
+
+  if (current < 3) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_command_services (
+      id VARCHAR(80) PRIMARY KEY,
+      name VARCHAR(160) NOT NULL,
+      kind VARCHAR(80) NOT NULL DEFAULT 'service',
+      objective TEXT NOT NULL,
+      endpoint VARCHAR(1000) NOT NULL DEFAULT '',
+      repository VARCHAR(300) NOT NULL DEFAULT '',
+      criticality DOUBLE NOT NULL DEFAULT 0.5,
+      enabled TINYINT NOT NULL DEFAULT 1,
+      state VARCHAR(40) NOT NULL DEFAULT 'unknown',
+      state_detail TEXT NOT NULL,
+      last_observed_at VARCHAR(40) NOT NULL DEFAULT '',
+      metadata LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_command_services_state(state,criticality)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_initiatives (
+      id CHAR(36) PRIMARY KEY,
+      fingerprint VARCHAR(64) NOT NULL,
+      domain VARCHAR(80) NOT NULL,
+      kind VARCHAR(40) NOT NULL,
+      title VARCHAR(240) NOT NULL,
+      objective TEXT NOT NULL,
+      rationale TEXT NOT NULL,
+      priority DOUBLE NOT NULL DEFAULT 0.5,
+      confidence DOUBLE NOT NULL DEFAULT 0.5,
+      requested_risks LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'queued',
+      execution_mode VARCHAR(80) NOT NULL DEFAULT '',
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      last_attempt_at VARCHAR(40) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_initiatives_status(status,priority,updated_at),
+      INDEX idx_aura_initiatives_fingerprint(fingerprint,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_command_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      initiative_id CHAR(36) NULL,
+      kind VARCHAR(80) NOT NULL,
+      payload LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_command_events_initiative(initiative_id,created_at),
+      INDEX idx_aura_command_events_kind(kind,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(3,?,?)',
+      ['autonomous-command-center', new Date().toISOString()],
     );
   }
 }
@@ -277,13 +333,15 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
     query('SELECT * FROM aura_routines ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_improvement_proposals ORDER BY updated_at DESC LIMIT 150'),
     query('SELECT * FROM aura_evolution_cycles ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT * FROM aura_command_services ORDER BY criticality DESC,name ASC'),
+    query('SELECT * FROM aura_initiatives ORDER BY updated_at DESC LIMIT 200'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -295,6 +353,8 @@ export async function createLogicalBackup(reason = 'scheduled') {
     routines,
     improvements,
     evolution,
+    command_services: commandServices,
+    initiatives,
   });
   const id = randomUUID();
   await query(
