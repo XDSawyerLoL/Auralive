@@ -5,7 +5,7 @@ from app.services.update_manager import CURRENT_VERSION, UpdateManager, _version
 
 def test_update_version_parser_is_semantic() -> None:
     assert CURRENT_VERSION == "2.8.1"
-    assert _version_tuple("quantic-studio-v2.8.2") == (2, 8, 1)
+    assert _version_tuple("quantic-studio-v2.8.1") == (2, 8, 1)
     assert _version_tuple("bad-tag") == (0, 0, 0)
 
 
@@ -49,7 +49,7 @@ def test_release_info_rejects_mismatched_installer(tmp_path: Path) -> None:
             "tag_name": "quantic-studio-v2.8.2",
             "assets": [
                 {
-                    "name": "QuanticStudio-Setup-2.8.2.exe",
+                    "name": "QuanticStudio-Setup-2.8.3.exe",
                     "browser_download_url": "https://github.com/example.exe",
                 }
             ],
