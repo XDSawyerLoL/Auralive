@@ -1,13 +1,16 @@
 {
-  "cloud": "1.9.0",
+  "cloud": "2.0.0",
   "studio": "2.8.1",
   "native_engine": "0.4.1",
   "schema": {
-    "mysql": 4,
+    "mysql": 5,
     "evolution": 3
   },
   "channel": "stable-next",
   "updated_at": "2026-09-25",
   "command_center": 1,
-  "web_substrate": 1
+  "web_substrate": 1,
+  "fabric": 1,
+  "dag": 1,
+  "rust_fabric": "0.1.0"
 }
