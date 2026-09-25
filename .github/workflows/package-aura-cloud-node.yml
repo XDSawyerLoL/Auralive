@@ -5,6 +5,12 @@ on:
     paths:
       - "cloud-node/**"
       - ".github/workflows/package-aura-cloud-node.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "cloud-node/**"
+      - ".github/workflows/package-aura-cloud-node.yml"
   workflow_dispatch:
 
 jobs:
