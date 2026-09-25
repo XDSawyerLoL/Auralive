@@ -100,6 +100,23 @@ jobs:
       - name: Build AURA Fabric swarm engine release
         run: cargo build --release --manifest-path ../aura-fabric/Cargo.toml
 
+  fabric-rust:
+    name: gate-fabric-rust
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine/aura-fabric
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/aura-fabric
+      - name: Test distributed scheduler
+        run: cargo test
+      - name: Build distributed scheduler release
+        run: cargo build --release
+
   windows-smoke:
     name: gate-windows-smoke
     runs-on: windows-latest
