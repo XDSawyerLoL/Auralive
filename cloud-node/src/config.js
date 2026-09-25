@@ -96,6 +96,27 @@ export const config = Object.freeze({
     'AURA_COMMAND_CENTER_ALLOWED_RISKS',
     'safe,ai,local-control,local-write',
   )),
+  commandCenterFleetPollSeconds: int('AURA_COMMAND_CENTER_FLEET_POLL_SECONDS', 1200, 300, 86400),
+  commandCenterRequestTimeoutMs: int('AURA_COMMAND_CENTER_REQUEST_TIMEOUT_MS', 9000, 1000, 60000),
+  commandCenterGithubToken:
+    process.env.AURA_COMMAND_GITHUB_TOKEN
+    || process.env.AURA_EVOLUTION_GITHUB_MACHINE_TOKEN
+    || process.env.GITHUB_TOKEN
+    || '',
+  commandCenterGithubRepos: csv(
+    'AURA_COMMAND_GITHUB_REPOS',
+    [
+      'XDSawyerLoL/Auralive',
+      'XDSawyerLoL/QuanticSillage',
+      'XDSawyerLoL/QuanticMail',
+      'XDSawyerLoL/QUANTIC-OS',
+      'XDSawyerLoL/Quantic-Browser',
+      'XDSawyerLoL/Human-Agency-Engine',
+    ].join(','),
+  ),
+  commandCenterAutoRerunFailedCi: bool('AURA_COMMAND_AUTO_RERUN_FAILED_CI', true),
+  commandCenterAutoCreateFailureIssue: bool('AURA_COMMAND_AUTO_CREATE_FAILURE_ISSUE', true),
+  commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 2, 0, 6),
 
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
