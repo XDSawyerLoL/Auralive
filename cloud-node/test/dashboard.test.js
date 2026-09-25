@@ -86,3 +86,17 @@ test('living AURA visuals are driven by the organism state', () => {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
 });
+
+
+test('private dashboard login uses persistent secure session cookie', () => {
+  for (const token of [
+    '/api/auth/session',
+    'createPrivateSession',
+    'ensurePrivateSession',
+    'credentials:\'same-origin\'',
+    'Privé · connecté',
+    'Session privée expirée',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
+});

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
@@ -25,8 +25,48 @@ function bearer(request) {
   return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
 }
 
+function cookies(request) {
+  const raw = String(request.headers.cookie || '');
+  const result = {};
+  for (const part of raw.split(';')) {
+    const index = part.indexOf('=');
+    if (index <= 0) continue;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!key) continue;
+    try {
+      result[key] = decodeURIComponent(value);
+    } catch {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+function sessionSignature(expiresAt) {
+  if (!config.cloudToken) return '';
+  return createHmac('sha256', config.cloudToken)
+    .update(`${expiresAt}:aura-dashboard-session`)
+    .digest('base64url');
+}
+
+function createPrivateSession(maxAgeSeconds = 30 * 24 * 60 * 60) {
+  const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds;
+  return `${expiresAt}.${sessionSignature(expiresAt)}`;
+}
+
+function validPrivateSession(value) {
+  const raw = String(value || '').trim();
+  const dot = raw.indexOf('.');
+  if (dot <= 0 || !config.cloudToken) return false;
+  const expiresAt = Number.parseInt(raw.slice(0, dot), 10);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) return false;
+  return tokenEquals(raw.slice(dot + 1), sessionSignature(expiresAt));
+}
+
 function isPrivate(request) {
-  return tokenEquals(bearer(request), config.cloudToken);
+  if (tokenEquals(bearer(request), config.cloudToken)) return true;
+  return validPrivateSession(cookies(request).aura_session);
 }
 
 function requirePrivate(request, reply) {
@@ -163,6 +203,44 @@ app.addHook('onSend', async (_request, reply, payload) => {
 app.get('/', async (_request, reply) => {
   reply.type('text/html; charset=utf-8');
   return DASHBOARD_HTML;
+});
+
+app.get('/api/auth/session', async (request) => ({
+  authenticated: isPrivate(request),
+  method: validPrivateSession(cookies(request).aura_session)
+    ? 'cookie'
+    : tokenEquals(bearer(request), config.cloudToken)
+      ? 'bearer'
+      : 'none',
+}));
+
+app.post('/api/auth/session', async (request, reply) => {
+  const supplied = String(request.body?.token || bearer(request) || '').trim();
+  if (!tokenEquals(supplied, config.cloudToken)) {
+    return reply.code(401).send({
+      authenticated: false,
+      error: 'Token privé AURA invalide',
+    });
+  }
+  const maxAge = 30 * 24 * 60 * 60;
+  const session = createPrivateSession(maxAge);
+  reply.header(
+    'Set-Cookie',
+    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`,
+  );
+  return {
+    authenticated: true,
+    method: 'cookie',
+    expires_in_seconds: maxAge,
+  };
+});
+
+app.delete('/api/auth/session', async (_request, reply) => {
+  reply.header(
+    'Set-Cookie',
+    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict',
+  );
+  return { authenticated: false };
 });
 
 app.get('/api/bootstrap/status', async () => ({

@@ -275,6 +275,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     <h3>Accès privé AURA</h3>
     <p>Le token reste dans <code>sessionStorage</code> de cet onglet. Sur mobile, un nouvel onglet ou une fermeture du navigateur peut nécessiter de le reconnecter. Il permet d’afficher intentions, pensée dominante, mémoire, activité et carte d’intérêt complète.</p>
     <div class="auth-row"><input id="token" type="password" autocomplete="off" placeholder="AURA_CLOUD_TOKEN"><button class="primary" id="saveToken">Connecter</button></div>
+    <div id="authStatus" style="min-height:18px;margin-top:9px;color:#9ba6ba;font-size:10px"></div>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="secondary" id="logoutToken">Déconnecter</button><button class="secondary" id="closeAuth">Fermer</button></div>
   </div>
 </div>
@@ -282,6 +283,8 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
 <script>
 const $ = function(id){ return document.getElementById(id); };
 let token = sessionStorage.getItem('aura_token') || '';
+let privateConnected = false;
+let privateSessionChecked = false;
 let lastSoul = null;
 let lastAttention = null;
 let livingScene = null;
@@ -300,7 +303,11 @@ function headers(json){
 }
 async function api(path,options){
   options=options||{};
-  const response=await fetch(path,Object.assign({},options,{headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}));
+  const response=await fetch(path,Object.assign(
+    {credentials:'same-origin'},
+    options,
+    {headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}
+  ));
   const text=await response.text();
   let data={};
   try{data=text?JSON.parse(text):{};}catch(_){data={error:text||'Réponse invalide'};}
@@ -322,8 +329,54 @@ function metric(id,value,active=true){
 }
 function setLive(ok,text){$('liveDot').className='live-dot '+(ok?'good':'bad');$('liveText').textContent=text;}
 function setPrivateState(connected){
-  $('authBtn').textContent=connected?'Privé · connecté':'Privé · hors connexion';
-  $('authBtn').title=connected?'Accès privé actif':'Appuyer pour reconnecter AURA';
+  privateConnected=Boolean(connected);
+  $('authBtn').textContent=privateConnected?'Privé · connecté':'Privé · hors connexion';
+  $('authBtn').title=privateConnected?'Accès privé actif':'Appuyer pour reconnecter AURA';
+}
+function setAuthStatus(text,ok){
+  $('authStatus').textContent=text||'';
+  $('authStatus').style.color=ok===true?'#60e6ad':ok===false?'#ff8d9e':'#9ba6ba';
+}
+async function createPrivateSession(value){
+  const raw=String(value||'').trim();
+  if(!raw)throw new Error('Entre le token privé AURA.');
+  const response=await fetch('/api/auth/session',{
+    method:'POST',
+    credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:raw})
+  });
+  const data=await response.json().catch(function(){return {};});
+  if(!response.ok){
+    const err=new Error(data.error||('Erreur '+response.status));err.status=response.status;throw err;
+  }
+  return data;
+}
+async function ensurePrivateSession(){
+  if(token){
+    try{
+      await createPrivateSession(token);
+      token='';
+      $('token').value='';
+      sessionStorage.removeItem('aura_token');
+      privateSessionChecked=true;
+      return true;
+    }catch(error){
+      if(error&&error.status===401){
+        token='';
+        $('token').value='';
+        sessionStorage.removeItem('aura_token');
+      }
+    }
+  }
+  try{
+    const state=await api('/api/auth/session');
+    privateSessionChecked=true;
+    return Boolean(state&&state.authenticated);
+  }catch(_){
+    privateSessionChecked=true;
+    return false;
+  }
 }
 function fmtTime(value){
   if(!value) return '—';
@@ -618,8 +671,9 @@ function renderNext(work,attention){
 }
 async function refresh(){
   try{
+    const connected=await ensurePrivateSession();
+    setPrivateState(connected);
     const boot=await api('/api/bootstrap/status');
-    setPrivateState(Boolean(token));
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -641,13 +695,13 @@ async function refresh(){
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
     $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
     metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
-    if(token){
+    if(privateConnected){
       $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
     }else{
       $('dominantThought').textContent='Connexion privée requise pour afficher la pensée dominante.';
     }
     lastSoul=Object.assign({},soul);
-    if(token && boot.runtime_ready){
+    if(privateConnected && boot.runtime_ready){
       const results=await Promise.all([
         api('/api/kernel/intentions?limit=5'),
         api('/api/kernel/lessons?limit=5'),
@@ -664,11 +718,12 @@ async function refresh(){
       renderNext([],null);
     }
   }catch(error){
-    if(error && error.status===401 && token){
+    if(error && error.status===401){
       token='';
       $('token').value='';
       sessionStorage.removeItem('aura_token');
       setPrivateState(false);
+      setAuthStatus('Session privée expirée. Reconnecte le token AURA.',false);
       $('chatState').textContent='Accès privé expiré · reconnecte le token';
       $('authDrawer').classList.add('open');
       return;
@@ -678,7 +733,7 @@ async function refresh(){
   }
 }
 async function speakAura(text){
-  if(!token||!text)return;
+  if(!privateConnected||!text)return;
   try{
     const out=await api('/api/voice/speak',{
       method:'POST',
@@ -720,8 +775,33 @@ document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=fun
 $('authBtn').onclick=function(){$('authDrawer').classList.add('open');};
 $('closeAuth').onclick=function(){$('authDrawer').classList.remove('open');};
 $('authDrawer').addEventListener('click',function(e){if(e.target===$('authDrawer'))$('authDrawer').classList.remove('open');});
-$('saveToken').onclick=function(){token=$('token').value.trim();if(token)sessionStorage.setItem('aura_token',token);else sessionStorage.removeItem('aura_token');setPrivateState(Boolean(token));$('authDrawer').classList.remove('open');refresh();};
-$('logoutToken').onclick=function(){token='';$('token').value='';sessionStorage.removeItem('aura_token');setPrivateState(false);$('authDrawer').classList.remove('open');refresh();};
+$('saveToken').onclick=async function(){
+  const supplied=$('token').value.trim();
+  setAuthStatus('Connexion…');
+  try{
+    await createPrivateSession(supplied);
+    token='';
+    $('token').value='';
+    sessionStorage.removeItem('aura_token');
+    setPrivateState(true);
+    setAuthStatus('Accès privé connecté.',true);
+    setTimeout(function(){$('authDrawer').classList.remove('open');},280);
+    await refresh();
+  }catch(error){
+    setPrivateState(false);
+    setAuthStatus(error.message||'Connexion privée impossible.',false);
+  }
+};
+$('logoutToken').onclick=async function(){
+  try{await api('/api/auth/session',{method:'DELETE'});}catch(_){}
+  token='';
+  $('token').value='';
+  sessionStorage.removeItem('aura_token');
+  setPrivateState(false);
+  setAuthStatus('Accès privé déconnecté.');
+  $('authDrawer').classList.remove('open');
+  refresh();
+};
 $('refreshMap').onclick=refresh;
 $('modeBtn').onclick=function(){$('authDrawer').classList.add('open');};
 $('voiceBtn').onclick=function(){
@@ -731,7 +811,7 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();setPrivateState(Boolean(token));initLivingAuraScene();setInterval(updateClock,1000);refresh();setInterval(refresh,8000);
+updateClock();setPrivateState(false);initLivingAuraScene();setInterval(updateClock,1000);refresh();setInterval(refresh,8000);
 </script>
 </body>
 </html>`;
