@@ -66,7 +66,7 @@ async def _native_overlay_audio_listener(event: dict[str, Any]) -> None:
 
 
 aura.overlay.subscribe(_native_overlay_audio_listener)
-app.version = "2.8.0"
+app.version = "2.8.1"
 
 
 def _remove_route(path: str, method: str) -> None:
