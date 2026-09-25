@@ -59,16 +59,18 @@ export function validateTaskGraph(graph, {
   let frontier = normalized.filter((node) => indegree.get(node.id) === 0).map((node) => node.id);
   let visited = 0;
   while (frontier.length) {
-    layers.push(frontier.slice(0, maxParallel));
-    const next = [];
-    for (const id of frontier) {
+    const current = frontier.slice(0, maxParallel);
+    const deferred = frontier.slice(maxParallel);
+    layers.push(current);
+    const unlocked = [];
+    for (const id of current) {
       visited += 1;
       for (const child of children.get(id) || []) {
         indegree.set(child, indegree.get(child) - 1);
-        if (indegree.get(child) === 0) next.push(child);
+        if (indegree.get(child) === 0) unlocked.push(child);
       }
     }
-    frontier = next;
+    frontier = [...deferred, ...unlocked];
   }
   if (visited !== normalized.length) throw new Error('cycle détecté dans le DAG AURA');
 
