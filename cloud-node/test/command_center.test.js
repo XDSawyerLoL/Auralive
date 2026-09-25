@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { CommandCenter } from '../src/command_center.js';
+import {
+  CommandCenter,
+  repositoryHealth,
+  summarizeWorkflowRuns,
+} from '../src/command_center.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const commandSource = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
@@ -81,4 +85,31 @@ test('command center is part of runtime startup and shutdown', () => {
   assert.match(serverSource, /commandCenter\.stop\(\)/);
   assert.match(serverSource, /command_center_enabled/);
   assert.match(serverSource, /version:\s*'1\.9\.0'/);
+});
+
+
+test('fleet health detects failing workflows deterministically', () => {
+  const runs = [
+    { id: 2, name: 'CI', conclusion: 'failure', status: 'completed', created_at: '2026-09-25T12:00:00Z', run_attempt: 2 },
+    { id: 1, name: 'CI', conclusion: 'failure', status: 'completed', created_at: '2026-09-25T11:00:00Z', run_attempt: 1 },
+    { id: 3, name: 'Release', conclusion: 'success', status: 'completed', created_at: '2026-09-25T10:00:00Z' },
+  ];
+  const summary = summarizeWorkflowRuns(runs);
+  const ci = summary.find((row) => row.name === 'CI');
+  assert.equal(ci.failure_streak, 2);
+  const health = repositoryHealth({ pushed_at: '2026-09-25T12:00:00Z', archived: false }, runs);
+  assert.equal(health.state, 'degraded');
+  assert.ok(health.score < 100);
+  assert.equal(health.repeated_failures, 1);
+});
+
+test('command center can supervise and safely act on the Quantic GitHub fleet', () => {
+  assert.match(commandSource, /async scanGithubFleet/);
+  assert.match(commandSource, /github\.rerun_failed_jobs/);
+  assert.match(commandSource, /github\.create_failure_issue/);
+  assert.match(commandSource, /AutoOps/);
+  assert.match(commandSource, /Aucun merge, déploiement, suppression ou changement de secret/);
+  assert.match(configSource, /AURA_COMMAND_GITHUB_REPOS/);
+  assert.match(configSource, /AURA_COMMAND_GITHUB_TOKEN/);
+  assert.match(configSource, /AURA_COMMAND_AUTO_RERUN_FAILED_CI/);
 });
