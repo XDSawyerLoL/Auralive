@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.services.image_generation import AuraImageService
 
 
@@ -43,3 +45,40 @@ def test_comfy_workflow_placeholders_are_replaced(tmp_path):
     assert replaced["1"]["inputs"]["text"] == "galaxie"
     assert replaced["1"]["inputs"]["width"] == 1024
     assert replaced["1"]["inputs"]["model"] == "flux.safetensors"
+
+
+class _FakeResponse:
+    def __init__(self, status: int, text: str = ""):
+        self.status = status
+        self._text = text
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def text(self):
+        return self._text
+
+
+class _RejectingSession:
+    def post(self, *args, **kwargs):
+        return _FakeResponse(404, "checkpoint not found")
+
+
+@pytest.mark.asyncio
+async def test_a1111_rejected_explicit_checkpoint_aborts_generation(tmp_path):
+    service = AuraImageService(settings(tmp_path))
+    service.session = _RejectingSession()
+
+    with pytest.raises(RuntimeError, match="checkpoint image demandé"):
+        await service._generate_a1111(
+            "galaxie",
+            negative_prompt="",
+            width=512,
+            height=512,
+            steps=4,
+            seed=42,
+            model="missing-checkpoint.safetensors",
+        )
