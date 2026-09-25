@@ -166,10 +166,7 @@ export const config = Object.freeze({
   computeMeshMaxTaskMs: int('AURA_COMPUTE_MESH_MAX_TASK_MS', 60000, 1000, 300000),
   computeMeshMaxPayloadBytes: int('AURA_COMPUTE_MESH_MAX_PAYLOAD_BYTES', 65536, 4096, 1048576),
   computeMeshMaxResultBytes: int('AURA_COMPUTE_MESH_MAX_RESULT_BYTES', 262144, 4096, 2097152),
-  meshWebLlmModuleUrl: String(
-    process.env.AURA_MESH_WEBLLM_MODULE_URL
-      || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/+esm',
-  ).trim(),
+  meshWebLlmModuleUrl: String(process.env.AURA_MESH_WEBLLM_MODULE_URL || '').trim(),
   meshWebLlmModel: String(process.env.AURA_MESH_WEBLLM_MODEL || '').trim(),
 
   wasmKernelMaxBytes: int('AURA_WASM_KERNEL_MAX_BYTES', 2 * 1024 * 1024, 1024, 16 * 1024 * 1024),
