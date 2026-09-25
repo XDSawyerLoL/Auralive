@@ -204,6 +204,8 @@ export class ComputeMesh {
       [String(peerId || ''), tokenHash(token)],
     );
     if (!row) return null;
+    const staleBefore = nowMs() - config.computeMeshPeerTtlSeconds * 2 * 1000;
+    if (Number(row.last_seen_ms || 0) < staleBefore) return null;
     return {
       ...row,
       capabilities: parseJson(row.capabilities, {}),
@@ -500,6 +502,9 @@ export class ComputeMesh {
       [String(assignmentId || ''), peer.id],
     );
     if (!assignment) throw new Error('assignment Mesh introuvable');
+    if (['completed', 'failed', 'cancelled'].includes(String(assignment.task_status || ''))) {
+      throw new Error('tâche Mesh déjà finalisée');
+    }
     if (String(assignment.status || '') !== 'leased') {
       throw new Error('assignment Mesh non loué ou déjà terminé');
     }
