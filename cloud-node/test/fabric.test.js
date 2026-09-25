@@ -17,6 +17,7 @@ const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url
 const dbSource = fs.readFileSync(new URL('../src/db.js', import.meta.url), 'utf8');
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 const kernelSource = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
+const edgeSource = fs.readFileSync(new URL('../../edge/aura-fabric-worker/src/index.js', import.meta.url), 'utf8');
 
 test('typed DAG validation keeps every node when parallelism is bounded', () => {
   const graph = validateTaskGraph({
@@ -144,4 +145,11 @@ test('Fabric remote execution is compute/read only by construction', () => {
   assert.match(source, /effet de bord remote interdit par politique AURA/);
   assert.match(source, /arbitrary_remote_shell:\s*false/);
   assert.match(source, /policy:\s*'typed-capabilities-only'/);
+});
+
+
+test('edge Fabric worker fails closed without its machine secret', () => {
+  assert.match(edgeSource, /if \(!expected\) return false/);
+  assert.match(edgeSource, /capability not allowed/);
+  assert.match(edgeSource, /arbitrary_code:\s*false/);
 });
