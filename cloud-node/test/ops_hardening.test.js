@@ -12,6 +12,8 @@ test('database schema uses explicit migrations and resilience tables', () => {
   assert.match(dbSource, /aura_runtime_metric_rollups/);
   assert.match(dbSource, /aura_command_services/);
   assert.match(dbSource, /aura_initiatives/);
+  assert.match(dbSource, /action_type VARCHAR\(120\)/);
+  assert.match(dbSource, /action_payload LONGTEXT/);
   assert.match(dbSource, /aura_command_events/);
   assert.match(dbSource, /autonomous-command-center/);
   assert.match(dbSource, /createLogicalBackup/);
