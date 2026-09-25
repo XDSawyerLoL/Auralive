@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 
@@ -14,6 +15,8 @@ CORE_MAIN = ROOT / "engine" / "quantic-live" / "src" / "main.rs"
 CORE_FFMPEG = ROOT / "engine" / "quantic-live" / "src" / "ffmpeg.rs"
 NATIVE_SERVICE = ROOT / "app" / "services" / "native_broadcast.py"
 STUDIO_HTML = ROOT / "app" / "web" / "templates" / "index.html"
+VERSION_MANIFEST = ROOT / "VERSION.json"
+VERSIONING = ROOT / "app" / "versioning.py"
 
 
 def test_desktop_launcher_does_not_depend_on_pythonnet_or_pywebview() -> None:
@@ -54,8 +57,10 @@ def test_desktop_keeps_stdio_fallback_and_startup_log() -> None:
 def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     build = BUILD.read_text(encoding="utf-8")
     desktop = DESKTOP.read_text(encoding="utf-8")
-    build_id = "QuanticStudio-2.8.1-Windows-Native-2026-09-25"
+    versioning = VERSIONING.read_text(encoding="utf-8")
+    manifest = json.loads(VERSION_MANIFEST.read_text(encoding="utf-8"))
 
+    assert manifest["studio"]
     assert "--console" in build
     assert "--hide-console hide-early" in build
     assert "--windowed" not in build
@@ -64,9 +69,12 @@ def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     assert '--name "QuanticStudio"' in build
     assert '--icon "build-assets\\\\quantic-studio.ico"' in build
     assert "BUILD-ID.txt" in build
-    assert build_id in build
-    assert build_id in desktop
-
+    assert 'Get-Content "VERSION.json"' in build
+    assert 'QuanticStudio-$StudioVersion-Windows-Native-$BuildDate' in build
+    assert "BUILD_ID = build_id()" in desktop
+    assert "STUDIO_VERSION = studio_version()" in desktop
+    assert "VERSION.json" in versioning
+    assert "BUILD-ID.txt" in versioning
 
 def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     build = BUILD.read_text(encoding="utf-8")
@@ -92,7 +100,9 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert "Kokoro ff_siwis n'est pas pret" in workflow
     assert "api/avatar/test" in workflow
     assert "overlay_required" in workflow
-    assert "QuanticStudio-Windows-Native-2.8.1" in workflow
+    assert 'Get-Content "VERSION.json"' in workflow
+    assert "name: QuanticStudio-Windows-Native" in workflow
+    assert "aura-source\\\\cloud-node\\\\src\\\\cognition.js" in workflow
 
 
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
@@ -123,7 +133,7 @@ def test_windows_installer_preserves_user_data_and_needs_no_admin() -> None:
 def test_windows_ci_builds_installer_and_supports_authenticode() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "build-installer.ps1" in workflow
-    assert "QuanticStudio-Setup-2.8.1.exe" in workflow
+    assert 'QuanticStudio-Setup-$($version.studio).exe' in workflow
     assert "sign-windows.ps1" in workflow
     assert "AURA_WINDOWS_SIGNING_PFX_BASE64" in workflow
     assert "AURA_WINDOWS_SIGNING_PFX_PASSWORD" in workflow
