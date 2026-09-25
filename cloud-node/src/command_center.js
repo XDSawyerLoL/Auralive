@@ -815,7 +815,7 @@ export class CommandCenter {
 
   async buildCandidates() {
     const syncedBridgeStatus = await this.syncCoreServices();
-    const [intentions, improvements, outcomes, services, bridgeStatus] = await Promise.all([
+    const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning] = await Promise.all([
       this.kernel.intentions(8),
       this.kernel.improvements(8),
       query(
@@ -824,6 +824,10 @@ export class CommandCenter {
       ),
       this.services(),
       Promise.resolve(syncedBridgeStatus || { enabled: false, worker_online: false }),
+      query(
+        `SELECT question,confidence,epistemic_status,evidence_count,updated_at
+         FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 24`,
+      ).catch(() => []),
     ]);
     const candidates = [];
 
@@ -891,35 +895,75 @@ export class CommandCenter {
     const topIntention = intentions.find((row) => Number(row.priority || 0) >= 0.55);
     if (topIntention) {
       const domain = String(parseJson(topIntention.context, {})?.domain || 'aura').slice(0, 80);
-      if (this.webSubstrate?.enabled && needsExternalEvidence(topIntention.statement)) {
+      const externalNeeded = Boolean(
+        this.webSubstrate?.enabled && needsExternalEvidence(topIntention.statement),
+      );
+      const intentionNeedle = String(topIntention.statement || '').trim().slice(0, 180).toLowerCase();
+      const research = externalNeeded
+        ? recentReasoning.find((row) =>
+          String(row.question || '').toLowerCase().includes(intentionNeedle))
+        : null;
+      const researchAgeMs = research ? Date.now() - Date.parse(String(research.updated_at || '')) : Infinity;
+      const researchFresh = Boolean(research && Number.isFinite(researchAgeMs) && researchAgeMs < 6 * 3600_000);
+      const evidenceAllowsAction = Boolean(
+        researchFresh
+        && ['corroborated', 'partially-supported'].includes(String(research.epistemic_status || ''))
+        && Number(research.confidence || 0) >= 0.55
+        && Number(research.evidence_count || 0) >= 1
+      );
+
+      if (externalNeeded && !researchFresh) {
         candidates.push(this.candidate({
           domain,
           kind: 'research',
           title: 'Vérifier une intention avec le Web',
           objective:
-            `Vérifier par sources indépendantes cette intention avant action: ${topIntention.statement}. `
-            + `Chercher les faits externes nécessaires, les contradictions et le niveau de confiance réel.`,
+            'Vérifier par sources indépendantes cette intention avant action: ' + topIntention.statement + '. '
+            + 'Chercher les faits externes nécessaires, les contradictions et le niveau de confiance réel.',
           rationale: 'L’intention dépend d’informations externes ou potentiellement changeantes.',
-          priority: Math.min(0.94, Math.max(0.64, Number(topIntention.priority || 0.5) + 0.06)),
-          confidence: 0.90,
+          priority: Math.min(0.96, Math.max(0.68, Number(topIntention.priority || 0.5) + 0.08)),
+          confidence: 0.92,
           requested_risks: [],
-          signature: `external-evidence:${topIntention.id}`,
+          signature: 'external-evidence:' + topIntention.id,
+        }));
+      } else if (externalNeeded && !evidenceAllowsAction) {
+        candidates.push(this.candidate({
+          domain,
+          kind: 'reflection',
+          title: 'Réviser une intention faute de preuves suffisantes',
+          objective:
+            'Les preuves externes pour cette intention sont ' + (research?.epistemic_status || 'insuffisantes')
+            + ' avec confiance ' + Number(research?.confidence || 0).toFixed(2) + '. '
+            + 'Réviser l’hypothèse, chercher une alternative ou attendre davantage de preuves: '
+            + topIntention.statement + '.',
+          rationale: 'La boucle critique interdit de transformer une hypothèse externe faible en action autonome.',
+          priority: Math.min(0.90, Math.max(0.62, Number(topIntention.priority || 0.5))),
+          confidence: 0.96,
+          requested_risks: [],
+          signature: 'evidence-block:' + topIntention.id + ':' + (research?.epistemic_status || 'none'),
         }));
       }
-      candidates.push(this.candidate({
-        domain,
-        kind: 'operator',
-        title: 'Faire avancer une intention active',
-        objective:
-          `Faire avancer concrètement cette intention AURA: ${topIntention.statement}. `
-          + `Choisir une prochaine action courte, réversible, mesurable et compatible avec les capacités réellement disponibles.`,
-        rationale: `Intention active priorité=${Number(topIntention.priority || 0).toFixed(2)}.`,
-        priority: Math.min(0.92, Math.max(0.58, Number(topIntention.priority || 0.5))),
-        confidence: 0.72,
-        signature: `intention:${topIntention.id}`,
-      }));
-    }
 
+      if (!externalNeeded || evidenceAllowsAction) {
+        candidates.push(this.candidate({
+          domain,
+          kind: 'operator',
+          title: 'Faire avancer une intention active',
+          objective:
+            'Faire avancer concrètement cette intention AURA: ' + topIntention.statement + '. '
+            + 'Choisir une prochaine action courte, réversible, mesurable et compatible avec les capacités réellement disponibles.',
+          rationale: evidenceAllowsAction
+            ? 'Preuves externes disponibles: statut=' + research.epistemic_status
+              + ', confiance=' + Number(research.confidence || 0).toFixed(2) + '.'
+            : 'Intention active priorité=' + Number(topIntention.priority || 0).toFixed(2) + '.',
+          priority: Math.min(0.92, Math.max(0.58, Number(topIntention.priority || 0.5))),
+          confidence: evidenceAllowsAction
+            ? Math.max(0.72, Math.min(0.95, Number(research.confidence || 0.72)))
+            : 0.72,
+          signature: 'intention:' + topIntention.id,
+        }));
+      }
+    }
     if (!bridgeStatus?.worker_online) {
       candidates.push(this.candidate({
         domain: 'quantic-studio',
