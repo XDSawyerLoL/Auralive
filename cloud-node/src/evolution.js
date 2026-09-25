@@ -139,6 +139,53 @@ export class EvolutionLab {
     };
   }
 
+  async applyRuntimeAdaptation(cycleId, objective, diagnosis) {
+    const diagnosisText = String(diagnosis?.diagnosis || '').trim();
+    const proposalText = String(diagnosis?.proposal || '').trim();
+    const validationPlan = String(diagnosis?.validation_plan || '').trim();
+    const risk = String(diagnosis?.risk || 'review').slice(0, 80);
+    if (!diagnosisText && !proposalText) return { applied: false, reason: 'aucune adaptation exploitable' };
+
+    const lessonContent = [
+      diagnosisText ? `Diagnostic d’évolution: ${diagnosisText}` : '',
+      proposalText ? `Amélioration candidate: ${proposalText}` : '',
+      validationPlan ? `Validation attendue: ${validationPlan}` : '',
+    ].filter(Boolean).join(' ').slice(0, 4000);
+
+    const learned = await this.kernel.learn({
+      lessonKey: `evolution:${cycleId}`,
+      content: lessonContent,
+      confidence: ['low', 'safe'].includes(risk.toLowerCase()) ? 0.74 : 0.62,
+      source: 'evolution-cloud',
+    });
+
+    const proposalId = randomUUID();
+    const timestamp = now();
+    await query(
+      `INSERT INTO aura_improvement_proposals(
+        id,target,diagnosis,proposal,validation_plan,risk,status,evidence_count,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,'proposed',1,?,?)`,
+      [
+        proposalId,
+        String(objective || 'AURA Cloud Evolution').slice(0, 500),
+        diagnosisText.slice(0, 4000),
+        proposalText.slice(0, 5000),
+        validationPlan.slice(0, 4000),
+        risk,
+        timestamp,
+        timestamp,
+      ],
+    );
+
+    return {
+      applied: true,
+      mode: 'persistent-runtime-learning',
+      lesson_key: learned.lesson_key,
+      proposal_id: proposalId,
+      risk,
+    };
+  }
+
   async runCycle(objective, trigger = 'manual') {
     if (this.running) return { ok: true, skipped: true, reason: 'un cycle Evolution est déjà en cours' };
     this.running = true;
@@ -153,10 +200,24 @@ export class EvolutionLab {
       const research = await this.research(objective);
       await query("UPDATE aura_evolution_cycles SET status='diagnosing',research=?,updated_at=? WHERE id=?", [JSON.stringify(research), now(), id]);
       const diagnosis = await this.diagnose(objective, research);
-      const status = diagnosis.worth_changing ? 'research-only' : 'no-change';
-      await query('UPDATE aura_evolution_cycles SET status=?,diagnosis=?,updated_at=? WHERE id=?', [status, JSON.stringify(diagnosis), now(), id]);
+      if (!diagnosis.worth_changing) {
+        await query('UPDATE aura_evolution_cycles SET status=?,diagnosis=?,updated_at=? WHERE id=?', ['no-change', JSON.stringify(diagnosis), now(), id]);
+        this.lastCycleAt = now();
+        return { id, status: 'no-change', research, diagnosis, adaptation: { applied: false } };
+      }
+
+      const adaptation = await this.applyRuntimeAdaptation(id, objective, diagnosis);
+      const status = adaptation.applied ? 'adapted-runtime' : 'research-only';
+      const promotion = {
+        runtime_adaptation: adaptation,
+        code_evolution: this.bridge?.enabled ? 'delegated-when-worker-online' : 'waiting-for-local-worker',
+      };
+      await query(
+        'UPDATE aura_evolution_cycles SET status=?,diagnosis=?,candidate=?,promotion=?,updated_at=? WHERE id=?',
+        [status, JSON.stringify(diagnosis), JSON.stringify(adaptation), JSON.stringify(promotion), now(), id],
+      );
       this.lastCycleAt = now();
-      return { id, status, research, diagnosis, promotion: { auto_submit: false, auto_merge: false, reason: 'Phase 1 Node: recherche et diagnostic uniquement; promotion automatique interdite.' } };
+      return { id, status, research, diagnosis, adaptation, promotion };
     } catch (error) {
       this.lastError = String(error?.message || error).slice(0, 1000);
       await query("UPDATE aura_evolution_cycles SET status='error',promotion=?,updated_at=? WHERE id=?", [JSON.stringify({ error: this.lastError }), now(), id]);
@@ -196,6 +257,7 @@ export class EvolutionLab {
   async status() {
     const bridgeStatus = this.bridge ? await this.bridge.status() : null;
     const counts = await one(`SELECT COUNT(*) AS total,
+      SUM(CASE WHEN status='adapted-runtime' THEN 1 ELSE 0 END) AS adapted_runtime,
       SUM(CASE WHEN status='research-only' THEN 1 ELSE 0 END) AS research_only,
       SUM(CASE WHEN status='no-change' THEN 1 ELSE 0 END) AS no_change,
       SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors
@@ -217,7 +279,13 @@ export class EvolutionLab {
       canary_min_observations: config.evolutionCanaryMinObservations,
       last_cycle_at: this.lastCycleAt,
       last_error: this.lastError,
-      counts: { total: Number(counts?.total || 0), research_only: Number(counts?.research_only || 0), no_change: Number(counts?.no_change || 0), errors: Number(counts?.errors || 0) },
+      counts: {
+        total: Number(counts?.total || 0),
+        adapted_runtime: Number(counts?.adapted_runtime || 0),
+        research_only: Number(counts?.research_only || 0),
+        no_change: Number(counts?.no_change || 0),
+        errors: Number(counts?.errors || 0),
+      },
       gates: [
         'research provenance',
         'external content treated as untrusted data',
