@@ -180,9 +180,17 @@ export class AuraMeshBrowserPeer {
 
   async start() {
     if (this.running) return;
-    this.running = true;
-    await this.register();
-    this.loopPromise = this.loop();
+    try {
+      await this.register();
+      this.running = true;
+      this.loopPromise = this.loop();
+    } catch (error) {
+      this.running = false;
+      this.peerToken = '';
+      this.peerId = '';
+      this.lastError = String(error?.message || error).slice(0, 1000);
+      throw error;
+    }
   }
 
   async stop() {
