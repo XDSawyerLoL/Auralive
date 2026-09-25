@@ -46,6 +46,9 @@ jobs:
             "cognition_native": true,
             "command_center": 1,
             "autonomous_initiatives": true,
+            "web_substrate": 1,
+            "external_memory": true,
+            "epistemic_gate": "independent-source-corroboration",
             "promotion": "ci-and-canary-gated"
           }
           EOF
