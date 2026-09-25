@@ -18,7 +18,9 @@ test('voice playback no longer requires a manual dashboard token', () => {
   const route = serverSource.slice(start, end);
   assert.doesNotMatch(route, /requirePrivate\(request, reply\)/);
   assert.match(route, /validVoiceTicket\(ticket, text\)/);
+  assert.match(route, /cloudVoice\.synthesize\(text/);
   assert.match(route, /bridge\.synthesize\(text/);
+  assert.match(route, /const attempts = preferLocal && localOnline \? \['local', 'cloud'\] : \['cloud', 'local'\]/);
 });
 
 test('voice ticket is bound to exact text and expires quickly', () => {
