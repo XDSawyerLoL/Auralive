@@ -11,11 +11,12 @@ const packagePath = resolve(here, '..', 'package.json');
 const now = () => new Date().toISOString();
 
 export class EvolutionLab {
-  static VERSION = 'aura-evolution-node-phase1-v1';
+  static VERSION = 'aura-evolution-node-phase2-v1';
 
-  constructor(ai, kernel) {
+  constructor(ai, kernel, bridge = null) {
     this.ai = ai;
     this.kernel = kernel;
+    this.bridge = bridge;
     this.timer = null;
     this.started = false;
     this.running = false;
@@ -26,17 +27,36 @@ export class EvolutionLab {
   async start() {
     this.started = true;
     if (!config.evolutionEnabled) return;
-    this.timer = setInterval(() => {
-      this.runCycle('Chercher une optimisation faible risque du noyau AURA Cloud Node à partir des résultats récents et des dépendances officielles.', 'continuous')
-        .catch((error) => { this.lastError = String(error?.message || error).slice(0, 1000); });
-    }, config.evolutionIntervalSeconds * 1000);
+    const objective = 'Chercher une optimisation faible risque du noyau AURA à partir des résultats récents, des dépendances officielles et des propositions internes.';
+    const run = () => this.dispatchCycle(objective, 'continuous')
+      .catch((error) => { this.lastError = String(error?.message || error).slice(0, 1000); });
+    this.timer = setInterval(run, config.evolutionIntervalSeconds * 1000);
+    this.warmupTimer = setTimeout(run, Math.min(60_000, Math.max(10_000, config.cognitiveTickSeconds * 1000)));
+    this.warmupTimer.unref?.();
     this.timer.unref?.();
   }
 
   stop() {
     if (this.timer) clearInterval(this.timer);
+    if (this.warmupTimer) clearTimeout(this.warmupTimer);
     this.timer = null;
+    this.warmupTimer = null;
     this.started = false;
+  }
+
+  async dispatchCycle(objective, trigger = 'manual') {
+    if (this.bridge?.enabled && await this.bridge.workerOnline()) {
+      const delegated = await this.bridge.evolve(objective);
+      this.lastCycleAt = now();
+      this.lastError = '';
+      return {
+        status: 'delegated-local-evolution',
+        trigger,
+        delegated_to_local: true,
+        ...delegated,
+      };
+    }
+    return this.runCycle(objective, trigger);
   }
 
   async fetchJson(url) {
@@ -174,6 +194,7 @@ export class EvolutionLab {
   }
 
   async status() {
+    const bridgeStatus = this.bridge ? await this.bridge.status() : null;
     const counts = await one(`SELECT COUNT(*) AS total,
       SUM(CASE WHEN status='research-only' THEN 1 ELSE 0 END) AS research_only,
       SUM(CASE WHEN status='no-change' THEN 1 ELSE 0 END) AS no_change,
@@ -183,10 +204,12 @@ export class EvolutionLab {
       version: EvolutionLab.VERSION,
       enabled: config.evolutionEnabled,
       started: this.started,
-      phase: 'phase1-research-diagnosis',
+      phase: bridgeStatus?.worker_online ? 'phase2-hybrid-local-evolution' : 'phase2-cloud-research-fallback',
       interval_seconds: config.evolutionIntervalSeconds,
-      auto_submit: false,
-      auto_merge: false,
+      delegated_to_local: Boolean(bridgeStatus?.worker_online),
+      local_worker_online: Boolean(bridgeStatus?.worker_online),
+      auto_submit: Boolean(bridgeStatus?.worker_online),
+      auto_merge: Boolean(bridgeStatus?.worker_online),
       repository: config.evolutionRepository,
       base_branch: config.evolutionBaseBranch,
       allowed_domains: [...config.evolutionAllowedDomains],
@@ -195,7 +218,14 @@ export class EvolutionLab {
       last_cycle_at: this.lastCycleAt,
       last_error: this.lastError,
       counts: { total: Number(counts?.total || 0), research_only: Number(counts?.research_only || 0), no_change: Number(counts?.no_change || 0), errors: Number(counts?.errors || 0) },
-      gates: ['research provenance', 'external content treated as untrusted data', 'manual candidate creation', 'CI required before future promotion', 'independent canary', 'auto-submit disabled', 'auto-merge disabled'],
+      gates: [
+        'research provenance',
+        'external content treated as untrusted data',
+        'local source sandbox when Quantic Studio is online',
+        'candidate compile/tests before submission',
+        'GitHub CI before promotion',
+        'protected evolution/security paths',
+      ],
     };
   }
 }
