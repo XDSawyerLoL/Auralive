@@ -209,7 +209,7 @@ async def test_automatic_canary_is_created_after_required_ci_checks(tmp_path: Pa
         {
             "successful": True,
             "head_sha": "abc123",
-            "required_checks": ["node-cloud", "python-core", "rust-core", "windows-smoke"],
+            "required_checks": ["gate-node-cloud", "gate-python-core", "gate-rust-core", "gate-windows-smoke"],
             "missing_required_checks": [],
         },
     )
