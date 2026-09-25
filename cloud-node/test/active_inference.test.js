@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { ActiveInferenceEngine } from '../src/active_inference.js';
+import { AuraOrganism } from '../src/organism.js';
 
 test('active inference spends more compute on ambiguous novel situations', () => {
   const engine = new ActiveInferenceEngine();
@@ -42,4 +43,14 @@ test('plan score rewards information and penalizes risk/cost', () => {
     computeCost: 0.7,
   });
   assert.ok(safe > costly);
+});
+
+
+test('default AURA organism stays on native or fast compute', () => {
+  const engine = new ActiveInferenceEngine();
+  const organism = new AuraOrganism().defaultState();
+  const assessment = engine.assess(organism);
+  assert.ok(['native', 'fast'].includes(assessment.compute_tier));
+  assert.ok(assessment.token_budget <= 180);
+  assert.ok(assessment.difficulty < 0.45);
 });
