@@ -163,3 +163,16 @@ test('mobile voice primes audio and falls back to device speech when needed', ()
   assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), true);
   assert.equal(DASHBOARD_SCRIPT.includes("utterance.lang='fr-FR'"), true);
 });
+
+
+test('long Mairaiy responses play every generated segment in sequence', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes("Array.isArray(out&&out.segments)"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("await playVoiceSegment(segments[i])"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("splitBrowserSpeech(text,220)"), true);
+});
+
+test('living visualization uses calmer motion and a 30fps stability cap', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes("mobile?44:108"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("t-scene.lastFrame<30"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Math.sin(t*.00042+phase)*1.6"), true);
+});
