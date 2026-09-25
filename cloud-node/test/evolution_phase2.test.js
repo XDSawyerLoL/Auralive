@@ -11,6 +11,9 @@ test('AURA Cloud Phase 2 delegates evolution to Quantic Studio when the worker i
   assert.match(evolutionSource, /await this\.bridge\.workerOnline\(\)/);
   assert.match(evolutionSource, /this\.bridge\.evolve\(objective\)/);
   assert.match(evolutionSource, /phase2-hybrid-local-evolution/);
+  assert.match(evolutionSource, /phase2-cloud-persistent-adaptation/);
+  assert.match(evolutionSource, /persistent-runtime-learning/);
+  assert.match(evolutionSource, /aura_improvement_proposals/);
   assert.match(serverSource, /new EvolutionLab\(ai, kernel, bridge\)/);
   assert.match(serverSource, /evolution\.dispatchCycle\(/);
 });
