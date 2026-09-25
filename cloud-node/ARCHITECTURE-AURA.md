@@ -56,3 +56,48 @@ Gemini peut être retiré lorsque :
 - le modèle local répond via Quantic Studio ;
 - les tests de non-régression passent ;
 - les actions, la voix et les cycles cognitifs restent disponibles sans clé Gemini.
+
+
+## Internet comme substrat de raisonnement
+
+AURA ne cherche pas à encoder toute la connaissance du monde dans un modèle de langage. Le modèle est un spécialiste remplaçable chargé de proposer des hypothèses, formuler des requêtes et interpréter des éléments de preuve. La décision reste dans le noyau AURA.
+
+### 1. Méta-raisonnement
+
+Le cycle externe est :
+
+1. question ou intention ;
+2. hypothèses testables ;
+3. plan de recherche ;
+4. récupération de sources par API/HTTPS ;
+5. évaluation source par source ;
+6. agrégation déterministe des preuves indépendantes ;
+7. détection des contradictions ;
+8. conclusion avec statut épistémique ;
+9. révision de l'hypothèse ou action seulement si le niveau de preuve le permet.
+
+Les statuts de preuve sont `unverified`, `partially-supported`, `contested` et `corroborated`. Une intention qui dépend de données externes ne passe pas au bras opérateur tant qu'une recherche récente n'a pas franchi le seuil de preuve.
+
+### 2. Web comme mémoire vive externe
+
+`WebSubstrate` indexe temporairement les sources utiles dans `aura_external_memory` et persiste les sessions de raisonnement et leur graphe de preuves. Cette mémoire est séparée du Soul et de la mémoire autobiographique interne. Elle expire et peut être reconstruite depuis le réseau.
+
+Le runtime dispose sans configuration d'API publiques structurées pour Wikipedia et Crossref. Un endpoint SearXNG JSON peut être branché pour la découverte Web générale. Les récupérations directes sont HTTPS, bornées en taille et protégées contre les réseaux privés/SSRF.
+
+### 3. Réseau comme espace d'action
+
+AURA n'utilise pas le Web comme une interface humaine à cliquer. Le centre de commande agit par bus structurés :
+
+- GitHub API pour l'état des dépôts, CI et actions AutoOps allowlistées ;
+- HORIZON API pour les signaux et le contexte ;
+- Quantic Studio via le bridge authentifié pour les capacités locales ;
+- GitHub Actions/CI comme calcul distant reproductible pour tests, builds et validation ;
+- APIs produit Quantic à mesure qu'elles exposent des capacités typées.
+
+Aucune commande shell distante arbitraire n'est exposée par le Cloud. Les capacités doivent être typées, authentifiées, observables, bornées par risque et produire un résultat mesurable.
+
+### 4. Boucle critique
+
+Une source seule ne devient pas un fait. Le score combine fiabilité de la source, pertinence, indépendance des domaines et contradictions. Plusieurs sources indépendantes sont nécessaires pour atteindre `corroborated`. Les contradictions abaissent le niveau de confiance et peuvent bloquer l'action autonome.
+
+Cette architecture transforme donc le réseau en mémoire externe + bus d'observation + couche d'exécution distribuée, tout en conservant l'identité, les intentions et l'arbitrage dans le noyau AURA.

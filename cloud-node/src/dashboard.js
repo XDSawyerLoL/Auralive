@@ -127,7 +127,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
 .progress{height:4px;margin-top:7px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--violet),var(--cyan))}
 .bottom-grid{grid-area:bottom;display:grid;grid-template-columns:5fr 3.25fr 4.25fr;gap:13px;margin-top:0}.bottom-grid .panel{min-height:188px}
 .activity-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:7px;padding:7px 9px}.activity-time{font-size:8px;color:var(--muted2)}.activity-title{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-kind{font-size:8px;color:#aab6ce;border:1px solid var(--line);padding:3px 6px;border-radius:999px}
-.next-action{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid rgba(154,108,255,.16);border-radius:14px;background:linear-gradient(135deg,rgba(154,108,255,.1),rgba(90,110,255,.05))}.next-orb{width:42px;height:42px;border-radius:50%;border:1px solid rgba(154,108,255,.45);display:grid;place-items:center;color:#c4b5ff;box-shadow:0 0 25px rgba(154,108,255,.18);flex:0 0 auto}.next-copy{font-size:10px;line-height:1.45}.confidence{font-size:8px;color:var(--muted);margin-top:14px}.memory-row{display:grid;grid-template-columns:auto 1fr;gap:8px}.memory-date{font-size:8px;color:var(--muted2)}.memory-text{font-size:9px;line-height:1.35}.empty{padding:14px;text-align:center;border:1px dashed var(--line);border-radius:11px;color:var(--muted);font-size:9px}
+.next-action{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid rgba(154,108,255,.16);border-radius:14px;background:linear-gradient(135deg,rgba(154,108,255,.1),rgba(90,110,255,.05))}.next-orb{width:42px;height:42px;border-radius:50%;border:1px solid rgba(154,108,255,.45);display:grid;place-items:center;color:#c4b5ff;box-shadow:0 0 25px rgba(154,108,255,.18);flex:0 0 auto}.next-copy{font-size:10px;line-height:1.45}.confidence{font-size:8px;color:var(--muted);margin-top:14px}.command-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 10px}.command-stat{border:1px solid rgba(157,181,255,.12);border-radius:10px;background:rgba(255,255,255,.025);padding:8px 9px;min-width:0}.command-stat span{display:block;color:var(--muted2);font-size:7px;text-transform:uppercase;letter-spacing:.08em}.command-stat strong{display:block;margin-top:3px;font-size:10px;color:#edf2ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.command-stat strong.good{color:var(--green)}.command-stat strong.warn{color:var(--gold)}.memory-row{display:grid;grid-template-columns:auto 1fr;gap:8px}.memory-date{font-size:8px;color:var(--muted2)}.memory-text{font-size:9px;line-height:1.35}.empty{padding:14px;text-align:center;border:1px dashed var(--line);border-radius:11px;color:var(--muted);font-size:9px}
 .auth-drawer{position:fixed;inset:0;display:none;z-index:50;background:rgba(2,4,9,.72);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:18px}.auth-drawer.open{display:flex}.auth-box{width:min(460px,100%);border:1px solid var(--line);border-radius:20px;background:#0d1321;padding:20px;box-shadow:0 30px 100px rgba(0,0,0,.45)}.auth-box h3{margin:0 0 7px;font-size:16px}.auth-box p{margin:0 0 13px;color:var(--muted);font-size:10px;line-height:1.45}.auth-row{display:flex;gap:8px}.auth-row input{flex:1;border:1px solid var(--line);background:#070b13;color:white;border-radius:12px;padding:10px 11px;outline:none}.primary{border:0;border-radius:11px;background:linear-gradient(135deg,#9368ff,#624ee8);color:white;padding:9px 12px;font-weight:650}.secondary{border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);color:#ccd4e5;padding:9px 12px}
 .emotion-strip{
   display:grid;grid-template-columns:minmax(180px,.72fr) minmax(0,2.28fr);gap:12px;
@@ -168,7 +168,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
   .composer{gap:8px}.composer textarea{font-size:16px;min-height:52px;line-height:1.35}.composer .voice,.composer .send{width:48px;height:48px;flex:0 0 48px}
   .map-panel{min-height:370px}.map-wrap{min-height:370px}.organism-hud{font-size:12px}.map-foot{max-width:88%;font-size:11px}.legend{display:none}
   .right-stack{grid-column:auto;grid-template-columns:1fr}.bottom-grid{grid-template-columns:1fr}.bottom-grid .panel:first-child{grid-column:auto}.title{white-space:normal}
-  .thought-card,.work-list,.intent-list,.activity-list,.memory-list,.next-copy{font-size:14px;line-height:1.45}
+  .thought-card,.work-list,.intent-list,.activity-list,.memory-list,.next-copy{font-size:14px;line-height:1.45}.command-stat span{font-size:9px}.command-stat strong{font-size:12px}
 }
 @media(max-width:480px){
   .shell{padding:10px 10px calc(22px + env(safe-area-inset-bottom))}.logo{font-size:30px}.title{font-size:18px}.subtitle{font-size:13px}
@@ -179,6 +179,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
   .chat-panel{min-height:74svh}.messages{min-height:51svh}.msg{max-width:88%;font-size:16px;line-height:1.52}.msg.user{margin-right:28px}.msg.aura{margin-left:28px}
   .composer{position:sticky;bottom:max(6px,env(safe-area-inset-bottom));z-index:8;padding:8px;border:1px solid rgba(160,180,240,.12);border-radius:16px;background:rgba(8,12,21,.94);backdrop-filter:blur(18px)}
   .composer textarea{font-size:16px;min-height:54px}
+  .command-stats{grid-template-columns:1fr 1fr}.command-stat:last-child{grid-column:1/-1}
   .map-panel,.map-wrap{min-height:315px}
 }
 @media(max-width:410px){
@@ -320,10 +321,15 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       <div class="panel-body"><div class="activity-list" id="activityList"><div class="empty">Chargement…</div></div></div>
     </section>
     <section class="panel">
-      <div class="panel-head"><span>✦</span><div class="panel-title">Prochaine action probable</div></div>
+      <div class="panel-head"><span>⌘</span><div class="panel-title">Centre de commande</div><div class="spacer"></div><div class="panel-meta" id="commandState">Initialisation</div></div>
       <div class="panel-body">
-        <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune action calculée.</div></div>
-        <div class="confidence">Confiance estimée : <span id="confidenceValue">—</span></div>
+        <div class="command-stats">
+          <div class="command-stat"><span>Flotte</span><strong id="commandFleet">—</strong></div>
+          <div class="command-stat"><span>Autonomie</span><strong id="commandMode">—</strong></div>
+          <div class="command-stat"><span>Initiatives</span><strong id="commandCount">—</strong></div>
+        </div>
+        <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune initiative calculée.</div></div>
+        <div class="confidence">Priorité / confiance : <span id="confidenceValue">—</span></div>
         <div class="progress"><span id="confidenceBar" style="width:0%"></span></div>
       </div>
     </section>

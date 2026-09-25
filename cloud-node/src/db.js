@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 2;
+export const LATEST_SCHEMA_VERSION = 5;
 
 export function getDb() {
   if (pool) return pool;
@@ -82,6 +82,163 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(2,?,?)',
       ['resilience-snapshots-and-metrics', new Date().toISOString()],
+    );
+    current = 2;
+  }
+
+  if (current < 3) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_command_services (
+      id VARCHAR(80) PRIMARY KEY,
+      name VARCHAR(160) NOT NULL,
+      kind VARCHAR(80) NOT NULL DEFAULT 'service',
+      objective TEXT NOT NULL,
+      endpoint VARCHAR(1000) NOT NULL DEFAULT '',
+      repository VARCHAR(300) NOT NULL DEFAULT '',
+      criticality DOUBLE NOT NULL DEFAULT 0.5,
+      enabled TINYINT NOT NULL DEFAULT 1,
+      state VARCHAR(40) NOT NULL DEFAULT 'unknown',
+      state_detail TEXT NOT NULL,
+      last_observed_at VARCHAR(40) NOT NULL DEFAULT '',
+      metadata LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_command_services_state(state,criticality)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_initiatives (
+      id CHAR(36) PRIMARY KEY,
+      fingerprint VARCHAR(64) NOT NULL,
+      domain VARCHAR(80) NOT NULL,
+      kind VARCHAR(40) NOT NULL,
+      title VARCHAR(240) NOT NULL,
+      objective TEXT NOT NULL,
+      rationale TEXT NOT NULL,
+      priority DOUBLE NOT NULL DEFAULT 0.5,
+      confidence DOUBLE NOT NULL DEFAULT 0.5,
+      requested_risks LONGTEXT NOT NULL,
+      action_type VARCHAR(120) NOT NULL DEFAULT '',
+      action_payload LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'queued',
+      execution_mode VARCHAR(80) NOT NULL DEFAULT '',
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      attempts INT NOT NULL DEFAULT 0,
+      last_attempt_at VARCHAR(40) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_initiatives_status(status,priority,updated_at),
+      INDEX idx_aura_initiatives_fingerprint(fingerprint,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_command_events (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      initiative_id CHAR(36) NULL,
+      kind VARCHAR(80) NOT NULL,
+      payload LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_command_events_initiative(initiative_id,created_at),
+      INDEX idx_aura_command_events_kind(kind,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(3,?,?)',
+      ['autonomous-command-center', new Date().toISOString()],
+    );
+    current = 3;
+  }
+
+  if (current < 4) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_external_memory (
+      id VARCHAR(40) PRIMARY KEY,
+      query_text TEXT NOT NULL,
+      url VARCHAR(1800) NOT NULL,
+      host VARCHAR(300) NOT NULL,
+      title VARCHAR(500) NOT NULL DEFAULT '',
+      excerpt LONGTEXT NOT NULL,
+      content_hash VARCHAR(64) NOT NULL,
+      source_quality DOUBLE NOT NULL DEFAULT 0.5,
+      published_at VARCHAR(80) NOT NULL DEFAULT '',
+      fetched_at VARCHAR(40) NOT NULL,
+      expires_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_external_memory_host(host,fetched_at),
+      INDEX idx_aura_external_memory_expiry(expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reasoning_sessions (
+      id CHAR(36) PRIMARY KEY,
+      trigger_name VARCHAR(120) NOT NULL,
+      question TEXT NOT NULL,
+      hypotheses LONGTEXT NOT NULL,
+      plan LONGTEXT NOT NULL,
+      conclusion LONGTEXT NOT NULL,
+      confidence DOUBLE NOT NULL DEFAULT 0,
+      epistemic_status VARCHAR(40) NOT NULL DEFAULT 'unverified',
+      evidence_count INT NOT NULL DEFAULT 0,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reasoning_status(epistemic_status,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reasoning_evidence (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      source_url VARCHAR(1800) NOT NULL,
+      source_title VARCHAR(500) NOT NULL DEFAULT '',
+      source_host VARCHAR(300) NOT NULL DEFAULT '',
+      stance VARCHAR(40) NOT NULL DEFAULT 'neutral',
+      relevance DOUBLE NOT NULL DEFAULT 0,
+      reliability DOUBLE NOT NULL DEFAULT 0,
+      excerpt LONGTEXT NOT NULL,
+      notes TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reasoning_evidence_session(session_id,created_at),
+      INDEX idx_aura_reasoning_evidence_host(source_host,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(4,?,?)',
+      ['web-substrate-external-memory-and-evidence', new Date().toISOString()],
+    );
+    current = 4;
+  }
+
+  if (current < 5) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_fabric_capabilities (
+      id VARCHAR(180) PRIMARY KEY,
+      manifest LONGTEXT NOT NULL,
+      manifest_hash VARCHAR(64) NOT NULL,
+      transport VARCHAR(80) NOT NULL,
+      provider VARCHAR(180) NOT NULL DEFAULT '',
+      trust DOUBLE NOT NULL DEFAULT 0.5,
+      observed_reliability DOUBLE NOT NULL DEFAULT 0.5,
+      latency_ms DOUBLE NOT NULL DEFAULT 0,
+      cost_microunits BIGINT NOT NULL DEFAULT 0,
+      side_effects TINYINT NOT NULL DEFAULT 0,
+      last_seen_at VARCHAR(40) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_fabric_caps_transport(transport,provider),
+      INDEX idx_aura_fabric_caps_quality(observed_reliability,trust)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_fabric_graphs (
+      id VARCHAR(120) PRIMARY KEY,
+      objective TEXT NOT NULL,
+      graph LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'planned',
+      result LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_fabric_graphs_status(status,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_fabric_node_runs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      graph_id VARCHAR(120) NOT NULL,
+      node_id VARCHAR(120) NOT NULL,
+      capability_id VARCHAR(180) NOT NULL,
+      ok TINYINT NOT NULL,
+      elapsed_ms BIGINT NOT NULL DEFAULT 0,
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_fabric_node_graph(graph_id,created_at),
+      INDEX idx_aura_fabric_node_capability(capability_id,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(5,?,?)',
+      ['capability-fabric-routing-and-graph-ledger', new Date().toISOString()],
     );
   }
 }
@@ -277,13 +434,18 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
     query('SELECT * FROM aura_routines ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_improvement_proposals ORDER BY updated_at DESC LIMIT 150'),
     query('SELECT * FROM aura_evolution_cycles ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT * FROM aura_command_services ORDER BY criticality DESC,name ASC'),
+    query('SELECT * FROM aura_initiatives ORDER BY updated_at DESC LIMIT 200'),
+    query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
+    query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -295,6 +457,11 @@ export async function createLogicalBackup(reason = 'scheduled') {
     routines,
     improvements,
     evolution,
+    command_services: commandServices,
+    initiatives,
+    reasoning_sessions: reasoningSessions,
+    fabric_capabilities: fabricCapabilities,
+    fabric_graphs: fabricGraphs,
   });
   const id = randomUUID();
   await query(

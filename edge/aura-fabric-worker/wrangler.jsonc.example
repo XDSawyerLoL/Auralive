@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "aura-fabric-edge",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-25",
+  "workers_dev": true,
+
+  // Create the index first, then uncomment this binding.
+  // "vectorize": [
+  //   {
+  //     "binding": "AURA_INDEX",
+  //     "index_name": "aura-capability-memory"
+  //   }
+  // ],
+
+  // Set AURA_FABRIC_TOKEN as a Wrangler secret, not in this file.
+  // npx wrangler secret put AURA_FABRIC_TOKEN
+  "vars": {
+    "AURA_FABRIC_NODE": "edge-primary"
+  }
+}

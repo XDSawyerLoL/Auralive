@@ -88,11 +88,34 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: engine/quantic-live
-      - name: Test native engine
+          workspaces: |
+            engine/quantic-live
+            engine/aura-fabric
+      - name: Test native broadcast engine
         run: cargo test --locked
-      - name: Build native engine release
+      - name: Build native broadcast engine release
         run: cargo build --release --locked
+      - name: Test AURA Fabric swarm engine
+        run: cargo test --manifest-path ../aura-fabric/Cargo.toml
+      - name: Build AURA Fabric swarm engine release
+        run: cargo build --release --manifest-path ../aura-fabric/Cargo.toml
+
+  fabric-rust:
+    name: gate-fabric-rust
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine/aura-fabric
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/aura-fabric
+      - name: Test distributed scheduler
+        run: cargo test
+      - name: Build distributed scheduler release
+        run: cargo build --release
 
   windows-smoke:
     name: gate-windows-smoke
