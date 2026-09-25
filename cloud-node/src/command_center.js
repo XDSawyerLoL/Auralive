@@ -73,6 +73,77 @@ const DEFAULT_SERVICES = [
 
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'waiting']);
 const BAD_SERVICE_STATES = new Set(['degraded', 'offline', 'error', 'unhealthy']);
+const BAD_WORKFLOW_CONCLUSIONS = new Set([
+  'failure',
+  'timed_out',
+  'action_required',
+  'startup_failure',
+]);
+const REPO_SERVICE_MAP = new Map([
+  ['xdsawyerlol/auralive', 'aura'],
+  ['xdsawyerlol/quanticsillage', 'quantic-sillage'],
+  ['xdsawyerlol/quanticmail', 'quantic-mail'],
+  ['xdsawyerlol/quantic-os', 'quantic-os'],
+  ['xdsawyerlol/quantic-browser', 'quantic-glide'],
+  ['xdsawyerlol/human-agency-engine', 'providence'],
+]);
+
+export function summarizeWorkflowRuns(rows = []) {
+  const ordered = [...rows].sort((a, b) =>
+    String(b?.created_at || '').localeCompare(String(a?.created_at || '')));
+  const groups = new Map();
+  for (const row of ordered) {
+    const name = String(row?.name || row?.workflow_id || 'workflow');
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(row);
+  }
+  return [...groups.entries()].map(([name, history]) => {
+    const latest = history[0] || {};
+    let failureStreak = 0;
+    for (const run of history) {
+      if (BAD_WORKFLOW_CONCLUSIONS.has(String(run?.conclusion || '').toLowerCase())) failureStreak += 1;
+      else break;
+    }
+    return {
+      name,
+      id: Number(latest.id || 0),
+      conclusion: String(latest.conclusion || ''),
+      status: String(latest.status || ''),
+      html_url: String(latest.html_url || ''),
+      head_sha: String(latest.head_sha || ''),
+      head_branch: String(latest.head_branch || ''),
+      run_attempt: Number(latest.run_attempt || 1),
+      created_at: String(latest.created_at || ''),
+      updated_at: String(latest.updated_at || ''),
+      failure_streak: failureStreak,
+    };
+  });
+}
+
+export function repositoryHealth(meta = {}, workflowRuns = []) {
+  const workflows = summarizeWorkflowRuns(workflowRuns);
+  const failed = workflows.filter((item) =>
+    BAD_WORKFLOW_CONCLUSIONS.has(String(item.conclusion || '').toLowerCase()));
+  const repeated = failed.filter((item) => item.failure_streak >= 2);
+  const pushedAt = Date.parse(String(meta.pushed_at || ''));
+  const staleDays = Number.isFinite(pushedAt)
+    ? Math.max(0, (Date.now() - pushedAt) / 86_400_000)
+    : 0;
+  let score = 100;
+  score -= Math.min(60, failed.length * 22);
+  score -= Math.min(20, repeated.length * 8);
+  if (staleDays > 120) score -= 8;
+  if (meta.archived) score -= 30;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    score,
+    state: failed.length ? 'degraded' : (meta.archived ? 'offline' : 'healthy'),
+    workflows,
+    failing_workflows: failed,
+    repeated_failures: repeated.length,
+    stale_days: Math.round(staleDays),
+  };
+}
 
 function parseJson(value, fallback) {
   try {
@@ -108,6 +179,9 @@ export class CommandCenter {
     this.warmupTimer = null;
     this.lastCycleAt = '';
     this.lastActionAt = '';
+    this.lastFleetPollAt = '';
+    this.lastFleetPollMs = 0;
+    this.fleetSnapshot = [];
     this.lastError = '';
   }
 
@@ -161,6 +235,334 @@ export class CommandCenter {
     this.timer = null;
     this.warmupTimer = null;
     this.started = false;
+  }
+
+  get githubToken() {
+    return String(config.commandCenterGithubToken || '').trim();
+  }
+
+  async github(path, { method = 'GET', body = null } = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.commandCenterRequestTimeoutMs);
+    try {
+      const headers = {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'AURA-Command-Center',
+        'X-GitHub-Api-Version': '2022-11-28',
+      };
+      if (this.githubToken) headers.Authorization = `Bearer ${this.githubToken}`;
+      if (body != null) headers['Content-Type'] = 'application/json';
+      const response = await fetch(`https://api.github.com${path}`, {
+        method,
+        headers,
+        body: body == null ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      if (!response.ok) {
+        const error = new Error(
+          `GitHub ${method} ${path}: ${data?.message || response.status}`,
+        );
+        error.status = response.status;
+        error.data = data;
+        throw error;
+      }
+      return { status: response.status, data };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async scanRepository(repository) {
+    const repo = String(repository || '').trim();
+    if (!repo.includes('/')) return { repository: repo, state: 'error', error: 'nom de dépôt invalide' };
+    try {
+      const metaResponse = await this.github(`/repos/${repo}`);
+      const meta = metaResponse.data || {};
+      const branch = String(meta.default_branch || 'main');
+      const runsResponse = await this.github(
+        `/repos/${repo}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=12`,
+      ).catch((error) => {
+        if (error?.status === 404) return { data: { workflow_runs: [] } };
+        throw error;
+      });
+      const runs = Array.isArray(runsResponse?.data?.workflow_runs)
+        ? runsResponse.data.workflow_runs
+        : [];
+      const health = repositoryHealth(meta, runs);
+      return {
+        repository: repo,
+        name: String(meta.name || repo.split('/').pop() || repo),
+        private: Boolean(meta.private),
+        default_branch: branch,
+        pushed_at: String(meta.pushed_at || ''),
+        html_url: String(meta.html_url || ''),
+        archived: Boolean(meta.archived),
+        state: health.state,
+        health_score: health.score,
+        stale_days: health.stale_days,
+        workflows: health.workflows,
+        failing_workflows: health.failing_workflows,
+        repeated_failures: health.repeated_failures,
+        observed_at: now(),
+      };
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      return {
+        repository: repo,
+        name: repo.split('/').pop() || repo,
+        private: status === 404,
+        state: status === 404 ? 'unknown' : 'error',
+        health_score: status === 404 ? 50 : 0,
+        workflows: [],
+        failing_workflows: [],
+        repeated_failures: 0,
+        observed_at: now(),
+        error: status === 404 && !this.githubToken
+          ? 'Dépôt privé ou non visible sans identité machine GitHub.'
+          : String(error?.message || error).slice(0, 500),
+      };
+    }
+  }
+
+  async syncRepositoryService(snapshot) {
+    const repoKey = String(snapshot.repository || '').toLowerCase();
+    const mapped = REPO_SERVICE_MAP.get(repoKey);
+    const serviceId = mapped || `repo-${repoKey.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70)}`;
+    const existing = await one('SELECT id,name,kind,objective,criticality FROM aura_command_services WHERE id=?', [serviceId]);
+    if (!existing) {
+      await this.upsertService({
+        id: serviceId,
+        name: snapshot.name || snapshot.repository,
+        kind: 'repository',
+        objective: `Maintenir ${snapshot.repository} sain, testable et livrable.`,
+        repository: snapshot.repository,
+        criticality: snapshot.repository === 'XDSawyerLoL/Auralive' ? 1 : 0.72,
+        state: snapshot.state,
+        state_detail: snapshot.error || '',
+        last_observed_at: snapshot.observed_at,
+        metadata: { github: snapshot },
+      });
+      return;
+    }
+    await query(
+      `UPDATE aura_command_services
+       SET repository=?,state=?,state_detail=?,last_observed_at=?,metadata=?,updated_at=?
+       WHERE id=?`,
+      [
+        snapshot.repository,
+        snapshot.state,
+        String(snapshot.error || (
+          snapshot.failing_workflows?.length
+            ? `${snapshot.failing_workflows.length} workflow(s) en échec sur ${snapshot.default_branch}`
+            : `Santé GitHub ${snapshot.health_score}%`
+        )).slice(0, 4000),
+        snapshot.observed_at,
+        JSON.stringify({ github: snapshot }).slice(0, 20000),
+        now(),
+        serviceId,
+      ],
+    );
+  }
+
+  async scanGithubFleet({ force = false } = {}) {
+    const due = force
+      || !this.lastFleetPollMs
+      || Date.now() - this.lastFleetPollMs >= config.commandCenterFleetPollSeconds * 1000;
+    if (!due) return this.fleetSnapshot;
+
+    const snapshot = [];
+    for (const repo of config.commandCenterGithubRepos) {
+      const item = await this.scanRepository(repo);
+      snapshot.push(item);
+      await this.syncRepositoryService(item).catch(() => {});
+    }
+    this.fleetSnapshot = snapshot;
+    this.lastFleetPollMs = Date.now();
+    this.lastFleetPollAt = now();
+    await query(
+      'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
+      [
+        'fleet-scan',
+        JSON.stringify({
+          repositories: snapshot.map((item) => ({
+            repository: item.repository,
+            state: item.state,
+            health_score: item.health_score,
+            failing_workflows: item.failing_workflows?.map((run) => ({
+              name: run.name,
+              id: run.id,
+              conclusion: run.conclusion,
+              failure_streak: run.failure_streak,
+            })) || [],
+          })),
+        }).slice(0, 30000),
+        now(),
+      ],
+    );
+    return snapshot;
+  }
+
+  githubCandidates(snapshot = []) {
+    const candidates = [];
+    for (const repo of snapshot) {
+      if (!Array.isArray(repo.failing_workflows) || !repo.failing_workflows.length) continue;
+      const criticality = repo.repository === 'XDSawyerLoL/Auralive' ? 1 : 0.78;
+      for (const run of repo.failing_workflows.slice(0, 2)) {
+        if (run.id) {
+          candidates.push(this.candidate({
+            domain: REPO_SERVICE_MAP.get(String(repo.repository).toLowerCase()) || 'quantic-sillage',
+            kind: 'github',
+            action_type: 'github.rerun_failed_jobs',
+            action_payload: {
+              repository: repo.repository,
+              run_id: run.id,
+              workflow: run.name,
+              head_sha: run.head_sha,
+              run_attempt: run.run_attempt,
+            },
+            title: `Relancer le CI défaillant de ${repo.name}`,
+            objective:
+              `Relancer uniquement les jobs en échec du workflow ${run.name} sur ${repo.repository}, puis observer le résultat avant toute autre action.`,
+            rationale:
+              `Workflow ${run.name}=${run.conclusion}; série d’échecs=${run.failure_streak}.`,
+            priority: Math.min(0.98, 0.72 + criticality * 0.18 + Math.min(run.failure_streak, 3) * 0.025),
+            confidence: 0.96,
+            requested_risks: ['safe'],
+            signature: `github-rerun:${repo.repository}:${run.id}:${run.run_attempt}`,
+          }));
+        }
+
+        if (run.failure_streak >= 2 || run.run_attempt >= 2) {
+          candidates.push(this.candidate({
+            domain: REPO_SERVICE_MAP.get(String(repo.repository).toLowerCase()) || 'quantic-sillage',
+            kind: 'github',
+            action_type: 'github.create_failure_issue',
+            action_payload: {
+              repository: repo.repository,
+              workflow: run.name,
+              head_sha: run.head_sha,
+              run_id: run.id,
+              failure_streak: run.failure_streak,
+              html_url: run.html_url,
+            },
+            title: `Documenter l’échec persistant de ${repo.name}`,
+            objective:
+              `Créer un ticket de diagnostic traçable pour le workflow ${run.name} de ${repo.repository}. Ne modifier aucun code et ne déclencher aucun déploiement.`,
+            rationale:
+              `Échec persistant détecté automatiquement; série=${run.failure_streak}, tentative=${run.run_attempt}.`,
+            priority: Math.min(0.96, 0.77 + criticality * 0.12 + Math.min(run.failure_streak, 4) * 0.02),
+            confidence: 0.97,
+            requested_risks: ['safe'],
+            signature: `github-issue:${repo.repository}:${run.name}:${run.head_sha}`,
+          }));
+        }
+
+        if (
+          String(repo.repository).toLowerCase() === 'xdsawyerlol/auralive'
+          && run.failure_streak >= 2
+        ) {
+          candidates.push(this.candidate({
+            domain: 'aura',
+            kind: 'evolution',
+            title: 'Auto-réparer AURA après échecs CI répétés',
+            objective:
+              `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur son propre dépôt. Diagnostiquer la cause, produire le correctif minimal, valider par sandbox + CI + canary avant toute promotion.`,
+            rationale: 'Le centre de commande déclenche Evolution sur une preuve opérationnelle répétée.',
+            priority: 0.99,
+            confidence: 0.94,
+            requested_risks: [],
+            signature: `self-repair:${run.name}:${run.head_sha}`,
+          }));
+        }
+      }
+    }
+    return candidates;
+  }
+
+  async executeGithubInitiative(initiative) {
+    if (!this.githubToken) {
+      return {
+        status: 'waiting',
+        execution_mode: 'github-readonly',
+        result: {
+          reason: 'AURA_COMMAND_GITHUB_TOKEN absent: observation autonome active, écriture GitHub verrouillée.',
+        },
+      };
+    }
+    const action = String(initiative.action_type || '');
+    const payload = initiative.action_payload || {};
+    const repository = String(payload.repository || '');
+    if (!repository.includes('/')) throw new Error('dépôt GitHub manquant');
+
+    if (action === 'github.rerun_failed_jobs') {
+      if (!config.commandCenterAutoRerunFailedCi) {
+        return {
+          status: 'waiting',
+          execution_mode: 'github-action-disabled',
+          result: { reason: 'AURA_COMMAND_AUTO_RERUN_FAILED_CI=false' },
+        };
+      }
+      const runId = Number(payload.run_id || 0);
+      if (!runId) throw new Error('run_id GitHub manquant');
+      const response = await this.github(
+        `/repos/${repository}/actions/runs/${runId}/rerun-failed-jobs`,
+        { method: 'POST' },
+      );
+      return {
+        status: 'completed',
+        execution_mode: 'github-safe-rerun',
+        result: {
+          executed: true,
+          repository,
+          run_id: runId,
+          status_code: response.status,
+        },
+      };
+    }
+
+    if (action === 'github.create_failure_issue') {
+      if (!config.commandCenterAutoCreateFailureIssue) {
+        return {
+          status: 'waiting',
+          execution_mode: 'github-action-disabled',
+          result: { reason: 'AURA_COMMAND_AUTO_CREATE_FAILURE_ISSUE=false' },
+        };
+      }
+      const marker = `<!-- aura-command:${initiative.fingerprint} -->`;
+      const title = `[AURA AutoOps] ${payload.workflow || 'Workflow'} en échec persistant`.slice(0, 240);
+      const body = [
+        marker,
+        'AURA a détecté automatiquement un échec CI persistant.',
+        '',
+        `- Dépôt: ${repository}`,
+        `- Workflow: ${payload.workflow || 'inconnu'}`,
+        `- Commit: ${payload.head_sha || 'inconnu'}`,
+        `- Série d’échecs: ${Number(payload.failure_streak || 0)}`,
+        payload.html_url ? `- Exécution: ${payload.html_url}` : '',
+        '',
+        'Action automatique volontairement limitée: diagnostic et traçabilité uniquement. '
+          + 'Aucun merge, déploiement, suppression ou changement de secret n’a été effectué.',
+      ].filter(Boolean).join('\n');
+      const response = await this.github(
+        `/repos/${repository}/issues`,
+        { method: 'POST', body: { title, body } },
+      );
+      return {
+        status: 'completed',
+        execution_mode: 'github-safe-issue',
+        result: {
+          executed: true,
+          repository,
+          issue_number: Number(response.data?.number || 0),
+          issue_url: String(response.data?.html_url || ''),
+        },
+      };
+    }
+
+    throw new Error(`action GitHub autonome non autorisée: ${action}`);
   }
 
   async services() {
@@ -260,6 +662,7 @@ export class CommandCenter {
       confidence: Number(row.confidence || 0),
       attempts: Number(row.attempts || 0),
       requested_risks: parseJson(row.requested_risks, []),
+      action_payload: parseJson(row.action_payload, {}),
       result: parseJson(row.result, {}),
     }));
   }
@@ -305,6 +708,10 @@ export class CommandCenter {
       priority: clamp(input.priority ?? 0.5),
       confidence: clamp(input.confidence ?? 0.5),
       requested_risks: risks,
+      action_type: String(input.action_type || '').slice(0, 120),
+      action_payload: input.action_payload && typeof input.action_payload === 'object'
+        ? input.action_payload
+        : {},
       fingerprint: fingerprint([domain, kind, input.signature || objective]),
     };
   }
@@ -442,8 +849,8 @@ export class CommandCenter {
     await query(
       `INSERT INTO aura_initiatives(
         id,fingerprint,domain,kind,title,objective,rationale,priority,confidence,requested_risks,
-        status,execution_mode,result,error,attempts,last_attempt_at,created_at,updated_at
-      ) VALUES(?,?,?,?,?,?,?,?,?,?,'queued','','{}','',0,'',?,?)`,
+        action_type,action_payload,status,execution_mode,result,error,attempts,last_attempt_at,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'queued','','{}','',0,'',?,?)`,
       [
         id,
         candidate.fingerprint,
@@ -455,6 +862,8 @@ export class CommandCenter {
         candidate.priority,
         candidate.confidence,
         JSON.stringify(candidate.requested_risks || []),
+        candidate.action_type || '',
+        JSON.stringify(candidate.action_payload || {}).slice(0, 30000),
         stamp,
         stamp,
       ],
@@ -498,6 +907,7 @@ export class CommandCenter {
     const initiative = {
       ...row,
       requested_risks: parseJson(row.requested_risks, []),
+      action_payload: parseJson(row.action_payload, {}),
     };
     const id = initiative.id;
     const bridgeOnline = this.bridge?.enabled && await this.bridge.workerOnline().catch(() => false);
@@ -529,7 +939,33 @@ export class CommandCenter {
       let result;
       let executionMode;
 
-      if (initiative.kind === 'evolution') {
+      if (initiative.kind === 'github') {
+        const githubResult = await this.executeGithubInitiative(initiative);
+        executionMode = githubResult.execution_mode;
+        result = githubResult.result;
+        const status = githubResult.status;
+        await this.updateInitiative(id, {
+          status,
+          execution_mode: executionMode,
+          result,
+        });
+        this.lastActionAt = now();
+        await query(
+          'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+          [id, 'initiative-result', JSON.stringify({ status, executionMode, result }).slice(0, 30000), now()],
+        );
+        if (status === 'completed') {
+          await this.kernel.recordOutcome({
+            automation_id: `command-center:${initiative.domain}`,
+            event_type: 'aura.initiative.github',
+            ok: true,
+            signature: 'success',
+            report: { initiative_id: id, title: initiative.title, result },
+            created_at: now(),
+          });
+        }
+        return { id, status, execution_mode: executionMode, result };
+      } else if (initiative.kind === 'evolution') {
         executionMode = bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud';
         result = await this.evolution.dispatchCycle(
           initiative.objective,
@@ -682,7 +1118,14 @@ export class CommandCenter {
           reason: 'initiative hourly budget reached',
         };
       }
-      const candidates = await this.buildCandidates();
+      const fleet = await this.scanGithubFleet().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return this.fleetSnapshot;
+      });
+      const candidates = [
+        ...this.githubCandidates(fleet),
+        ...(await this.buildCandidates()),
+      ].sort((a, b) => (b.priority + b.confidence * 0.15) - (a.priority + a.confidence * 0.15));
       let selected = null;
       for (const candidate of candidates) {
         const persisted = await this.persistInitiative(candidate);
@@ -741,6 +1184,17 @@ export class CommandCenter {
       this.services(),
     ]);
     const degraded = services.filter((item) => BAD_SERVICE_STATES.has(String(item.state || '').toLowerCase()));
+    const fleet = this.fleetSnapshot || [];
+    const fleetObserved = fleet.filter((item) => item.state !== 'unknown');
+    const fleetScore = fleetObserved.length
+      ? Math.round(fleetObserved.reduce((sum, item) => sum + Number(item.health_score || 0), 0) / fleetObserved.length)
+      : null;
+    const topInitiative = await one(
+      `SELECT id,domain,kind,title,objective,priority,confidence,status,execution_mode,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+       ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 1`,
+    );
     const payload = {
       version: CommandCenter.VERSION,
       enabled: config.commandCenterEnabled,
@@ -752,6 +1206,27 @@ export class CommandCenter {
       max_initiatives_per_hour: config.commandCenterMaxInitiativesPerHour,
       min_confidence: config.commandCenterMinConfidence,
       local_worker_online: Boolean(bridgeStatus?.worker_online),
+      github_write_authority: Boolean(this.githubToken),
+      monitored_repositories: config.commandCenterGithubRepos.length,
+      fleet: {
+        score: fleetScore,
+        healthy: fleet.filter((item) => item.state === 'healthy').length,
+        degraded: fleet.filter((item) => item.state === 'degraded').length,
+        unavailable: fleet.filter((item) => ['error','unknown'].includes(item.state)).length,
+        last_scan_at: this.lastFleetPollAt,
+      },
+      top_initiative: topInitiative ? {
+        id: topInitiative.id,
+        domain: topInitiative.domain,
+        kind: topInitiative.kind,
+        title: topInitiative.title,
+        objective: String(topInitiative.objective || '').slice(0, 500),
+        priority: Number(topInitiative.priority || 0),
+        confidence: Number(topInitiative.confidence || 0),
+        status: topInitiative.status,
+        execution_mode: topInitiative.execution_mode,
+        updated_at: topInitiative.updated_at,
+      } : null,
       last_cycle_at: this.lastCycleAt,
       last_action_at: this.lastActionAt,
       last_error: this.lastError,
@@ -772,6 +1247,7 @@ export class CommandCenter {
     if (!publicView) {
       payload.allowed_risks = [...config.commandCenterAllowedRisks];
       payload.service_registry = services;
+      payload.repository_fleet = fleet;
     }
     return payload;
   }
