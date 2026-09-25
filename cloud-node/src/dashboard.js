@@ -282,7 +282,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
 
 <script>
 const $ = function(id){ return document.getElementById(id); };
-let token = sessionStorage.getItem('aura_token') || '';
+let token = localStorage.getItem('aura_token') || sessionStorage.getItem('aura_token') || '';
 let privateConnected = false;
 let privateSessionChecked = false;
 let lastSoul = null;
@@ -353,30 +353,54 @@ async function createPrivateSession(value){
   return data;
 }
 async function ensurePrivateSession(){
-  if(token){
-    try{
-      await createPrivateSession(token);
-      token='';
-      $('token').value='';
-      sessionStorage.removeItem('aura_token');
+  // 1) Cookie persistant si disponible.
+  try{
+    const cookieState=await fetch('/api/auth/session',{credentials:'same-origin'})
+      .then(async function(response){
+        const data=await response.json().catch(function(){return {};});
+        return response.ok?data:{authenticated:false};
+      });
+    if(cookieState&&cookieState.authenticated){
       privateSessionChecked=true;
       return true;
+    }
+  }catch(_){}
+
+  // 2) Fallback robuste : Bearer conservé localement tant que le cookie
+  // n'a pas été confirmé. Cela évite qu'un navigateur mobile bloque AURA.
+  if(token){
+    try{
+      const bearerState=await api('/api/auth/session');
+      if(bearerState&&bearerState.authenticated){
+        try{
+          await createPrivateSession(token);
+          const confirm=await fetch('/api/auth/session',{credentials:'same-origin'})
+            .then(async function(response){
+              const data=await response.json().catch(function(){return {};});
+              return response.ok?data:{authenticated:false};
+            });
+          if(confirm&&confirm.authenticated&&confirm.method==='cookie'){
+            localStorage.removeItem('aura_token');
+            sessionStorage.removeItem('aura_token');
+            token='';
+            $('token').value='';
+          }
+        }catch(_){}
+        privateSessionChecked=true;
+        return true;
+      }
     }catch(error){
       if(error&&error.status===401){
         token='';
         $('token').value='';
+        localStorage.removeItem('aura_token');
         sessionStorage.removeItem('aura_token');
       }
     }
   }
-  try{
-    const state=await api('/api/auth/session');
-    privateSessionChecked=true;
-    return Boolean(state&&state.authenticated);
-  }catch(_){
-    privateSessionChecked=true;
-    return false;
-  }
+
+  privateSessionChecked=true;
+  return false;
 }
 function fmtTime(value){
   if(!value) return '—';
@@ -721,6 +745,7 @@ async function refresh(){
     if(error && error.status===401){
       token='';
       $('token').value='';
+      localStorage.removeItem('aura_token');
       sessionStorage.removeItem('aura_token');
       setPrivateState(false);
       setAuthStatus('Session privée expirée. Reconnecte le token AURA.',false);
@@ -777,17 +802,26 @@ $('closeAuth').onclick=function(){$('authDrawer').classList.remove('open');};
 $('authDrawer').addEventListener('click',function(e){if(e.target===$('authDrawer'))$('authDrawer').classList.remove('open');});
 $('saveToken').onclick=async function(){
   const supplied=$('token').value.trim();
+  if(!supplied){setAuthStatus('Entre le token privé AURA.',false);return;}
   setAuthStatus('Connexion…');
+  token=supplied;
+  localStorage.setItem('aura_token',token);
+  sessionStorage.setItem('aura_token',token);
   try{
-    await createPrivateSession(supplied);
-    token='';
-    $('token').value='';
-    sessionStorage.removeItem('aura_token');
+    const state=await api('/api/auth/session');
+    if(!state||!state.authenticated)throw new Error('Token privé AURA invalide');
+    try{await createPrivateSession(token);}catch(_){}
+    const connected=await ensurePrivateSession();
+    if(!connected)throw new Error('Le token est valide mais la session privée ne tient pas sur ce navigateur.');
     setPrivateState(true);
-    setAuthStatus('Accès privé connecté.',true);
+    setAuthStatus(token?'Accès privé connecté · mode Bearer sécurisé local.':'Accès privé connecté.',true);
     setTimeout(function(){$('authDrawer').classList.remove('open');},280);
     await refresh();
   }catch(error){
+    token='';
+    $('token').value='';
+    localStorage.removeItem('aura_token');
+    sessionStorage.removeItem('aura_token');
     setPrivateState(false);
     setAuthStatus(error.message||'Connexion privée impossible.',false);
   }
@@ -796,6 +830,7 @@ $('logoutToken').onclick=async function(){
   try{await api('/api/auth/session',{method:'DELETE'});}catch(_){}
   token='';
   $('token').value='';
+  localStorage.removeItem('aura_token');
   sessionStorage.removeItem('aura_token');
   setPrivateState(false);
   setAuthStatus('Accès privé déconnecté.');
