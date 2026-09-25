@@ -74,6 +74,29 @@ function validPrivateSession(value) {
   return tokenEquals(raw.slice(dot + 1), sessionSignature(expiresAt));
 }
 
+function voiceSignature(expiresAt, text) {
+  if (!config.cloudToken) return '';
+  return createHmac('sha256', config.cloudToken)
+    .update(`${expiresAt}:aura-voice:${String(text || '').trim().slice(0, 430)}`)
+    .digest('base64url');
+}
+
+function createVoiceTicket(text, maxAgeSeconds = 120) {
+  if (!config.cloudToken) return '';
+  const expiresAt = Math.floor(Date.now() / 1000) + Math.max(10, Math.min(maxAgeSeconds, 300));
+  return `${expiresAt}.${voiceSignature(expiresAt, text)}`;
+}
+
+function validVoiceTicket(value, text) {
+  const raw = String(value || '').trim();
+  const dot = raw.indexOf('.');
+  if (dot <= 0 || !config.cloudToken) return false;
+  const expiresAt = Number.parseInt(raw.slice(0, dot), 10);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) return false;
+  if (expiresAt > Math.floor(Date.now() / 1000) + 300) return false;
+  return tokenEquals(raw.slice(dot + 1), voiceSignature(expiresAt, text));
+}
+
 function isPrivate(request) {
   if (tokenEquals(bearer(request), config.cloudToken)) return true;
   return validPrivateSession(cookies(request).aura_session);
@@ -266,7 +289,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.8.0',
+  version: '1.8.1',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -358,9 +381,13 @@ app.post(
 });
 
 app.post('/api/voice/speak', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Texte vide' });
+  const ticket = String(request.body?.ticket || '').trim();
+  if (!isPrivate(request) && !validVoiceTicket(ticket, text)) {
+    return reply.code(401).send({ error: 'Ticket vocal AURA invalide ou expiré' });
+  }
   try {
     return await bridge.synthesize(text, request.body || {});
   } catch (error) {
@@ -619,7 +646,13 @@ app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
-  return kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
+  const response = await kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
+  const answer = String(response?.answer || '').trim();
+  return {
+    ...response,
+    voice_ticket: answer ? createVoiceTicket(answer) : '',
+    voice_profile: 'mairaiy',
+  };
 });
 
 app.post('/api/cloud/events', async (request, reply) => {
