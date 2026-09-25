@@ -36,5 +36,5 @@ test('Hostinger config accepts common MySQL environment aliases', () => {
 });
 
 test('bootstrap endpoint reports 1.9.0', () => {
-  assert.match(serverSource, /version:\s*'1\.8\.3'/);
+  assert.match(serverSource, /version:\s*'1\.9\.0'/);
 });
