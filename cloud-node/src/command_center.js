@@ -186,11 +186,22 @@ export function needsExternalEvidence(value) {
 export class CommandCenter {
   static VERSION = 'aura-command-center-v1';
 
-  constructor(kernel, evolution, bridge, webSubstrate = null) {
+  constructor(
+    kernel,
+    evolution,
+    bridge,
+    webSubstrate = null,
+    fabric = null,
+    dagCompiler = null,
+    graphExecutor = null,
+  ) {
     this.kernel = kernel;
     this.evolution = evolution;
     this.bridge = bridge;
     this.webSubstrate = webSubstrate;
+    this.fabric = fabric;
+    this.dagCompiler = dagCompiler;
+    this.graphExecutor = graphExecutor;
     this.started = false;
     this.running = false;
     this.timer = null;
@@ -1127,14 +1138,39 @@ export class CommandCenter {
         }
         return { id, status, execution_mode: executionMode, result };
       } else if (initiative.kind === 'research') {
-        if (!this.webSubstrate?.enabled) {
-          throw new Error('Web Substrate indisponible');
+        if (
+          this.fabric
+          && this.dagCompiler
+          && this.graphExecutor
+          && config.fabricEnabled
+        ) {
+          const safeCapabilities = this.fabric
+            .list()
+            .filter((item) => !item.side_effects);
+          const graph = await this.dagCompiler.compile(
+            initiative.objective,
+            safeCapabilities,
+            {
+              maxNodes: Math.min(config.fabricMaxGraphNodes, 16),
+              maxParallel: Math.min(config.fabricMaxParallel, 8),
+              budgetMicrounits: config.fabricDefaultBudgetMicrounits,
+            },
+          );
+          executionMode = 'aura-fabric-research-dag';
+          result = await this.graphExecutor.execute(
+            graph,
+            { trigger: 'command-center' },
+          );
+        } else {
+          if (!this.webSubstrate?.enabled) {
+            throw new Error('Web Substrate indisponible');
+          }
+          executionMode = 'web-substrate-research';
+          result = await this.webSubstrate.research(
+            initiative.objective,
+            { trigger: 'command-center' },
+          );
         }
-        executionMode = 'web-substrate-research';
-        result = await this.webSubstrate.research(
-          initiative.objective,
-          { trigger: 'command-center' },
-        );
       } else if (initiative.kind === 'evolution') {
         executionMode = bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud';
         result = await this.evolution.dispatchCycle(
