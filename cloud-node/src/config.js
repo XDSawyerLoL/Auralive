@@ -206,6 +206,12 @@ export function productionConfigIssues() {
       message: 'AI_MODE=bridge exige AURA_CLOUD_TOKEN ou AURA_BRIDGE_TOKEN.',
     });
   }
+  if (process.env.NODE_ENV === 'production' && config.fabricDiscoveryUrls.length && !config.fabricToken) {
+    issues.push({
+      code: 'fabric_token_missing',
+      message: 'AURA_FABRIC_DISCOVERY_URLS est configuré mais AURA_FABRIC_TOKEN est absent.',
+    });
+  }
   return issues;
 }
 
