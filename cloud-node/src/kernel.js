@@ -22,10 +22,11 @@ const AGENT_ROLES = {
 export class CognitiveKernel {
   static VERSION = 'aura-unified-kernel-node-v3';
 
-  constructor(ai, horizon, bridge = null) {
+  constructor(ai, horizon, bridge = null, webSubstrate = null) {
     this.ai = ai;
     this.horizon = horizon;
     this.bridge = bridge;
+    this.webSubstrate = webSubstrate;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.organism = new AuraOrganism();
@@ -538,7 +539,11 @@ export class CognitiveKernel {
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
     const horizonContext = this.horizon?.contextForAi?.() || '';
     if (horizonContext) lines.push('HORIZON', horizonContext);
-    return lines.join('\n').slice(0, 14000);
+    const externalContext = this.webSubstrate?.enabled
+      ? await this.webSubstrate.externalContext(4).catch(() => '')
+      : '';
+    if (externalContext) lines.push('MÉMOIRE EXTERNE', externalContext);
+    return lines.join('\n').slice(0, 18000);
   }
 
   async runAgent(name, task) {
