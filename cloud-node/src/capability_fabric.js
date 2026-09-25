@@ -188,11 +188,13 @@ export class CapabilityFabric {
         if (!online) throw new Error('Quantic Studio hors ligne');
         const objective = clean(input?.objective, 6000);
         if (!objective) throw new Error('studio.operator exige objective');
-        const result = await this.bridge.enqueueOperator({
+        const task = [
           objective,
-          context: input?.dependencies || {},
-          max_steps: Math.min(6, Math.max(1, Number(input?.max_steps || 4))),
-        });
+          input?.dependencies && Object.keys(input.dependencies).length
+            ? 'Contexte dépendances: ' + JSON.stringify(input.dependencies).slice(0, 12000)
+            : '',
+        ].filter(Boolean).join('\n');
+        const result = await this.bridge.operate(task, ['local-control']);
         return {
           ok: true,
           result,
