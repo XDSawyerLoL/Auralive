@@ -145,9 +145,17 @@ const horizon = new HorizonBridge(async (type, payload, source) => {
     await kernel.observeEvent(type, payload, source);
   }
 });
-kernel = new CognitiveKernel(ai, horizon, bridge, webSubstrate);
+kernel = new CognitiveKernel(ai, horizon, bridge, webSubstrate, fabric);
 const evolution = new EvolutionLab(ai, kernel, bridge);
-const commandCenter = new CommandCenter(kernel, evolution, bridge, webSubstrate);
+const commandCenter = new CommandCenter(
+  kernel,
+  evolution,
+  bridge,
+  webSubstrate,
+  fabric,
+  dagCompiler,
+  graphExecutor,
+);
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
