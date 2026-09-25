@@ -156,8 +156,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     <div class="top-actions">
       <div class="pill"><span id="liveDot" class="live-dot"></span><span id="liveText">Connexion…</span></div>
       <div class="clock"><div id="clockDate" class="date">—</div><div id="clockTime" class="time">—</div></div>
-      <button class="mode-btn" id="modeBtn">⌁ Mode évolutif⌄</button>
-      <button class="icon-btn" id="authBtn">Privé · hors connexion</button>
+      <button class="mode-btn" id="modeBtn">⌁ Mode évolutif</button>
     </div>
   </header>
 
@@ -177,7 +176,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       <div class="panel-head"><span>◱</span><div class="panel-title">Dialogue</div><div class="spacer"></div><div class="panel-meta" id="chatState">AURA</div></div>
       <div class="chat-body">
         <div class="messages" id="messages">
-          <div class="msg aura"><span class="who">AURA</span>Je suis en train de charger mon état. Connecte l’accès privé pour voir mes intentions, ma mémoire et mon activité complète.</div>
+          <div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div>
         </div>
         <div class="quick">
           <button data-prompt="Fais-moi un point sur ce que tu fais maintenant.">Que fais-tu maintenant ?</button>
@@ -225,7 +224,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
           </g>
         </svg>
         <div class="organism-hud"><i id="organismDot"></i><span id="organismMood">organisme en réveil</span></div>
-        <div class="map-foot"><strong id="focusLabel" style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">connexion privée requise</span></div>
+        <div class="map-foot"><strong id="focusLabel" style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">chargement de l’état</span></div>
         <div class="legend">
           <div class="legend-row"><span class="legend-line"></span>Flux d’attention actuel</div>
           <div class="legend-row"><span class="legend-line rise"></span>Intérêt croissant</div>
@@ -241,18 +240,18 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       </section>
       <section class="panel">
         <div class="panel-head"><span>▣</span><div class="panel-title">Travail en cours</div><div class="spacer"></div><div class="panel-meta" id="workMeta">—</div></div>
-        <div class="panel-body"><div class="work-list" id="workList"><div class="empty">Accès privé requis.</div></div></div>
+        <div class="panel-body"><div class="work-list" id="workList"><div class="empty">Chargement…</div></div></div>
       </section>
       <section class="panel">
         <div class="panel-head"><span>◎</span><div class="panel-title">Intentions actives</div></div>
-        <div class="panel-body"><div class="intent-list" id="intentList"><div class="empty">Accès privé requis.</div></div></div>
+        <div class="panel-body"><div class="intent-list" id="intentList"><div class="empty">Chargement…</div></div></div>
       </section>
     </aside>
 
     <section class="bottom-grid">
     <section class="panel">
       <div class="panel-head"><span>◴</span><div class="panel-title">Ce qu’elle fait maintenant</div><div class="spacer"></div><div class="panel-meta" id="activityLive">En temps réel</div></div>
-      <div class="panel-body"><div class="activity-list" id="activityList"><div class="empty">Accès privé requis.</div></div></div>
+      <div class="panel-body"><div class="activity-list" id="activityList"><div class="empty">Chargement…</div></div></div>
     </section>
     <section class="panel">
       <div class="panel-head"><span>✦</span><div class="panel-title">Prochaine action probable</div></div>
@@ -264,31 +263,20 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     </section>
     <section class="panel">
       <div class="panel-head"><span>◫</span><div class="panel-title">Mémoire et leçons</div><div class="spacer"></div><div class="panel-meta" id="memoryMeta">—</div></div>
-      <div class="panel-body"><div class="memory-list" id="memoryList"><div class="empty">Accès privé requis.</div></div></div>
+      <div class="panel-body"><div class="memory-list" id="memoryList"><div class="empty">Chargement…</div></div></div>
     </section>
   </section>
   </main>
 </div>
 
-<div class="auth-drawer" id="authDrawer">
-  <div class="auth-box">
-    <h3>Accès privé AURA</h3>
-    <p>Le token reste dans <code>sessionStorage</code> de cet onglet. Sur mobile, un nouvel onglet ou une fermeture du navigateur peut nécessiter de le reconnecter. Il permet d’afficher intentions, pensée dominante, mémoire, activité et carte d’intérêt complète.</p>
-    <div class="auth-row"><input id="token" type="password" autocomplete="off" placeholder="AURA_CLOUD_TOKEN"><button class="primary" id="saveToken">Connecter</button></div>
-    <div id="authStatus" style="min-height:18px;margin-top:9px;color:#9ba6ba;font-size:10px"></div>
-    <div style="display:flex;gap:8px;margin-top:10px"><button class="secondary" id="logoutToken">Déconnecter</button><button class="secondary" id="closeAuth">Fermer</button></div>
-  </div>
-</div>
-
 <script>
 const $ = function(id){ return document.getElementById(id); };
-let token = localStorage.getItem('aura_token') || sessionStorage.getItem('aura_token') || '';
+let token = '';
 let privateConnected = false;
-let privateSessionChecked = false;
 let lastSoul = null;
 let lastAttention = null;
 let livingScene = null;
-$('token').value = token;
+try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
 
 function escapeHtml(value){
   return String(value == null ? '' : value).replace(/[&<>"']/g,function(c){
@@ -298,7 +286,6 @@ function escapeHtml(value){
 function headers(json){
   const h={};
   if(json) h['Content-Type']='application/json';
-  if(token) h.Authorization='Bearer '+token;
   return h;
 }
 async function api(path,options){
@@ -328,80 +315,6 @@ function metric(id,value,active=true){
   }
 }
 function setLive(ok,text){$('liveDot').className='live-dot '+(ok?'good':'bad');$('liveText').textContent=text;}
-function setPrivateState(connected){
-  privateConnected=Boolean(connected);
-  $('authBtn').textContent=privateConnected?'Privé · connecté':'Privé · hors connexion';
-  $('authBtn').title=privateConnected?'Accès privé actif':'Appuyer pour reconnecter AURA';
-}
-function setAuthStatus(text,ok){
-  $('authStatus').textContent=text||'';
-  $('authStatus').style.color=ok===true?'#60e6ad':ok===false?'#ff8d9e':'#9ba6ba';
-}
-async function createPrivateSession(value){
-  const raw=String(value||'').trim();
-  if(!raw)throw new Error('Entre le token privé AURA.');
-  const response=await fetch('/api/auth/session',{
-    method:'POST',
-    credentials:'same-origin',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({token:raw})
-  });
-  const data=await response.json().catch(function(){return {};});
-  if(!response.ok){
-    const err=new Error(data.error||('Erreur '+response.status));err.status=response.status;throw err;
-  }
-  return data;
-}
-async function ensurePrivateSession(){
-  // 1) Cookie persistant si disponible.
-  try{
-    const cookieState=await fetch('/api/auth/session',{credentials:'same-origin'})
-      .then(async function(response){
-        const data=await response.json().catch(function(){return {};});
-        return response.ok?data:{authenticated:false};
-      });
-    if(cookieState&&cookieState.authenticated){
-      privateSessionChecked=true;
-      return true;
-    }
-  }catch(_){}
-
-  // 2) Fallback robuste : Bearer conservé localement tant que le cookie
-  // n'a pas été confirmé. Cela évite qu'un navigateur mobile bloque AURA.
-  if(token){
-    try{
-      const bearerState=await api('/api/auth/session');
-      if(bearerState&&bearerState.authenticated){
-        try{
-          await createPrivateSession(token);
-          const confirm=await fetch('/api/auth/session',{credentials:'same-origin'})
-            .then(async function(response){
-              const data=await response.json().catch(function(){return {};});
-              return response.ok?data:{authenticated:false};
-            });
-          if(confirm&&confirm.authenticated&&confirm.method==='cookie'){
-            localStorage.removeItem('aura_token');
-            sessionStorage.removeItem('aura_token');
-            token='';
-            $('token').value='';
-          }
-        }catch(_){}
-        privateSessionChecked=true;
-        return true;
-      }
-    }catch(error){
-      if(error&&error.status===401){
-        token='';
-        $('token').value='';
-        localStorage.removeItem('aura_token');
-        sessionStorage.removeItem('aura_token');
-      }
-    }
-  }
-
-  privateSessionChecked=true;
-  return false;
-}
 function fmtTime(value){
   if(!value) return '—';
   const d=new Date(value); if(Number.isNaN(d.getTime())) return '—';
@@ -699,8 +612,6 @@ function renderNext(work,attention){
 }
 async function refresh(){
   try{
-    const connected=await ensurePrivateSession();
-    setPrivateState(connected);
     const boot=await api('/api/bootstrap/status');
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
@@ -724,13 +635,9 @@ async function refresh(){
     $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
     $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
-    if(privateConnected){
-      $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
-    }else{
-      $('dominantThought').textContent='Connexion privée requise pour afficher la pensée dominante.';
-    }
+    $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
     lastSoul=Object.assign({},soul);
-    if(privateConnected && boot.runtime_ready){
+    if(boot.runtime_ready){
       const results=await Promise.all([
         api('/api/kernel/intentions?limit=5'),
         api('/api/kernel/lessons?limit=5'),
@@ -740,24 +647,13 @@ async function refresh(){
       ]);
       renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderNext(results[3],results[4]);
     }else{
-      $('intentList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
-      $('memoryList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
-      $('activityList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
-      $('workList').innerHTML='<div class="empty">Connecte l’accès privé.</div>';
+      $('intentList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
+      $('memoryList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
+      $('activityList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
+      $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       renderNext([],null);
     }
   }catch(error){
-    if(error && error.status===401){
-      token='';
-      $('token').value='';
-      localStorage.removeItem('aura_token');
-      sessionStorage.removeItem('aura_token');
-      setPrivateState(false);
-      setAuthStatus('Session privée expirée. Reconnecte le token AURA.',false);
-      $('chatState').textContent='Accès privé expiré · reconnecte le token';
-      $('authDrawer').classList.add('open');
-      return;
-    }
     setLive(false,'Indisponible');
     $('chatState').textContent=error.message;
   }
@@ -802,48 +698,8 @@ async function sendMessage(text){
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
 document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
-$('authBtn').onclick=function(){$('authDrawer').classList.add('open');};
-$('closeAuth').onclick=function(){$('authDrawer').classList.remove('open');};
-$('authDrawer').addEventListener('click',function(e){if(e.target===$('authDrawer'))$('authDrawer').classList.remove('open');});
-$('saveToken').onclick=async function(){
-  const supplied=$('token').value.trim();
-  if(!supplied){setAuthStatus('Entre le token privé AURA.',false);return;}
-  setAuthStatus('Connexion…');
-  token=supplied;
-  localStorage.setItem('aura_token',token);
-  sessionStorage.setItem('aura_token',token);
-  try{
-    const state=await api('/api/auth/session');
-    if(!state||!state.authenticated)throw new Error('Token privé AURA invalide');
-    try{await createPrivateSession(token);}catch(_){}
-    const connected=await ensurePrivateSession();
-    if(!connected)throw new Error('Le token est valide mais la session privée ne tient pas sur ce navigateur.');
-    setPrivateState(true);
-    setAuthStatus(token?'Accès privé connecté · mode Bearer sécurisé local.':'Accès privé connecté.',true);
-    setTimeout(function(){$('authDrawer').classList.remove('open');},280);
-    await refresh();
-  }catch(error){
-    token='';
-    $('token').value='';
-    localStorage.removeItem('aura_token');
-    sessionStorage.removeItem('aura_token');
-    setPrivateState(false);
-    setAuthStatus(error.message||'Connexion privée impossible.',false);
-  }
-};
-$('logoutToken').onclick=async function(){
-  try{await api('/api/auth/session',{method:'DELETE'});}catch(_){}
-  token='';
-  $('token').value='';
-  localStorage.removeItem('aura_token');
-  sessionStorage.removeItem('aura_token');
-  setPrivateState(false);
-  setAuthStatus('Accès privé déconnecté.');
-  $('authDrawer').classList.remove('open');
-  refresh();
-};
 $('refreshMap').onclick=refresh;
-$('modeBtn').onclick=function(){$('authDrawer').classList.add('open');};
+$('modeBtn').onclick=refresh;
 $('voiceBtn').onclick=function(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){$('message').placeholder='Reconnaissance vocale non disponible sur ce navigateur.';return;}
@@ -851,7 +707,7 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();setPrivateState(false);refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 </script>
 </body>
 </html>`;
