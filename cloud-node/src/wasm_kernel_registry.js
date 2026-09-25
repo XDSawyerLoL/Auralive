@@ -58,13 +58,18 @@ export function kernelHash(bytes) {
 export class SignedWasmKernelRegistry {
   static VERSION = 'aura-signed-wasm-kernels-v1';
 
-  constructor() {
+  constructor({
+    signerKeys = config.wasmSignerKeys,
+    maxKernelBytes = config.wasmKernelMaxBytes,
+  } = {}) {
+    this.signerKeys = signerKeys || {};
+    this.maxKernelBytes = Math.max(1024, Number(maxKernelBytes || config.wasmKernelMaxBytes));
     this.lastError = '';
     this.lastVerifiedAt = '';
   }
 
   signer(keyId) {
-    const record = config.wasmSignerKeys?.[String(keyId || '')];
+    const record = this.signerKeys?.[String(keyId || '')];
     if (!record) return null;
     return typeof record === 'string' ? record : record.public_key || record.pem || '';
   }
@@ -72,8 +77,8 @@ export class SignedWasmKernelRegistry {
   async inspect(bytes, manifest = {}) {
     if (!Buffer.isBuffer(bytes)) bytes = Buffer.from(bytes || []);
     if (!bytes.length) throw new Error('kernel Wasm vide');
-    if (bytes.length > config.wasmKernelMaxBytes) {
-      throw new Error(`kernel Wasm trop volumineux: ${bytes.length}/${config.wasmKernelMaxBytes}`);
+    if (bytes.length > this.maxKernelBytes) {
+      throw new Error(`kernel Wasm trop volumineux: ${bytes.length}/${this.maxKernelBytes}`);
     }
     if (!WebAssembly.validate(bytes)) throw new Error('module Wasm invalide');
 
@@ -189,8 +194,8 @@ export class SignedWasmKernelRegistry {
   status() {
     return {
       version: SignedWasmKernelRegistry.VERSION,
-      configured_signers: Object.keys(config.wasmSignerKeys || {}).length,
-      max_kernel_bytes: config.wasmKernelMaxBytes,
+      configured_signers: Object.keys(this.signerKeys || {}).length,
+      max_kernel_bytes: this.maxKernelBytes,
       signed_only: true,
       remote_side_effects: false,
       last_verified_at: this.lastVerifiedAt,
