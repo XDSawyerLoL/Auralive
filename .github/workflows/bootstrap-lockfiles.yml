@@ -9,11 +9,16 @@ on:
       - "cloud-node/package.json"
       - "engine/quantic-live/Cargo.toml"
 
+permissions:
+  contents: write
+
 jobs:
   locks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feat/aura-autonomy-hardening-1.8.0
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -24,10 +29,16 @@ jobs:
       - name: Generate Cargo lock
         working-directory: engine/quantic-live
         run: cargo generate-lockfile
-      - uses: actions/upload-artifact@v4
-        with:
-          name: aura-lockfiles
-          path: |
-            cloud-node/package-lock.json
-            engine/quantic-live/Cargo.lock
-          if-no-files-found: error
+      - name: Commit reproducible lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "AURA CI"
+          git config user.email "aura-ci@users.noreply.github.com"
+          git add cloud-node/package-lock.json engine/quantic-live/Cargo.lock
+          if git diff --cached --quiet; then
+            echo "Lockfiles already current."
+            exit 0
+          fi
+          git commit -m "build: lock Node and Rust dependency graphs"
+          git push origin HEAD:feat/aura-autonomy-hardening-1.8.0
