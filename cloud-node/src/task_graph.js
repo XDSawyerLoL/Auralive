@@ -192,6 +192,7 @@ export class TaskGraphExecutor {
   async execute(graph, { trigger = 'manual' } = {}) {
     const valid = validateTaskGraph(graph);
     const startedAt = Date.now();
+    await this.fabric?.recordGraph?.(valid, { status: 'running', result: {} }).catch?.(() => {});
     const results = new Map();
     const errors = [];
     let spent = 0;
@@ -232,25 +233,29 @@ export class TaskGraphExecutor {
           if (valid.budget_microunits && spent > valid.budget_microunits) {
             throw new Error(`budget DAG dépassé: ${spent}/${valid.budget_microunits}`);
           }
-          results.set(node.id, {
+          const stored = {
             ok: outcome?.ok !== false,
             capability: node.capability,
             result: outcome?.result ?? outcome,
             evidence: outcome?.evidence || [],
             verification: outcome?.verification || {},
             metrics: outcome?.metrics || {},
-          });
+          };
+          results.set(node.id, stored);
+          await this.fabric?.recordNodeRun?.(valid.id, node, stored).catch?.(() => {});
         } else {
           const error = String(settled.reason?.message || settled.reason || 'échec inconnu');
           errors.push({ node_id: node.id, capability: node.capability, error });
-          results.set(node.id, { ok: false, capability: node.capability, error });
+          const stored = { ok: false, capability: node.capability, error };
+          results.set(node.id, stored);
+          await this.fabric?.recordNodeRun?.(valid.id, node, stored).catch?.(() => {});
         }
       }
 
       if (errors.length) break;
     }
 
-    return {
+    const finalResult = {
       ok: errors.length === 0,
       graph_id: valid.id,
       objective: valid.objective,
@@ -264,5 +269,10 @@ export class TaskGraphExecutor {
         layers: valid.layers.length,
       },
     };
+    await this.fabric?.recordGraph?.(valid, {
+      status: finalResult.ok ? 'completed' : 'failed',
+      result: finalResult,
+    }).catch?.(() => {});
+    return finalResult;
   }
 }
