@@ -193,3 +193,11 @@ test('signed Wasm imports require both manifest and global host policy approval'
   assert.match(source, /!declared\.has\(item\) \|\| !this\.allowedImports\.has\(item\)/);
   assert.match(configSource, /AURA_WASM_ALLOWED_IMPORTS/);
 });
+
+
+test('public peers cannot self-assert trusted capability tags', () => {
+  assert.match(meshSource, /RESERVED_PEER_TAGS/);
+  assert.match(meshSource, /peerTags\(value, trusted = false\)/);
+  assert.match(meshSource, /peer\.trust_tier === 'trusted'/);
+  assert.match(meshSource, /trusted \? tags : tags\.filter/);
+});
