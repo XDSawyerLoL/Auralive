@@ -201,3 +201,12 @@ test('public peers cannot self-assert trusted capability tags', () => {
   assert.match(meshSource, /peer\.trust_tier === 'trusted'/);
   assert.match(meshSource, /trusted \? tags : tags\.filter/);
 });
+
+
+test('stale peer identity and late results cannot mutate Mesh consensus', () => {
+  assert.match(meshSource, /computeMeshPeerTtlSeconds \* 2 \* 1000/);
+  assert.match(meshSource, /tâche Mesh déjà finalisée/);
+  const peerSource = fs.readFileSync(new URL('../src/public/compute-mesh/peer.js', import.meta.url), 'utf8');
+  assert.match(peerSource, /message\.includes\('Identité Compute Mesh'\)/);
+  assert.match(peerSource, /return this\.register\(\)/);
+});
