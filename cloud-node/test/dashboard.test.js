@@ -68,8 +68,11 @@ test('living AURA map includes animated visual layers', () => {
 });
 
 
-test('dashboard speaks through the private Mairaiy voice bridge', () => {
+test('dashboard speaks through the tokenless Mairaiy voice ticket bridge', () => {
   assert.equal(DASHBOARD_HTML.includes('/api/voice/speak'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('out.voice_ticket'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('ticket:ticket'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('if(!privateConnected||!text)return'), false);
   assert.equal(DASHBOARD_HTML.includes('audio_base64'), true);
   assert.equal(DASHBOARD_HTML.includes('aura-speaking'), true);
 });
