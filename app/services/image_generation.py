@@ -140,6 +140,7 @@ class AuraImageService:
         )
         wanted_steps = max(1, min(int(steps or self.settings.image_default_steps), 80))
         wanted_seed = int(seed if seed is not None else random.randint(1, 2**31 - 1))
+        explicit_model = bool(str(model or "").strip())
         wanted_model = str(model or self.settings.image_default_model or "").strip()
 
         started = time.monotonic()
@@ -153,6 +154,7 @@ class AuraImageService:
                     steps=wanted_steps,
                     seed=wanted_seed,
                     model=wanted_model,
+                    strict_model=explicit_model,
                 )
             else:
                 result = await self._generate_comfyui(
@@ -198,6 +200,7 @@ class AuraImageService:
         steps: int,
         seed: int,
         model: str,
+        strict_model: bool = False,
     ) -> dict[str, Any]:
         await self.start()
         assert self.session is not None
@@ -212,9 +215,14 @@ class AuraImageService:
                 ) as response:
                     body = await response.text()
                     if response.status >= 400:
-                        raise RuntimeError(
-                            f"A1111 refuse le checkpoint {model!r} "
-                            f"(HTTP {response.status}): {body[:300]}"
+                        if strict_model:
+                            raise RuntimeError(
+                                f"A1111 refuse le checkpoint {model!r} "
+                                f"(HTTP {response.status}): {body[:300]}"
+                            )
+                        logger.info(
+                            "Checkpoint par défaut %r indisponible; conservation du modèle A1111 déjà chargé.",
+                            model,
                         )
 
                 options = await self._get_json(
@@ -223,9 +231,22 @@ class AuraImageService:
                 )
                 actual_model = str(options.get("sd_model_checkpoint") or model).strip()
             except Exception as exc:
-                raise RuntimeError(
-                    f"Impossible d'activer le checkpoint image demandé {model!r}: {exc}"
-                ) from exc
+                if strict_model:
+                    raise RuntimeError(
+                        f"Impossible d'activer le checkpoint image demandé {model!r}: {exc}"
+                    ) from exc
+                logger.info(
+                    "Sélection du checkpoint par défaut ignorée; utilisation du modèle A1111 courant: %s",
+                    exc,
+                )
+                try:
+                    options = await self._get_json(
+                        f"{self.settings.image_a1111_url}/sdapi/v1/options",
+                        timeout=10,
+                    )
+                    actual_model = str(options.get("sd_model_checkpoint") or "").strip() or model
+                except Exception:
+                    actual_model = model
 
         payload = {
             "prompt": prompt,
