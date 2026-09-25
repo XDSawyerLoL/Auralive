@@ -121,3 +121,12 @@ test('dashboard runtime is an independently testable module', () => {
   assert.doesNotThrow(() => new Function(DASHBOARD_SCRIPT));
   assert.equal(DASHBOARD_HTML.includes(DASHBOARD_SCRIPT), true);
 });
+
+
+test('dashboard exposes live Mairaiy readiness without a login drawer', () => {
+  assert.equal(DASHBOARD_HTML.includes('id="voiceDot"'), true);
+  assert.equal(DASHBOARD_HTML.includes('id="voiceText"'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("api('/api/capabilities')"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · prête"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Kokoro ff_siwis via Quantic Studio"), true);
+});
