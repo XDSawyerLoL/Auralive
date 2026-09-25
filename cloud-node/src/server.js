@@ -900,6 +900,21 @@ app.post('/api/reasoning/research', async (request, reply) => {
   }
 });
 
+app.get('/api/mesh/client-config', async () => ({
+  enabled: Boolean(config.computeMeshEnabled),
+  public_join: Boolean(config.computeMeshPublicJoin),
+  peer_module: '/mesh/peer.js',
+  webllm_adapter_module: '/mesh/webllm-adapter.js',
+  webllm_module_url: config.meshWebLlmModuleUrl,
+  default_model: config.meshWebLlmModel,
+  policy: {
+    opt_in_required: true,
+    public_data_only_for_public_peers: true,
+    secret_data_distributed: false,
+    side_effects: false,
+  },
+}));
+
 app.get('/api/mesh/status', async (request) => {
   if (!bootstrap.dbReady) {
     return {
