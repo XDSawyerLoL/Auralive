@@ -18,13 +18,16 @@ export class ExpressionLayer {
       normalize(plan.semantic_query),
       '',
       'CONTEXTE AURA',
-      normalize(context).slice(0, 9000),
+      normalize(context).slice(0, 16000),
       '',
       'Fournis uniquement un appui sémantique factuel pour AURA.',
       'Ne parle pas à la première personne au nom d’AURA.',
       'Ne crée aucune intention, mémoire, émotion, priorité ou décision pour AURA.',
       'Ne prétends pas modifier son Soul.',
       'Si tu ne sais pas, indique clairement l’incertitude.',
+      plan.external_evidence_required
+        ? 'Cette question exige une preuve externe: utilise la MÉMOIRE EXTERNE et son statut épistémique; ne transforme jamais un statut contested, unverified ou unavailable en fait.'
+        : 'Aucune preuve Web spécifique n’est imposée pour cette question.',
     ].join('\n');
     try {
       return normalize(await this.ai.generate(
