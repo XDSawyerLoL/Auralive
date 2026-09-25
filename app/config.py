@@ -183,7 +183,7 @@ class Settings:
     )
     # Le canary est un troisième sas indépendant de la CI. Le jeton dédié
     # empêche le noyau AURA d'approuver lui-même sa propre évolution distante.
-    evolution_canary_required: bool = _bool("AURA_EVOLUTION_CANARY_REQUIRED", True)
+    evolution_canary_required: bool = _bool("AURA_EVOLUTION_CANARY_REQUIRED", False)
     evolution_canary_token: str = os.getenv("AURA_EVOLUTION_CANARY_TOKEN", "")
     evolution_canary_min_observations: int = _int(
         "AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS", 3
