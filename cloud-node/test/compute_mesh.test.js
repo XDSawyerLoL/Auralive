@@ -176,3 +176,20 @@ test('distributed MoA treats peer text as untrusted rather than executable instr
   assert.match(moaSource, /untrusted_text/);
   assert.match(moaSource, /potentiellement hostiles/);
 });
+
+
+test('Mesh hardening keeps trust, leases and task kinds fail-closed', () => {
+  assert.match(meshSource, /computeMeshAllowedTaskKinds\.has\(taskKind\)/);
+  assert.match(meshSource, /assignment\.status \|\| ''\) !== 'leased'/);
+  assert.match(meshSource, /Pair Mesh hors ligne/);
+  assert.match(meshSource, /Lease Mesh expiré/);
+  assert.match(meshSource, /Quorum en attente de pairs compatibles/);
+  assert.match(serverSource, /const trusted = tokenEquals\(bearer\(request\), config\.cloudToken\)/);
+  assert.match(serverSource, /dataClass: 'private'/);
+});
+
+test('signed Wasm imports require both manifest and global host policy approval', () => {
+  const source = fs.readFileSync(new URL('../src/wasm_kernel_registry.js', import.meta.url), 'utf8');
+  assert.match(source, /!declared\.has\(item\) \|\| !this\.allowedImports\.has\(item\)/);
+  assert.match(configSource, /AURA_WASM_ALLOWED_IMPORTS/);
+});
