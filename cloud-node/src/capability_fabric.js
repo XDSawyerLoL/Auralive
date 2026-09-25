@@ -97,6 +97,8 @@ export class CapabilityFabric {
     this.lastExecutionAt = '';
     this.lastError = '';
     this.executionCount = 0;
+    this.started = false;
+    this.discoveryTimer = null;
     this.registerBuiltins();
   }
 
@@ -223,6 +225,28 @@ export class CapabilityFabric {
     this.registry.set(normalized.id, normalized);
     if (handler) this.handlers.set(normalized.id, handler);
     return normalized;
+  }
+
+  async start() {
+    if (this.started) return;
+    this.started = true;
+    await this.hydrate();
+    if (!this.enabled || !config.fabricDiscoveryUrls.length) return;
+    const discover = () => this.discoverRemote().catch((error) => {
+      this.lastError = String(error?.message || error).slice(0, 1000);
+    });
+    await discover();
+    this.discoveryTimer = setInterval(
+      discover,
+      config.fabricDiscoverySeconds * 1000,
+    );
+    this.discoveryTimer.unref?.();
+  }
+
+  stop() {
+    if (this.discoveryTimer) clearInterval(this.discoveryTimer);
+    this.discoveryTimer = null;
+    this.started = false;
   }
 
   registerBuiltins() {
@@ -509,6 +533,7 @@ export class CapabilityFabric {
     return {
       version: CapabilityFabric.VERSION,
       enabled: Boolean(config.fabricEnabled),
+      started: this.started,
       capabilities: all.length,
       local: all.filter((item) => item.transport === 'local').length,
       edge: all.filter((item) => item.transport === 'edge-http').length,
