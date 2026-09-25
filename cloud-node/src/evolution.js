@@ -266,7 +266,7 @@ export class EvolutionLab {
       version: EvolutionLab.VERSION,
       enabled: config.evolutionEnabled,
       started: this.started,
-      phase: bridgeStatus?.worker_online ? 'phase2-hybrid-local-evolution' : 'phase2-cloud-research-fallback',
+      phase: bridgeStatus?.worker_online ? 'phase2-hybrid-local-evolution' : 'phase2-cloud-persistent-adaptation',
       interval_seconds: config.evolutionIntervalSeconds,
       delegated_to_local: Boolean(bridgeStatus?.worker_online),
       local_worker_online: Boolean(bridgeStatus?.worker_online),
