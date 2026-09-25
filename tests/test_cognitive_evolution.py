@@ -47,7 +47,7 @@ def settings() -> SimpleNamespace:
         evolution_github_base_branch="main",
         evolution_allowed_domains="api.github.com,pypi.org",
         evolution_research_urls="",
-        evolution_required_checks="node-cloud,python-core,rust-core,windows-smoke",
+        evolution_required_checks="gate-node-cloud,gate-python-core,gate-rust-core,gate-windows-smoke",
         evolution_canary_required=True,
         evolution_canary_mode="automatic",
         evolution_canary_token="",
