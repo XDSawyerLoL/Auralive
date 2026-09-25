@@ -87,6 +87,14 @@ const REPO_SERVICE_MAP = new Map([
   ['xdsawyerlol/quantic-browser', 'quantic-glide'],
   ['xdsawyerlol/human-agency-engine', 'providence'],
 ]);
+const REPO_PRODUCT_LABELS = new Map([
+  ['xdsawyerlol/auralive', 'AURA'],
+  ['xdsawyerlol/quanticsillage', 'Quantic Sillage'],
+  ['xdsawyerlol/quanticmail', 'Quantic Mail'],
+  ['xdsawyerlol/quantic-os', 'Quantic OS'],
+  ['xdsawyerlol/quantic-browser', 'Quantic Glide'],
+  ['xdsawyerlol/human-agency-engine', 'Providence'],
+]);
 
 export function summarizeWorkflowRuns(rows = []) {
   const ordered = [...rows].sort((a, b) =>
@@ -409,6 +417,8 @@ export class CommandCenter {
     const candidates = [];
     for (const repo of snapshot) {
       if (!Array.isArray(repo.failing_workflows) || !repo.failing_workflows.length) continue;
+      const repoKey = String(repo.repository || '').toLowerCase();
+      const productName = REPO_PRODUCT_LABELS.get(repoKey) || repo.name || repo.repository;
       const criticality = repo.repository === 'XDSawyerLoL/Auralive' ? 1 : 0.78;
       for (const run of repo.failing_workflows.slice(0, 2)) {
         if (run.id) {
@@ -423,7 +433,7 @@ export class CommandCenter {
               head_sha: run.head_sha,
               run_attempt: run.run_attempt,
             },
-            title: `Relancer le CI défaillant de ${repo.name}`,
+            title: `Relancer le CI défaillant de ${productName}`,
             objective:
               `Relancer uniquement les jobs en échec du workflow ${run.name} sur ${repo.repository}, puis observer le résultat avant toute autre action.`,
             rationale:
@@ -448,7 +458,7 @@ export class CommandCenter {
               failure_streak: run.failure_streak,
               html_url: run.html_url,
             },
-            title: `Documenter l’échec persistant de ${repo.name}`,
+            title: `Documenter l’échec persistant de ${productName}`,
             objective:
               `Créer un ticket de diagnostic traçable pour le workflow ${run.name} de ${repo.repository}. Ne modifier aucun code et ne déclencher aucun déploiement.`,
             rationale:
