@@ -182,7 +182,7 @@ class Settings:
 
     evolution_required_checks: str = os.getenv(
         "AURA_EVOLUTION_REQUIRED_CHECKS",
-        "gate-node-cloud,gate-python-core,gate-rust-core,gate-windows-smoke",
+        "gate-node-cloud,gate-python-core,gate-rust-core,gate-fabric-rust,gate-windows-smoke",
     )
     # Le canary est un troisième sas indépendant de la CI. Le jeton dédié
     # empêche le noyau AURA d'approuver lui-même sa propre évolution distante.
