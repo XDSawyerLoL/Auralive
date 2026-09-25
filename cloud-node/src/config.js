@@ -134,6 +134,17 @@ export const config = Object.freeze({
     'localhost,metadata.google.internal,169.254.169.254',
   )),
 
+  fabricEnabled: bool('AURA_FABRIC_ENABLED', true),
+  fabricDiscoveryUrls: csv('AURA_FABRIC_DISCOVERY_URLS', ''),
+  fabricToken: process.env.AURA_FABRIC_TOKEN || '',
+  fabricRequestTimeoutMs: int('AURA_FABRIC_REQUEST_TIMEOUT_MS', 15000, 1000, 120000),
+  fabricDiscoverySeconds: int('AURA_FABRIC_DISCOVERY_SECONDS', 900, 60, 86400),
+  fabricMaxRemoteCapabilities: int('AURA_FABRIC_MAX_REMOTE_CAPABILITIES', 64, 1, 256),
+  fabricRemoteTrustCeiling: num('AURA_FABRIC_REMOTE_TRUST_CEILING', 0.78, 0.1, 0.95),
+  fabricMaxGraphNodes: int('AURA_FABRIC_MAX_GRAPH_NODES', 32, 1, 128),
+  fabricMaxParallel: int('AURA_FABRIC_MAX_PARALLEL', 12, 1, 64),
+  fabricDefaultBudgetMicrounits: int('AURA_FABRIC_DEFAULT_BUDGET_MICROUNITS', 0, 0, 1_000_000_000),
+
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
   horizonApiKey: process.env.HORIZON_API_KEY || '',
