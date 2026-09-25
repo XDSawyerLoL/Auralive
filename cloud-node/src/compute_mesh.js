@@ -118,11 +118,19 @@ export class ComputeMesh {
       [now(), staleBefore],
     );
     await query(
+      `UPDATE aura_mesh_assignments a
+       JOIN aura_mesh_peers p ON p.id=a.peer_id
+       SET a.status='failed',a.error='Pair Mesh hors ligne',a.lease_expires_ms=0,a.updated_at=?
+       WHERE a.status IN ('queued','leased') AND p.status='offline'`,
+      [now()],
+    );
+    await query(
       `UPDATE aura_mesh_assignments
-       SET status='queued',lease_expires_ms=0,updated_at=?
+       SET status='failed',error='Lease Mesh expiré',lease_expires_ms=0,updated_at=?
        WHERE status='leased' AND lease_expires_ms > 0 AND lease_expires_ms < ?`,
       [now(), leaseBefore],
     );
+    await this.rebalanceOpenTasks().catch(() => {});
   }
 
   async registerPeer(input = {}, { trusted = false } = {}) {
@@ -349,6 +357,9 @@ export class ComputeMesh {
     }
     const taskKind = clean(kind, 120);
     if (!taskKind) throw new Error('kind Mesh requis');
+    if (!config.computeMeshAllowedTaskKinds.has(taskKind)) {
+      throw new Error(`Type de tâche Mesh non autorisé: ${taskKind}`);
+    }
     const payloadText = JSON.stringify(payload || {});
     if (Buffer.byteLength(payloadText) > config.computeMeshMaxPayloadBytes) {
       throw new Error('payload Mesh trop volumineux');
@@ -479,8 +490,8 @@ export class ComputeMesh {
       [String(assignmentId || ''), peer.id],
     );
     if (!assignment) throw new Error('assignment Mesh introuvable');
-    if (!['leased', 'queued'].includes(String(assignment.status || ''))) {
-      throw new Error('assignment Mesh déjà terminé');
+    if (String(assignment.status || '') !== 'leased') {
+      throw new Error('assignment Mesh non loué ou déjà terminé');
     }
 
     const resultText = JSON.stringify(result ?? {});
@@ -619,20 +630,26 @@ export class ComputeMesh {
       return { id: task.id, status: 'completed', result };
     }
 
-    if (!active.length && completed.length < quorum) {
-      await query(
-        "UPDATE aura_mesh_tasks SET status='failed',error=?,updated_at=? WHERE id=?",
-        ['Quorum Mesh non atteint', now(), task.id],
-      );
-      return { id: task.id, status: 'failed', error: 'quorum not reached' };
-    }
-
     if (nowMs() >= Number(task.deadline_ms || 0)) {
       await query(
         "UPDATE aura_mesh_tasks SET status='failed',error=?,updated_at=? WHERE id=?",
         ['Délai Mesh dépassé', now(), task.id],
       );
       return { id: task.id, status: 'failed', error: 'deadline exceeded' };
+    }
+
+    if (!active.length && completed.length < quorum) {
+      await query(
+        "UPDATE aura_mesh_tasks SET status='waiting',error=?,updated_at=? WHERE id=?",
+        ['Quorum en attente de pairs compatibles', now(), task.id],
+      );
+      return {
+        id: task.id,
+        status: 'waiting',
+        completed: completed.length,
+        active: 0,
+        missing_quorum: quorum - completed.length,
+      };
     }
 
     return { id: task.id, status: task.status, completed: completed.length, active: active.length };
