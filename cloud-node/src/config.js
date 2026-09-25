@@ -89,7 +89,7 @@ export const config = Object.freeze({
   evolutionBaseBranch: process.env.AURA_EVOLUTION_GITHUB_BASE_BRANCH || 'main',
   evolutionAllowedDomains: new Set(csv('AURA_EVOLUTION_ALLOWED_DOMAINS', 'api.github.com,registry.npmjs.org')),
   evolutionResearchUrls: csv('AURA_EVOLUTION_RESEARCH_URLS', ''),
-  evolutionCanaryRequired: bool('AURA_EVOLUTION_CANARY_REQUIRED', false),
+  evolutionCanaryRequired: bool('AURA_EVOLUTION_CANARY_REQUIRED', true),\n  evolutionCanaryMode: String(process.env.AURA_EVOLUTION_CANARY_MODE || 'automatic').trim().toLowerCase(),
   evolutionCanaryMinObservations: int('AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS', 3, 1, 1000),
   evolutionAutoSubmit: false,
   evolutionAutoMerge: false,
@@ -111,10 +111,10 @@ export function productionConfigIssues() {
       message: 'AURA_CLOUD_TOKEN est absent. Les fonctions privées restent verrouillées.',
     });
   }
-  if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && !config.canaryToken) {
+  if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && config.evolutionCanaryMode === 'manual' && !config.canaryToken) {
     issues.push({
       code: 'canary_token_missing',
-      message: 'AURA_EVOLUTION_CANARY_TOKEN est absent. Le canary indépendant reste verrouillé.',
+      message: 'AURA_EVOLUTION_CANARY_TOKEN est absent alors que le canary manuel est activé.',
     });
   }
   if (config.aiMode === 'gemini' && !config.aiApiKey) {
