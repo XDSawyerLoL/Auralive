@@ -40,6 +40,15 @@ _PROTECTED_EXACT = {
     "app/cognitive/routes.py",
     "app/services/horizon_bridge.py",
     "app/services/update_manager.py",
+    "cloud-node/src/config.js",
+    "cloud-node/src/db.js",
+    "cloud-node/src/evolution.js",
+    "cloud-node/src/bridge.js",
+    "cloud-node/src/horizon.js",
+    "cloud-node/src/kernel.js",
+    "cloud-node/src/policy.js",
+    "cloud-node/src/server.js",
+    "cloud-node/src/ai.js",
 }
 _PROTECTED_PARTS = {
     "auth",
@@ -60,6 +69,12 @@ _DENIED_PATCH_TOKENS = {
     "winreg.",
     "shutil.rmtree(",
     "socket.socket(",
+    "node:child_process",
+    "child_process",
+    "process.env",
+    "node:fs",
+    "node:https",
+    "node:http",
 }
 
 
@@ -106,7 +121,7 @@ class EvolutionLab:
     droit de contourner ses propres garde-fous.
     """
 
-    VERSION = "aura-evolution-sas-v2"
+    VERSION = "aura-evolution-sas-v3"
 
     def __init__(
         self,
@@ -157,6 +172,11 @@ class EvolutionLab:
         return str(getattr(self.settings, "evolution_github_token", "") or "")
 
     @property
+    def canary_mode(self) -> str:
+        value = str(getattr(self.settings, "evolution_canary_mode", "automatic") or "automatic")
+        return value.strip().casefold() if value else "automatic"
+
+    @property
     def github_repository(self) -> str:
         return str(
             getattr(self.settings, "evolution_github_repository", "XDSawyerLoL/Auralive")
@@ -190,7 +210,7 @@ class EvolutionLab:
             getattr(
                 self.settings,
                 "evolution_required_checks",
-                "validate,build-engine,build-windows-lite,build-windows",
+                "node-cloud,python-core,rust-core,windows-smoke",
             )
             or ""
         )
@@ -202,6 +222,14 @@ class EvolutionLab:
             (self.source_root / "app").is_dir()
             and (self.source_root / "tests").is_dir()
             and (self.source_root / "requirements.txt").is_file()
+        )
+
+    @property
+    def cloud_node_source_ready(self) -> bool:
+        return (
+            (self.source_root / "cloud-node" / "src").is_dir()
+            and (self.source_root / "cloud-node" / "test").is_dir()
+            and (self.source_root / "cloud-node" / "package.json").is_file()
         )
 
     @property
@@ -533,10 +561,16 @@ class EvolutionLab:
             if len(token) >= 5
         }
         ranked: list[tuple[int, str, str]] = []
-        for base in (root / "app", root / "tests"):
+        source_specs = (
+            (root / "app", "*.py"),
+            (root / "tests", "*.py"),
+            (root / "cloud-node" / "src", "*.js"),
+            (root / "cloud-node" / "test", "*.js"),
+        )
+        for base, pattern in source_specs:
             if not base.is_dir():
                 continue
-            for path in base.rglob("*.py"):
+            for path in base.rglob(pattern):
                 try:
                     rel = path.relative_to(root).as_posix()
                     text = path.read_text(encoding="utf-8")
@@ -573,7 +607,7 @@ class EvolutionLab:
             + "\n\nContexte source local:\n"
             + json.dumps(source_context, ensure_ascii=False, default=str)[:26000]
             + "\n\nRetourne uniquement JSON: "
-            '{"worth_changing":true,"diagnosis":"...","target_files":["app/..."],'
+            '{"worth_changing":true,"diagnosis":"...","target_files":["app/...","cloud-node/src/..."],'
             '"expected_gain":"...","failure_risk":"...","evidence":["..."]}. '
             "Si aucune amélioration n'est objectivement testable, worth_changing=false."
         )
@@ -604,12 +638,16 @@ class EvolutionLab:
         if path.is_absolute() or ".." in path.parts:
             return False, "chemin hors dépôt"
         normalized = path.as_posix()
-        if not normalized.endswith(".py"):
-            return False, "seuls les fichiers Python sont admis dans le sas automatique"
-        if not (normalized.startswith("app/") or normalized.startswith("tests/")):
-            return False, "fichier hors app/tests"
+        is_python = normalized.endswith(".py") and (
+            normalized.startswith("app/") or normalized.startswith("tests/")
+        )
+        is_node = normalized.endswith(".js") and (
+            normalized.startswith("cloud-node/src/") or normalized.startswith("cloud-node/test/")
+        )
+        if not (is_python or is_node):
+            return False, "seuls app/tests Python et cloud-node src/test JavaScript sont admis"
         if auto:
-            if normalized.startswith("tests/"):
+            if normalized.startswith("tests/") or normalized.startswith("cloud-node/test/"):
                 return False, "les tests existants ne sont jamais modifiables par auto-promotion"
             if normalized in _PROTECTED_EXACT:
                 return False, "fichier de politique protégé"
@@ -657,9 +695,10 @@ class EvolutionLab:
 
         prompt = (
             "Crée un candidat de correction MINIMAL pour AURA. "
-            "Tu ne peux modifier que des fichiers .py sous app/ ou tests/. "
+            "Tu peux modifier un fichier .py sous app/ ou un fichier .js sous cloud-node/src/. "
+            "Les tests sont fournis comme contexte mais ne sont jamais auto-modifiés. "
             "Retourne uniquement JSON sous la forme "
-            '{"summary":"...","edits":[{"path":"app/x.py","before":"texte exact existant",'
+            '{"summary":"...","edits":[{"path":"app/x.py ou cloud-node/src/x.js","before":"texte exact existant",'
             '"after":"remplacement complet","reason":"..."}],"validation_focus":["..."]}. '
             "Chaque before doit être un extrait exact et unique du fichier. Maximum 4 edits. "
             "N'ajoute pas de shell, subprocess, eval/exec, socket, accès aux secrets, mécanisme de téléchargement "
@@ -856,6 +895,39 @@ socket.create_connection = _guard_create
         return await asyncio.to_thread(self._validate_candidate_sync, candidate)
 
     @staticmethod
+    def _compile_node_files(root: Path, changed_paths: list[str]) -> dict[str, Any]:
+        node = shutil.which("node")
+        node_paths = [rel for rel in changed_paths if rel.endswith(".js") and rel.startswith("cloud-node/")]
+        if not node_paths:
+            return {"ok": True, "checked_files": 0, "skipped": True, "reason": "aucun fichier Node modifié"}
+        if not node:
+            return {
+                "ok": True,
+                "checked_files": 0,
+                "skipped": True,
+                "reason": "Node.js absent localement; validation complète déléguée à la CI distante",
+            }
+        errors: list[str] = []
+        checked = 0
+        for rel in node_paths:
+            target = root / rel
+            if not target.is_file():
+                errors.append(f"{rel}: fichier absent")
+                continue
+            completed = subprocess.run(
+                [node, "--check", str(target)],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                timeout=60,
+                shell=False,
+            )
+            checked += 1
+            if completed.returncode != 0:
+                errors.append(f"{rel}: {(completed.stderr or completed.stdout)[-3000:]}")
+        return {"ok": not errors, "checked_files": checked, "errors": errors, "skipped": False}
+
+    @staticmethod
     def _compile_source_tree(root: Path) -> dict[str, Any]:
         errors: list[str] = []
         checked = 0
@@ -905,12 +977,21 @@ socket.create_connection = _guard_create
         if IS_FROZEN:
             baseline_compile = self._compile_source_tree(self.source_root)
             candidate_compile = self._compile_source_tree(workspace)
-            ok = bool(baseline_compile["ok"] and candidate_compile["ok"])
+            baseline_node = self._compile_node_files(self.source_root, changed_paths)
+            candidate_node = self._compile_node_files(workspace, changed_paths)
+            ok = bool(
+                baseline_compile["ok"]
+                and candidate_compile["ok"]
+                and baseline_node["ok"]
+                and candidate_node["ok"]
+            )
             return {
                 "ok": ok,
                 "gate": "packaged-static-then-github-ci",
                 "baseline_compile": baseline_compile,
                 "candidate_compile": candidate_compile,
+                "baseline_node": baseline_node,
+                "candidate_node": candidate_node,
                 "changed_paths": changed_paths,
                 "github_ci_required_before_merge": True,
                 "canary_required_before_merge": bool(self.canary_required),
@@ -937,6 +1018,8 @@ socket.create_connection = _guard_create
             [sys.executable, "-m", "pytest", "-q"],
             timeout=900,
         )
+        baseline_node = self._compile_node_files(self.source_root, changed_paths)
+        candidate_node = self._compile_node_files(workspace, changed_paths)
         ok = all(
             item["ok"]
             for item in (
@@ -944,6 +1027,8 @@ socket.create_connection = _guard_create
                 baseline_tests,
                 candidate_compile,
                 candidate_tests,
+                baseline_node,
+                candidate_node,
             )
         )
         return {
@@ -953,6 +1038,8 @@ socket.create_connection = _guard_create
             "baseline_tests": baseline_tests,
             "candidate_compile": candidate_compile,
             "candidate_tests": candidate_tests,
+            "baseline_node": baseline_node,
+            "candidate_node": candidate_node,
             "changed_paths": changed_paths,
             "external_network_blocked_during_tests": True,
             "validated_at": utcnow(),
@@ -967,7 +1054,9 @@ socket.create_connection = _guard_create
         accept: str = "application/vnd.github+json",
     ) -> Any:
         if not self.github_token:
-            raise EvolutionPolicyError("AURA_EVOLUTION_GITHUB_TOKEN absent")
+            raise EvolutionPolicyError(
+                "identité machine GitHub absente (AURA_EVOLUTION_GITHUB_MACHINE_TOKEN)"
+            )
         url = f"{_GITHUB_API}{path}"
         self._validate_research_url(url)
         data = None
@@ -1175,7 +1264,11 @@ socket.create_connection = _guard_create
         }
 
         if successful and self.auto_merge:
-            canary = self._latest_canary_sync(cycle_id)
+            canary = (
+                self._automatic_canary_sync(cycle_id, result)
+                if self.canary_required
+                else self._latest_canary_sync(cycle_id)
+            )
             result["canary"] = canary
             if self.canary_required and not bool(canary.get("ready")):
                 self._sync_db_status(cycle_id, "awaiting-canary", result)
@@ -1201,6 +1294,54 @@ socket.create_connection = _guard_create
         else:
             self._sync_db_status(cycle_id, "remote-validation", result)
         return result
+
+    def _automatic_canary_sync(
+        self,
+        cycle_id: str,
+        remote_result: dict[str, Any],
+    ) -> dict[str, Any]:
+        current = self._latest_canary_sync(cycle_id)
+        if bool(current.get("ready")):
+            return current
+        if self.canary_mode != "automatic":
+            return current
+        successful = bool(remote_result.get("successful"))
+        observations = self.canary_min_observations if successful else 0
+        metrics = {
+            "mode": "automatic-ci-sandbox",
+            "head_sha": str(remote_result.get("head_sha") or ""),
+            "required_checks": list(remote_result.get("required_checks") or []),
+            "missing_required_checks": list(remote_result.get("missing_required_checks") or []),
+            "all_required_checks_successful": successful,
+        }
+        import sqlite3
+
+        with sqlite3.connect(self.db.path, timeout=20) as connection:
+            connection.execute(
+                """
+                INSERT INTO aura_evolution_canary(
+                    cycle_id,passed,observations,metrics,notes,created_at
+                ) VALUES(?,?,?,?,?,?)
+                """,
+                (
+                    cycle_id,
+                    int(successful),
+                    observations,
+                    json.dumps(metrics, ensure_ascii=False),
+                    "Canary automatique: sandbox local + totalité des checks CI requis.",
+                    utcnow(),
+                ),
+            )
+            connection.commit()
+        return {
+            "ready": successful and observations >= self.canary_min_observations,
+            "passed": successful,
+            "observations": observations,
+            "required_observations": self.canary_min_observations,
+            "metrics": metrics,
+            "notes": "automatic-ci-sandbox",
+            "created_at": utcnow(),
+        }
 
     def _latest_canary_sync(self, cycle_id: str) -> dict[str, Any]:
         import sqlite3
@@ -1492,7 +1633,9 @@ socket.create_connection = _guard_create
             "allowed_domains": sorted(self.allowed_domains),
             "required_checks": sorted(self.required_checks),
             "canary_required": self.canary_required,
+            "canary_mode": self.canary_mode,
             "canary_min_observations": self.canary_min_observations,
+            "cloud_node_source_ready": self.cloud_node_source_ready,
             "protected_paths": sorted(_PROTECTED_EXACT),
             "last_cycle_at": self.last_cycle_at,
             "last_error": self.last_error,
@@ -1509,7 +1652,7 @@ socket.create_connection = _guard_create
                 "candidate compile + pytest",
                 "GitHub PR",
                 "remote CI",
-                "independent canary + before/after metrics",
+                "automatic CI+sandbox canary (manual override optional)",
                 "merge only after all checks and canary succeed",
             ],
         }
