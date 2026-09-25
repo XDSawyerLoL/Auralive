@@ -174,13 +174,23 @@ function normalizeRisks(value) {
   return [...new Set(source.map((item) => String(item).trim().toLowerCase()).filter(Boolean))];
 }
 
+export function needsExternalEvidence(value) {
+  const text = String(value || '').toLowerCase();
+  return [
+    'marché','marche','concurrent','technolog','documentation',' api ','actualité','actualite',
+    'recherche','scientif','benchmark','compatib','version','norme','réglement','reglement',
+    'sécurité','securite','performance','prix','licence','standard',
+  ].some((token) => text.includes(token));
+}
+
 export class CommandCenter {
   static VERSION = 'aura-command-center-v1';
 
-  constructor(kernel, evolution, bridge) {
+  constructor(kernel, evolution, bridge, webSubstrate = null) {
     this.kernel = kernel;
     this.evolution = evolution;
     this.bridge = bridge;
+    this.webSubstrate = webSubstrate;
     this.started = false;
     this.running = false;
     this.timer = null;
@@ -880,8 +890,24 @@ export class CommandCenter {
 
     const topIntention = intentions.find((row) => Number(row.priority || 0) >= 0.55);
     if (topIntention) {
+      const domain = String(parseJson(topIntention.context, {})?.domain || 'aura').slice(0, 80);
+      if (this.webSubstrate?.enabled && needsExternalEvidence(topIntention.statement)) {
+        candidates.push(this.candidate({
+          domain,
+          kind: 'research',
+          title: 'Vérifier une intention avec le Web',
+          objective:
+            `Vérifier par sources indépendantes cette intention avant action: ${topIntention.statement}. `
+            + `Chercher les faits externes nécessaires, les contradictions et le niveau de confiance réel.`,
+          rationale: 'L’intention dépend d’informations externes ou potentiellement changeantes.',
+          priority: Math.min(0.94, Math.max(0.64, Number(topIntention.priority || 0.5) + 0.06)),
+          confidence: 0.90,
+          requested_risks: [],
+          signature: `external-evidence:${topIntention.id}`,
+        }));
+      }
       candidates.push(this.candidate({
-        domain: String(parseJson(topIntention.context, {})?.domain || 'aura').slice(0, 80),
+        domain,
         kind: 'operator',
         title: 'Faire avancer une intention active',
         objective:
@@ -1056,6 +1082,15 @@ export class CommandCenter {
           });
         }
         return { id, status, execution_mode: executionMode, result };
+      } else if (initiative.kind === 'research') {
+        if (!this.webSubstrate?.enabled) {
+          throw new Error('Web Substrate indisponible');
+        }
+        executionMode = 'web-substrate-research';
+        result = await this.webSubstrate.research(
+          initiative.objective,
+          { trigger: 'command-center' },
+        );
       } else if (initiative.kind === 'evolution') {
         executionMode = bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud';
         result = await this.evolution.dispatchCycle(
@@ -1299,6 +1334,7 @@ export class CommandCenter {
       running: this.running,
       auto_execute: config.commandCenterAutoExecute,
       autonomy_mode: 'continuous-native-initiative-with-bounded-execution',
+      web_substrate: this.webSubstrate?.status?.() || { enabled: false },
       tick_seconds: config.commandCenterTickSeconds,
       max_initiatives_per_hour: config.commandCenterMaxInitiativesPerHour,
       min_confidence: config.commandCenterMinConfidence,
