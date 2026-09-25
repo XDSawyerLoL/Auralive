@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   node-cloud:
-    name: node-cloud
+    name: gate-node-cloud
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,7 +56,7 @@ jobs:
           exit 1
 
   python-core:
-    name: python-core
+    name: gate-python-core
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +78,7 @@ jobs:
         run: pytest -q
 
   rust-core:
-    name: rust-core
+    name: gate-rust-core
     runs-on: windows-latest
     defaults:
       run:
@@ -95,7 +95,7 @@ jobs:
         run: cargo build --release --locked
 
   windows-smoke:
-    name: windows-smoke
+    name: gate-windows-smoke
     runs-on: windows-latest
     timeout-minutes: 55
     steps:
