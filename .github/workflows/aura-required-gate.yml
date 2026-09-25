@@ -26,9 +26,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: cloud-node/package.json
+          cache-dependency-path: cloud-node/package-lock.json
       - name: Install exact Node dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Syntax and policy checks
         run: |
           npm run check
@@ -90,9 +90,9 @@ jobs:
         with:
           workspaces: engine/quantic-live
       - name: Test native engine
-        run: cargo test
+        run: cargo test --locked
       - name: Build native engine release
-        run: cargo build --release
+        run: cargo build --release --locked
 
   windows-smoke:
     name: windows-smoke
@@ -113,7 +113,7 @@ jobs:
             requirements-desktop.txt
       - name: Build native engine
         shell: pwsh
-        run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
+        run: cargo build --release --locked --manifest-path engine/quantic-live/Cargo.toml
       - name: Build Quantic Studio Lite
         shell: pwsh
         run: .\scripts\build-windows-lite.ps1 -Python python
