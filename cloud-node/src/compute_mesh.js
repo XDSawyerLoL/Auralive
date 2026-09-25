@@ -48,6 +48,13 @@ function normalizeModels(value) {
     .filter(Boolean))].slice(0, 24);
 }
 
+const RESERVED_PEER_TAGS = new Set(['trusted', 'private', 'secret', 'action', 'operator']);
+
+function peerTags(value, trusted = false) {
+  const tags = normalizeTags(value);
+  return trusted ? tags : tags.filter((tag) => !RESERVED_PEER_TAGS.has(tag));
+}
+
 export function peerRoutingScore(peer, {
   requiredTags = [],
   modelHint = '',
@@ -139,7 +146,7 @@ export class ComputeMesh {
     const peerId = randomUUID();
     const stamp = now();
     const capabilities = {
-      tags: normalizeTags(input?.capabilities?.tags || input?.tags || []),
+      tags: peerTags(input?.capabilities?.tags || input?.tags || [], trusted),
       runtime: clean(input?.capabilities?.runtime || input?.runtime || 'browser', 80),
       wasm: Boolean(input?.capabilities?.wasm ?? input?.wasm),
       webgpu: Boolean(input?.capabilities?.webgpu ?? input?.webgpu),
@@ -212,7 +219,10 @@ export class ComputeMesh {
   async heartbeat(peer, input = {}) {
     const capabilities = {
       ...(peer.capabilities || {}),
-      tags: normalizeTags(input?.capabilities?.tags || input?.tags || peer.capabilities?.tags || []),
+      tags: peerTags(
+        input?.capabilities?.tags || input?.tags || peer.capabilities?.tags || [],
+        peer.trust_tier === 'trusted',
+      ),
       runtime: clean(input?.capabilities?.runtime || peer.capabilities?.runtime || 'browser', 80),
       wasm: Boolean(input?.capabilities?.wasm ?? peer.capabilities?.wasm),
       webgpu: Boolean(input?.capabilities?.webgpu ?? input?.webgpu ?? peer.webgpu),
