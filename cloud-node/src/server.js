@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
@@ -321,6 +322,21 @@ app.addHook('onSend', async (_request, reply, payload) => {
 app.get('/', async (_request, reply) => {
   reply.type('text/html; charset=utf-8');
   return DASHBOARD_HTML;
+});
+
+app.get('/mesh/peer.js', async (_request, reply) => {
+  reply.type('text/javascript; charset=utf-8');
+  return readFile(new URL('./public/compute-mesh/peer.js', import.meta.url), 'utf8');
+});
+
+app.get('/mesh/webllm-adapter.js', async (_request, reply) => {
+  reply.type('text/javascript; charset=utf-8');
+  return readFile(new URL('./public/compute-mesh/webllm-adapter.js', import.meta.url), 'utf8');
+});
+
+app.get('/mesh/readme', async (_request, reply) => {
+  reply.type('text/plain; charset=utf-8');
+  return readFile(new URL('./public/compute-mesh/README.md', import.meta.url), 'utf8');
 });
 
 app.get('/api/auth/session', async (request) => ({
