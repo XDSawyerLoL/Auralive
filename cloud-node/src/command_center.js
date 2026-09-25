@@ -562,14 +562,16 @@ export class CommandCenter {
         'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
         [id, 'initiative-result', JSON.stringify({ status, executionMode, result }).slice(0, 30000), now()],
       );
-      await this.kernel.recordOutcome({
-        automation_id: `command-center:${initiative.domain}`,
-        event_type: `aura.initiative.${initiative.kind}`,
-        ok: status === 'completed' && executed,
-        signature: status === 'completed' && executed ? 'success' : (result?.reason || status),
-        report: { initiative_id: id, title: initiative.title, result },
-        created_at: now(),
-      });
+      if (status === 'completed') {
+        await this.kernel.recordOutcome({
+          automation_id: `command-center:${initiative.domain}`,
+          event_type: `aura.initiative.${initiative.kind}`,
+          ok: Boolean(executed),
+          signature: executed ? 'success' : (result?.reason || 'not-executed'),
+          report: { initiative_id: id, title: initiative.title, result },
+          created_at: now(),
+        });
+      }
       return { id, status, execution_mode: executionMode, result };
     } catch (error) {
       const message = String(error?.message || error).slice(0, 5000);
@@ -595,6 +597,72 @@ export class CommandCenter {
     }
   }
 
+  async reconcileWaiting() {
+    const rows = await query(
+      `SELECT * FROM aura_initiatives
+       WHERE status='waiting'
+       ORDER BY priority DESC,updated_at ASC LIMIT 12`,
+    );
+    const reconciled = [];
+    const workerOnline = this.bridge?.enabled
+      && await this.bridge.workerOnline().catch(() => false);
+
+    for (const row of rows) {
+      const stored = parseJson(row.result, {});
+      const jobId = String(stored?.job_id || stored?.result?.job_id || '').trim();
+
+      if (!jobId) {
+        if (row.execution_mode === 'waiting-local-worker' && workerOnline) {
+          reconciled.push(await this.executeInitiative(row));
+        }
+        continue;
+      }
+
+      const job = await this.bridge.getJob(jobId).catch(() => null);
+      if (!job || ['queued', 'leased'].includes(String(job.status || ''))) continue;
+
+      if (job.status === 'completed') {
+        const payload = job.result || {};
+        await query(
+          `UPDATE aura_initiatives
+           SET status='completed',execution_mode='quantic-studio-operator',
+               result=?,error='',updated_at=?
+           WHERE id=?`,
+          [JSON.stringify(payload).slice(0, 100000), now(), row.id],
+        );
+        await this.kernel.recordOutcome({
+          automation_id: `command-center:${row.domain}`,
+          event_type: `aura.initiative.${row.kind}`,
+          ok: payload?.ok !== false,
+          signature: payload?.ok === false
+            ? String(payload?.error || 'worker-result-failed')
+            : 'success',
+          report: { initiative_id: row.id, job_id: jobId, result: payload },
+          created_at: now(),
+        });
+        reconciled.push({ id: row.id, status: 'completed', job_id: jobId });
+      } else if (job.status === 'error') {
+        const message = String(job.error || 'worker execution failed').slice(0, 5000);
+        await query(
+          `UPDATE aura_initiatives
+           SET status='failed',error=?,updated_at=?
+           WHERE id=?`,
+          [message, now(), row.id],
+        );
+        await this.kernel.recordOutcome({
+          automation_id: `command-center:${row.domain}`,
+          event_type: `aura.initiative.${row.kind}`,
+          ok: false,
+          signature: message,
+          report: { initiative_id: row.id, job_id: jobId, error: message },
+          created_at: now(),
+        });
+        reconciled.push({ id: row.id, status: 'failed', job_id: jobId });
+      }
+    }
+    return reconciled;
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -604,8 +672,15 @@ export class CommandCenter {
     }
     this.running = true;
     try {
+      const reconciled = await this.reconcileWaiting();
       if (await this.countRecentInitiatives() >= config.commandCenterMaxInitiativesPerHour) {
-        return { ok: true, skipped: true, reason: 'initiative hourly budget reached' };
+        this.lastCycleAt = now();
+        return {
+          ok: true,
+          reconciled,
+          skipped: true,
+          reason: 'initiative hourly budget reached',
+        };
       }
       const candidates = await this.buildCandidates();
       let selected = null;
@@ -617,7 +692,13 @@ export class CommandCenter {
       }
       this.lastCycleAt = now();
       if (!selected) {
-        return { ok: true, skipped: true, reason: 'all candidates are cooling down', candidates: candidates.length };
+        return {
+          ok: true,
+          reconciled,
+          skipped: true,
+          reason: 'all candidates are cooling down',
+          candidates: candidates.length,
+        };
       }
       const result = await this.executeInitiative(selected);
       this.lastError = '';
@@ -625,6 +706,7 @@ export class CommandCenter {
         ok: true,
         trigger,
         candidate_count: candidates.length,
+        reconciled,
         initiative: result,
       };
     } catch (error) {
