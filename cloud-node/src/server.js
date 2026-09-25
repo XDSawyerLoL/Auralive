@@ -147,6 +147,13 @@ const graphExecutor = new TaskGraphExecutor(fabric);
 const moa = new MoAEngine({ ai, computeMesh });
 const wasmKernels = new SignedWasmKernelRegistry();
 
+dagCompiler.setPlanner(async ({ prompt, system, maxTokens }) =>
+  moa.meshGenerate(prompt, system, {
+    dataClass: 'private',
+    timeoutMs: Math.max(12000, Math.min(Number(maxTokens || 1800) * 12, 30000)),
+    role: 'dag-compiler',
+  }));
+
 fabric.register({
   id: 'reasoning.moa',
   name: 'AURA Mixture-of-Agents reasoning',
