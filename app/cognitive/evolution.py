@@ -106,7 +106,7 @@ class EvolutionLab:
     droit de contourner ses propres garde-fous.
     """
 
-    VERSION = "aura-evolution-sas-v1"
+    VERSION = "aura-evolution-sas-v2"
 
     def __init__(
         self,
@@ -1381,7 +1381,7 @@ socket.create_connection = _guard_create
                 await self._set_cycle(cycle_id, status=status, validation=validation)
                 promotion: dict[str, Any] = {}
                 wants_submit = self.auto_submit if submit is None else bool(submit)
-                if validation.get("ok") and wants_submit:
+                if validation.get("ok") and wants_submit and self.github_token:
                     promotion = await self.submit_candidate(
                         cycle_id,
                         candidate,
@@ -1390,6 +1390,21 @@ socket.create_connection = _guard_create
                     await self._set_cycle(
                         cycle_id,
                         status="remote-validation",
+                        promotion=promotion,
+                    )
+                elif validation.get("ok") and wants_submit and not self.github_token:
+                    promotion = {
+                        "submitted": False,
+                        "reason": (
+                            "Candidat validé et conservé localement. La promotion GitHub "
+                            "nécessite une identité machine configurée côté runtime, jamais "
+                            "une saisie de token dans l'interface utilisateur."
+                        ),
+                        "requires_user_ui_token": False,
+                    }
+                    await self._set_cycle(
+                        cycle_id,
+                        status="validated-local",
                         promotion=promotion,
                     )
 
@@ -1465,9 +1480,9 @@ socket.create_connection = _guard_create
             "source_root": str(self.source_root),
             "source_ready": self.source_ready,
             "phase": (
-                "phase1-research-diagnosis-sandbox"
+                "phase2-candidate-sandbox"
                 if self.source_ready
-                else "phase1-research-diagnosis-only"
+                else "phase2-research-fallback"
             ),
             "auto_submit": self.auto_submit,
             "auto_merge": self.auto_merge,
