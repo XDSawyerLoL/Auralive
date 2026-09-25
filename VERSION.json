@@ -1,9 +1,9 @@
 {
-  "cloud": "2.0.0",
+  "cloud": "2.1.0",
   "studio": "2.8.1",
   "native_engine": "0.4.1",
   "schema": {
-    "mysql": 5,
+    "mysql": 6,
     "evolution": 3
   },
   "channel": "stable-next",
@@ -12,5 +12,8 @@
   "web_substrate": 1,
   "fabric": 1,
   "dag": 1,
-  "rust_fabric": "0.1.0"
+  "rust_fabric": "0.1.0",
+  "compute_mesh": 1,
+  "moa": 1,
+  "signed_wasm": 1
 }

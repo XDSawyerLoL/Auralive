@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
 import platform
 import socket
@@ -40,7 +41,12 @@ class AuraCloudWorker:
         self.last_job_kind = ""
         self.jobs_completed = 0
         self.jobs_failed = 0
+        self.mesh_peer_id = ""
+        self.mesh_peer_token = ""
+        self.mesh_jobs_completed = 0
+        self.mesh_jobs_failed = 0
         self._last_heartbeat = 0.0
+        self._last_mesh_heartbeat = 0.0
 
     @property
     def enabled(self) -> bool:
@@ -151,6 +157,208 @@ class AuraCloudWorker:
             except Exception as exc:
                 raise RuntimeError("AURA Cloud a renvoyé une réponse non JSON") from exc
             return data if isinstance(data, dict) else {}
+
+    def _mesh_headers(self, *, registration: bool = False) -> dict[str, str]:
+        if registration or not self.mesh_peer_token:
+            return self._headers()
+        return {
+            "Authorization": f"Bearer {self.mesh_peer_token}",
+            "X-AURA-Peer-ID": self.mesh_peer_id,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": f"AURA-Quantic-Mesh/{self.VERSION}",
+        }
+
+    async def _mesh_post(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        registration: bool = False,
+    ) -> dict[str, Any]:
+        if self.session is None:
+            self.session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=self.timeout_seconds)
+            )
+        assert self.session is not None
+        async with self.session.post(
+            f"{self.base_url}{path}",
+            json=payload,
+            headers=self._mesh_headers(registration=registration),
+        ) as response:
+            text = await response.text()
+            if response.status >= 400:
+                raise RuntimeError(
+                    f"AURA Compute Mesh HTTP {response.status}: {text[:500]}"
+                )
+            if not text:
+                return {}
+            try:
+                data = __import__("json").loads(text)
+            except Exception as exc:
+                raise RuntimeError("AURA Compute Mesh a renvoyé une réponse non JSON") from exc
+            return data if isinstance(data, dict) else {}
+
+    def _mesh_model(self) -> str:
+        ai = self._ai_diagnostic()
+        return str(
+            ai.get("runtime_model")
+            or ai.get("model")
+            or getattr(self.settings, "ai_model", "")
+            or ""
+        ).strip()
+
+    async def _mesh_register(self) -> None:
+        model = self._mesh_model()
+        response = await self._mesh_post(
+            "/api/mesh/register",
+            {
+                "capabilities": {
+                    "runtime": "quantic-studio",
+                    "webgpu": False,
+                    "wasm": True,
+                    "tags": ["compute", "llm", "trusted", "quantic-studio"],
+                },
+                "models": [model] if model else [],
+                "memory_mb": 0,
+            },
+            registration=True,
+        )
+        self.mesh_peer_id = str(response.get("peer_id") or "")
+        self.mesh_peer_token = str(response.get("peer_token") or "")
+        if not self.mesh_peer_id or not self.mesh_peer_token:
+            raise RuntimeError("AURA Compute Mesh n'a pas fourni d'identité de pair")
+
+    async def _mesh_heartbeat(self) -> None:
+        if not self.mesh_peer_id or not self.mesh_peer_token:
+            await self._mesh_register()
+        model = self._mesh_model()
+        try:
+            await self._mesh_post(
+                "/api/mesh/heartbeat",
+                {
+                    "capabilities": {
+                        "runtime": "quantic-studio",
+                        "webgpu": False,
+                        "wasm": True,
+                        "tags": ["compute", "llm", "trusted", "quantic-studio"],
+                    },
+                    "models": [model] if model else [],
+                },
+            )
+        except Exception:
+            self.mesh_peer_id = ""
+            self.mesh_peer_token = ""
+            raise
+
+    async def _mesh_claim(self) -> dict[str, Any] | None:
+        if not self.mesh_peer_id or not self.mesh_peer_token:
+            return None
+        payload = await self._mesh_post("/api/mesh/claim", {})
+        assignment = payload.get("assignment")
+        return (
+            assignment
+            if isinstance(assignment, dict) and assignment.get("id")
+            else None
+        )
+
+    async def _mesh_complete(
+        self,
+        assignment_id: str,
+        *,
+        result: dict[str, Any] | None = None,
+        error: str = "",
+        latency_ms: int = 0,
+    ) -> None:
+        await self._mesh_post(
+            "/api/mesh/complete",
+            {
+                "assignment_id": assignment_id,
+                "result": result or {},
+                "error": str(error)[:4000],
+                "latency_ms": max(0, int(latency_ms or 0)),
+            },
+        )
+
+    async def _run_mesh_assignment(self, assignment: dict[str, Any]) -> None:
+        assignment_id = str(assignment.get("id") or "")
+        kind = str(assignment.get("kind") or "")
+        payload = dict(assignment.get("payload") or {})
+        started = time.perf_counter()
+        try:
+            if kind == "llm.chat":
+                messages = [
+                    item
+                    for item in (payload.get("messages") or [])
+                    if isinstance(item, dict)
+                ]
+                system = "\n".join(
+                    str(item.get("content") or "")
+                    for item in messages
+                    if str(item.get("role") or "") == "system"
+                ).strip()
+                prompt = "\n\n".join(
+                    str(item.get("content") or "")
+                    for item in messages
+                    if str(item.get("role") or "") != "system"
+                ).strip()
+                if not prompt:
+                    raise ValueError("Prompt Mesh vide")
+                answer = await self.aura.ai.generate(
+                    prompt,
+                    system,
+                    max(64, min(int(payload.get("max_tokens") or 900), 1800)),
+                    system_is_complete=True,
+                    task_role=str(payload.get("role") or "reasoning"),
+                )
+                result = {
+                    "text": str(answer or ""),
+                    "model": self._mesh_model(),
+                    "runtime": "quantic-studio",
+                }
+            elif kind == "mesh.hash.sha256":
+                result = {
+                    "sha256": hashlib.sha256(
+                        str(payload.get("value") or "").encode("utf-8")
+                    ).hexdigest()
+                }
+            elif kind == "mesh.benchmark":
+                iterations = max(
+                    1000,
+                    min(int(payload.get("iterations") or 250000), 1000000),
+                )
+                value = 0
+                for index in range(iterations):
+                    value = (
+                        value + ((index + 1) * 2654435761 & 0xFFFFFFFF)
+                    ) & 0xFFFFFFFF
+                result = {"iterations": iterations, "checksum": value}
+            else:
+                raise ValueError(f"Type de tâche Mesh non supporté: {kind}")
+
+            elapsed = int((time.perf_counter() - started) * 1000)
+            await self._mesh_complete(
+                assignment_id,
+                result=result,
+                latency_ms=elapsed,
+            )
+            self.mesh_jobs_completed += 1
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            self.mesh_jobs_failed += 1
+            elapsed = int((time.perf_counter() - started) * 1000)
+            try:
+                await self._mesh_complete(
+                    assignment_id,
+                    error=f"{exc.__class__.__name__}: {exc}",
+                    latency_ms=elapsed,
+                )
+            except Exception:
+                logger.debug(
+                    "Impossible de signaler l'échec Compute Mesh",
+                    exc_info=True,
+                )
 
     def _capabilities(self) -> list[dict[str, Any]]:
         cognitive = getattr(self.aura, "cognitive", None)
@@ -459,11 +667,33 @@ class AuraCloudWorker:
                 if now - self._last_heartbeat >= self.heartbeat_seconds:
                     await self._heartbeat()
                     self._last_heartbeat = now
+                if now - self._last_mesh_heartbeat >= self.heartbeat_seconds:
+                    try:
+                        await self._mesh_heartbeat()
+                    except Exception:
+                        logger.debug(
+                            "Compute Mesh temporairement indisponible",
+                            exc_info=True,
+                        )
+                    self._last_mesh_heartbeat = now
 
                 job = await self._claim()
                 if job:
                     await self._run_job(job)
                     continue
+
+                mesh_assignment = None
+                try:
+                    mesh_assignment = await self._mesh_claim()
+                except Exception:
+                    logger.debug(
+                        "Claim Compute Mesh temporairement indisponible",
+                        exc_info=True,
+                    )
+                if mesh_assignment:
+                    await self._run_mesh_assignment(mesh_assignment)
+                    continue
+
                 await asyncio.sleep(self.poll_seconds)
             except asyncio.CancelledError:
                 raise
@@ -485,5 +715,9 @@ class AuraCloudWorker:
             "last_job_kind": self.last_job_kind,
             "jobs_completed": self.jobs_completed,
             "jobs_failed": self.jobs_failed,
+            "mesh_peer_id": self.mesh_peer_id,
+            "mesh_online": bool(self.mesh_peer_id and self.mesh_peer_token),
+            "mesh_jobs_completed": self.mesh_jobs_completed,
+            "mesh_jobs_failed": self.mesh_jobs_failed,
             "last_error": self.last_error,
         }

@@ -104,8 +104,13 @@ export function taskGraphSummary(graph) {
 export class DagCompiler {
   static VERSION = 'aura-dag-compiler-v1';
 
-  constructor(ai) {
+  constructor(ai, planner = null) {
     this.ai = ai;
+    this.planner = planner;
+  }
+
+  setPlanner(planner) {
+    this.planner = typeof planner === 'function' ? planner : null;
   }
 
   async compile(objective, capabilities = [], {
@@ -125,7 +130,39 @@ export class DagCompiler {
       }))
       .filter((item) => item.id);
 
-    if (!this.ai?.enabled) {
+    const prompt = [
+      'Compile l’objectif AURA en DAG de capacités typées.',
+      'Ne génère AUCUN shell, JavaScript, Python, SQL arbitraire ou code source.',
+      'Tu peux seulement référencer les capability ids fournis.',
+      'Les dépendances doivent former un graphe acyclique.',
+      'Les lectures/recherches peuvent être parallèles.',
+      'Une action avec effet de bord doit dépendre explicitement des vérifications nécessaires.',
+      'Retour JSON strict:',
+      '{"objective":"...","max_parallel":4,"budget_microunits":0,"nodes":[{"id":"n1","capability":"...","depends_on":[],"input":{},"expected_output":"json","verification":"none|evidence|quorum|side-effect","quorum":1,"timeout_ms":15000,"max_cost_microunits":0}]}',
+      'Capabilities disponibles: ' + JSON.stringify(available).slice(0, 18000),
+      'Objectif: ' + goal,
+    ].join('\n');
+
+    const system =
+      'Tu es le compilateur de graphes d’AURA. Tu planifies; tu ne prends pas de permissions et tu ne crées pas de nouveau type d’action.';
+    let raw = '';
+    if (this.ai?.enabled) {
+      raw = await this.ai.generate(
+        prompt,
+        system,
+        1800,
+        'reasoning',
+      );
+    } else if (this.planner) {
+      raw = await this.planner({
+        objective: goal,
+        prompt,
+        system,
+        maxTokens: 1800,
+      });
+    }
+
+    if (!String(raw || '').trim()) {
       const research = available.find((item) => item.id === 'web.research')
         || available.find((item) => item.tags.includes('research'));
       if (!research) throw new Error('aucune capability de fallback disponible sans modèle');
@@ -144,25 +181,6 @@ export class DagCompiler {
       }, { maxNodes, maxParallel });
     }
 
-    const prompt = [
-      'Compile l’objectif AURA en DAG de capacités typées.',
-      'Ne génère AUCUN shell, JavaScript, Python, SQL arbitraire ou code source.',
-      'Tu peux seulement référencer les capability ids fournis.',
-      'Les dépendances doivent former un graphe acyclique.',
-      'Les lectures/recherches peuvent être parallèles.',
-      'Une action avec effet de bord doit dépendre explicitement des vérifications nécessaires.',
-      'Retour JSON strict:',
-      '{"objective":"...","max_parallel":4,"budget_microunits":0,"nodes":[{"id":"n1","capability":"...","depends_on":[],"input":{},"expected_output":"json","verification":"none|evidence|quorum|side-effect","quorum":1,"timeout_ms":15000,"max_cost_microunits":0}]}',
-      'Capabilities disponibles: ' + JSON.stringify(available).slice(0, 18000),
-      'Objectif: ' + goal,
-    ].join('\n');
-
-    const raw = await this.ai.generate(
-      prompt,
-      'Tu es le compilateur de graphes d’AURA. Tu planifies; tu ne prends pas de permissions et tu ne crées pas de nouveau type d’action.',
-      1800,
-      'reasoning',
-    );
     const parsed = parseJsonObject(raw);
     parsed.objective = goal;
     parsed.budget_microunits = Math.max(0, Number(parsed.budget_microunits || budgetMicrounits));

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 
 from types import SimpleNamespace
@@ -182,3 +183,62 @@ async def test_cloud_worker_returns_mairaiy_kokoro_voice_payload(tmp_path):
     assert result["duration_ms"] == 900
     assert result["mime_type"] == "audio/wav"
     assert result["audio_base64"]
+
+
+@pytest.mark.asyncio
+async def test_quantic_worker_executes_trusted_mesh_llm_assignment(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    captured = {}
+
+    async def fake_complete(assignment_id, *, result=None, error="", latency_ms=0):
+        captured["assignment_id"] = assignment_id
+        captured["result"] = result or {}
+        captured["error"] = error
+        captured["latency_ms"] = latency_ms
+
+    monkeypatch.setattr(worker, "_mesh_complete", fake_complete)
+
+    await worker._run_mesh_assignment(
+        {
+            "id": "assignment-1",
+            "kind": "llm.chat",
+            "payload": {
+                "messages": [
+                    {"role": "system", "content": "Tu es critique."},
+                    {"role": "user", "content": "Analyse cette architecture."},
+                ],
+                "max_tokens": 300,
+                "role": "critic",
+            },
+        }
+    )
+
+    assert captured["assignment_id"] == "assignment-1"
+    assert captured["error"] == ""
+    assert captured["result"]["text"] == "réponse locale:critic"
+    assert captured["result"]["model"] == "gemma3:12b"
+    assert captured["result"]["runtime"] == "quantic-studio"
+    assert worker.mesh_jobs_completed == 1
+
+
+@pytest.mark.asyncio
+async def test_quantic_worker_mesh_hash_is_deterministic(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    captured = {}
+
+    async def fake_complete(assignment_id, *, result=None, error="", latency_ms=0):
+        captured["result"] = result or {}
+        captured["error"] = error
+
+    monkeypatch.setattr(worker, "_mesh_complete", fake_complete)
+
+    await worker._run_mesh_assignment(
+        {
+            "id": "assignment-hash",
+            "kind": "mesh.hash.sha256",
+            "payload": {"value": "AURA"},
+        }
+    )
+
+    assert captured["error"] == ""
+    assert captured["result"]["sha256"] == hashlib.sha256(b"AURA").hexdigest()

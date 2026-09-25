@@ -93,7 +93,7 @@ test('command center is part of runtime startup and shutdown', () => {
   assert.match(serverSource, /await commandCenter\.start\(\)/);
   assert.match(serverSource, /commandCenter\.stop\(\)/);
   assert.match(serverSource, /command_center_enabled/);
-  assert.match(serverSource, /version:\s*'2\.0\.0'/);
+  assert.match(serverSource, /version:\s*'2\.1\.0'/);
 });
 
 

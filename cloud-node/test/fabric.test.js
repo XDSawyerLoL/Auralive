@@ -153,3 +153,34 @@ test('edge Fabric worker fails closed without its machine secret', () => {
   assert.match(edgeSource, /capability not allowed/);
   assert.match(edgeSource, /arbitrary_code:\s*false/);
 });
+
+
+test('DAG compiler can use a distributed planner when the central AI is absent', async () => {
+  const compiler = new DagCompiler({ enabled: false }, async () => JSON.stringify({
+    objective: 'distributed plan',
+    max_parallel: 2,
+    nodes: [
+      {
+        id: 'research-a',
+        capability: 'web.research',
+        depends_on: [],
+        input: { question: 'A' },
+        expected_output: 'evidence',
+        verification: 'evidence',
+      },
+      {
+        id: 'research-b',
+        capability: 'web.research',
+        depends_on: [],
+        input: { question: 'B' },
+        expected_output: 'evidence',
+        verification: 'evidence',
+      },
+    ],
+  }));
+  const graph = await compiler.compile('Planifier sans modèle central', [
+    { id: 'web.research', tags: ['research'], side_effects: false, trust: 0.9 },
+  ]);
+  assert.equal(graph.nodes.length, 2);
+  assert.equal(graph.max_parallel, 2);
+});
