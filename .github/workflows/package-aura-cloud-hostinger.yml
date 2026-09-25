@@ -42,23 +42,22 @@ jobs:
             "target": "Hostinger/manual",
             "git_sha": "$GITHUB_SHA",
             "git_ref": "$GITHUB_REF",
-            "evolution_phase": 1,
-            "auto_submit_default": false,
-            "auto_merge_default": false
+            "evolution_phase": 3,
+            "cognition_native": true,
+            "promotion": "ci-and-canary-gated"
           }
           EOF
 
           cp deploy/hostinger/.env.hostinger.example "$ROOT/.env.hostinger.example"
 
-          (
-            cd "$RUNNER_TEMP"
-            zip -qr aura-cloud-hostinger.zip aura-cloud-hostinger
-          )
+          test -f "$ROOT/app/cognitive/evolution.py"
+          test -f "$ROOT/app/services/voice_identity_lock.py"
+          test -f "$ROOT/requirements.txt"
 
-      - name: Upload deployment ZIP
+      - name: Upload deployment project
         uses: actions/upload-artifact@v4
         with:
           name: aura-cloud-hostinger
-          path: ${{ runner.temp }}/aura-cloud-hostinger.zip
+          path: ${{ runner.temp }}/aura-cloud-hostinger/
           if-no-files-found: error
           retention-days: 14
