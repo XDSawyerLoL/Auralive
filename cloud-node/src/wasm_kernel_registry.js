@@ -37,7 +37,7 @@ function normalizedManifest(raw = {}) {
   };
 }
 
-function signaturePayload(manifest) {
+export function kernelSigningPayload(manifest) {
   return Buffer.from(stableJson(normalizedManifest(manifest)), 'utf8');
 }
 
@@ -121,7 +121,7 @@ export class SignedWasmKernelRegistry {
 
     const ok = cryptoVerify(
       null,
-      signaturePayload(inspected.manifest),
+      kernelSigningPayload(inspected.manifest),
       signer,
       sig,
     );
