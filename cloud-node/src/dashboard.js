@@ -129,6 +129,23 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
 .activity-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:7px;padding:7px 9px}.activity-time{font-size:8px;color:var(--muted2)}.activity-title{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.activity-kind{font-size:8px;color:#aab6ce;border:1px solid var(--line);padding:3px 6px;border-radius:999px}
 .next-action{display:flex;gap:12px;align-items:flex-start;padding:13px;border:1px solid rgba(154,108,255,.16);border-radius:14px;background:linear-gradient(135deg,rgba(154,108,255,.1),rgba(90,110,255,.05))}.next-orb{width:42px;height:42px;border-radius:50%;border:1px solid rgba(154,108,255,.45);display:grid;place-items:center;color:#c4b5ff;box-shadow:0 0 25px rgba(154,108,255,.18);flex:0 0 auto}.next-copy{font-size:10px;line-height:1.45}.confidence{font-size:8px;color:var(--muted);margin-top:14px}.memory-row{display:grid;grid-template-columns:auto 1fr;gap:8px}.memory-date{font-size:8px;color:var(--muted2)}.memory-text{font-size:9px;line-height:1.35}.empty{padding:14px;text-align:center;border:1px dashed var(--line);border-radius:11px;color:var(--muted);font-size:9px}
 .auth-drawer{position:fixed;inset:0;display:none;z-index:50;background:rgba(2,4,9,.72);backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:18px}.auth-drawer.open{display:flex}.auth-box{width:min(460px,100%);border:1px solid var(--line);border-radius:20px;background:#0d1321;padding:20px;box-shadow:0 30px 100px rgba(0,0,0,.45)}.auth-box h3{margin:0 0 7px;font-size:16px}.auth-box p{margin:0 0 13px;color:var(--muted);font-size:10px;line-height:1.45}.auth-row{display:flex;gap:8px}.auth-row input{flex:1;border:1px solid var(--line);background:#070b13;color:white;border-radius:12px;padding:10px 11px;outline:none}.primary{border:0;border-radius:11px;background:linear-gradient(135deg,#9368ff,#624ee8);color:white;padding:9px 12px;font-weight:650}.secondary{border:1px solid var(--line);border-radius:11px;background:rgba(255,255,255,.035);color:#ccd4e5;padding:9px 12px}
+.emotion-strip{
+  display:grid;grid-template-columns:minmax(180px,.72fr) minmax(0,2.28fr);gap:12px;
+  margin:0 0 13px;border:1px solid rgba(154,108,255,.20);border-radius:18px;
+  background:linear-gradient(135deg,rgba(69,44,121,.20),rgba(12,18,32,.88));
+  padding:14px 16px;box-shadow:inset 0 1px rgba(255,255,255,.035),0 18px 50px rgba(0,0,0,.15)
+}
+.emotion-main{display:flex;align-items:center;gap:12px;min-width:0}
+.emotion-orb{width:54px;height:54px;border-radius:50%;flex:0 0 auto;background:radial-gradient(circle at 38% 32%,#fff 0 6%,#bca8ff 17%,#744ee6 46%,#151125 72%);box-shadow:0 0 30px rgba(154,108,255,.32)}
+.emotion-kicker{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#9faac1}
+.emotion-mood{font-size:24px;font-weight:720;line-height:1.05;margin-top:3px;text-transform:capitalize}
+.emotion-reason{font-size:11px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.emotion-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;align-items:center}
+.emotion-cell{min-width:0}
+.emotion-label{display:flex;justify-content:space-between;gap:6px;font-size:9px;color:#aeb9cf;margin-bottom:5px}
+.emotion-label strong{color:#edf1ff;font-size:10px}
+.emotion-bar{height:6px;border-radius:999px;background:rgba(255,255,255,.065);overflow:hidden}
+.emotion-bar span{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#7356e8,#59e0ef);transition:width .4s ease}
 .setup-banner{display:none;margin-bottom:14px;border:1px solid rgba(255,201,106,.22);background:linear-gradient(135deg,rgba(255,201,106,.08),rgba(154,108,255,.06));border-radius:16px;padding:12px 14px;color:#eadfca;font-size:10px;line-height:1.5}.setup-banner.show{display:block}.setup-title{font-size:12px;font-weight:700;color:#ffd991;margin-bottom:5px}.setup-list{margin:7px 0 0;padding-left:18px;color:#b9c3d8}.mobile-tabs{display:none}
 @media(max-width:1180px){
   .metrics{grid-template-columns:repeat(3,1fr)}
@@ -138,10 +155,29 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
   .bottom-grid{grid-template-columns:1fr 1fr}.bottom-grid .panel:first-child{grid-column:1/-1}.title{white-space:normal}
 }
 @media(max-width:820px){
-  .shell{padding:12px 10px 24px}.topbar{align-items:flex-start;flex-wrap:wrap}.identity{width:100%}.identity-copy{display:block;padding-left:0}.logo{font-size:28px}.logo-dash{display:none}.title{font-size:15px}.subtitle{font-size:10px}.top-actions{width:100%;margin-left:0;justify-content:space-between}.clock{display:none}.mode-btn{display:none}
-  .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{min-height:66px;padding:9px}.ring{width:38px;height:38px}.metric-value{font-size:15px}.metric-label{font-size:10px}.metric-trend{font-size:8px}
-  .workspace{grid-template-columns:1fr}.chat-panel{min-height:520px}.map-panel{min-height:520px}.map-wrap{min-height:520px}.right-stack{grid-column:auto;grid-template-columns:1fr}
-  .bottom-grid{grid-template-columns:1fr}.bottom-grid .panel:first-child{grid-column:auto}.map-foot{max-width:72%}.legend{display:none}.title{white-space:normal}
+  html{font-size:16px}
+  body{font-size:16px}
+  .shell{width:100%;max-width:none;padding:12px max(12px,env(safe-area-inset-right)) 24px max(12px,env(safe-area-inset-left))}
+  .topbar{align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:12px}.identity{width:100%}.identity-copy{display:block;padding-left:0}.logo{font-size:32px}.logo-dash{display:none}.title{font-size:18px;line-height:1.15}.subtitle{font-size:13px;line-height:1.35}
+  .top-actions{width:100%;margin-left:0;justify-content:flex-start;gap:8px;flex-wrap:wrap}.pill{font-size:12px;padding:9px 11px}.clock{display:none}.mode-btn{display:none}
+  .emotion-strip{grid-template-columns:1fr;padding:14px;margin-bottom:10px}.emotion-main{gap:13px}.emotion-orb{width:58px;height:58px}.emotion-kicker{font-size:11px}.emotion-mood{font-size:26px}.emotion-reason{font-size:13px;white-space:normal;line-height:1.35}.emotion-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px}.emotion-label{font-size:11px}.emotion-label strong{font-size:12px}.emotion-bar{height:8px}
+  .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.metric{min-height:82px;padding:11px;gap:10px}.ring{width:46px;height:46px}.ring span{font-size:16px}.metric-value{font-size:19px}.metric-label{font-size:12px}.metric-trend{font-size:10px}
+  .workspace{grid-template-columns:minmax(0,1fr);gap:11px}.panel{border-radius:15px}.panel-head{padding:13px;min-height:48px}.panel-title{font-size:15px}.panel-meta{font-size:11px}.panel-body{padding:13px}
+  .chat-panel{min-height:70svh}.chat-body{padding:10px}.messages{min-height:48svh;padding:8px 6px 14px;gap:14px}.msg{font-size:15px;line-height:1.5;max-width:88%;padding:12px 13px}.who{font-size:10px}
+  .quick{gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}.quick::-webkit-scrollbar{display:none}.quick button{font-size:13px;min-height:40px;flex:0 0 auto}
+  .composer{gap:8px}.composer textarea{font-size:16px;min-height:52px;line-height:1.35}.composer .voice,.composer .send{width:48px;height:48px;flex:0 0 48px}
+  .map-panel{min-height:370px}.map-wrap{min-height:370px}.organism-hud{font-size:12px}.map-foot{max-width:88%;font-size:11px}.legend{display:none}
+  .right-stack{grid-column:auto;grid-template-columns:1fr}.bottom-grid{grid-template-columns:1fr}.bottom-grid .panel:first-child{grid-column:auto}.title{white-space:normal}
+  .thought-card,.work-list,.intent-list,.activity-list,.memory-list,.next-copy{font-size:14px;line-height:1.45}
+}
+@media(max-width:480px){
+  .shell{padding-top:10px}.logo{font-size:30px}.title{font-size:17px}.subtitle{font-size:12px}
+  .top-actions .pill{flex:1 1 calc(50% - 8px);justify-content:center;min-width:0}
+  .metrics{grid-template-columns:1fr 1fr}.metric{min-height:84px}.metric-copy{overflow:hidden}
+  .metric-label{font-size:12px}.metric-value{font-size:20px}.metric-trend{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .emotion-grid{grid-template-columns:1fr 1fr}
+  .chat-panel{min-height:72svh}.messages{min-height:50svh}.msg{max-width:84%;font-size:15px}.msg.user{margin-right:30px}.msg.aura{margin-left:30px}
+  .map-panel,.map-wrap{min-height:330px}
 }
 </style>
 </head>
@@ -165,6 +201,25 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
   </header>
 
   <section class="setup-banner" id="setupBanner"><div class="setup-title">Configuration AURA requise</div><div id="setupSummary">Le serveur web fonctionne, mais le noyau persistant n’est pas encore actif.</div><ul class="setup-list" id="setupIssues"></ul></section>
+
+  <section class="emotion-strip" aria-label="État émotionnel AURA">
+    <div class="emotion-main">
+      <div class="emotion-orb" id="emotionOrb" aria-hidden="true"></div>
+      <div>
+        <div class="emotion-kicker">État émotionnel</div>
+        <div class="emotion-mood" id="emotionMood">En réveil</div>
+        <div class="emotion-reason" id="emotionReason">Lecture de l’état interne…</div>
+      </div>
+    </div>
+    <div class="emotion-grid">
+      <div class="emotion-cell"><div class="emotion-label"><span>Stabilité</span><strong id="emotion-stability-value">—</strong></div><div class="emotion-bar"><span id="emotion-stability"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Clarté</span><strong id="emotion-clarity-value">—</strong></div><div class="emotion-bar"><span id="emotion-clarity"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Attachement</span><strong id="emotion-attachment-value">—</strong></div><div class="emotion-bar"><span id="emotion-attachment"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Curiosité</span><strong id="emotion-curiosity-value">—</strong></div><div class="emotion-bar"><span id="emotion-curiosity"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Rêve</span><strong id="emotion-dream-value">—</strong></div><div class="emotion-bar"><span id="emotion-dream"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Silence</span><strong id="emotion-silence-value">—</strong></div><div class="emotion-bar"><span id="emotion-silence"></span></div></div>
+    </div>
+  </section>
 
   <section class="metrics">
     <div class="metric" style="--metric-color:#60e6ad;--metric-glow:rgba(96,230,173,.16)"><div class="ring" id="ring-energy"><span>⚡</span></div><div class="metric-copy"><div class="metric-label">Énergie</div><div class="metric-value" id="metric-energy">—</div><div class="metric-trend" id="trend-energy">état interne</div></div></div>
