@@ -11,7 +11,7 @@ const packagePath = resolve(here, '..', 'package.json');
 const now = () => new Date().toISOString();
 
 export class EvolutionLab {
-  static VERSION = 'aura-evolution-node-phase2-v1';
+  static VERSION = 'aura-evolution-node-phase3-v1';
 
   constructor(ai, kernel, bridge = null) {
     this.ai = ai;
@@ -266,7 +266,7 @@ export class EvolutionLab {
       version: EvolutionLab.VERSION,
       enabled: config.evolutionEnabled,
       started: this.started,
-      phase: bridgeStatus?.worker_online ? 'phase2-hybrid-local-evolution' : 'phase2-cloud-persistent-adaptation',
+      phase: bridgeStatus?.worker_online ? 'phase3-hybrid-autonomous-evolution' : 'phase3-cloud-persistent-adaptation',
       interval_seconds: config.evolutionIntervalSeconds,
       delegated_to_local: Boolean(bridgeStatus?.worker_online),
       local_worker_online: Boolean(bridgeStatus?.worker_online),
@@ -276,6 +276,7 @@ export class EvolutionLab {
       base_branch: config.evolutionBaseBranch,
       allowed_domains: [...config.evolutionAllowedDomains],
       canary_required: config.evolutionCanaryRequired,
+      canary_mode: config.evolutionCanaryMode,
       canary_min_observations: config.evolutionCanaryMinObservations,
       last_cycle_at: this.lastCycleAt,
       last_error: this.lastError,
@@ -291,7 +292,8 @@ export class EvolutionLab {
         'external content treated as untrusted data',
         'local source sandbox when Quantic Studio is online',
         'candidate compile/tests before submission',
-        'GitHub CI before promotion',
+        'GitHub full-stack required gate before promotion',
+        'automatic CI+sandbox canary',
         'protected evolution/security paths',
       ],
     };
