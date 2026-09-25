@@ -11,6 +11,7 @@ const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 const webSource = fs.readFileSync(new URL('../src/web_substrate.js', import.meta.url), 'utf8');
 const kernelSource = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
+const expressionSource = fs.readFileSync(new URL('../src/expression.js', import.meta.url), 'utf8');
 
 test('source priors distinguish institutional and generic sources', () => {
   assert.ok(sourcePrior('https://www.who.int/example') > sourcePrior('https://example.com/post'));
@@ -60,4 +61,14 @@ test('Web substrate is wired as external memory into AURA', () => {
   assert.match(serverSource, /\/api\/reasoning\/status/);
   assert.match(kernelSource, /MÉMOIRE EXTERNE/);
   assert.match(kernelSource, /webSubstrate\.externalContext/);
+});
+
+
+test('live chat routes changing external questions through Web evidence first', () => {
+  assert.match(kernelSource, /requiresExternalKnowledge/);
+  assert.match(kernelSource, /this\.webSubstrate\.research/);
+  assert.match(kernelSource, /external_evidence_required/);
+  assert.match(kernelSource, /external_epistemic_status/);
+  assert.match(expressionSource, /MÉMOIRE EXTERNE/);
+  assert.match(expressionSource, /contested, unverified ou unavailable/);
 });
