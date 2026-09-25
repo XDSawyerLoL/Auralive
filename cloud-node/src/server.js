@@ -100,12 +100,24 @@ async function startRuntime() {
   try {
     await initSchema();
     bootstrap.dbReady = true;
+
+    // Le noyau AURA est le cœur critique. Les services optionnels ne doivent
+    // jamais empêcher l'organisme, la mémoire et le chat de démarrer.
     await kernel.start();
-    await horizon.start();
-    await evolution.start();
     bootstrap.runtimeReady = true;
     bootstrap.lastReadyAt = new Date().toISOString();
     app.log.info('AURA Cloud: noyau persistant démarré.');
+
+    try {
+      await horizon.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: HORIZON indisponible, noyau maintenu actif.');
+    }
+    try {
+      await evolution.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: Evolution indisponible, noyau maintenu actif.');
+    }
   } catch (error) {
     bootstrap.runtimeReady = false;
     bootstrap.dbReady = false;
@@ -156,7 +168,7 @@ app.get('/', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.7.2',
+  version: '1.7.3',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
