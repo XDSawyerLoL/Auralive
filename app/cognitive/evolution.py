@@ -49,6 +49,7 @@ _PROTECTED_EXACT = {
     "cloud-node/src/policy.js",
     "cloud-node/src/server.js",
     "cloud-node/src/ai.js",
+    "cloud-node/src/native_learning.js",
 }
 _PROTECTED_PARTS = {
     "auth",
@@ -1621,9 +1622,9 @@ socket.create_connection = _guard_create
             "source_root": str(self.source_root),
             "source_ready": self.source_ready,
             "phase": (
-                "phase2-candidate-sandbox"
+                "phase3-candidate-sandbox"
                 if self.source_ready
-                else "phase2-research-fallback"
+                else "phase3-research-fallback"
             ),
             "auto_submit": self.auto_submit,
             "auto_merge": self.auto_merge,
