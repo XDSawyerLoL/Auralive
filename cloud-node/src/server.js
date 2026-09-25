@@ -4,6 +4,7 @@ import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
 import { CapabilityFabric } from './capability_fabric.js';
+import { ComputeMesh } from './compute_mesh.js';
 import {
   config,
   databaseConfigured,
@@ -24,9 +25,11 @@ import { EvolutionLab } from './evolution.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
+import { MoAEngine } from './moa.js';
 import { CloudVoice } from './voice.js';
 import { WebSubstrate } from './web_substrate.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
+import { SignedWasmKernelRegistry } from './wasm_kernel_registry.js';
 
 function tokenEquals(actual, expected) {
   if (!actual || !expected) return false;
@@ -136,9 +139,39 @@ const cloudVoice = new CloudVoice();
 const bridge = new ExecutionBridge();
 const ai = new AiClient(bridge);
 const webSubstrate = new WebSubstrate(ai);
+const computeMesh = new ComputeMesh();
 const fabric = new CapabilityFabric({ webSubstrate, bridge });
 const dagCompiler = new DagCompiler(ai);
 const graphExecutor = new TaskGraphExecutor(fabric);
+const moa = new MoAEngine({ ai, computeMesh });
+const wasmKernels = new SignedWasmKernelRegistry();
+
+fabric.register({
+  id: 'reasoning.moa',
+  name: 'AURA Mixture-of-Agents reasoning',
+  transport: 'local',
+  tags: ['reasoning', 'moa', 'llm', 'synthesis'],
+  trust: 0.92,
+  observed_reliability: 0.86,
+  latency_ms: 3000,
+  side_effects: false,
+  risk: 'safe',
+  input_contract: { objective: 'string', data_class: 'public|private' },
+  output_contract: { synthesis: 'string', experts: 'array' },
+  provider: 'aura-compute-mesh',
+}, async (input) => {
+  const result = await moa.run(String(input?.objective || ''), {
+    dataClass: String(input?.data_class || 'private'),
+    modelHint: String(input?.model_hint || ''),
+    maxExperts: Number(input?.max_experts || 4),
+  });
+  return {
+    ok: result.ok,
+    result,
+    verification: { method: 'multi-agent-critique', confidence: result.confidence },
+    metrics: { cost_microunits: 0, experts: result.experts?.length || 0 },
+  };
+});
 let kernel;
 const horizon = new HorizonBridge(async (type, payload, source) => {
   if (bootstrap.runtimeReady) {
@@ -195,6 +228,7 @@ async function startRuntime() {
     await initSchema();
     bootstrap.dbReady = true;
     await fabric.start();
+    await computeMesh.start();
 
     // Le noyau AURA est le cœur critique. Les services optionnels ne doivent
     // jamais empêcher l'organisme, la mémoire et le chat de démarrer.
@@ -241,6 +275,21 @@ function requireRuntime(reply) {
     startup_error: bootstrap.startupError,
   });
   return false;
+}
+
+async function requireMeshPeer(request, reply) {
+  const peerId = String(request.headers['x-aura-peer-id'] || '').trim();
+  const token = bearer(request);
+  if (!peerId || !token) {
+    reply.code(401).send({ error: 'Identité Compute Mesh requise' });
+    return null;
+  }
+  const peer = await computeMesh.authenticate(peerId, token);
+  if (!peer) {
+    reply.code(401).send({ error: 'Identité Compute Mesh invalide' });
+    return null;
+  }
+  return peer;
 }
 
 function publicFallbackSoul(privateView) {
@@ -530,6 +579,11 @@ app.get('/api/capabilities', async (request) => {
       capabilities: fabric.list().length,
       remote_side_effects: false,
     },
+    compute_mesh: bootstrap.dbReady
+      ? await computeMesh.status({ publicView: !privateView })
+      : { enabled: config.computeMeshEnabled, started: false, peers_online: 0 },
+    moa: moa.status(),
+    signed_wasm: wasmKernels.status(),
     kernel: privateView ? kernelStatus : undefined,
   };
 });
@@ -545,7 +599,10 @@ app.get('/api/kernel/architecture', async () => ({
   initiative_owner: 'AURA command center',
   meta_reasoning: 'hypothesis -> external retrieval -> source criticism -> deterministic evidence gate -> revised conclusion',
   external_memory: 'Web substrate + persisted evidence ledger + distributed capability topology',
-  distributed_compute: 'typed DAG -> Capability Fabric -> parallel Node/Rust swarm -> edge/API/local capabilities',
+  distributed_compute: 'typed DAG -> Capability Fabric -> Node/Rust swarm -> trusted Studio + volunteer Compute Mesh + edge/API capabilities',
+  volunteer_compute: 'reputation-weighted task federation; public peers receive public read/compute tasks only',
+  mixture_of_agents: 'parallel specialist SLM/LLM experts with explicit critic/synthesizer and fallback',
+  signed_wasm: 'immutable Ed25519-signed kernels with import allowlists before promotion',
   capability_router: 'trust + observed reliability + latency + cost + task tags',
   network_action_model: 'typed authenticated capabilities; no arbitrary remote shell; remote edge side effects disabled',
   execution_arm: 'Quantic Studio authenticated bridge for bounded side effects; edge fabric for read/compute',
@@ -582,6 +639,11 @@ app.get('/healthz', async () => {
       ? await commandCenter.status({ publicView: true })
       : { enabled: config.commandCenterEnabled, started: false },
     fabric: fabric.status(),
+    compute_mesh: bootstrap.dbReady
+      ? await computeMesh.status({ publicView: true })
+      : { enabled: config.computeMeshEnabled, started: false },
+    moa: moa.status(),
+    signed_wasm: wasmKernels.status(),
     issues: bootstrap.issues.map((item) => item.code),
     startup_error: bootstrap.startupError,
   };
@@ -819,6 +881,144 @@ app.post('/api/reasoning/research', async (request, reply) => {
     return result;
   } catch (error) {
     return reply.code(502).send({ error: String(error?.message || error) });
+  }
+});
+
+app.get('/api/mesh/status', async (request) => {
+  if (!bootstrap.dbReady) {
+    return {
+      version: ComputeMesh.VERSION,
+      enabled: config.computeMeshEnabled,
+      started: false,
+      peers_online: 0,
+      peers_webgpu: 0,
+      tasks_active: 0,
+    };
+  }
+  return computeMesh.status({ publicView: !isPrivate(request) });
+});
+
+app.post('/api/mesh/register', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  const trusted = isPrivate(request);
+  if (!trusted && !config.computeMeshPublicJoin) {
+    return reply.code(403).send({ error: 'Inscription publique au Compute Mesh désactivée' });
+  }
+  try {
+    return await computeMesh.registerPeer(request.body || {}, { trusted });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/heartbeat', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  const peer = await requireMeshPeer(request, reply);
+  if (!peer) return;
+  try {
+    return await computeMesh.heartbeat(peer, request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/claim', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  const peer = await requireMeshPeer(request, reply);
+  if (!peer) return;
+  try {
+    return await computeMesh.claim(peer);
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/complete', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  const peer = await requireMeshPeer(request, reply);
+  if (!peer) return;
+  const assignmentId = String(request.body?.assignment_id || '').trim();
+  if (!assignmentId) return reply.code(422).send({ error: 'assignment_id requis' });
+  try {
+    return await computeMesh.complete(peer, assignmentId, request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/tasks', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await computeMesh.enqueueTask(request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.get('/api/mesh/tasks/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const task = await computeMesh.getTask(request.params.id);
+  if (!task) return reply.code(404).send({ error: 'Tâche Compute Mesh introuvable' });
+  return task;
+});
+
+app.post('/api/moa/run', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const objective = String(request.body?.objective || '').trim();
+  if (!objective) return reply.code(422).send({ error: 'Objectif MoA requis' });
+  try {
+    return await moa.run(objective, {
+      dataClass: String(request.body?.data_class || 'private'),
+      modelHint: String(request.body?.model_hint || ''),
+      maxExperts: Number(request.body?.max_experts || 4),
+      meshTimeoutMs: Number(request.body?.timeout_ms || 18000),
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.get('/api/kernels', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return {
+    registry: wasmKernels.status(),
+    kernels: await wasmKernels.list(request.query?.limit),
+  };
+});
+
+app.post('/api/kernels/verify', {
+  bodyLimit: Math.max(1024 * 1024, config.wasmKernelMaxBytes * 2),
+}, async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const bytes = Buffer.from(String(request.body?.wasm_base64 || ''), 'base64');
+    return await wasmKernels.verify(
+      bytes,
+      request.body?.manifest || {},
+      String(request.body?.signature || ''),
+    );
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/kernels/register', {
+  bodyLimit: Math.max(1024 * 1024, config.wasmKernelMaxBytes * 2),
+}, async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const bytes = Buffer.from(String(request.body?.wasm_base64 || ''), 'base64');
+    return await wasmKernels.register(
+      bytes,
+      request.body?.manifest || {},
+      String(request.body?.signature || ''),
+      {
+        origin: String(request.body?.origin || 'private-api'),
+        artifactUrl: String(request.body?.artifact_url || ''),
+      },
+    );
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
   }
 });
 
@@ -1069,6 +1269,7 @@ export async function stopAura() {
     metricsTimer = null;
   }
   commandCenter.stop();
+  computeMesh.stop();
   fabric.stop();
   evolution.stop();
   horizon.stop();
