@@ -3,7 +3,7 @@ function clamp(value, low = 0, high = 1) {
 }
 
 export class ActiveInferenceEngine {
-  static VERSION = 'aura-active-inference-v1.1';
+  static VERSION = 'aura-active-inference-v1.2';
 
   softmax(values, temperature = 0.18) {
     if (!values.length) return [];
@@ -64,7 +64,7 @@ export class ActiveInferenceEngine {
     ).toFixed(6));
   }
 
-  assess(organism = {}, { novelty = 0, risk = 0 } = {}) {
+  assess(organism = {}, { novelty = 0, risk = 0, policy = {} } = {}) {
     const field = organism?.intention_field || {};
     const uncertainty = this.normalizedEntropy(field?.potentials || {});
     const clarity = Number(organism?.clarte ?? 0.7);
@@ -74,22 +74,31 @@ export class ActiveInferenceEngine {
     // AURA entretient volontairement plusieurs intentions concurrentes :
     // leur entropie brute est donc élevée même au repos. Nouveauté et risque
     // doivent être les principaux déclencheurs du calcul profond.
+    const weights = {
+      uncertainty: clamp(policy.uncertainty_weight ?? 0.18, 0.08, 0.35),
+      clarity: clamp(policy.clarity_weight ?? 0.18, 0.08, 0.35),
+      stability: clamp(policy.stability_weight ?? 0.12, 0.06, 0.30),
+      novelty: clamp(policy.novelty_weight ?? 0.30, 0.15, 0.45),
+      risk: clamp(policy.risk_weight ?? 0.22, 0.15, 0.55),
+    };
+    const deepThreshold = clamp(policy.deep_threshold ?? 0.45, 0.30, 0.62);
+    const verifiedThreshold = clamp(policy.verified_threshold ?? 0.72, 0.58, 0.86);
     const difficulty = (
-      uncertainty * 0.18
-      + (1 - clarity) * 0.18
-      + (1 - stability) * 0.12
-      + safeNovelty * 0.30
-      + safeRisk * 0.22
+      uncertainty * weights.uncertainty
+      + (1 - clarity) * weights.clarity
+      + (1 - stability) * weights.stability
+      + safeNovelty * weights.novelty
+      + safeRisk * weights.risk
     );
 
     let computeTier = 'native';
     let modelRole = 'fast';
     let tokenBudget = 0;
-    if (difficulty >= 0.72) {
+    if (difficulty >= verifiedThreshold) {
       computeTier = 'verified';
       modelRole = 'critic';
       tokenBudget = 1000;
-    } else if (difficulty >= 0.45) {
+    } else if (difficulty >= deepThreshold) {
       computeTier = 'deep';
       modelRole = 'reasoning';
       tokenBudget = 700;
@@ -109,6 +118,11 @@ export class ActiveInferenceEngine {
       compute_tier: computeTier,
       model_role: modelRole,
       token_budget: tokenBudget,
+      learned_policy: {
+        weights,
+        deep_threshold: Number(deepThreshold.toFixed(4)),
+        verified_threshold: Number(verifiedThreshold.toFixed(4)),
+      },
     };
   }
 }
