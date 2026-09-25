@@ -103,3 +103,10 @@ test('dashboard live metrics survive optional mobile visual failures', () => {
   assert.ok(metricsIndex >= 0);
   assert.ok(organismIndex > metricsIndex);
 });
+
+
+test('embedded dashboard script parses as browser JavaScript', () => {
+  const match = DASHBOARD_HTML.match(/<script>([\s\S]*?)<\/script>/);
+  assert.ok(match && match[1], 'inline dashboard script missing');
+  assert.doesNotThrow(() => new Function(match[1]));
+});
