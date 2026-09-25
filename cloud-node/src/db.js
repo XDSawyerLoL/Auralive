@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 4;
+export const LATEST_SCHEMA_VERSION = 5;
 
 export function getDb() {
   if (pool) return pool;
@@ -192,6 +192,53 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(4,?,?)',
       ['web-substrate-external-memory-and-evidence', new Date().toISOString()],
+    );
+    current = 4;
+  }
+
+  if (current < 5) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_fabric_capabilities (
+      id VARCHAR(180) PRIMARY KEY,
+      manifest LONGTEXT NOT NULL,
+      manifest_hash VARCHAR(64) NOT NULL,
+      transport VARCHAR(80) NOT NULL,
+      provider VARCHAR(180) NOT NULL DEFAULT '',
+      trust DOUBLE NOT NULL DEFAULT 0.5,
+      observed_reliability DOUBLE NOT NULL DEFAULT 0.5,
+      latency_ms DOUBLE NOT NULL DEFAULT 0,
+      cost_microunits BIGINT NOT NULL DEFAULT 0,
+      side_effects TINYINT NOT NULL DEFAULT 0,
+      last_seen_at VARCHAR(40) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_fabric_caps_transport(transport,provider),
+      INDEX idx_aura_fabric_caps_quality(observed_reliability,trust)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_fabric_graphs (
+      id VARCHAR(120) PRIMARY KEY,
+      objective TEXT NOT NULL,
+      graph LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'planned',
+      result LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_fabric_graphs_status(status,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_fabric_node_runs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      graph_id VARCHAR(120) NOT NULL,
+      node_id VARCHAR(120) NOT NULL,
+      capability_id VARCHAR(180) NOT NULL,
+      ok TINYINT NOT NULL,
+      elapsed_ms BIGINT NOT NULL DEFAULT 0,
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_fabric_node_graph(graph_id,created_at),
+      INDEX idx_aura_fabric_node_capability(capability_id,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(5,?,?)',
+      ['capability-fabric-routing-and-graph-ledger', new Date().toISOString()],
     );
   }
 }
@@ -387,7 +434,7 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -397,6 +444,8 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT * FROM aura_command_services ORDER BY criticality DESC,name ASC'),
     query('SELECT * FROM aura_initiatives ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
+    query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -411,6 +460,8 @@ export async function createLogicalBackup(reason = 'scheduled') {
     command_services: commandServices,
     initiatives,
     reasoning_sessions: reasoningSessions,
+    fabric_capabilities: fabricCapabilities,
+    fabric_graphs: fabricGraphs,
   });
   const id = randomUUID();
   await query(
