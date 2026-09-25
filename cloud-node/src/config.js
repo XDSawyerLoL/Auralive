@@ -166,11 +166,16 @@ export const config = Object.freeze({
   computeMeshMaxTaskMs: int('AURA_COMPUTE_MESH_MAX_TASK_MS', 60000, 1000, 300000),
   computeMeshMaxPayloadBytes: int('AURA_COMPUTE_MESH_MAX_PAYLOAD_BYTES', 65536, 4096, 1048576),
   computeMeshMaxResultBytes: int('AURA_COMPUTE_MESH_MAX_RESULT_BYTES', 262144, 4096, 2097152),
+  computeMeshAllowedTaskKinds: new Set(csv(
+    'AURA_COMPUTE_MESH_ALLOWED_TASK_KINDS',
+    'llm.chat,mesh.hash.sha256,mesh.benchmark',
+  )),
   meshWebLlmModuleUrl: String(process.env.AURA_MESH_WEBLLM_MODULE_URL || '').trim(),
   meshWebLlmModel: String(process.env.AURA_MESH_WEBLLM_MODEL || '').trim(),
 
   wasmKernelMaxBytes: int('AURA_WASM_KERNEL_MAX_BYTES', 2 * 1024 * 1024, 1024, 16 * 1024 * 1024),
   wasmSignerKeys: jsonObject('AURA_WASM_SIGNER_KEYS_JSON', {}),
+  wasmAllowedImports: new Set(csv('AURA_WASM_ALLOWED_IMPORTS', '')),
 
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
