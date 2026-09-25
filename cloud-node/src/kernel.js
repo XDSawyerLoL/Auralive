@@ -32,11 +32,12 @@ const AGENT_ROLES = {
 export class CognitiveKernel {
   static VERSION = 'aura-unified-kernel-node-v3';
 
-  constructor(ai, horizon, bridge = null, webSubstrate = null) {
+  constructor(ai, horizon, bridge = null, webSubstrate = null, fabric = null) {
     this.ai = ai;
     this.horizon = horizon;
     this.bridge = bridge;
     this.webSubstrate = webSubstrate;
+    this.fabric = fabric;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.organism = new AuraOrganism();
@@ -689,10 +690,19 @@ export class CognitiveKernel {
       && requiresExternalKnowledge(content)
     ) {
       try {
-        externalResearch = await this.webSubstrate.research(
-          content,
-          { trigger: 'chat' },
-        );
+        if (this.fabric?.enabled !== false && this.fabric?.registry?.has('web.research')) {
+          const routed = await this.fabric.execute(
+            'web.research',
+            { question: content },
+            { trigger: 'chat', verification: 'evidence' },
+          );
+          externalResearch = routed?.result || null;
+        } else {
+          externalResearch = await this.webSubstrate.research(
+            content,
+            { trigger: 'chat' },
+          );
+        }
         plan = {
           ...plan,
           external_evidence_required: true,
