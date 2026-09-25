@@ -110,7 +110,10 @@ async function startRuntime() {
     bootstrap.runtimeReady = false;
     bootstrap.dbReady = false;
     bootstrap.startupError = safeError(error);
-    app.log.error({ err: error }, 'AURA Cloud: démarrage du noyau impossible, serveur maintenu en mode diagnostic.');
+    try {
+      await closeDb();
+    } catch {}
+    app.log.error({ err: error }, 'AURA Cloud: démarrage du noyau impossible, reconnexion automatique programmée.');
   } finally {
     bootstrap.starting = false;
   }
@@ -615,7 +618,7 @@ export function startRuntimeLoop() {
         bootstrap.startupError = safeError(error);
       });
     }
-  }, 60_000);
+  }, 15_000);
   retryTimer.unref?.();
 }
 
