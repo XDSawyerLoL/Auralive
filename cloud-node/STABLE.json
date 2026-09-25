@@ -1,20 +1,25 @@
 {
   "product": "AURA Cloud",
-  "version": "1.7.8",
+  "version": "1.8.1",
   "status": "stable",
   "baseline": true,
   "recorded_at": "2026-09-25",
-  "baseline_commit": "e29647ae32d7754dcf271911b5486e313d90acf0",
+  "baseline_commit": "326edcbe59579910aff1e1e71baac6befffd481e",
   "validated": {
     "github_ci": true,
-    "hostinger_runtime": true,
+    "hostinger_package": true,
     "dashboard_interactive": true,
     "chat_operational": true,
-    "live_metrics": true
+    "live_metrics": true,
+    "cognition_native": true,
+    "evolution_phase3": true,
+    "mairaiy_voice_bridge": true,
+    "full_stack_gate": true
   },
   "notes": [
-    "Premiere base consideree solide apres correction du JavaScript embarque du dashboard.",
-    "Ne pas modifier l'interface sans test de parsing du JavaScript embarque et validation CI.",
-    "Toute regression doit pouvoir revenir a cette base."
+    "AURA 1.8.1 devient la nouvelle base stable après validation Node, Python, Rust et Windows.",
+    "Cognition native apprenante et Evolution Phase 3 sont intégrées dans main.",
+    "La voix Mairaiy utilise Kokoro ff_siwis via Quantic Studio, avec ticket vocal court côté dashboard sans saisie de token utilisateur.",
+    "La liaison machine Cloud vers Quantic Studio conserve une authentification backend distincte."
   ]
 }
