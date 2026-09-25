@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
+import { CommandCenter } from './command_center.js';
 import {
   config,
   databaseConfigured,
@@ -139,6 +140,7 @@ const horizon = new HorizonBridge(async (type, payload, source) => {
 });
 kernel = new CognitiveKernel(ai, horizon, bridge);
 const evolution = new EvolutionLab(ai, kernel, bridge);
+const commandCenter = new CommandCenter(kernel, evolution, bridge);
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
@@ -194,6 +196,11 @@ async function startRuntime() {
       await evolution.start();
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: Evolution indisponible, noyau maintenu actif.');
+    }
+    try {
+      await commandCenter.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: centre de commande indisponible, noyau maintenu actif.');
     }
     startMaintenance();
   } catch (error) {
@@ -292,7 +299,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.8.3',
+  version: '1.9.0',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -315,6 +322,8 @@ app.get('/api/bootstrap/status', async () => ({
   cognition_independent_from_language_model: true,
   language_role: 'semantic-support-and-verbalisation-only',
   horizon_configured: Boolean(config.horizonEnabled && config.horizonBaseUrl),
+  command_center_enabled: Boolean(config.commandCenterEnabled),
+  command_center_auto_execute: Boolean(config.commandCenterAutoExecute),
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -489,6 +498,9 @@ app.get('/api/capabilities', async (request) => {
       cloud_enabled: Boolean(config.evolutionEnabled),
       delegated_to_local: Boolean(bridgeStatus?.worker_online),
     },
+    command_center: bootstrap.runtimeReady
+      ? await commandCenter.status({ publicView: !privateView })
+      : { enabled: config.commandCenterEnabled, started: false, auto_execute: config.commandCenterAutoExecute },
     kernel: privateView ? kernelStatus : undefined,
   };
 });
@@ -500,6 +512,10 @@ app.get('/api/kernel/architecture', async () => ({
   language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
+  command_center: 'continuous native initiative engine with bounded autonomous execution',
+  initiative_owner: 'AURA command center',
+  execution_arm: 'Quantic Studio through authenticated execution bridge',
+  autonomous_risk_envelope: [...config.commandCenterAllowedRisks],
   provider: ai.provider,
   provider_enabled: ai.enabled,
 }));
@@ -528,6 +544,9 @@ app.get('/healthz', async () => {
       ? await bridge.status()
       : { enabled: bridge.enabled, worker_online: false, mode: bridge.enabled ? 'waiting-for-runtime' : 'disabled' },
     evolution: config.evolutionEnabled,
+    command_center: bootstrap.runtimeReady
+      ? await commandCenter.status({ publicView: true })
+      : { enabled: config.commandCenterEnabled, started: false },
     issues: bootstrap.issues.map((item) => item.code),
     startup_error: bootstrap.startupError,
   };
@@ -729,6 +748,53 @@ app.post('/api/horizon/context/intents', async (request, reply) =>
     ? horizon.pushIntent(request.body || {})
     : undefined);
 
+app.get('/api/command/status', async (request, reply) =>
+  requireRuntime(reply)
+    ? commandCenter.status({ publicView: !isPrivate(request) })
+    : undefined);
+
+app.get('/api/command/initiatives', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? commandCenter.initiatives(request.query?.limit, request.query?.status)
+    : undefined);
+
+app.get('/api/command/services', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? commandCenter.services()
+    : undefined);
+
+app.post('/api/command/services', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.upsertService(request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/command/services/:id/state', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.observeService(request.params.id, request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/command/run', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return commandCenter.runCycle(String(request.body?.trigger || 'private-api'));
+});
+
+app.post('/api/command/initiatives/:id/retry', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.retryInitiative(request.params.id);
+  } catch (error) {
+    return reply.code(409).send({ error: String(error?.message || error) });
+  }
+});
+
 app.get('/api/evolution/status', async (_request, reply) =>
   requireRuntime(reply) ? evolution.status() : undefined);
 
@@ -872,6 +938,7 @@ export async function stopAura() {
     clearInterval(metricsTimer);
     metricsTimer = null;
   }
+  commandCenter.stop();
   evolution.stop();
   horizon.stop();
   kernel.stop();
