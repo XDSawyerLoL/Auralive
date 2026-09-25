@@ -777,7 +777,11 @@ export class CommandCenter {
   }
 
   candidate(input) {
-    const risks = normalizeRisks(input.requested_risks || config.commandCenterAllowedRisks);
+    const policyRisks = new Set(normalizeRisks(config.commandCenterAllowedRisks));
+    const requested = input.requested_risks == null
+      ? [...policyRisks]
+      : normalizeRisks(input.requested_risks);
+    const risks = requested.filter((risk) => policyRisks.has(risk));
     const domain = String(input.domain || 'aura').slice(0, 80);
     const kind = String(input.kind || 'reflection').slice(0, 40);
     const objective = String(input.objective || '').replace(/\s+/g, ' ').trim().slice(0, 8000);
@@ -826,6 +830,9 @@ export class CommandCenter {
         rationale: service.state_detail || `Service déclaré ${service.state}.`,
         priority: Math.min(0.98, 0.66 + Number(service.criticality || 0.5) * 0.30),
         confidence: 0.9,
+        requested_risks: Array.isArray(service.metadata?.allowed_risks)
+          ? service.metadata.allowed_risks
+          : undefined,
         signature: `service:${service.id}:${service.state}`,
       }));
     }
