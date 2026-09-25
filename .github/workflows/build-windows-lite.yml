@@ -75,11 +75,15 @@ jobs:
           if (-not (Test-Path "dist\QuanticStudio\aura-source\app\cognitive\evolution.py")) { throw "Source AURA Evolution absente." }
           if (-not (Test-Path "dist\QuanticStudio\aura-source\tests")) { throw "Tests AURA Evolution absents." }
           if (-not (Test-Path "dist\QuanticStudio\aura-source\requirements.txt")) { throw "Requirements AURA Evolution absents." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\cloud-node\src\cognition.js")) { throw "Sources cloud-node AURA Evolution absentes." }
           $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
           if ($filters -notmatch "\bgfxcapture\b") { throw "Le FFmpeg Lite ne contient pas gfxcapture." }
+          $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+          $buildDate = ([string]$version.updated_at).Replace("-", "")
+          $expectedBuildId = "QuanticStudio-$($version.studio)-Windows-Native-LITE-$buildDate"
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.8.1-Windows-Native-LITE-2026-09-25") {
-            throw "Build ID inattendu: $buildId"
+          if ($buildId -ne $expectedBuildId) {
+            throw "Build ID inattendu: $buildId (attendu: $expectedBuildId)"
           }
           $envContent = Get-Content "dist\QuanticStudio\.env" -Raw
           if ($envContent -notmatch "MAIRAIY_KOKORO_AUTO_DOWNLOAD=true") {
@@ -179,7 +183,7 @@ jobs:
       - name: Upload Windows Lite application
         uses: actions/upload-artifact@v4
         with:
-          name: QuanticStudio-Windows-Native-2.8.1-LITE
+          name: QuanticStudio-Windows-Native-LITE
           path: dist/QuanticStudio
           if-no-files-found: error
           include-hidden-files: true
