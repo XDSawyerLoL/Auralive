@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { config } from './config.js';
+import { query } from './db.js';
 import { clamp } from './policy.js';
 
 const clean = (value, limit = 4000) =>
@@ -97,6 +98,124 @@ export class CapabilityFabric {
     this.lastError = '';
     this.executionCount = 0;
     this.registerBuiltins();
+  }
+
+  get enabled() {
+    return Boolean(config.fabricEnabled);
+  }
+
+  async persistCapability(capability) {
+    const item = capability || {};
+    const stamp = new Date().toISOString();
+    await query(
+      `INSERT INTO aura_fabric_capabilities(
+        id,manifest,manifest_hash,transport,provider,trust,observed_reliability,
+        latency_ms,cost_microunits,side_effects,last_seen_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+      ON DUPLICATE KEY UPDATE
+        manifest=VALUES(manifest),
+        manifest_hash=VALUES(manifest_hash),
+        transport=VALUES(transport),
+        provider=VALUES(provider),
+        trust=VALUES(trust),
+        observed_reliability=VALUES(observed_reliability),
+        latency_ms=VALUES(latency_ms),
+        cost_microunits=VALUES(cost_microunits),
+        side_effects=VALUES(side_effects),
+        last_seen_at=VALUES(last_seen_at),
+        updated_at=VALUES(updated_at)`,
+      [
+        item.id,
+        JSON.stringify(item).slice(0, 50000),
+        item.manifest_hash,
+        item.transport,
+        item.provider,
+        Number(item.trust || 0),
+        Number(item.observed_reliability || 0),
+        Math.max(0, Number(item.latency_ms || 0)),
+        Math.max(0, Number(item.cost_microunits || 0)),
+        item.side_effects ? 1 : 0,
+        stamp,
+        stamp,
+      ],
+    );
+  }
+
+  async hydrate() {
+    try {
+      const rows = await query(
+        `SELECT manifest FROM aura_fabric_capabilities
+         ORDER BY observed_reliability DESC,updated_at DESC LIMIT ?`,
+        [Math.max(1, Math.min(config.fabricMaxRemoteCapabilities * 4, 256))],
+      );
+      for (const row of rows) {
+        try {
+          const parsed = JSON.parse(row.manifest || '{}');
+          if (!parsed?.id || parsed.transport === 'local' || parsed.transport === 'studio-bridge') continue;
+          this.register(parsed);
+        } catch {}
+      }
+      return { ok: true, restored: rows.length };
+    } catch (error) {
+      this.lastError = String(error?.message || error).slice(0, 1000);
+      return { ok: false, restored: 0, error: this.lastError };
+    }
+  }
+
+  async recordObservation(capability, { ok, elapsedMs = 0 } = {}) {
+    const current = this.registry.get(capability.id) || capability;
+    const alpha = 0.18;
+    const previousReliability = clamp(current.observed_reliability ?? current.trust ?? 0.5);
+    const sample = ok ? 1 : 0;
+    const previousLatency = Math.max(0, Number(current.latency_ms || elapsedMs || 0));
+    const next = normalizeCapability({
+      ...current,
+      observed_reliability: previousReliability * (1 - alpha) + sample * alpha,
+      latency_ms: previousLatency
+        ? previousLatency * (1 - alpha) + Math.max(0, elapsedMs) * alpha
+        : Math.max(0, elapsedMs),
+    });
+    this.registry.set(next.id, next);
+    await this.persistCapability(next).catch(() => {});
+    return next;
+  }
+
+  async recordGraph(graph, { status = 'planned', result = {} } = {}) {
+    if (!graph?.id) return;
+    const stamp = new Date().toISOString();
+    await query(
+      `INSERT INTO aura_fabric_graphs(id,objective,graph,status,result,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE
+         graph=VALUES(graph),status=VALUES(status),result=VALUES(result),updated_at=VALUES(updated_at)`,
+      [
+        String(graph.id).slice(0, 120),
+        clean(graph.objective, 10000),
+        JSON.stringify(graph).slice(0, 200000),
+        String(status).slice(0, 40),
+        JSON.stringify(result || {}).slice(0, 200000),
+        stamp,
+        stamp,
+      ],
+    );
+  }
+
+  async recordNodeRun(graphId, node, outcome = {}) {
+    await query(
+      `INSERT INTO aura_fabric_node_runs(
+        graph_id,node_id,capability_id,ok,elapsed_ms,result,error,created_at
+      ) VALUES(?,?,?,?,?,?,?,?)`,
+      [
+        String(graphId || '').slice(0, 120),
+        String(node?.id || '').slice(0, 120),
+        String(node?.capability || '').slice(0, 180),
+        outcome?.ok === false ? 0 : 1,
+        Math.max(0, Number(outcome?.metrics?.elapsed_ms || 0)),
+        JSON.stringify(outcome?.result ?? {}).slice(0, 100000),
+        String(outcome?.error || '').slice(0, 5000),
+        new Date().toISOString(),
+      ],
+    );
   }
 
   register(manifest, handler = null) {
@@ -267,6 +386,7 @@ export class CapabilityFabric {
                 config.fabricRemoteTrustCeiling,
               ),
             });
+            await this.persistCapability(item).catch(() => {});
             discovered.push(item.id);
           }
         } finally {
@@ -361,9 +481,11 @@ export class CapabilityFabric {
         if (!handler) throw new Error(`handler local absent: ${capability.id}`);
         outcome = await handler(input, options);
       }
+      const elapsedMs = Date.now() - started;
       this.executionCount += 1;
       this.lastExecutionAt = new Date().toISOString();
       this.lastError = '';
+      await this.recordObservation(capability, { ok: outcome?.ok !== false, elapsedMs }).catch(() => {});
       return {
         ...outcome,
         capability: capability.id,
@@ -371,11 +493,13 @@ export class CapabilityFabric {
         manifest_hash: capability.manifest_hash,
         metrics: {
           ...(outcome?.metrics || {}),
-          elapsed_ms: Date.now() - started,
+          elapsed_ms: elapsedMs,
         },
       };
     } catch (error) {
+      const elapsedMs = Date.now() - started;
       this.lastError = String(error?.message || error).slice(0, 1000);
+      await this.recordObservation(capability, { ok: false, elapsedMs }).catch(() => {});
       throw error;
     }
   }
