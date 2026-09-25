@@ -100,3 +100,16 @@ test('private dashboard login uses persistent secure session cookie', () => {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
 });
+
+
+test('mobile auth keeps a bearer fallback when cookies are not retained', () => {
+  for (const token of [
+    "localStorage.getItem('aura_token')",
+    "localStorage.setItem('aura_token',token)",
+    "localStorage.removeItem('aura_token')",
+    "mode Bearer sécurisé local",
+    "confirm.method==='cookie'",
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
+});
