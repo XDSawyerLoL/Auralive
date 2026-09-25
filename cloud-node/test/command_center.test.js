@@ -131,3 +131,12 @@ test('externally-dependent intentions are routed through evidence gathering firs
   assert.match(commandSource, /kind: 'research'/);
   assert.match(commandSource, /this\.webSubstrate\.research/);
 });
+
+
+test('autonomous research initiatives use AURA Fabric DAGs when available', () => {
+  assert.match(commandSource, /this\.dagCompiler\.compile/);
+  assert.match(commandSource, /this\.graphExecutor\.execute/);
+  assert.match(commandSource, /aura-fabric-research-dag/);
+  assert.match(commandSource, /filter\(\(item\) => !item\.side_effects\)/);
+  assert.match(serverSource, /new CommandCenter\([\s\S]*fabric,[\s\S]*dagCompiler,[\s\S]*graphExecutor/);
+});
