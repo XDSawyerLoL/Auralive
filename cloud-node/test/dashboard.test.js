@@ -32,10 +32,11 @@ test('dashboard is wired to live AURA APIs', () => {
   }
 });
 
-test('dashboard includes dynamic attention map and private access controls', () => {
+test('dashboard includes dynamic attention map without a manual token gate', () => {
   assert.equal(DASHBOARD_HTML.includes('id="attentionMap"'), true);
-  assert.equal(DASHBOARD_HTML.includes('sessionStorage'), true);
-  assert.equal(DASHBOARD_HTML.includes('AURA_CLOUD_TOKEN'), true);
+  assert.equal(DASHBOARD_HTML.includes('AURA_CLOUD_TOKEN'), false);
+  assert.equal(DASHBOARD_HTML.includes('id="authBtn"'), false);
+  assert.equal(DASHBOARD_HTML.includes('id="authDrawer"'), false);
 });
 
 
@@ -88,32 +89,11 @@ test('living AURA visuals are driven by the organism state', () => {
 });
 
 
-test('private dashboard login uses persistent secure session cookie', () => {
-  for (const token of [
-    '/api/auth/session',
-    'createPrivateSession',
-    'ensurePrivateSession',
-    'credentials:\'same-origin\'',
-    'Privé · connecté',
-    'Session privée expirée',
-  ]) {
-    assert.equal(DASHBOARD_HTML.includes(token), true, token);
-  }
+test('dashboard direct mode clears obsolete browser token state', () => {
+  assert.equal(DASHBOARD_HTML.includes("localStorage.removeItem('aura_token')"), true);
+  assert.equal(DASHBOARD_HTML.includes("sessionStorage.removeItem('aura_token')"), true);
+  assert.equal(DASHBOARD_HTML.includes('ensurePrivateSession'), false);
 });
-
-
-test('mobile auth keeps a bearer fallback when cookies are not retained', () => {
-  for (const token of [
-    "localStorage.getItem('aura_token')",
-    "localStorage.setItem('aura_token',token)",
-    "localStorage.removeItem('aura_token')",
-    "mode Bearer sécurisé local",
-    "confirm.method==='cookie'",
-  ]) {
-    assert.equal(DASHBOARD_HTML.includes(token), true, token);
-  }
-});
-
 
 test('dashboard live metrics survive optional mobile visual failures', () => {
   assert.equal(DASHBOARD_HTML.includes("if(!nctx||!pctx)"), true);
