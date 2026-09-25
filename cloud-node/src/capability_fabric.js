@@ -285,7 +285,7 @@ export class CapabilityFabric {
     quorum = 1,
   } = {}) {
     if (!capability.endpoint) throw new Error('endpoint remote absent');
-    if (capability.side_effects && !config.fabricAllowRemoteSideEffects) {
+    if (capability.side_effects) {
       throw new Error('effet de bord remote interdit par politique AURA');
     }
     if (maxCostMicrounits > 0 && capability.cost_microunits > maxCostMicrounits) {
@@ -387,7 +387,7 @@ export class CapabilityFabric {
       local: all.filter((item) => item.transport === 'local').length,
       edge: all.filter((item) => item.transport === 'edge-http').length,
       studio: all.filter((item) => item.transport === 'studio-bridge').length,
-      remote_side_effects: Boolean(config.fabricAllowRemoteSideEffects),
+      remote_side_effects: false,
       discovery_urls: config.fabricDiscoveryUrls.length,
       last_discovery_at: this.lastDiscoveryAt,
       last_execution_at: this.lastExecutionAt,
