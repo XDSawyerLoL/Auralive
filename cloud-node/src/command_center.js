@@ -575,6 +575,79 @@ export class CommandCenter {
     throw new Error(`action GitHub autonome non autorisée: ${action}`);
   }
 
+  async setServiceState(id, state, detail = '', metadata = {}) {
+    const stamp = now();
+    const current = await one(
+      'SELECT state,state_detail,metadata FROM aura_command_services WHERE id=?',
+      [String(id)],
+    );
+    if (!current) return null;
+    const normalizedState = String(state || 'unknown').slice(0, 40);
+    const normalizedDetail = String(detail || '').slice(0, 4000);
+    const normalizedMetadata = JSON.stringify(metadata || {}).slice(0, 20000);
+    const changed = String(current.state || '') !== normalizedState
+      || String(current.state_detail || '') !== normalizedDetail
+      || String(current.metadata || '{}') !== normalizedMetadata;
+    await query(
+      `UPDATE aura_command_services
+       SET state=?,state_detail=?,last_observed_at=?,metadata=?,updated_at=?
+       WHERE id=?`,
+      [normalizedState, normalizedDetail, stamp, normalizedMetadata, stamp, String(id)],
+    );
+    if (changed) {
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
+        [
+          'service-state-change',
+          JSON.stringify({
+            service_id: String(id),
+            state: normalizedState,
+            detail: normalizedDetail,
+            metadata,
+          }).slice(0, 30000),
+          stamp,
+        ],
+      );
+    }
+    return { id: String(id), state: normalizedState, changed };
+  }
+
+  async syncCoreServices() {
+    const bridgeStatus = this.bridge?.status
+      ? await this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
+      : { enabled: false, worker_online: false };
+    await this.setServiceState(
+      'aura',
+      'online',
+      'Noyau Cloud actif et centre de commande en exécution.',
+      { command_center: CommandCenter.VERSION },
+    );
+    await this.setServiceState(
+      'quantic-studio',
+      bridgeStatus.worker_online ? 'online' : 'standby',
+      bridgeStatus.worker_online
+        ? 'Worker local connecté et disponible pour les actions autorisées.'
+        : 'Worker local absent; AURA Cloud poursuit ses décisions et met en attente les actions locales.',
+      {
+        worker_online: Boolean(bridgeStatus.worker_online),
+        worker_version: String(bridgeStatus?.worker?.version || ''),
+      },
+    );
+    const horizonStatus = this.kernel?.horizon?.status?.() || {};
+    await this.setServiceState(
+      'horizon',
+      horizonStatus.enabled ? (horizonStatus.last_error ? 'degraded' : 'online') : 'standby',
+      horizonStatus.enabled
+        ? (horizonStatus.last_error ? 'HORIZON signale une erreur récente.' : 'HORIZON actif.')
+        : 'HORIZON non configuré; AURA fonctionne sans lui.',
+      {
+        enabled: Boolean(horizonStatus.enabled),
+        last_success_at: String(horizonStatus.last_success_at || ''),
+      },
+    );
+    return bridgeStatus;
+  }
+
   async services() {
     const rows = await query(
       `SELECT id,name,kind,objective,endpoint,repository,criticality,enabled,state,state_detail,
@@ -727,6 +800,7 @@ export class CommandCenter {
   }
 
   async buildCandidates() {
+    const syncedBridgeStatus = await this.syncCoreServices();
     const [intentions, improvements, outcomes, services, bridgeStatus] = await Promise.all([
       this.kernel.intentions(8),
       this.kernel.improvements(8),
@@ -735,7 +809,7 @@ export class CommandCenter {
          FROM aura_outcomes ORDER BY id DESC LIMIT 24`,
       ),
       this.services(),
-      this.bridge?.status?.() || Promise.resolve({ enabled: false, worker_online: false }),
+      Promise.resolve(syncedBridgeStatus || { enabled: false, worker_online: false }),
     ]);
     const candidates = [];
 
