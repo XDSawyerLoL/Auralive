@@ -157,7 +157,7 @@ export const config = Object.freeze({
   fabricDefaultBudgetMicrounits: int('AURA_FABRIC_DEFAULT_BUDGET_MICROUNITS', 0, 0, 1_000_000_000),
 
   computeMeshEnabled: bool('AURA_COMPUTE_MESH_ENABLED', true),
-  computeMeshPublicJoin: bool('AURA_COMPUTE_MESH_PUBLIC_JOIN', true),
+  computeMeshPublicJoin: bool('AURA_COMPUTE_MESH_PUBLIC_JOIN', false),
   computeMeshPeerTtlSeconds: int('AURA_COMPUTE_MESH_PEER_TTL_SECONDS', 120, 30, 3600),
   computeMeshHeartbeatSeconds: int('AURA_COMPUTE_MESH_HEARTBEAT_SECONDS', 20, 5, 300),
   computeMeshCleanupSeconds: int('AURA_COMPUTE_MESH_CLEANUP_SECONDS', 45, 15, 3600),
