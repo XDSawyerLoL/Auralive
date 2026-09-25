@@ -5,6 +5,7 @@ import {
   CommandCenter,
   repositoryHealth,
   summarizeWorkflowRuns,
+  needsExternalEvidence,
 } from '../src/command_center.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
@@ -120,4 +121,13 @@ test('command center can supervise and safely act on the Quantic GitHub fleet', 
   assert.match(configSource, /AURA_COMMAND_GITHUB_REPOS/);
   assert.match(configSource, /AURA_COMMAND_GITHUB_TOKEN/);
   assert.match(configSource, /AURA_COMMAND_AUTO_RERUN_FAILED_CI/);
+});
+
+
+test('externally-dependent intentions are routed through evidence gathering first', () => {
+  assert.equal(needsExternalEvidence('Comparer le marché et les concurrents'), true);
+  assert.equal(needsExternalEvidence('Vérifier la documentation API et la compatibilité'), true);
+  assert.equal(needsExternalEvidence('Ranger la mémoire interne'), false);
+  assert.match(commandSource, /kind: 'research'/);
+  assert.match(commandSource, /this\.webSubstrate\.research/);
 });
