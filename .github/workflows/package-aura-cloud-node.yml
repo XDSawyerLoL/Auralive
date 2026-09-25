@@ -28,25 +28,32 @@ jobs:
           cp -R cloud-node/src "$ROOT/src"
           cp -R cloud-node/test "$ROOT/test"
           cp cloud-node/server.js cloud-node/package.json cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md cloud-node/HOSTINGER-QUICKSTART.txt "$ROOT/"
+          PACKAGE_VERSION="$(node -p "require('./cloud-node/package.json').version")"
           cat > "$ROOT/DEPLOYMENT.json" <<EOF
           {
             "product": "AURA Cloud",
+            "version": "$PACKAGE_VERSION",
             "runtime": "Node.js 22 / Fastify / MySQL",
             "target": "Hostinger Node.js Web App",
             "git_sha": "$GITHUB_SHA",
-            "evolution_phase": 1,
-            "operator_mode": "plan-only",
-            "auto_submit": false,
-            "auto_merge": false
+            "evolution_phase": 3,
+            "cognition_native": true,
+            "operator_mode": "guarded-local-worker",
+            "promotion": "ci-and-canary-gated"
           }
           EOF
-          (
-            cd "$ROOT"
-            zip -qr "$RUNNER_TEMP/aura-cloud-node-hostinger.zip" .
-          )
-      - uses: actions/upload-artifact@v4
+
+          test -f "$ROOT/package.json"
+          test -f "$ROOT/server.js"
+          test -f "$ROOT/src/server.js"
+          test -f "$ROOT/src/native_learning.js"
+          test -f "$ROOT/src/evolution.js"
+          test -f "$ROOT/test/voice_bridge.test.js"
+
+      - name: Upload Hostinger-ready project root
+        uses: actions/upload-artifact@v4
         with:
           name: aura-cloud-node-hostinger
-          path: ${{ runner.temp }}/aura-cloud-node-hostinger.zip
+          path: ${{ runner.temp }}/aura-cloud-node-hostinger/
           retention-days: 14
           if-no-files-found: error
