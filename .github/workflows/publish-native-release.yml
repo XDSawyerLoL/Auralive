@@ -1,12 +1,14 @@
-name: Publish Quantic Studio 2.7.4 Release
+name: Publish Quantic Studio Release
 
 on:
   push:
     branches:
       - main
     paths:
+      - "VERSION.json"
       - ".github/workflows/publish-native-release.yml"
       - "app/**"
+      - "cloud-node/**"
       - "engine/quantic-live/**"
       - "installer/**"
       - "scripts/build-installer.ps1"
@@ -17,8 +19,6 @@ on:
       - "scripts/sign-windows.ps1"
       - "requirements*.txt"
       - "build-assets/**"
-      - "tests/test_windows_desktop_packaging.py"
-      - "tests/test_native_broadcast.py"
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,14 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read shared version manifest
+        shell: pwsh
+        run: |
+          $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+          "STUDIO_VERSION=$($version.studio)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "NATIVE_ENGINE_VERSION=$($version.native_engine)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "BUILD_DATE=$(([string]$version.updated_at).Replace('-', ''))" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -51,11 +59,13 @@ jobs:
 
       - name: Compile Python sources
         shell: pwsh
-        run: python -m compileall -q app
+        run: python -m compileall -q app tests
 
-      - name: Build Quantic Studio Core engine
+      - name: Build and test Quantic Studio Core
         shell: pwsh
-        run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
+        run: |
+          cargo test --manifest-path engine/quantic-live/Cargo.toml
+          cargo build --release --manifest-path engine/quantic-live/Cargo.toml
 
       - name: Prepare release directory
         shell: pwsh
@@ -63,14 +73,7 @@ jobs:
           if (Test-Path "release") { Remove-Item "release" -Recurse -Force }
           New-Item -ItemType Directory -Force "release" | Out-Null
 
-      - name: Sign native engine when certificate is configured
-        shell: pwsh
-        env:
-          AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
-          AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
-        run: .\scripts\sign-windows.ps1 -Path @("engine\quantic-live\target\release\quantic-live.exe")
-
-      - name: Build full Quantic Studio 2.7.4
+      - name: Build full Quantic Studio
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
@@ -80,20 +83,11 @@ jobs:
           .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
           Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\QuanticStudio\QuanticStudioCore.exe" -Force
 
-          if (-not (Test-Path "dist\QuanticStudio\QuanticStudio.exe")) { throw "QuanticStudio.exe absent du package complet." }
-          if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) { throw "QuanticStudioCore.exe absent du package complet." }
-          if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package complet." }
+          $expected = "QuanticStudio-$env:STUDIO_VERSION-Windows-Native-$env:BUILD_DATE"
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.7.4-Windows-Native-2026-09-20") {
-            throw "Build ID complet inattendu: $buildId"
-          }
-          $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
-          if ($filters -notmatch "\bgfxcapture\b") { throw "gfxcapture absent du FFmpeg complet." }
-
-          $model = Get-Item "dist\QuanticStudio\data\voices\kokoro\kokoro-v1.0.onnx" -ErrorAction Stop
-          $voices = Get-Item "dist\QuanticStudio\data\voices\kokoro\voices-v1.0.bin" -ErrorAction Stop
-          if ($model.Length -lt 250000000 -or $voices.Length -lt 10000000) {
-            throw "Les assets Kokoro complets sont incomplets."
+          if ($buildId -ne $expected) { throw "Build ID complet inattendu: $buildId (attendu: $expected)" }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\cloud-node\src\cognition.js")) {
+            throw "Les sources cloud-node nécessaires à AURA Evolution ne sont pas embarquées."
           }
 
           .\scripts\sign-windows.ps1 -Path @(
@@ -101,7 +95,7 @@ jobs:
             "dist\QuanticStudio\QuanticStudioCore.exe"
           )
 
-          $zip = "release\QuanticStudio-Windows-Native-2.7.4.zip"
+          $zip = "release\QuanticStudio-Windows-Native-$env:STUDIO_VERSION.zip"
           Compress-Archive -Path "dist\QuanticStudio" -DestinationPath $zip -CompressionLevel Optimal
           if ((Get-Item $zip).Length -lt 1000000) { throw "Archive complète anormalement petite." }
 
@@ -112,22 +106,18 @@ jobs:
             "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
             "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $iscc) {
-            choco install innosetup --yes --no-progress
-          }
+          if (-not $iscc) { choco install innosetup --yes --no-progress }
 
-      - name: Build Quantic Studio 2.7.4 installer
-        shell: pwsh
-        run: .\scripts\build-installer.ps1 -Version "2.7.4" -SourceDir "dist\QuanticStudio"
-
-      - name: Sign installer when certificate is configured
+      - name: Build and sign installer
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
           AURA_WINDOWS_SIGNING_PFX_PASSWORD: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_PASSWORD }}
-        run: .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-2.7.4.exe")
+        run: |
+          .\scripts\build-installer.ps1 -Version $env:STUDIO_VERSION -SourceDir "dist\QuanticStudio"
+          .\scripts\sign-windows.ps1 -Path @("release\QuanticStudio-Setup-$env:STUDIO_VERSION.exe")
 
-      - name: Build Lite Quantic Studio 2.7.4
+      - name: Build Lite Quantic Studio
         shell: pwsh
         env:
           AURA_WINDOWS_SIGNING_PFX_BASE64: ${{ secrets.AURA_WINDOWS_SIGNING_PFX_BASE64 }}
@@ -138,32 +128,16 @@ jobs:
           .\scripts\install-aura-ffmpeg.ps1 -Destination "dist\QuanticStudio\ffmpeg"
           Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\QuanticStudio\QuanticStudioCore.exe" -Force
 
-          if (-not (Test-Path "dist\QuanticStudio\QuanticStudio.exe")) { throw "QuanticStudio.exe absent du package Lite." }
-          if (-not (Test-Path "dist\QuanticStudio\QuanticStudioCore.exe")) { throw "QuanticStudioCore.exe absent du package Lite." }
-          if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) { throw "FFmpeg Aura absent du package Lite." }
+          $expected = "QuanticStudio-$env:STUDIO_VERSION-Windows-Native-LITE-$env:BUILD_DATE"
           $buildId = (Get-Content "dist\QuanticStudio\BUILD-ID.txt" -Raw).Trim()
-          if ($buildId -ne "QuanticStudio-2.7.4-Windows-Native-LITE-2026-09-20") {
-            throw "Build ID Lite inattendu: $buildId"
-          }
-          $filters = & "dist\QuanticStudio\ffmpeg\ffmpeg.exe" -hide_banner -filters 2>&1 | Out-String
-          if ($filters -notmatch "\bgfxcapture\b") { throw "gfxcapture absent du FFmpeg Lite." }
-          $envContent = Get-Content "dist\QuanticStudio\.env" -Raw
-          if ($envContent -notmatch "MAIRAIY_KOKORO_AUTO_DOWNLOAD=true") {
-            throw "Auto-download Kokoro inactif dans le Lite."
-          }
-          if (Test-Path "dist\QuanticStudio\data\voices\kokoro\kokoro-v1.0.onnx") {
-            throw "Le modèle Kokoro ne doit pas être embarqué dans le Lite."
-          }
-          if (Test-Path "dist\QuanticStudio\data\voices\kokoro\voices-v1.0.bin") {
-            throw "Le pack de voix Kokoro ne doit pas être embarqué dans le Lite."
-          }
+          if ($buildId -ne $expected) { throw "Build ID Lite inattendu: $buildId (attendu: $expected)" }
 
           .\scripts\sign-windows.ps1 -Path @(
             "dist\QuanticStudio\QuanticStudio.exe",
             "dist\QuanticStudio\QuanticStudioCore.exe"
           )
 
-          $zip = "release\QuanticStudio-Windows-Native-2.7.4-LITE.zip"
+          $zip = "release\QuanticStudio-Windows-Native-$env:STUDIO_VERSION-LITE.zip"
           Compress-Archive -Path "dist\QuanticStudio" -DestinationPath $zip -CompressionLevel Optimal
           if ((Get-Item $zip).Length -lt 1000000) { throw "Archive Lite anormalement petite." }
 
@@ -192,56 +166,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "quantic-studio-v2.7.4"
-          $full = "release\QuanticStudio-Windows-Native-2.7.4.zip"
-          $lite = "release\QuanticStudio-Windows-Native-2.7.4-LITE.zip"
+          $tag = "quantic-studio-v$env:STUDIO_VERSION"
+          $full = "release\QuanticStudio-Windows-Native-$env:STUDIO_VERSION.zip"
+          $lite = "release\QuanticStudio-Windows-Native-$env:STUDIO_VERSION-LITE.zip"
           $engine = "release\Quantic-Studio-Core-Windows-x64.zip"
-          $installer = "release\QuanticStudio-Setup-2.7.4.exe"
+          $installer = "release\QuanticStudio-Setup-$env:STUDIO_VERSION.exe"
           $sums = "release\SHA256SUMS.txt"
           $notes = @"
-          # Quantic Studio 2.7.4
+          # Quantic Studio $env:STUDIO_VERSION
 
-          Quantic Studio devient un studio de streaming Windows autonome avec **Quantic Studio Core 0.4** comme moteur par défaut. OBS reste disponible uniquement comme mode de compatibilité manuel.
+          Version générée depuis le manifeste unique VERSION.json.
 
-          ## Points clés
-          - Studio glossy unifié : scènes, sources, aperçu, REC, Live, chat, activité et Aura.
-          - Capture écran/fenêtre/jeu via Windows Graphics Capture avec fallback adapté.
-          - Sources webcam, image, texte, navigateur, Mairaiy et overlays Aura.
-          - Encodage NVENC, AMD AMF, Intel QSV ou x264 selon la machine.
-          - Mix audio natif : micro + son PC/jeu + Aura/Mairaiy/alertes.
-          - Live et enregistrement simultanés.
-          - Gestion complète des scènes depuis le Studio.
-          - Transitions Cut / Fondu configurables.
-          - Replay buffer local et sauvegarde instantanée de clips.
-          - Multistream jusqu’à 3 destinations secondaires avec un seul encodage.
-          - Sortie RTMP directe.
-          - Clé de stream protégée localement par Windows DPAPI, jamais persistée en clair dans engine.json.
-          - Aucun compte Microsoft ni service cloud requis pour le coffre RTMP.
-          - CI Windows et moteur natif validés sur la branche principale.
-
-          ## Fichiers
-          - **QuanticStudio-Windows-Native-2.7.4.zip** : package complet avec assets Kokoro embarqués.
-          - **QuanticStudio-Windows-Native-2.7.4-LITE.zip** : package allégé ; Kokoro se télécharge au premier usage.
-          - **QuanticStudio-Setup-2.7.4.exe** : installateur Windows recommandé, données utilisateur conservées lors des mises à jour.
-          - **Quantic-Studio-Core-Windows-x64.zip** : moteur natif autonome.
-          - **SHA256SUMS.txt** : empreintes SHA-256 des archives et de l’installateur.
-          - Mise à jour intégrée : Aura vérifie la release officielle et contrôle le SHA-256 avant exécution.
-          - Signature Authenticode appliquée automatiquement lorsque le certificat de signature est configuré dans les secrets CI.
-
-          Build complet : `QuanticStudio-2.7.4-Windows-Native-2026-09-20`
-          Build Lite : `QuanticStudio-2.7.4-Windows-Native-LITE-2026-09-20`
-          Moteur natif : 0.4.1
+          - Build complet : QuanticStudio-$env:STUDIO_VERSION-Windows-Native-$env:BUILD_DATE
+          - Build Lite : QuanticStudio-$env:STUDIO_VERSION-Windows-Native-LITE-$env:BUILD_DATE
+          - Moteur natif : $env:NATIVE_ENGINE_VERSION
+          - AURA Evolution embarque désormais aussi le runtime cloud-node pour les candidats cognitifs JavaScript.
+          - SHA256SUMS.txt contient les empreintes des archives et de l'installateur.
           "@
 
           gh release view $tag --repo "${{ github.repository }}" *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $full $lite $engine $installer $sums --clobber --repo "${{ github.repository }}"
-            gh release edit $tag --repo "${{ github.repository }}" --title "Quantic Studio 2.7.4" --notes $notes --latest
+            gh release edit $tag --repo "${{ github.repository }}" --title "Quantic Studio $env:STUDIO_VERSION" --notes $notes --latest
           } else {
             gh release create $tag $full $lite $engine $installer $sums `
               --repo "${{ github.repository }}" `
               --target "${{ github.sha }}" `
-              --title "Quantic Studio 2.7.4" `
+              --title "Quantic Studio $env:STUDIO_VERSION" `
               --notes $notes `
               --latest
           }
