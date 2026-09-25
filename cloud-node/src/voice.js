@@ -3,8 +3,62 @@ import { config } from './config.js';
 const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
 const DEFAULT_VOICE = 'Leda';
 
-function clean(value, limit = 430) {
+function clean(value, limit = 8000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+export function splitSpeechText(value, maxChars = 360) {
+  const text = clean(value, 8000);
+  const limit = Math.max(160, Math.min(Number(maxChars) || 360, 520));
+  if (!text) return [];
+  if (text.length <= limit) return [text];
+
+  const sentences = text.match(/[^.!?…]+[.!?…]+[»”"')\]]*|[^.!?…]+$/g) || [text];
+  const chunks = [];
+  let current = '';
+
+  const pushWords = (input) => {
+    const words = String(input || '').trim().split(/\s+/).filter(Boolean);
+    let part = '';
+    for (const word of words) {
+      if (!part) {
+        part = word;
+      } else if ((part + ' ' + word).length <= limit) {
+        part += ' ' + word;
+      } else {
+        chunks.push(part);
+        part = word;
+      }
+    }
+    if (part) {
+      if (current && (current + ' ' + part).length <= limit) current += ' ' + part;
+      else {
+        if (current) chunks.push(current);
+        current = part;
+      }
+    }
+  };
+
+  for (const sentenceRaw of sentences) {
+    const sentence = sentenceRaw.trim();
+    if (!sentence) continue;
+    if (sentence.length > limit) {
+      if (current) {
+        chunks.push(current);
+        current = '';
+      }
+      pushWords(sentence);
+      continue;
+    }
+    if (!current) current = sentence;
+    else if ((current + ' ' + sentence).length <= limit) current += ' ' + sentence;
+    else {
+      chunks.push(current);
+      current = sentence;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.filter(Boolean);
 }
 
 function clamp(value, low, high) {
@@ -87,7 +141,7 @@ function promptFor(text, options = {}) {
 }
 
 export class CloudVoice {
-  static VERSION = 'mairaiy-cloud-voice-v1';
+  static VERSION = 'mairaiy-cloud-voice-v2';
 
   constructor() {
     this.lastError = '';
@@ -127,11 +181,7 @@ export class CloudVoice {
     };
   }
 
-  async synthesize(text, options = {}) {
-    const transcript = clean(text);
-    if (!transcript) throw new Error('Texte vocal vide');
-    if (!this.enabled) throw new Error('Voix Mairaiy Cloud non configurée');
-
+  async synthesizeChunk(transcript, options = {}) {
     const endpoint = `${String(config.voiceBaseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '')}/models/${this.model}:generateContent`;
     const payload = {
       contents: [{ parts: [{ text: promptFor(transcript, options) }] }],
@@ -171,17 +221,53 @@ export class CloudVoice {
       const mime = String(inline.mimeType || inline.mime_type || '');
       const rate = pcmRate(mime);
       const wav = pcmToWav(raw, rate);
+      return {
+        audio_base64: wav.toString('base64'),
+        mime_type: 'audio/wav',
+        generation_ms: Date.now() - started,
+        chars: transcript.length,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async synthesize(text, options = {}) {
+    const transcript = clean(text, 8000);
+    if (!transcript) throw new Error('Texte vocal vide');
+    if (!this.enabled) throw new Error('Voix Mairaiy Cloud non configurée');
+
+    const chunks = splitSpeechText(transcript, 360);
+    const started = Date.now();
+    const segments = [];
+    try {
+      for (let index = 0; index < chunks.length; index += 2) {
+        const batch = chunks.slice(index, index + 2);
+        const rendered = await Promise.all(
+          batch.map((chunk) => this.synthesizeChunk(chunk, options)),
+        );
+        for (let offset = 0; offset < rendered.length; offset += 1) {
+          segments.push({
+            ...rendered[offset],
+            index: index + offset,
+            text_length: batch[offset].length,
+          });
+        }
+      }
 
       this.lastError = '';
       this.lastEngine = 'gemini-cloud-tts';
       this.lastVoice = this.voice;
       this.lastGenerationMs = Date.now() - started;
-      this.generatedCount += 1;
+      this.generatedCount += segments.length;
 
       return {
         ok: true,
-        audio_base64: wav.toString('base64'),
+        audio_base64: segments[0]?.audio_base64 || '',
         mime_type: 'audio/wav',
+        segments,
+        segment_count: segments.length,
+        total_chars: transcript.length,
         engine: this.lastEngine,
         voice: this.lastVoice,
         profile: 'mairaiy',
@@ -190,8 +276,6 @@ export class CloudVoice {
     } catch (error) {
       this.lastError = String(error?.name === 'AbortError' ? 'Mairaiy Cloud TTS timeout' : error?.message || error).slice(0, 500);
       throw new Error(this.lastError);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }
