@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1';
+  static VERSION = 'aura-cognition-native-v1.1';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -121,6 +121,8 @@ export class CognitionEngine {
       || item?.payload?.autonomy_hint === 'notify_or_verify_only'
     );
 
+    const confidenceBias = Number(soul?.native_learning?.params?.confidence_bias || 0);
+
     return {
       title,
       summary,
@@ -128,7 +130,7 @@ export class CognitionEngine {
       next_action: nextAction,
       memory,
       intention,
-      confidence: clamp(confidence),
+      confidence: clamp(confidence + confidenceBias),
       autonomy_hint: restrictedAuthority
         ? 'notify_or_verify_only'
         : 'native_cognition_then_policy_gate',
@@ -145,6 +147,7 @@ export class CognitionEngine {
         clarity,
         silence_need: silenceNeed,
         dream_pressure: dreamPressure,
+        learned_confidence_bias: Number(confidenceBias.toFixed(4)),
       },
     };
   }
