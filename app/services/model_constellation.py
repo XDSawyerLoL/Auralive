@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -434,7 +435,8 @@ class ModelConstellation:
             raise ValueError("Nom de modèle invalide")
 
         target = str(base_url or getattr(self.settings, "ai_base_url", "") or "").strip().rstrip("/")
-        if not target.startswith(("http://127.0.0.1", "http://localhost", "https://127.0.0.1", "https://localhost")):
+        parsed = urlparse(target)
+        if parsed.scheme not in {"http", "https"} or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError("Pour l'installation automatique, Ollama doit être local.")
 
         # Valide l'endpoint AVANT de toucher à la configuration active.
