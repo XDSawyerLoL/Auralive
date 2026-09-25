@@ -118,6 +118,22 @@ export const config = Object.freeze({
   commandCenterAutoCreateFailureIssue: bool('AURA_COMMAND_AUTO_CREATE_FAILURE_ISSUE', true),
   commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 2, 0, 6),
 
+  webSubstrateEnabled: bool('AURA_WEB_SUBSTRATE_ENABLED', true),
+  webSearchUrl: String(process.env.AURA_WEB_SEARCH_URL || '').trim(),
+  webSearchApiKey: process.env.AURA_WEB_SEARCH_API_KEY || '',
+  webSearchLanguage: process.env.AURA_WEB_SEARCH_LANGUAGE || 'fr-FR',
+  webSearchResults: int('AURA_WEB_SEARCH_RESULTS', 8, 2, 20),
+  webMaxQueries: int('AURA_WEB_MAX_QUERIES', 3, 1, 8),
+  webMaxSources: int('AURA_WEB_MAX_SOURCES', 8, 2, 20),
+  webMaxSourceBytes: int('AURA_WEB_MAX_SOURCE_BYTES', 240000, 20000, 1000000),
+  webRequestTimeoutMs: int('AURA_WEB_REQUEST_TIMEOUT_MS', 12000, 1000, 60000),
+  webMemoryTtlSeconds: int('AURA_WEB_MEMORY_TTL_SECONDS', 604800, 3600, 2592000),
+  webAllowedDomains: new Set(csv('AURA_WEB_ALLOWED_DOMAINS', '')),
+  webBlockedDomains: new Set(csv(
+    'AURA_WEB_BLOCKED_DOMAINS',
+    'localhost,metadata.google.internal,169.254.169.254',
+  )),
+
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
   horizonApiKey: process.env.HORIZON_API_KEY || '',
