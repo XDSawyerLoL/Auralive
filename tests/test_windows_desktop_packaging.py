@@ -102,7 +102,7 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert "overlay_required" in workflow
     assert 'Get-Content "VERSION.json"' in workflow
     assert "name: QuanticStudio-Windows-Native" in workflow
-    assert "aura-source\\\\cloud-node\\\\src\\\\cognition.js" in workflow
+    assert "aura-source\\cloud-node\\src\\cognition.js" in workflow
 
 
 def test_desktop_tracks_real_chromium_instance_not_bootstrap_pid() -> None:
