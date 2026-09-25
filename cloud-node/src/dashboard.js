@@ -1,4 +1,4 @@
-export const DASHBOARD_HTML = `<!doctype html>
+export const DASHBOARD_HTML = String.raw`<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
