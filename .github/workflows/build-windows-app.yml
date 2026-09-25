@@ -418,7 +418,6 @@ jobs:
 
       - name: Build Windows installer
         shell: pwsh
-        shell: pwsh
         run: |
           $version = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
           .\scripts\build-installer.ps1 -Version ([string]$version.studio) -SourceDir "dist\QuanticStudio"
