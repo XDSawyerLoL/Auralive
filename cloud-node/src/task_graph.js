@@ -50,6 +50,10 @@ export function validateTaskGraph(graph, {
     }
   }
 
+  const effectiveParallel = Math.max(
+    1,
+    Math.min(Number(graph.max_parallel || maxParallel), maxParallel),
+  );
   const indegree = new Map(normalized.map((node) => [node.id, node.depends_on.length]));
   const children = new Map(normalized.map((node) => [node.id, []]));
   for (const node of normalized) {
@@ -59,8 +63,8 @@ export function validateTaskGraph(graph, {
   let frontier = normalized.filter((node) => indegree.get(node.id) === 0).map((node) => node.id);
   let visited = 0;
   while (frontier.length) {
-    const current = frontier.slice(0, maxParallel);
-    const deferred = frontier.slice(maxParallel);
+    const current = frontier.slice(0, effectiveParallel);
+    const deferred = frontier.slice(effectiveParallel);
     layers.push(current);
     const unlocked = [];
     for (const id of current) {
@@ -79,7 +83,7 @@ export function validateTaskGraph(graph, {
     objective: clean(graph.objective, 5000),
     nodes: normalized,
     layers,
-    max_parallel: Math.max(1, Math.min(Number(graph.max_parallel || maxParallel), maxParallel)),
+    max_parallel: effectiveParallel,
     budget_microunits: Math.max(0, Number(graph.budget_microunits || 0)),
     created_at: new Date().toISOString(),
   };
