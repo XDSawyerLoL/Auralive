@@ -110,7 +110,10 @@ async function startRuntime() {
     bootstrap.runtimeReady = false;
     bootstrap.dbReady = false;
     bootstrap.startupError = safeError(error);
-    app.log.error({ err: error }, 'AURA Cloud: démarrage du noyau impossible, serveur maintenu en mode diagnostic.');
+    try {
+      await closeDb();
+    } catch {}
+    app.log.error({ err: error }, 'AURA Cloud: démarrage du noyau impossible, reconnexion automatique programmée.');
   } finally {
     bootstrap.starting = false;
   }
@@ -153,7 +156,7 @@ app.get('/', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.7.1',
+  version: '1.7.2',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -615,7 +618,7 @@ export function startRuntimeLoop() {
         bootstrap.startupError = safeError(error);
       });
     }
-  }, 60_000);
+  }, 15_000);
   retryTimer.unref?.();
 }
 
