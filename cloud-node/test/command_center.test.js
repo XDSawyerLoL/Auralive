@@ -32,6 +32,14 @@ test('command center creates deterministic native initiative fingerprints', () =
   assert.equal(first.kind, 'operator');
   assert.equal(first.priority, 0.82);
   assert.equal(first.confidence, 0.88);
+
+  const bounded = center.candidate({
+    domain: 'quantic-mail',
+    kind: 'operator',
+    objective: 'Tester la politique.',
+    requested_risks: ['safe', 'network', 'process'],
+  });
+  assert.deepEqual(bounded.requested_risks, ['safe']);
 });
 
 test('autonomous initiatives are native decisions with outcome learning', () => {
