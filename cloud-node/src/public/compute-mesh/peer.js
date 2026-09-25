@@ -92,10 +92,20 @@ export class AuraMeshBrowserPeer {
 
   async heartbeat() {
     if (!this.peerId || !this.peerToken) await this.register();
-    return this.request('/api/mesh/heartbeat', {
-      capabilities: await this.capabilities(),
-      models: this.models(),
-    });
+    try {
+      return await this.request('/api/mesh/heartbeat', {
+        capabilities: await this.capabilities(),
+        models: this.models(),
+      });
+    } catch (error) {
+      const message = String(error?.message || error);
+      if (message.includes('Identité Compute Mesh')) {
+        this.peerId = '';
+        this.peerToken = '';
+        return this.register();
+      }
+      throw error;
+    }
   }
 
   async execute(assignment) {
