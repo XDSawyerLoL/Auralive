@@ -55,6 +55,9 @@ export const config = Object.freeze({
   dbName: process.env.DB_NAME || process.env.DB_DATABASE || process.env.DATABASE_NAME || process.env.MYSQL_DATABASE || '',
   dbConnectionLimit: int('DB_CONNECTION_LIMIT', 10, 1, 30),
   dbConnectTimeoutMs: int('DB_CONNECT_TIMEOUT_MS', 5000, 1000, 30000),
+  backupIntervalSeconds: int('AURA_BACKUP_INTERVAL_SECONDS', 21600, 900, 604800),
+  backupRetentionCount: int('AURA_BACKUP_RETENTION_COUNT', 28, 3, 365),
+  metricsRollupSeconds: int('AURA_METRICS_ROLLUP_SECONDS', 300, 60, 86400),
 
   aiMode: AI_MODE,
   aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
