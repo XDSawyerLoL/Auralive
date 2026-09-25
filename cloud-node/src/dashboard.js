@@ -629,9 +629,10 @@ async function refresh(){
     try{
       const evolution=await api('/api/evolution/status');
       const phase=String(evolution.phase||'');
-      const active=Boolean(evolution.local_worker_online);
+      const local=Boolean(evolution.local_worker_online);
+      const active=Boolean(evolution.enabled);
       $('evolutionDot').className='live-dot '+(active?'good':'');
-      $('evolutionText').textContent=active?'Évolution · Phase 2':'Évolution · recherche';
+      $('evolutionText').textContent=local?'Évolution · Phase 2':'Évolution · Cloud';
       $('evolutionText').title=phase;
     }catch(_){
       $('evolutionDot').className='live-dot';
