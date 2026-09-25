@@ -1,11 +1,12 @@
 {
-  "cloud": "1.8.3",
+  "cloud": "1.9.0",
   "studio": "2.8.1",
   "native_engine": "0.4.1",
   "schema": {
-    "mysql": 2,
+    "mysql": 3,
     "evolution": 3
   },
   "channel": "stable-next",
-  "updated_at": "2026-09-25"
+  "updated_at": "2026-09-25",
+  "command_center": 1
 }
