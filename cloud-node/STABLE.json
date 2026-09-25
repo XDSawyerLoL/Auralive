@@ -1,10 +1,10 @@
 {
   "product": "AURA Cloud",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "status": "stable",
   "baseline": true,
   "recorded_at": "2026-09-25",
-  "baseline_commit": "326edcbe59579910aff1e1e71baac6befffd481e",
+  "baseline_commit": "703cbbbc772fa926166836e9a70e7688a6883830",
   "validated": {
     "github_ci": true,
     "hostinger_package": true,
@@ -13,13 +13,16 @@
     "live_metrics": true,
     "cognition_native": true,
     "evolution_phase3": true,
-    "mairaiy_voice_bridge": true,
+    "mairaiy_cloud_voice": true,
+    "mobile_responsive": true,
+    "emotional_state_ui": true,
     "full_stack_gate": true
   },
   "notes": [
-    "AURA 1.8.1 devient la nouvelle base stable après validation Node, Python, Rust et Windows.",
-    "Cognition native apprenante et Evolution Phase 3 sont intégrées dans main.",
-    "La voix Mairaiy utilise Kokoro ff_siwis via Quantic Studio, avec ticket vocal court côté dashboard sans saisie de token utilisateur.",
-    "La liaison machine Cloud vers Quantic Studio conserve une authentification backend distincte."
+    "AURA 1.8.2 devient la nouvelle base stable après validation Node, Python, Rust et Windows.",
+    "Mairaiy est disponible depuis le Cloud sans dépendre de Quantic Studio; le navigateur sert de secours si le TTS Cloud n'est pas configuré.",
+    "Le dashboard mobile utilise une typographie et des panneaux adaptés aux écrans téléphone.",
+    "L'état émotionnel natif de l'organisme est visible directement dans l'interface.",
+    "Cognition native apprenante et Evolution Phase 3 restent intégrées."
   ]
 }
