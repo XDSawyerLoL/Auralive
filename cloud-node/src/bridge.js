@@ -154,6 +154,25 @@ export class ExecutionBridge {
     return null;
   }
 
+  async renew(id, workerId) {
+    const worker = String(workerId || '').trim().slice(0, 160);
+    if (!worker) throw new Error('worker_id requis');
+    const row = await one(
+      'SELECT id,status,lease_owner FROM aura_execution_jobs WHERE id=?',
+      [String(id)],
+    );
+    if (!row) throw new Error('job inconnu');
+    if (row.status !== 'leased') throw new Error(`job non renouvelable: ${row.status}`);
+    if (String(row.lease_owner || '') !== worker) throw new Error('lease worker invalide');
+
+    const leaseUntil = nowMs() + settings.leaseSeconds * 1000;
+    await query(
+      'UPDATE aura_execution_jobs SET lease_until=?,updated_at=? WHERE id=? AND lease_owner=? AND status=\'leased\'',
+      [leaseUntil, nowIso(), String(id), worker],
+    );
+    return { ok: true, id: String(id), lease_until: leaseUntil };
+  }
+
   async complete(id, workerId, payload = {}) {
     const worker = String(workerId || '').trim().slice(0, 160);
     const row = await one(
@@ -174,7 +193,7 @@ export class ExecutionBridge {
        SET status=?,result=?,error=?,lease_until=0,updated_at=? WHERE id=?`,
       [
         ok ? 'completed' : 'error',
-        JSON.stringify(resultPayload || {}).slice(0, 12_000_000),
+        JSON.stringify(resultPayload || {}).slice(0, 20_000_000),
         error,
         nowIso(),
         String(id),
