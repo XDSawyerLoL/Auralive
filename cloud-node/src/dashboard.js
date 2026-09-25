@@ -544,6 +544,10 @@ function initLivingAuraScene(){
   if(!wrap||!nebula||!particles||!svg) return null;
   const nctx=nebula.getContext('2d');
   const pctx=particles.getContext('2d');
+  if(!nctx||!pctx){
+    console.warn('AURA visual canvas unavailable; live data remains active.');
+    return null;
+  }
   const reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const scene={w:0,h:0,dpr:1,time:0,raf:0,dust:[],sparks:[],running:true,organism:{}};
 
@@ -707,8 +711,10 @@ async function refresh(){
         ? 'Le serveur est en ligne mais le noyau redémarre automatiquement : '+startup
         : 'L’interface est en ligne, mais le noyau attend encore MySQL. Reconnexion automatique en cours.';
     }
-    const ks=await api('/api/kernel/status');
-    const soul=await api('/api/kernel/soul');
+    const coreState=await Promise.all([api('/api/kernel/status'),api('/api/kernel/soul')]);
+    const ks=coreState[0];
+    const soul=coreState[1];
+    metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     if(livingScene)livingScene.organism=organism;
     $('organismMood').textContent=(organism.mood||'calme')+' · '+((organism.habitat&&organism.habitat.last_activity_label)||organism.active_intention||'présence');
@@ -718,7 +724,6 @@ async function refresh(){
     $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
     $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
-    metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     if(privateConnected){
       $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
     }else{
@@ -846,7 +851,7 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();setPrivateState(false);initLivingAuraScene();setInterval(updateClock,1000);refresh();setInterval(refresh,8000);
+updateClock();setPrivateState(false);refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 </script>
 </body>
 </html>`;
