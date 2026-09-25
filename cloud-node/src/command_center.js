@@ -1050,6 +1050,12 @@ export class CommandCenter {
       if (!jobId) {
         if (row.execution_mode === 'waiting-local-worker' && workerOnline) {
           reconciled.push(await this.executeInitiative(row));
+        } else if (
+          row.kind === 'github'
+          && row.execution_mode === 'github-readonly'
+          && this.githubToken
+        ) {
+          reconciled.push(await this.executeInitiative(row));
         }
         continue;
       }
