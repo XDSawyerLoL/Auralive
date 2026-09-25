@@ -138,3 +138,47 @@ async def test_worker_renews_before_minimum_supported_lease_expires(monkeypatch)
     assert intervals
     assert intervals[0] < 15.0
     assert intervals[0] <= 7.0
+
+
+
+class FakeMairaiyAudio:
+    def __init__(self, output_dir):
+        self.output_dir = output_dir
+        self.last_file = ""
+        self.last_engine = ""
+        self.last_voice = ""
+        self.last_audio_duration_ms = 0
+        self.last_error = ""
+
+    async def synthesize(self, text, **_kwargs):
+        assert text
+        self.last_file = "mairaiy-cloud-test.wav"
+        self.last_engine = "kokoro-local"
+        self.last_voice = "ff_siwis"
+        self.last_audio_duration_ms = 900
+        path = self.output_dir / self.last_file
+        path.write_bytes(b"RIFF" + b"\x00" * 128)
+        return f"/media/tts/{self.last_file}"
+
+
+@pytest.mark.asyncio
+async def test_cloud_worker_returns_mairaiy_kokoro_voice_payload(tmp_path):
+    aura = FakeAura()
+    aura.avatar_audio = FakeMairaiyAudio(tmp_path)
+    worker = AuraCloudWorker(aura, settings())
+
+    result = await worker._run_tts(
+        {
+            "text": "Bonjour, je suis AURA.",
+            "rate": 1.0,
+            "pitch": 1.0,
+            "volume": 1.0,
+            "context": "aura-cloud-chat",
+        }
+    )
+
+    assert result["engine"] == "kokoro-local"
+    assert result["voice"] == "ff_siwis"
+    assert result["duration_ms"] == 900
+    assert result["mime_type"] == "audio/wav"
+    assert result["audio_base64"]
