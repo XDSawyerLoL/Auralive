@@ -55,6 +55,9 @@ export const config = Object.freeze({
   dbName: process.env.DB_NAME || process.env.DB_DATABASE || process.env.DATABASE_NAME || process.env.MYSQL_DATABASE || '',
   dbConnectionLimit: int('DB_CONNECTION_LIMIT', 10, 1, 30),
   dbConnectTimeoutMs: int('DB_CONNECT_TIMEOUT_MS', 5000, 1000, 30000),
+  backupIntervalSeconds: int('AURA_BACKUP_INTERVAL_SECONDS', 21600, 900, 604800),
+  backupRetentionCount: int('AURA_BACKUP_RETENTION_COUNT', 28, 3, 365),
+  metricsRollupSeconds: int('AURA_METRICS_ROLLUP_SECONDS', 300, 60, 86400),
 
   aiMode: AI_MODE,
   aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
@@ -89,7 +92,8 @@ export const config = Object.freeze({
   evolutionBaseBranch: process.env.AURA_EVOLUTION_GITHUB_BASE_BRANCH || 'main',
   evolutionAllowedDomains: new Set(csv('AURA_EVOLUTION_ALLOWED_DOMAINS', 'api.github.com,registry.npmjs.org')),
   evolutionResearchUrls: csv('AURA_EVOLUTION_RESEARCH_URLS', ''),
-  evolutionCanaryRequired: bool('AURA_EVOLUTION_CANARY_REQUIRED', false),
+  evolutionCanaryRequired: bool('AURA_EVOLUTION_CANARY_REQUIRED', true),
+  evolutionCanaryMode: String(process.env.AURA_EVOLUTION_CANARY_MODE || 'automatic').trim().toLowerCase(),
   evolutionCanaryMinObservations: int('AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS', 3, 1, 1000),
   evolutionAutoSubmit: false,
   evolutionAutoMerge: false,
@@ -111,10 +115,10 @@ export function productionConfigIssues() {
       message: 'AURA_CLOUD_TOKEN est absent. Les fonctions privées restent verrouillées.',
     });
   }
-  if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && !config.canaryToken) {
+  if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && config.evolutionCanaryMode === 'manual' && !config.canaryToken) {
     issues.push({
       code: 'canary_token_missing',
-      message: 'AURA_EVOLUTION_CANARY_TOKEN est absent. Le canary indépendant reste verrouillé.',
+      message: 'AURA_EVOLUTION_CANARY_TOKEN est absent alors que le canary manuel est activé.',
     });
   }
   if (config.aiMode === 'gemini' && !config.aiApiKey) {

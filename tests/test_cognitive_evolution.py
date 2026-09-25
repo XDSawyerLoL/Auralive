@@ -47,15 +47,16 @@ def settings() -> SimpleNamespace:
         evolution_github_base_branch="main",
         evolution_allowed_domains="api.github.com,pypi.org",
         evolution_research_urls="",
-        evolution_required_checks="validate,build-engine,build-windows-lite,build-windows",
+        evolution_required_checks="gate-node-cloud,gate-python-core,gate-rust-core,gate-windows-smoke",
         evolution_canary_required=True,
+        evolution_canary_mode="automatic",
         evolution_canary_token="",
         evolution_canary_min_observations=3,
     )
 
 
 @pytest.mark.asyncio
-async def test_phase1_stays_research_only_without_full_source_tree(tmp_path: Path):
+async def test_phase3_stays_research_only_without_full_source_tree(tmp_path: Path):
     db = Database(tmp_path / "aura.db")
     await db.initialize()
     automation = FakeAutomation()
@@ -164,3 +165,54 @@ async def test_failed_canary_never_becomes_ready(tmp_path: Path):
     )
     assert result["ready"] is False
     assert (await lab.canary_status(cycle_id))["ready"] is False
+
+
+def test_cloud_node_cognition_is_auto_promotable_surface(tmp_path: Path):
+    db = Database(tmp_path / "aura.db")
+    lab = EvolutionLab(
+        SimpleNamespace(),
+        db,
+        FakeAutomation(),
+        SimpleNamespace(),
+        settings(),
+    )
+    assert lab._path_policy("cloud-node/src/cognition.js", auto=True) == (True, "")
+    ok, reason = lab._path_policy("cloud-node/src/server.js", auto=True)
+    assert ok is False
+    assert "protégé" in reason
+
+
+@pytest.mark.asyncio
+async def test_automatic_canary_is_created_after_required_ci_checks(tmp_path: Path):
+    db = Database(tmp_path / "aura.db")
+    await db.initialize()
+    lab = EvolutionLab(
+        SimpleNamespace(),
+        db,
+        FakeAutomation(),
+        SimpleNamespace(),
+        settings(),
+    )
+    await lab.initialize()
+    cycle_id = "cycle-auto-canary"
+    stamp = utcnow()
+    await db.execute(
+        """
+        INSERT INTO aura_evolution_cycles(
+            id,trigger,objective,status,created_at,updated_at
+        ) VALUES(?,?,?,'remote-validation',?,?)
+        """,
+        (cycle_id, "test", "Valider automatiquement.", stamp, stamp),
+    )
+    result = lab._automatic_canary_sync(
+        cycle_id,
+        {
+            "successful": True,
+            "head_sha": "abc123",
+            "required_checks": ["gate-node-cloud", "gate-python-core", "gate-rust-core", "gate-windows-smoke"],
+            "missing_required_checks": [],
+        },
+    )
+    assert result["ready"] is True
+    assert result["observations"] == 3
+    assert result["metrics"]["mode"] == "automatic-ci-sandbox"

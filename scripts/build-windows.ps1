@@ -6,7 +6,10 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "QuanticStudio-2.8.1-Windows-Native-2026-09-25"
+$VersionManifest = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+$StudioVersion = [string]$VersionManifest.studio
+$BuildDate = ([string]$VersionManifest.updated_at).Replace("-", "")
+$BuildId = "QuanticStudio-$StudioVersion-Windows-Native-$BuildDate"
 $KokoroModelUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx"
 $KokoroVoicesUrl = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
 
@@ -65,6 +68,8 @@ New-Item -ItemType Directory -Force -Path $AuraSource | Out-Null
 Copy-Item "app" "$AuraSource\app" -Recurse -Force
 Copy-Item "tests" "$AuraSource\tests" -Recurse -Force
 Copy-Item "requirements.txt" "$AuraSource\requirements.txt" -Force
+Copy-Item "cloud-node" "$AuraSource\cloud-node" -Recurse -Force
+Copy-Item "VERSION.json" "$AuraSource\VERSION.json" -Force
 
 New-Item -ItemType Directory -Force -Path "dist\QuanticStudio\data\media" | Out-Null
 $KokoroDir = "dist\QuanticStudio\data\voices\kokoro"

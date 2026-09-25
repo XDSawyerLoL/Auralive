@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DASHBOARD_HTML } from '../src/dashboard.js';
+import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 
 test('AURA operational consciousness interface exposes core product surfaces', () => {
   for (const label of [
@@ -109,4 +110,11 @@ test('embedded dashboard script parses as browser JavaScript', () => {
   const match = DASHBOARD_HTML.match(/<script>([\s\S]*?)<\/script>/);
   assert.ok(match && match[1], 'inline dashboard script missing');
   assert.doesNotThrow(() => new Function(match[1]));
+});
+
+
+test('dashboard runtime is an independently testable module', () => {
+  assert.ok(DASHBOARD_SCRIPT.length > 1000);
+  assert.doesNotThrow(() => new Function(DASHBOARD_SCRIPT));
+  assert.equal(DASHBOARD_HTML.includes(DASHBOARD_SCRIPT), true);
 });

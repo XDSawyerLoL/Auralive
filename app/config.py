@@ -167,7 +167,10 @@ class Settings:
     evolution_interval_seconds: int = _int("AURA_EVOLUTION_INTERVAL_SECONDS", 21600)
     evolution_auto_submit: bool = _bool("AURA_EVOLUTION_AUTO_SUBMIT", True)
     evolution_auto_merge: bool = _bool("AURA_EVOLUTION_AUTO_MERGE", True)
-    evolution_github_token: str = os.getenv("AURA_EVOLUTION_GITHUB_TOKEN", "")
+    evolution_github_token: str = (
+        os.getenv("AURA_EVOLUTION_GITHUB_MACHINE_TOKEN")
+        or os.getenv("AURA_EVOLUTION_GITHUB_TOKEN", "")
+    )
     evolution_github_repository: str = os.getenv(
         "AURA_EVOLUTION_GITHUB_REPOSITORY", "XDSawyerLoL/Auralive"
     )
@@ -179,11 +182,12 @@ class Settings:
 
     evolution_required_checks: str = os.getenv(
         "AURA_EVOLUTION_REQUIRED_CHECKS",
-        "validate,build-engine,build-windows-lite,build-windows",
+        "gate-node-cloud,gate-python-core,gate-rust-core,gate-windows-smoke",
     )
     # Le canary est un troisième sas indépendant de la CI. Le jeton dédié
     # empêche le noyau AURA d'approuver lui-même sa propre évolution distante.
-    evolution_canary_required: bool = _bool("AURA_EVOLUTION_CANARY_REQUIRED", False)
+    evolution_canary_required: bool = _bool("AURA_EVOLUTION_CANARY_REQUIRED", True)
+    evolution_canary_mode: str = os.getenv("AURA_EVOLUTION_CANARY_MODE", "automatic").strip().lower()
     evolution_canary_token: str = os.getenv("AURA_EVOLUTION_CANARY_TOKEN", "")
     evolution_canary_min_observations: int = _int(
         "AURA_EVOLUTION_CANARY_MIN_OBSERVATIONS", 3

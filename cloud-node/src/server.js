@@ -7,11 +7,21 @@ import {
   databaseConfigured,
   productionConfigIssues,
 } from './config.js';
-import { closeDb, dbHealth, initSchema } from './db.js';
+import {
+  closeDb,
+  createLogicalBackup,
+  dbHealth,
+  getLogicalBackup,
+  initSchema,
+  listLogicalBackups,
+  recordMetricRollup,
+  schemaStatus,
+} from './db.js';
 import { DASHBOARD_HTML } from './dashboard.js';
 import { EvolutionLab } from './evolution.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
+import { RuntimeMetrics } from './metrics.js';
 
 function tokenEquals(actual, expected) {
   if (!actual || !expected) return false;
@@ -91,6 +101,7 @@ const app = Fastify({
   bodyLimit: 1_048_576,
   trustProxy: true,
 });
+const metrics = new RuntimeMetrics();
 
 const bridge = new ExecutionBridge();
 const ai = new AiClient(bridge);
@@ -158,6 +169,7 @@ async function startRuntime() {
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: Evolution indisponible, noyau maintenu actif.');
     }
+    startMaintenance();
   } catch (error) {
     bootstrap.runtimeReady = false;
     bootstrap.dbReady = false;
@@ -191,6 +203,14 @@ function publicFallbackSoul(privateView) {
   } = fallbackSoul;
   return safe;
 }
+
+app.addHook('onRequest', async (request) => {
+  metrics.begin(request);
+});
+
+app.addHook('onResponse', async (request, reply) => {
+  metrics.observe(request, reply);
+});
 
 app.addHook('onSend', async (_request, reply, payload) => {
   reply.header('X-Content-Type-Options', 'nosniff');
@@ -246,7 +266,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.7.8',
+  version: '1.8.0',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -671,6 +691,56 @@ app.post('/api/evolution/canary/:cycleId', async (request, reply) =>
     ? evolution.recordCanary(request.params.cycleId, request.body || {})
     : undefined);
 
+async function runtimeMetricsSnapshot() {
+  const [evolutionStatus, schema] = await Promise.all([
+    bootstrap.runtimeReady ? evolution.status().catch(() => ({ last_error: 'unavailable' })) : Promise.resolve(null),
+    bootstrap.dbReady ? schemaStatus().catch(() => ({ current: 0, latest: 0, ready: false })) : Promise.resolve(null),
+  ]);
+  return {
+    ...metrics.snapshot({
+      runtimeReady: bootstrap.runtimeReady,
+      dbReady: bootstrap.dbReady,
+      ai: ai.diagnostic(),
+      evolution: evolutionStatus,
+    }),
+    schema,
+  };
+}
+
+app.get('/api/ops/status', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return {
+    metrics: await runtimeMetricsSnapshot(),
+    backups: bootstrap.dbReady ? await listLogicalBackups(10) : [],
+  };
+});
+
+app.post('/api/ops/backup', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return createLogicalBackup(String(request.body?.reason || 'manual'));
+});
+
+app.get('/api/ops/backups', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return listLogicalBackups(request.query?.limit);
+});
+
+app.get('/api/ops/backups/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const row = await getLogicalBackup(request.params.id);
+  if (!row) return reply.code(404).send({ error: 'Snapshot AURA introuvable' });
+  let snapshot = {};
+  try { snapshot = JSON.parse(row.payload || '{}'); } catch {}
+  return {
+    id: row.id,
+    reason: row.reason,
+    schema_version: row.schema_version,
+    payload_bytes: row.payload_bytes,
+    created_at: row.created_at,
+    snapshot,
+  };
+});
+
 app.setErrorHandler((error, _request, reply) => {
   app.log.error(error);
   const status = Number(error?.statusCode || 500);
@@ -682,6 +752,33 @@ app.setErrorHandler((error, _request, reply) => {
 });
 
 let retryTimer = null;
+let backupTimer = null;
+let metricsTimer = null;
+
+function startMaintenance() {
+  if (!backupTimer) {
+    const runBackup = () => {
+      if (!bootstrap.runtimeReady) return;
+      createLogicalBackup('scheduled').catch((error) => {
+        app.log.warn({ err: error }, 'AURA Cloud: snapshot logique impossible.');
+      });
+    };
+    backupTimer = setInterval(runBackup, config.backupIntervalSeconds * 1000);
+    backupTimer.unref?.();
+  }
+  if (!metricsTimer) {
+    const rollup = async () => {
+      if (!bootstrap.runtimeReady) return;
+      try {
+        await recordMetricRollup('runtime', await runtimeMetricsSnapshot());
+      } catch (error) {
+        app.log.warn({ err: error }, 'AURA Cloud: rollup métrique impossible.');
+      }
+    };
+    metricsTimer = setInterval(rollup, config.metricsRollupSeconds * 1000);
+    metricsTimer.unref?.();
+  }
+}
 
 export function startRuntimeLoop() {
   startRuntime().catch((error) => {
@@ -702,6 +799,14 @@ export async function stopAura() {
   if (retryTimer) {
     clearInterval(retryTimer);
     retryTimer = null;
+  }
+  if (backupTimer) {
+    clearInterval(backupTimer);
+    backupTimer = null;
+  }
+  if (metricsTimer) {
+    clearInterval(metricsTimer);
+    metricsTimer = null;
   }
   evolution.stop();
   horizon.stop();

@@ -1,0 +1,158 @@
+name: AURA Required Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: aura-required-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-cloud:
+    name: gate-node-cloud
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud-node/package-lock.json
+      - name: Install exact Node dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Syntax and policy checks
+        run: |
+          npm run check
+          npm test
+      - name: Dashboard browser-script regression gate
+        run: node --test test/dashboard.test.js
+      - name: Runtime smoke
+        env:
+          NODE_ENV: production
+          PORT: "49999"
+          AURA_GATEWAY_PORT: "3987"
+          AURA_INTERNAL_PORT: "3988"
+        run: |
+          set -euo pipefail
+          node server.js >/tmp/aura-cloud.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3987/healthz | grep -q '"ok":true'; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/aura-cloud.log
+          exit 1
+
+  python-core:
+    name: gate-python-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-desktop.txt
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Compile Python
+        run: python -m compileall -q app tests
+      - name: Full Python test suite
+        run: pytest -q
+
+  rust-core:
+    name: gate-rust-core
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: engine/quantic-live
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/quantic-live
+      - name: Test native engine
+        run: cargo test --locked
+      - name: Build native engine release
+        run: cargo build --release --locked
+
+  windows-smoke:
+    name: gate-windows-smoke
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/quantic-live
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-desktop.txt
+      - name: Build native engine
+        shell: pwsh
+        run: cargo build --release --locked --manifest-path engine/quantic-live/Cargo.toml
+      - name: Build Quantic Studio Lite
+        shell: pwsh
+        run: .\scripts\build-windows-lite.ps1 -Python python
+      - name: Embed native engine
+        shell: pwsh
+        run: Copy-Item "engine\quantic-live\target\release\quantic-live.exe" "dist\QuanticStudio\QuanticStudioCore.exe" -Force
+      - name: Verify evolution source bundle
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\app\cognitive\evolution.py")) { throw "Evolution Python source absent." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\cloud-node\src\cognition.js")) { throw "Evolution cloud-node source absent." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\VERSION.json")) { throw "Version manifest absent." }
+      - name: Smoke QuanticStudio.exe
+        shell: pwsh
+        env:
+          AURA_PORT: "18787"
+          AURA_PUBLIC_BASE_URL: "http://localhost:18787"
+          AI_MODE: "off"
+          OBS_AUTO_CONNECT: "false"
+          OBS_ENABLED: "false"
+          MAIRAIY_KOKORO_ENABLED: "false"
+          MAIRAIY_KOKORO_AUTO_DOWNLOAD: "false"
+        run: |
+          $process = Start-Process "dist\QuanticStudio\QuanticStudio.exe" -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(60)
+            $ready = $false
+            while ((Get-Date) -lt $deadline) {
+              if ($process.HasExited) { throw "QuanticStudio.exe exited during smoke test." }
+              try {
+                $health = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 2
+                if ($health.StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 600
+            }
+            if (-not $ready) { throw "QuanticStudio.exe did not expose /health." }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
