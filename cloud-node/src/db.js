@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 5;
+export const LATEST_SCHEMA_VERSION = 6;
 
 export function getDb() {
   if (pool) return pool;
@@ -240,6 +240,88 @@ async function applyMigrations(db) {
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(5,?,?)',
       ['capability-fabric-routing-and-graph-ledger', new Date().toISOString()],
     );
+    current = 5;
+  }
+
+  if (current < 6) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mesh_peers (
+      id CHAR(36) PRIMARY KEY,
+      token_hash VARCHAR(64) NOT NULL,
+      trust_tier VARCHAR(32) NOT NULL DEFAULT 'public',
+      status VARCHAR(32) NOT NULL DEFAULT 'offline',
+      capabilities LONGTEXT NOT NULL,
+      models LONGTEXT NOT NULL,
+      webgpu TINYINT NOT NULL DEFAULT 0,
+      vram_mb INT NOT NULL DEFAULT 0,
+      memory_mb INT NOT NULL DEFAULT 0,
+      reputation DOUBLE NOT NULL DEFAULT 0.5,
+      reliability DOUBLE NOT NULL DEFAULT 0.5,
+      agreement_rate DOUBLE NOT NULL DEFAULT 0.5,
+      latency_ms DOUBLE NOT NULL DEFAULT 0,
+      jobs_ok BIGINT NOT NULL DEFAULT 0,
+      jobs_failed BIGINT NOT NULL DEFAULT 0,
+      last_seen_ms BIGINT NOT NULL DEFAULT 0,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mesh_peers_online(status,last_seen_ms),
+      INDEX idx_aura_mesh_peers_quality(reputation,reliability,agreement_rate)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mesh_tasks (
+      id CHAR(36) PRIMARY KEY,
+      kind VARCHAR(120) NOT NULL,
+      data_class VARCHAR(32) NOT NULL DEFAULT 'private',
+      payload LONGTEXT NOT NULL,
+      required_tags LONGTEXT NOT NULL,
+      model_hint VARCHAR(240) NOT NULL DEFAULT '',
+      replicas INT NOT NULL DEFAULT 1,
+      quorum INT NOT NULL DEFAULT 1,
+      consensus_mode VARCHAR(40) NOT NULL DEFAULT 'any',
+      status VARCHAR(32) NOT NULL DEFAULT 'queued',
+      source VARCHAR(120) NOT NULL DEFAULT 'aura',
+      deadline_ms BIGINT NOT NULL DEFAULT 0,
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mesh_tasks_status(status,created_at),
+      INDEX idx_aura_mesh_tasks_deadline(deadline_ms,status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mesh_assignments (
+      id CHAR(36) PRIMARY KEY,
+      task_id CHAR(36) NOT NULL,
+      peer_id CHAR(36) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'queued',
+      lease_expires_ms BIGINT NOT NULL DEFAULT 0,
+      result LONGTEXT NOT NULL,
+      result_hash VARCHAR(64) NOT NULL DEFAULT '',
+      latency_ms BIGINT NOT NULL DEFAULT 0,
+      error TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      UNIQUE KEY uq_aura_mesh_task_peer(task_id,peer_id),
+      INDEX idx_aura_mesh_assignment_peer(peer_id,status,created_at),
+      INDEX idx_aura_mesh_assignment_task(task_id,status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_wasm_kernels (
+      id VARCHAR(180) PRIMARY KEY,
+      version VARCHAR(80) NOT NULL,
+      sha256 VARCHAR(64) NOT NULL,
+      signer_key_id VARCHAR(120) NOT NULL,
+      manifest LONGTEXT NOT NULL,
+      signature TEXT NOT NULL,
+      artifact_url VARCHAR(1800) NOT NULL DEFAULT '',
+      origin VARCHAR(120) NOT NULL DEFAULT 'manual',
+      status VARCHAR(40) NOT NULL DEFAULT 'verified',
+      verified_at VARCHAR(40) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_wasm_kernel_hash(sha256),
+      INDEX idx_aura_wasm_kernel_status(status,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(6,?,?)',
+      ['compute-mesh-and-signed-wasm-kernels', new Date().toISOString()],
+    );
   }
 }
 
@@ -434,7 +516,7 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs, meshSummary, wasmKernels] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -446,6 +528,14 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
     query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
     query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
+    query(`SELECT
+      COUNT(*) AS peers_total,
+      SUM(CASE WHEN status='online' THEN 1 ELSE 0 END) AS peers_online,
+      AVG(reputation) AS avg_reputation,
+      SUM(jobs_ok) AS jobs_ok,
+      SUM(jobs_failed) AS jobs_failed
+      FROM aura_mesh_peers`),
+    query('SELECT id,version,sha256,signer_key_id,artifact_url,origin,status,verified_at,updated_at FROM aura_wasm_kernels ORDER BY updated_at DESC LIMIT 100'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -462,6 +552,8 @@ export async function createLogicalBackup(reason = 'scheduled') {
     reasoning_sessions: reasoningSessions,
     fabric_capabilities: fabricCapabilities,
     fabric_graphs: fabricGraphs,
+    compute_mesh_summary: meshSummary?.[0] || {},
+    wasm_kernels: wasmKernels,
   });
   const id = randomUUID();
   await query(
