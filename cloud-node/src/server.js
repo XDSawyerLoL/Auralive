@@ -22,6 +22,7 @@ import { EvolutionLab } from './evolution.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
+import { CloudVoice } from './voice.js';
 
 function tokenEquals(actual, expected) {
   if (!actual || !expected) return false;
@@ -125,6 +126,7 @@ const app = Fastify({
   trustProxy: true,
 });
 const metrics = new RuntimeMetrics();
+const cloudVoice = new CloudVoice();
 
 const bridge = new ExecutionBridge();
 const ai = new AiClient(bridge);
@@ -289,7 +291,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.8.1',
+  version: '1.8.2',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -388,14 +390,35 @@ app.post('/api/voice/speak', async (request, reply) => {
   if (!isPrivate(request) && !validVoiceTicket(ticket, text)) {
     return reply.code(401).send({ error: 'Ticket vocal AURA invalide ou expiré' });
   }
-  try {
-    return await bridge.synthesize(text, request.body || {});
-  } catch (error) {
-    return reply.code(503).send({
-      error: String(error?.message || error),
-      code: 'AURA_LOCAL_VOICE_UNAVAILABLE',
-    });
+
+  const preferLocal = request.body?.prefer_local === true;
+  const localOnline = await bridge.workerOnline().catch(() => false);
+  const attempts = preferLocal && localOnline ? ['local', 'cloud'] : ['cloud', 'local'];
+  const errors = [];
+
+  for (const mode of attempts) {
+    if (mode === 'cloud' && cloudVoice.enabled) {
+      try {
+        return await cloudVoice.synthesize(text, request.body || {});
+      } catch (error) {
+        errors.push(`cloud: ${String(error?.message || error)}`);
+      }
+    }
+    if (mode === 'local' && localOnline) {
+      try {
+        return await bridge.synthesize(text, request.body || {});
+      } catch (error) {
+        errors.push(`studio: ${String(error?.message || error)}`);
+      }
+    }
   }
+
+  return reply.code(503).send({
+    error: errors.join(' | ') || 'Voix Mairaiy indisponible',
+    code: 'AURA_VOICE_UNAVAILABLE',
+    cloud_ready: cloudVoice.enabled,
+    studio_ready: localOnline,
+  });
 });
 
 app.post('/api/image/generate', async (request, reply) => {
@@ -437,8 +460,15 @@ app.get('/api/capabilities', async (request) => {
       local_worker: Boolean(bridgeStatus?.worker_online),
     },
     voice: {
-      ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
-      engine: privateView ? String(bridgeStatus?.worker?.voice || '') : '',
+      ready: Boolean(cloudVoice.enabled || (bridgeStatus?.worker_online && bridgeStatus?.worker?.voice)),
+      profile: 'mairaiy',
+      mode: cloudVoice.enabled ? 'cloud-primary' : (bridgeStatus?.worker_online ? 'studio-local' : 'offline'),
+      engine: cloudVoice.enabled
+        ? 'gemini-cloud-tts'
+        : (privateView ? String(bridgeStatus?.worker?.voice || '') : ''),
+      cloud_ready: Boolean(cloudVoice.enabled),
+      studio_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
+      cloud: privateView ? cloudVoice.diagnostic() : undefined,
     },
     image: {
       ready: Boolean(
