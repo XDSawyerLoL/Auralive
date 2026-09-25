@@ -1,0 +1,33 @@
+name: Bootstrap lockfiles
+
+on:
+  push:
+    branches:
+      - feat/aura-autonomy-hardening-1.8.0
+    paths:
+      - ".github/workflows/bootstrap-lockfiles.yml"
+      - "cloud-node/package.json"
+      - "engine/quantic-live/Cargo.toml"
+
+jobs:
+  locks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate npm lock
+        working-directory: cloud-node
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Generate Cargo lock
+        working-directory: engine/quantic-live
+        run: cargo generate-lockfile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aura-lockfiles
+          path: |
+            cloud-node/package-lock.json
+            engine/quantic-live/Cargo.lock
+          if-no-files-found: error
