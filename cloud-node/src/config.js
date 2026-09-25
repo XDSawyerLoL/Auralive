@@ -25,6 +25,17 @@ function num(name, fallback, min = -Infinity, max = Infinity) {
   return Math.max(min, Math.min(max, value));
 }
 
+function jsonObject(name, fallback = {}) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 const AI_MODE = String(process.env.AI_MODE || 'off').trim().toLowerCase();
 const AI_DEFAULT_BASE_URL = AI_MODE === 'gemini'
   ? 'https://generativelanguage.googleapis.com/v1beta'
@@ -144,6 +155,25 @@ export const config = Object.freeze({
   fabricMaxGraphNodes: int('AURA_FABRIC_MAX_GRAPH_NODES', 32, 1, 128),
   fabricMaxParallel: int('AURA_FABRIC_MAX_PARALLEL', 12, 1, 64),
   fabricDefaultBudgetMicrounits: int('AURA_FABRIC_DEFAULT_BUDGET_MICROUNITS', 0, 0, 1_000_000_000),
+
+  computeMeshEnabled: bool('AURA_COMPUTE_MESH_ENABLED', true),
+  computeMeshPublicJoin: bool('AURA_COMPUTE_MESH_PUBLIC_JOIN', true),
+  computeMeshPeerTtlSeconds: int('AURA_COMPUTE_MESH_PEER_TTL_SECONDS', 120, 30, 3600),
+  computeMeshHeartbeatSeconds: int('AURA_COMPUTE_MESH_HEARTBEAT_SECONDS', 20, 5, 300),
+  computeMeshCleanupSeconds: int('AURA_COMPUTE_MESH_CLEANUP_SECONDS', 45, 15, 3600),
+  computeMeshLeaseSeconds: int('AURA_COMPUTE_MESH_LEASE_SECONDS', 45, 5, 600),
+  computeMeshMaxReplicas: int('AURA_COMPUTE_MESH_MAX_REPLICAS', 5, 1, 9),
+  computeMeshMaxTaskMs: int('AURA_COMPUTE_MESH_MAX_TASK_MS', 60000, 1000, 300000),
+  computeMeshMaxPayloadBytes: int('AURA_COMPUTE_MESH_MAX_PAYLOAD_BYTES', 65536, 4096, 1048576),
+  computeMeshMaxResultBytes: int('AURA_COMPUTE_MESH_MAX_RESULT_BYTES', 262144, 4096, 2097152),
+  meshWebLlmModuleUrl: String(
+    process.env.AURA_MESH_WEBLLM_MODULE_URL
+      || 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.85/+esm',
+  ).trim(),
+  meshWebLlmModel: String(process.env.AURA_MESH_WEBLLM_MODEL || '').trim(),
+
+  wasmKernelMaxBytes: int('AURA_WASM_KERNEL_MAX_BYTES', 2 * 1024 * 1024, 1024, 16 * 1024 * 1024),
+  wasmSignerKeys: jsonObject('AURA_WASM_SIGNER_KEYS_JSON', {}),
 
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
