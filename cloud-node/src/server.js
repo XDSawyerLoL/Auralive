@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
+import { CapabilityFabric } from './capability_fabric.js';
 import {
   config,
   databaseConfigured,
@@ -25,6 +26,7 @@ import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
 import { CloudVoice } from './voice.js';
 import { WebSubstrate } from './web_substrate.js';
+import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 function tokenEquals(actual, expected) {
   if (!actual || !expected) return false;
@@ -134,6 +136,9 @@ const cloudVoice = new CloudVoice();
 const bridge = new ExecutionBridge();
 const ai = new AiClient(bridge);
 const webSubstrate = new WebSubstrate(ai);
+const fabric = new CapabilityFabric({ webSubstrate, bridge });
+const dagCompiler = new DagCompiler(ai);
+const graphExecutor = new TaskGraphExecutor(fabric);
 let kernel;
 const horizon = new HorizonBridge(async (type, payload, source) => {
   if (bootstrap.runtimeReady) {
@@ -203,6 +208,11 @@ async function startRuntime() {
       await commandCenter.start();
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: centre de commande indisponible, noyau maintenu actif.');
+    }
+    if (config.fabricEnabled && config.fabricDiscoveryUrls.length) {
+      fabric.discoverRemote().catch((error) => {
+        app.log.warn({ err: error }, 'AURA Cloud: découverte Fabric distante indisponible.');
+      });
     }
     startMaintenance();
   } catch (error) {
@@ -506,6 +516,12 @@ app.get('/api/capabilities', async (request) => {
     command_center: bootstrap.runtimeReady
       ? await commandCenter.status({ publicView: !privateView })
       : { enabled: config.commandCenterEnabled, started: false, auto_execute: config.commandCenterAutoExecute },
+    fabric: {
+      ready: Boolean(config.fabricEnabled),
+      version: CapabilityFabric.VERSION,
+      capabilities: fabric.list().length,
+      remote_side_effects: false,
+    },
     kernel: privateView ? kernelStatus : undefined,
   };
 });
@@ -792,6 +808,62 @@ app.post('/api/reasoning/research', async (request, reply) => {
     return result;
   } catch (error) {
     return reply.code(502).send({ error: String(error?.message || error) });
+  }
+});
+
+app.get('/api/fabric/status', async () => ({
+  ...fabric.status(),
+  dag_compiler: DagCompiler.VERSION,
+  graph_executor: TaskGraphExecutor.VERSION,
+}));
+
+app.get('/api/fabric/capabilities', async (request, reply) =>
+  requirePrivate(request, reply)
+    ? { capabilities: fabric.list({ includeDisabled: true }) }
+    : undefined);
+
+app.post('/api/fabric/discover', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const discovered = await fabric.discoverRemote();
+    return { ok: true, discovered, status: fabric.status() };
+  } catch (error) {
+    return reply.code(502).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/fabric/plan', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const objective = String(request.body?.objective || '').trim();
+  if (!objective) return reply.code(422).send({ error: 'Objectif Fabric requis' });
+  try {
+    return await dagCompiler.compile(objective, fabric.list(), {
+      maxNodes: config.fabricMaxGraphNodes,
+      maxParallel: config.fabricMaxParallel,
+      budgetMicrounits: config.fabricDefaultBudgetMicrounits,
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/fabric/execute', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const graph = request.body?.graph || await dagCompiler.compile(
+      String(request.body?.objective || ''),
+      fabric.list(),
+      {
+        maxNodes: config.fabricMaxGraphNodes,
+        maxParallel: config.fabricMaxParallel,
+        budgetMicrounits: config.fabricDefaultBudgetMicrounits,
+      },
+    );
+    return await graphExecutor.execute(graph, {
+      trigger: String(request.body?.trigger || 'private-api'),
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
   }
 });
 
