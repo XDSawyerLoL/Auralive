@@ -157,7 +157,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       <div class="pill"><span id="liveDot" class="live-dot"></span><span id="liveText">Connexion…</span></div>
       <div class="clock"><div id="clockDate" class="date">—</div><div id="clockTime" class="time">—</div></div>
       <button class="mode-btn" id="modeBtn">⌁ Mode évolutif⌄</button>
-      <button class="icon-btn" id="authBtn">Privé</button>
+      <button class="icon-btn" id="authBtn">Privé · hors connexion</button>
     </div>
   </header>
 
@@ -273,7 +273,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
 <div class="auth-drawer" id="authDrawer">
   <div class="auth-box">
     <h3>Accès privé AURA</h3>
-    <p>Le token reste dans <code>sessionStorage</code> de cet onglet. Il permet d’afficher intentions, pensée dominante, mémoire, activité et carte d’intérêt complète.</p>
+    <p>Le token reste dans <code>sessionStorage</code> de cet onglet. Sur mobile, un nouvel onglet ou une fermeture du navigateur peut nécessiter de le reconnecter. Il permet d’afficher intentions, pensée dominante, mémoire, activité et carte d’intérêt complète.</p>
     <div class="auth-row"><input id="token" type="password" autocomplete="off" placeholder="AURA_CLOUD_TOKEN"><button class="primary" id="saveToken">Connecter</button></div>
     <div style="display:flex;gap:8px;margin-top:10px"><button class="secondary" id="logoutToken">Déconnecter</button><button class="secondary" id="closeAuth">Fermer</button></div>
   </div>
@@ -321,6 +321,10 @@ function metric(id,value,active=true){
   }
 }
 function setLive(ok,text){$('liveDot').className='live-dot '+(ok?'good':'bad');$('liveText').textContent=text;}
+function setPrivateState(connected){
+  $('authBtn').textContent=connected?'Privé · connecté':'Privé · hors connexion';
+  $('authBtn').title=connected?'Accès privé actif':'Appuyer pour reconnecter AURA';
+}
 function fmtTime(value){
   if(!value) return '—';
   const d=new Date(value); if(Number.isNaN(d.getTime())) return '—';
@@ -615,6 +619,7 @@ function renderNext(work,attention){
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
+    setPrivateState(Boolean(token));
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -659,6 +664,15 @@ async function refresh(){
       renderNext([],null);
     }
   }catch(error){
+    if(error && error.status===401 && token){
+      token='';
+      $('token').value='';
+      sessionStorage.removeItem('aura_token');
+      setPrivateState(false);
+      $('chatState').textContent='Accès privé expiré · reconnecte le token';
+      $('authDrawer').classList.add('open');
+      return;
+    }
     setLive(false,'Indisponible');
     $('chatState').textContent=error.message;
   }
@@ -706,8 +720,8 @@ document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=fun
 $('authBtn').onclick=function(){$('authDrawer').classList.add('open');};
 $('closeAuth').onclick=function(){$('authDrawer').classList.remove('open');};
 $('authDrawer').addEventListener('click',function(e){if(e.target===$('authDrawer'))$('authDrawer').classList.remove('open');});
-$('saveToken').onclick=function(){token=$('token').value.trim();if(token)sessionStorage.setItem('aura_token',token);else sessionStorage.removeItem('aura_token');$('authDrawer').classList.remove('open');refresh();};
-$('logoutToken').onclick=function(){token='';$('token').value='';sessionStorage.removeItem('aura_token');$('authDrawer').classList.remove('open');refresh();};
+$('saveToken').onclick=function(){token=$('token').value.trim();if(token)sessionStorage.setItem('aura_token',token);else sessionStorage.removeItem('aura_token');setPrivateState(Boolean(token));$('authDrawer').classList.remove('open');refresh();};
+$('logoutToken').onclick=function(){token='';$('token').value='';sessionStorage.removeItem('aura_token');setPrivateState(false);$('authDrawer').classList.remove('open');refresh();};
 $('refreshMap').onclick=refresh;
 $('modeBtn').onclick=function(){$('authDrawer').classList.add('open');};
 $('voiceBtn').onclick=function(){
@@ -717,7 +731,7 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();initLivingAuraScene();setInterval(updateClock,1000);refresh();setInterval(refresh,8000);
+updateClock();setPrivateState(Boolean(token));initLivingAuraScene();setInterval(updateClock,1000);refresh();setInterval(refresh,8000);
 </script>
 </body>
 </html>`;
