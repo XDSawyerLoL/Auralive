@@ -6,6 +6,7 @@ import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
+import { NativePolicyLearner } from './native_learning.js';
 
 const now = () => new Date().toISOString();
 
@@ -19,7 +20,7 @@ const AGENT_ROLES = {
 };
 
 export class CognitiveKernel {
-  static VERSION = 'aura-unified-kernel-node-v2';
+  static VERSION = 'aura-unified-kernel-node-v3';
 
   constructor(ai, horizon, bridge = null) {
     this.ai = ai;
@@ -29,6 +30,7 @@ export class CognitiveKernel {
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.organism = new AuraOrganism();
     this.activeInference = new ActiveInferenceEngine();
+    this.nativeLearning = new NativePolicyLearner();
     this.lastInferenceAssessment = {};
     this.started = false;
     this.timer = null;
@@ -58,6 +60,7 @@ export class CognitiveKernel {
       dominant_thought: 'Maintenir une présence utile sans produire de bruit.',
       current_intention: 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.',
       organism,
+      native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
     };
@@ -113,7 +116,8 @@ export class CognitiveKernel {
 
   inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
     const organism = this.organism.migrate(this.soulCache || {});
-    const assessment = this.activeInference.assess(organism, { novelty, risk });
+    const policy = this.nativeLearning.inferenceParams(this.soulCache?.native_learning);
+    const assessment = this.activeInference.assess(organism, { novelty, risk, policy });
     this.lastInferenceAssessment = assessment;
     return assessment;
   }
@@ -139,6 +143,7 @@ export class CognitiveKernel {
     if (!this.soulCache) this.soulCache = this.defaultSoul();
     this.soulCache.kernel_version = CognitiveKernel.VERSION;
     this.soulCache.organism = this.organism.migrate(this.soulCache);
+    this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
     this.syncLegacyFromOrganism();
     await this.saveSoul();
   }
@@ -441,15 +446,30 @@ export class CognitiveKernel {
     );
     this.soulCache.organism = organ.state;
     this.syncLegacyFromOrganism();
+    const inferenceBeforeLearning = this.lastInferenceAssessment || {};
+    this.soulCache.native_learning = this.nativeLearning.update(
+      this.soulCache.native_learning,
+      {
+        ok,
+        surprise: Number(inferenceBeforeLearning.uncertainty || 0),
+        risk: Number(inferenceBeforeLearning.risk || (ok ? 0.15 : 0.65)),
+      },
+    );
+    const nativeLearning = this.nativeLearning.diagnostic(this.soulCache.native_learning);
     await this.recordOrganismEvent('outcome', ok ? 'action réussie' : 'action échouée', {
       automation_id: automationId,
       event_type: eventType,
       signature,
       ok,
       delta: organ.delta || {},
+      native_learning: {
+        observations: nativeLearning.observations,
+        success_rate: nativeLearning.success_rate,
+        last_signal: nativeLearning.last_signal,
+      },
     });
     await this.saveSoul();
-    if (ok) return { ok: true, learned: false };
+    if (ok) return { ok: true, learned: true, native_learning: nativeLearning };
 
     this.pushStimulus({ type: 'automation.failure', source: 'automation', occurred_at: timestamp, payload: { automation_id: automationId, event_type: eventType, signature } });
     const countRow = await one('SELECT COUNT(*) AS total FROM aura_outcomes WHERE automation_id=? AND ok=0 AND signature=?', [automationId, signature]);
@@ -464,7 +484,12 @@ export class CognitiveKernel {
       await this.proposeImprovement(automationId, signature, count);
     }
     await this.saveSoul();
-    return { ok: true, learned: count >= 3, failures: count };
+    return {
+      ok: true,
+      learned: true,
+      failures: count,
+      native_learning: this.nativeLearning.diagnostic(this.soulCache.native_learning),
+    };
   }
 
   async proposeImprovement(automationId, signature, count) {
@@ -502,6 +527,8 @@ export class CognitiveKernel {
       `phase=${soul.phase} cycles=${soul.cycles} énergie=${soul.energy} curiosité=${soul.curiosity} pression=${soul.pressure} continuité=${soul.continuity}`,
       'ORGANISME HOMEOSTATIQUE',
       `humeur=${publicOrganism.mood} valence=${publicOrganism.valence} identité=${publicOrganism.identite} stabilité=${publicOrganism.stabilite} clarté=${publicOrganism.clarte} attachement=${publicOrganism.attachement} curiosité=${publicOrganism.curiosite} pression_de_rêve=${publicOrganism.pression_de_reve} besoin_de_silence=${publicOrganism.besoin_de_silence}`,
+      'APPRENTISSAGE NATIF',
+      `observations=${Number(soul.native_learning?.observations || 0)} succès=${Number(soul.native_learning?.successes || 0)} échecs=${Number(soul.native_learning?.failures || 0)} taux_succès=${Number(soul.native_learning?.success_rate ?? 0.5)}`,
       `intention_organique=${publicOrganism.active_intention || ''}`,
       `habitat=${JSON.stringify(publicOrganism.habitat || {})}`,
     ];
@@ -921,6 +948,7 @@ export class CognitiveKernel {
         ...this.inferenceAssessment(),
         version: ActiveInferenceEngine.VERSION,
       },
+      native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
