@@ -22,7 +22,7 @@ class AuraCloudWorker:
     évolution sans exposer le PC sur Internet.
     """
 
-    VERSION = "aura-quantic-worker-v1"
+    VERSION = "aura-quantic-worker-v1.1"
 
     def __init__(self, aura: Any, settings: Any):
         self.aura = aura
@@ -238,6 +238,27 @@ class AuraCloudWorker:
         job = payload.get("job")
         return job if isinstance(job, dict) and job.get("id") else None
 
+    async def _renew(self, job_id: str) -> None:
+        await self._post(
+            f"/api/bridge/jobs/{job_id}/renew",
+            {"worker_id": self.worker_id},
+        )
+
+    async def _lease_renewer(self, job_id: str) -> None:
+        interval = min(30.0, max(10.0, float(self.heartbeat_seconds)))
+        while self.started:
+            await asyncio.sleep(interval)
+            try:
+                await self._renew(job_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Renouvellement lease AURA Cloud %s impossible: %s",
+                    job_id,
+                    exc,
+                )
+
     async def _complete(
         self,
         job_id: str,
@@ -383,6 +404,10 @@ class AuraCloudWorker:
         job_id = str(job.get("id") or "")
         self.last_job_id = job_id
         self.last_job_kind = str(job.get("kind") or "")
+        lease_task = asyncio.create_task(
+            self._lease_renewer(job_id),
+            name=f"aura-cloud-lease-{job_id[:8]}",
+        )
         try:
             result = await self._execute(job)
             await self._complete(job_id, ok=True, result=result)
@@ -403,6 +428,12 @@ class AuraCloudWorker:
                 await self._complete(job_id, ok=False, error=self.last_error)
             except Exception:
                 logger.debug("Impossible de signaler l'échec du job Cloud", exc_info=True)
+        finally:
+            lease_task.cancel()
+            try:
+                await lease_task
+            except asyncio.CancelledError:
+                pass
 
     async def _loop(self) -> None:
         loop = asyncio.get_running_loop()
