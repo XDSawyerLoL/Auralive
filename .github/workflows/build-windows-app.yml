@@ -52,7 +52,7 @@ jobs:
 
       - name: Build Quantic Studio Core engine
         shell: pwsh
-        run: cargo build --release --manifest-path engine/quantic-live/Cargo.toml
+        run: cargo build --release --locked --manifest-path engine/quantic-live/Cargo.toml
 
       - uses: actions/setup-python@v5
         with:
