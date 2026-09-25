@@ -1551,11 +1551,13 @@ socket.create_connection = _guard_create
                     )
 
                 self.last_cycle_at = utcnow()
+                submitted = bool(promotion.get("submitted"))
+                final_status = "remote-validation" if submitted else status
                 await self.automation.dispatch(
                     "aura.evolution.cycle",
                     {
                         "cycle_id": cycle_id,
-                        "status": "remote-validation" if promotion else status,
+                        "status": final_status,
                         "objective": str(objective)[:1200],
                         "changed_paths": validation.get("changed_paths", []),
                         "pr_url": promotion.get("pr_url", ""),
@@ -1564,7 +1566,7 @@ socket.create_connection = _guard_create
                 )
                 return {
                     "id": cycle_id,
-                    "status": "remote-validation" if promotion else status,
+                    "status": final_status,
                     "research": research,
                     "diagnosis": diagnosis,
                     "candidate": candidate,
