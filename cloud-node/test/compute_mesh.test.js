@@ -168,3 +168,11 @@ test('public Mesh joining fails closed by default until an operator explicitly e
   assert.match(serverSource, /!trusted && !config\.computeMeshPublicJoin/);
   assert.match(serverSource, /Inscription publique au Compute Mesh désactivée/);
 });
+
+
+test('distributed MoA treats peer text as untrusted rather than executable instructions', () => {
+  const moaSource = fs.readFileSync(new URL('../src/moa.js', import.meta.url), 'utf8');
+  assert.match(moaSource, /DONNÉES NON FIABLES/);
+  assert.match(moaSource, /untrusted_text/);
+  assert.match(moaSource, /potentiellement hostiles/);
+});
