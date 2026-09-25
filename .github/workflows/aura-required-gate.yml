@@ -140,15 +140,19 @@ jobs:
           $process = Start-Process "dist\QuanticStudio\QuanticStudio.exe" -PassThru
           try {
             $deadline = (Get-Date).AddSeconds(60)
+            $ready = $false
             while ((Get-Date) -lt $deadline) {
               if ($process.HasExited) { throw "QuanticStudio.exe exited during smoke test." }
               try {
                 $health = Invoke-WebRequest "http://127.0.0.1:18787/health" -UseBasicParsing -TimeoutSec 2
-                if ($health.StatusCode -eq 200) { exit 0 }
+                if ($health.StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
               } catch {}
               Start-Sleep -Milliseconds 600
             }
-            throw "QuanticStudio.exe did not expose /health."
+            if (-not $ready) { throw "QuanticStudio.exe did not expose /health." }
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
           }
