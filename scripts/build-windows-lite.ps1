@@ -6,7 +6,10 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-$BuildId = "QuanticStudio-2.8.1-Windows-Native-LITE-2026-09-25"
+$VersionManifest = Get-Content "VERSION.json" -Raw | ConvertFrom-Json
+$StudioVersion = [string]$VersionManifest.studio
+$BuildDate = ([string]$VersionManifest.updated_at).Replace("-", "")
+$BuildId = "QuanticStudio-$StudioVersion-Windows-Native-LITE-$BuildDate"
 
 & $Python -m pip install --upgrade pip
 & $Python -m pip install -r requirements-desktop.txt
@@ -62,6 +65,8 @@ New-Item -ItemType Directory -Force -Path $AuraSource | Out-Null
 Copy-Item "app" "$AuraSource\app" -Recurse -Force
 Copy-Item "tests" "$AuraSource\tests" -Recurse -Force
 Copy-Item "requirements.txt" "$AuraSource\requirements.txt" -Force
+Copy-Item "cloud-node" "$AuraSource\cloud-node" -Recurse -Force
+Copy-Item "VERSION.json" "$AuraSource\VERSION.json" -Force
 
 New-Item -ItemType Directory -Force -Path "dist\QuanticStudio\data\media" | Out-Null
 New-Item -ItemType Directory -Force -Path "dist\QuanticStudio\data\voices\kokoro" | Out-Null
