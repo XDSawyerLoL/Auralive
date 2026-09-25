@@ -155,6 +155,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     </div>
     <div class="top-actions">
       <div class="pill"><span id="liveDot" class="live-dot"></span><span id="liveText">Connexion…</span></div>
+      <div class="pill"><span id="evolutionDot" class="live-dot"></span><span id="evolutionText">Évolution…</span></div>
       <div class="clock"><div id="clockDate" class="date">—</div><div id="clockTime" class="time">—</div></div>
       <button class="mode-btn" id="modeBtn">⌁ Mode évolutif</button>
     </div>
@@ -625,6 +626,17 @@ async function refresh(){
     const coreState=await Promise.all([api('/api/kernel/status'),api('/api/kernel/soul')]);
     const ks=coreState[0];
     const soul=coreState[1];
+    try{
+      const evolution=await api('/api/evolution/status');
+      const phase=String(evolution.phase||'');
+      const active=Boolean(evolution.local_worker_online);
+      $('evolutionDot').className='live-dot '+(active?'good':'');
+      $('evolutionText').textContent=active?'Évolution · Phase 2':'Évolution · recherche';
+      $('evolutionText').title=phase;
+    }catch(_){
+      $('evolutionDot').className='live-dot';
+      $('evolutionText').textContent='Évolution · attente';
+    }
     metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     if(livingScene)livingScene.organism=organism;
