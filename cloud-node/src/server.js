@@ -205,7 +205,21 @@ app.post('/api/bridge/claim', async (request, reply) => {
   return { job: await bridge.claim(workerId) };
 });
 
-app.post('/api/bridge/jobs/:id/complete', async (request, reply) => {
+app.post('/api/bridge/jobs/:id/renew', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const workerId = String(request.body?.worker_id || '').trim();
+  if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
+  try {
+    return await bridge.renew(request.params.id, workerId);
+  } catch (error) {
+    return reply.code(409).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post(
+  '/api/bridge/jobs/:id/complete',
+  { bodyLimit: 24 * 1024 * 1024 },
+  async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
