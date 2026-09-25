@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import mysql from 'mysql2/promise';
 import { config } from './config.js';
 
 let pool;
+
+export const LATEST_SCHEMA_VERSION = 2;
 
 export function getDb() {
   if (pool) return pool;
@@ -38,8 +41,54 @@ export async function closeDb() {
   }
 }
 
+async function ensureMigrationTable(db) {
+  await db.query(`CREATE TABLE IF NOT EXISTS aura_schema_migrations (
+    version INT PRIMARY KEY,
+    name VARCHAR(240) NOT NULL,
+    applied_at VARCHAR(40) NOT NULL
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+}
+
+async function applyMigrations(db) {
+  await ensureMigrationTable(db);
+  const [rows] = await db.query('SELECT COALESCE(MAX(version), 0) AS version FROM aura_schema_migrations');
+  let current = Number(rows?.[0]?.version || 0);
+
+  if (current < 1) {
+    await db.query(
+      'INSERT IGNORE INTO aura_schema_migrations(version,name,applied_at) VALUES(1,?,?)',
+      ['baseline-cloud-schema', new Date().toISOString()],
+    );
+    current = 1;
+  }
+
+  if (current < 2) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_state_snapshots (
+      id CHAR(36) PRIMARY KEY,
+      reason VARCHAR(120) NOT NULL,
+      schema_version INT NOT NULL,
+      payload LONGTEXT NOT NULL,
+      payload_bytes BIGINT NOT NULL DEFAULT 0,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_state_snapshots_created(created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_runtime_metric_rollups (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      payload LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_metric_rollups_created(created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(2,?,?)',
+      ['resilience-snapshots-and-metrics', new Date().toISOString()],
+    );
+  }
+}
+
 export async function initSchema() {
   const db = getDb();
+  await ensureMigrationTable(db);
   const statements = [
     `CREATE TABLE IF NOT EXISTS aura_soul_state (
       id TINYINT PRIMARY KEY,
@@ -213,6 +262,79 @@ export async function initSchema() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
   ];
   for (const sql of statements) await db.query(sql);
+  await applyMigrations(db);
+}
+
+export async function schemaStatus() {
+  await ensureMigrationTable(getDb());
+  const row = await one('SELECT COALESCE(MAX(version), 0) AS version FROM aura_schema_migrations');
+  return {
+    current: Number(row?.version || 0),
+    latest: LATEST_SCHEMA_VERSION,
+    ready: Number(row?.version || 0) === LATEST_SCHEMA_VERSION,
+  };
+}
+
+export async function createLogicalBackup(reason = 'scheduled') {
+  const timestamp = new Date().toISOString();
+  const [soul, intentions, lessons, routines, improvements, evolution] = await Promise.all([
+    query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
+    query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
+    query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
+    query('SELECT * FROM aura_routines ORDER BY updated_at DESC LIMIT 200'),
+    query('SELECT * FROM aura_improvement_proposals ORDER BY updated_at DESC LIMIT 150'),
+    query('SELECT * FROM aura_evolution_cycles ORDER BY updated_at DESC LIMIT 100'),
+  ]);
+  const payload = JSON.stringify({
+    format: 'aura-cognitive-snapshot-v1',
+    created_at: timestamp,
+    schema_version: LATEST_SCHEMA_VERSION,
+    soul,
+    intentions,
+    lessons,
+    routines,
+    improvements,
+    evolution,
+  });
+  const id = randomUUID();
+  await query(
+    `INSERT INTO aura_state_snapshots(
+      id,reason,schema_version,payload,payload_bytes,created_at
+    ) VALUES(?,?,?,?,?,?)`,
+    [id, String(reason).slice(0, 120), LATEST_SCHEMA_VERSION, payload, Buffer.byteLength(payload), timestamp],
+  );
+  const keep = Math.max(3, Number(config.backupRetentionCount || 28));
+  await query(
+    `DELETE FROM aura_state_snapshots
+     WHERE id NOT IN (
+       SELECT id FROM (
+         SELECT id FROM aura_state_snapshots ORDER BY created_at DESC LIMIT ?
+       ) AS recent_snapshots
+     )`,
+    [keep],
+  );
+  return { id, reason: String(reason), bytes: Buffer.byteLength(payload), created_at: timestamp };
+}
+
+export async function listLogicalBackups(limit = 20) {
+  return query(
+    'SELECT id,reason,schema_version,payload_bytes,created_at FROM aura_state_snapshots ORDER BY created_at DESC LIMIT ?',
+    [Math.max(1, Math.min(Number(limit) || 20, 100))],
+  );
+}
+
+export async function getLogicalBackup(id) {
+  return one(
+    'SELECT id,reason,schema_version,payload,payload_bytes,created_at FROM aura_state_snapshots WHERE id=?',
+    [String(id)],
+  );
+}
+
+export async function recordMetricRollup(name, payload) {
+  await query(
+    'INSERT INTO aura_runtime_metric_rollups(name,payload,created_at) VALUES(?,?,?)',
+    [String(name).slice(0, 120), JSON.stringify(payload || {}).slice(0, 64000), new Date().toISOString()],
+  );
 }
 
 export async function dbHealth() {
