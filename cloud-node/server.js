@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 const host = '0.0.0.0';
 const port = Number.parseInt(process.env.AURA_GATEWAY_PORT || '3000', 10) || 3000;
 const MAX_BODY = 1_048_576;
+const MAX_BRIDGE_MEDIA_BODY = 24 * 1024 * 1024;
 
 let auraApp = null;
 let auraModule = null;
@@ -89,12 +90,16 @@ function sendFallback(request, response) {
 
 function readBody(request) {
   if (request.method === 'GET' || request.method === 'HEAD') return Promise.resolve(undefined);
+  const pathname = String(request.url || '').split('?', 1)[0];
+  const limit = /^\/api\/bridge\/jobs\/[^/]+\/complete$/.test(pathname)
+    ? MAX_BRIDGE_MEDIA_BODY
+    : MAX_BODY;
   return new Promise((resolve, reject) => {
     const chunks = [];
     let total = 0;
     request.on('data', (chunk) => {
       total += chunk.length;
-      if (total > MAX_BODY) {
+      if (total > limit) {
         reject(Object.assign(new Error('Request body too large'), { statusCode: 413 }));
         request.destroy();
         return;
