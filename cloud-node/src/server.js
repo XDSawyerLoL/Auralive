@@ -194,6 +194,7 @@ async function startRuntime() {
   try {
     await initSchema();
     bootstrap.dbReady = true;
+    await fabric.start();
 
     // Le noyau AURA est le cœur critique. Les services optionnels ne doivent
     // jamais empêcher l'organisme, la mémoire et le chat de démarrer.
@@ -216,11 +217,6 @@ async function startRuntime() {
       await commandCenter.start();
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: centre de commande indisponible, noyau maintenu actif.');
-    }
-    if (config.fabricEnabled && config.fabricDiscoveryUrls.length) {
-      fabric.discoverRemote().catch((error) => {
-        app.log.warn({ err: error }, 'AURA Cloud: découverte Fabric distante indisponible.');
-      });
     }
     startMaintenance();
   } catch (error) {
@@ -1066,6 +1062,7 @@ export async function stopAura() {
     metricsTimer = null;
   }
   commandCenter.stop();
+  fabric.stop();
   evolution.stop();
   horizon.stop();
   kernel.stop();
