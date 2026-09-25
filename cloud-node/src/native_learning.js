@@ -48,8 +48,10 @@ export class NativePolicyLearner {
     p.verified_threshold = clamp(p.verified_threshold, 0.58, 0.86);
     p.confidence_bias = clamp(p.confidence_bias, -0.12, 0.08);
 
-    const total = Math.max(1, state.successes + state.failures);
-    state.success_rate = Number((state.successes / total).toFixed(4));
+    const total = state.successes + state.failures;
+    state.success_rate = total > 0
+      ? Number((state.successes / total).toFixed(4))
+      : 0.5;
     state.last_update_at = String(state.last_update_at || '');
     state.last_signal = String(state.last_signal || defaults.last_signal);
     return state;
