@@ -44,12 +44,15 @@ export const config = Object.freeze({
   cloudToken: process.env.AURA_CLOUD_TOKEN || '',
   canaryToken: process.env.AURA_EVOLUTION_CANARY_TOKEN || '',
 
-  dbUrl: process.env.DATABASE_URL || '',
-  dbHost: process.env.DB_HOST || 'localhost',
-  dbPort: int('DB_PORT', 3306, 1, 65535),
-  dbUser: process.env.DB_USER || '',
-  dbPassword: process.env.DB_PASSWORD || '',
-  dbName: process.env.DB_NAME || '',
+  dbUrl: process.env.DATABASE_URL || process.env.MYSQL_URL || '',
+  dbHost: process.env.DB_HOST || process.env.DATABASE_HOST || process.env.MYSQL_HOST || 'localhost',
+  dbPort: Number.parseInt(
+    process.env.DB_PORT || process.env.DATABASE_PORT || process.env.MYSQL_PORT || '3306',
+    10,
+  ) || 3306,
+  dbUser: process.env.DB_USER || process.env.DATABASE_USER || process.env.MYSQL_USER || '',
+  dbPassword: process.env.DB_PASSWORD || process.env.DATABASE_PASSWORD || process.env.MYSQL_PASSWORD || '',
+  dbName: process.env.DB_NAME || process.env.DB_DATABASE || process.env.DATABASE_NAME || process.env.MYSQL_DATABASE || '',
   dbConnectionLimit: int('DB_CONNECTION_LIMIT', 10, 1, 30),
   dbConnectTimeoutMs: int('DB_CONNECT_TIMEOUT_MS', 5000, 1000, 30000),
 
