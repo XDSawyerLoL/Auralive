@@ -731,7 +731,7 @@ export class CognitiveKernel {
 
   async workItems(limit = 6) {
     const max = Math.max(1, Math.min(Number(limit) || 6, 12));
-    const [intentions, improvements, routines, traces] = await Promise.all([
+    const [intentions, improvements, routines, traces, initiatives] = await Promise.all([
       this.intentions(max),
       this.improvements(max),
       query(
@@ -740,9 +740,30 @@ export class CognitiveKernel {
         [max],
       ),
       this.activity(max),
+      query(
+        `SELECT id,domain,kind,title,objective,priority,confidence,status,execution_mode,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+        [max],
+      ),
     ]);
 
     const items = [];
+    for (const row of initiatives) {
+      items.push({
+        kind: 'initiative',
+        title: String(row.title || row.objective || '').slice(0, 180),
+        detail: `Initiative ${String(row.domain || 'AURA')} · ${String(row.status || 'queued')}`,
+        priority: clamp(
+          Math.max(
+            Number(row.priority || 0.5),
+            Number(row.confidence || 0.5) * 0.75,
+          ),
+        ),
+        updated_at: row.updated_at,
+      });
+    }
     for (const row of intentions) {
       items.push({
         kind: 'intention',
@@ -925,7 +946,15 @@ export class CognitiveKernel {
 
   async status() {
     const counts = {};
-    for (const [key, table] of Object.entries({ reflections: 'aura_reflections', intentions: 'aura_intentions', lessons: 'aura_lessons', routines: 'aura_routines', outcomes: 'aura_outcomes', improvements: 'aura_improvement_proposals' })) {
+    for (const [key, table] of Object.entries({
+      reflections: 'aura_reflections',
+      intentions: 'aura_intentions',
+      lessons: 'aura_lessons',
+      routines: 'aura_routines',
+      outcomes: 'aura_outcomes',
+      improvements: 'aura_improvement_proposals',
+      initiatives: 'aura_initiatives',
+    })) {
       const row = await one(`SELECT COUNT(*) AS total FROM ${table}`);
       counts[key] = Number(row?.total || 0);
     }
