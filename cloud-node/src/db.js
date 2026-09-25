@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 3;
+export const LATEST_SCHEMA_VERSION = 4;
 
 export function getDb() {
   if (pool) return pool;
@@ -140,6 +140,58 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(3,?,?)',
       ['autonomous-command-center', new Date().toISOString()],
+    );
+    current = 3;
+  }
+
+  if (current < 4) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_external_memory (
+      id VARCHAR(40) PRIMARY KEY,
+      query_text TEXT NOT NULL,
+      url VARCHAR(1800) NOT NULL,
+      host VARCHAR(300) NOT NULL,
+      title VARCHAR(500) NOT NULL DEFAULT '',
+      excerpt LONGTEXT NOT NULL,
+      content_hash VARCHAR(64) NOT NULL,
+      source_quality DOUBLE NOT NULL DEFAULT 0.5,
+      published_at VARCHAR(80) NOT NULL DEFAULT '',
+      fetched_at VARCHAR(40) NOT NULL,
+      expires_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_external_memory_host(host,fetched_at),
+      INDEX idx_aura_external_memory_expiry(expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reasoning_sessions (
+      id CHAR(36) PRIMARY KEY,
+      trigger_name VARCHAR(120) NOT NULL,
+      question TEXT NOT NULL,
+      hypotheses LONGTEXT NOT NULL,
+      plan LONGTEXT NOT NULL,
+      conclusion LONGTEXT NOT NULL,
+      confidence DOUBLE NOT NULL DEFAULT 0,
+      epistemic_status VARCHAR(40) NOT NULL DEFAULT 'unverified',
+      evidence_count INT NOT NULL DEFAULT 0,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reasoning_status(epistemic_status,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reasoning_evidence (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      session_id CHAR(36) NOT NULL,
+      source_url VARCHAR(1800) NOT NULL,
+      source_title VARCHAR(500) NOT NULL DEFAULT '',
+      source_host VARCHAR(300) NOT NULL DEFAULT '',
+      stance VARCHAR(40) NOT NULL DEFAULT 'neutral',
+      relevance DOUBLE NOT NULL DEFAULT 0,
+      reliability DOUBLE NOT NULL DEFAULT 0,
+      excerpt LONGTEXT NOT NULL,
+      notes TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reasoning_evidence_session(session_id,created_at),
+      INDEX idx_aura_reasoning_evidence_host(source_host,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(4,?,?)',
+      ['web-substrate-external-memory-and-evidence', new Date().toISOString()],
     );
   }
 }
@@ -335,7 +387,7 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -344,6 +396,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT * FROM aura_evolution_cycles ORDER BY updated_at DESC LIMIT 100'),
     query('SELECT * FROM aura_command_services ORDER BY criticality DESC,name ASC'),
     query('SELECT * FROM aura_initiatives ORDER BY updated_at DESC LIMIT 200'),
+    query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -357,6 +410,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     evolution,
     command_services: commandServices,
     initiatives,
+    reasoning_sessions: reasoningSessions,
   });
   const id = randomUUID();
   await query(
