@@ -40,6 +40,9 @@ jobs:
             "cognition_native": true,
             "command_center": 1,
             "autonomous_initiatives": true,
+            "web_substrate": 1,
+            "external_memory": true,
+            "epistemic_gate": "independent-source-corroboration",
             "operator_mode": "guarded-local-worker",
             "promotion": "ci-and-canary-gated"
           }
@@ -50,9 +53,11 @@ jobs:
           test -f "$ROOT/src/server.js"
           test -f "$ROOT/src/native_learning.js"
           test -f "$ROOT/src/command_center.js"
+          test -f "$ROOT/src/web_substrate.js"
           test -f "$ROOT/src/evolution.js"
           test -f "$ROOT/test/voice_bridge.test.js"
           test -f "$ROOT/test/command_center.test.js"
+          test -f "$ROOT/test/web_substrate.test.js"
 
       - name: Upload Hostinger-ready project root
         uses: actions/upload-artifact@v4
