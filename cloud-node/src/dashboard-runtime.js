@@ -353,6 +353,17 @@ async function refresh(){
     const ks=coreState[0];
     const soul=coreState[1];
     try{
+      const capabilities=await api('/api/capabilities');
+      const voice=(capabilities&&capabilities.voice)||{};
+      const voiceReady=Boolean(voice.ready);
+      $('voiceDot').className='live-dot '+(voiceReady?'good':'');
+      $('voiceText').textContent=voiceReady?'Mairaiy · prête':'Mairaiy · hors ligne';
+      $('voiceText').title=voiceReady?'Kokoro ff_siwis via Quantic Studio':'Quantic Studio doit être connecté pour la voix locale';
+    }catch(_){
+      $('voiceDot').className='live-dot';
+      $('voiceText').textContent='Mairaiy · attente';
+    }
+    try{
       const evolution=await api('/api/evolution/status');
       const phase=String(evolution.phase||'');
       const local=Boolean(evolution.local_worker_online);
