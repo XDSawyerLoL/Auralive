@@ -6,6 +6,6 @@
     "mysql": 2,
     "evolution": 3
   },
-  "channel": "stable-next",
+  "channel": "stable",
   "updated_at": "2026-09-25"
 }
