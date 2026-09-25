@@ -12,7 +12,7 @@ test('AURA operational consciousness interface exposes core product surfaces', (
     'Travail en cours',
     'Intentions actives',
     'Ce qu’elle fait maintenant',
-    'Prochaine action probable',
+    'Centre de commande',
     'Mémoire et leçons',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
@@ -28,6 +28,7 @@ test('dashboard is wired to live AURA APIs', () => {
     '/api/kernel/work',
     '/api/kernel/attention',
     '/api/chat',
+    '/api/command/status',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(endpoint), true, endpoint);
   }
@@ -175,4 +176,19 @@ test('living visualization uses calmer motion and a 30fps stability cap', () => 
   assert.equal(DASHBOARD_SCRIPT.includes("mobile?44:108"), true);
   assert.equal(DASHBOARD_SCRIPT.includes("t-scene.lastFrame<30"), true);
   assert.equal(DASHBOARD_SCRIPT.includes("Math.sin(t*.00042+phase)*1.6"), true);
+});
+
+
+test('dashboard exposes operational command-center state instead of decorative autonomy', () => {
+  for (const token of [
+    'id="commandState"',
+    'id="commandFleet"',
+    'id="commandMode"',
+    'id="commandCount"',
+    "api('/api/command/status')",
+    'renderCommandCenter(commandStatus',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
+  assert.equal(DASHBOARD_SCRIPT.includes("github_write_authority?'Agit + observe':'Observe + planifie'"), true);
 });

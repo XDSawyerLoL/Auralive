@@ -10,6 +10,16 @@ import { NativePolicyLearner } from './native_learning.js';
 
 const now = () => new Date().toISOString();
 
+export function requiresExternalKnowledge(value) {
+  const text = String(value || '').toLowerCase();
+  return [
+    'internet',' web ','aujourd','actuel','actuelle','dernière','derniere','récent','recent',
+    'marché','marche','concurrent','documentation',' api ','version','prix','actualité','actualite',
+    'source','vérifie','verifie','cherche','recherche','technolog','benchmark','norme','standard',
+    'licence','compatib','sortie','release','mise à jour','mise a jour',
+  ].some((token) => text.includes(token));
+}
+
 const AGENT_ROLES = {
   planner: 'Tu es l’agent planificateur d’AURA. Découpe la mission en étapes courtes, vérifiables et exécutables. Repère dépendances et points de contrôle.',
   research: 'Tu es l’agent recherche d’AURA. Sépare les faits des hypothèses, compare les éléments disponibles et signale clairement ce qui manque.',
@@ -22,10 +32,11 @@ const AGENT_ROLES = {
 export class CognitiveKernel {
   static VERSION = 'aura-unified-kernel-node-v3';
 
-  constructor(ai, horizon, bridge = null) {
+  constructor(ai, horizon, bridge = null, webSubstrate = null) {
     this.ai = ai;
     this.horizon = horizon;
     this.bridge = bridge;
+    this.webSubstrate = webSubstrate;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.organism = new AuraOrganism();
@@ -538,7 +549,11 @@ export class CognitiveKernel {
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
     const horizonContext = this.horizon?.contextForAi?.() || '';
     if (horizonContext) lines.push('HORIZON', horizonContext);
-    return lines.join('\n').slice(0, 14000);
+    const externalContext = this.webSubstrate?.enabled
+      ? await this.webSubstrate.externalContext(4).catch(() => '')
+      : '';
+    if (externalContext) lines.push('MÉMOIRE EXTERNE', externalContext);
+    return lines.join('\n').slice(0, 18000);
   }
 
   async runAgent(name, task) {
@@ -663,6 +678,67 @@ export class CognitiveKernel {
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
     const inference = this.inferenceAssessment();
 
+    // Quand une question dépend du monde extérieur, le modèle n'est pas
+    // autorisé à répondre depuis ses seuls paramètres. Il doit d'abord
+    // transformer le Web en mémoire de travail externe, puis passer par
+    // la boucle de corroboration/contradiction du Web Substrate.
+    let externalResearch = null;
+    if (
+      plan.needs_semantic_support
+      && this.webSubstrate?.enabled
+      && requiresExternalKnowledge(content)
+    ) {
+      try {
+        externalResearch = await this.webSubstrate.research(
+          content,
+          { trigger: 'chat' },
+        );
+        plan = {
+          ...plan,
+          external_evidence_required: true,
+          external_epistemic_status: externalResearch?.epistemic_status || 'unverified',
+          external_confidence: Number(externalResearch?.confidence || 0),
+          external_evidence_count: Number(externalResearch?.evidence_count || 0),
+          facts: [
+            ...(plan.facts || []),
+            'Recherche Web effectuée avant réponse: statut='
+              + String(externalResearch?.epistemic_status || 'unverified')
+              + ', confiance=' + Number(externalResearch?.confidence || 0).toFixed(2)
+              + ', preuves=' + Number(externalResearch?.evidence_count || 0) + '.',
+          ],
+        };
+        await this.trace(
+          'web-research',
+          'Mémoire externe',
+          String(externalResearch?.conclusion || '').slice(0, 3000),
+          {
+            session_id: externalResearch?.session_id || '',
+            epistemic_status: externalResearch?.epistemic_status || 'unverified',
+            confidence: Number(externalResearch?.confidence || 0),
+            evidence_count: Number(externalResearch?.evidence_count || 0),
+          },
+        );
+      } catch (error) {
+        plan = {
+          ...plan,
+          external_evidence_required: true,
+          external_epistemic_status: 'unavailable',
+          external_confidence: 0,
+          external_evidence_count: 0,
+          facts: [
+            ...(plan.facts || []),
+            'La vérification Web nécessaire à cette question est indisponible; ne pas présenter de connaissance externe comme vérifiée.',
+          ],
+        };
+        await this.trace(
+          'web-research-error',
+          'Vérification externe indisponible',
+          String(error?.message || error).slice(0, 1000),
+          {},
+        );
+      }
+    }
+
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
@@ -715,6 +791,12 @@ export class CognitiveKernel {
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       semantic_support_used: Boolean(plan.semantic_support),
+      external_research: externalResearch ? {
+        session_id: externalResearch.session_id,
+        epistemic_status: externalResearch.epistemic_status,
+        confidence: externalResearch.confidence,
+        evidence_count: externalResearch.evidence_count,
+      } : null,
       compute: inference,
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
     };
@@ -731,7 +813,7 @@ export class CognitiveKernel {
 
   async workItems(limit = 6) {
     const max = Math.max(1, Math.min(Number(limit) || 6, 12));
-    const [intentions, improvements, routines, traces] = await Promise.all([
+    const [intentions, improvements, routines, traces, initiatives] = await Promise.all([
       this.intentions(max),
       this.improvements(max),
       query(
@@ -740,9 +822,30 @@ export class CognitiveKernel {
         [max],
       ),
       this.activity(max),
+      query(
+        `SELECT id,domain,kind,title,objective,priority,confidence,status,execution_mode,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+        [max],
+      ),
     ]);
 
     const items = [];
+    for (const row of initiatives) {
+      items.push({
+        kind: 'initiative',
+        title: String(row.title || row.objective || '').slice(0, 180),
+        detail: `Initiative ${String(row.domain || 'AURA')} · ${String(row.status || 'queued')}`,
+        priority: clamp(
+          Math.max(
+            Number(row.priority || 0.5),
+            Number(row.confidence || 0.5) * 0.75,
+          ),
+        ),
+        updated_at: row.updated_at,
+      });
+    }
     for (const row of intentions) {
       items.push({
         kind: 'intention',
@@ -925,7 +1028,15 @@ export class CognitiveKernel {
 
   async status() {
     const counts = {};
-    for (const [key, table] of Object.entries({ reflections: 'aura_reflections', intentions: 'aura_intentions', lessons: 'aura_lessons', routines: 'aura_routines', outcomes: 'aura_outcomes', improvements: 'aura_improvement_proposals' })) {
+    for (const [key, table] of Object.entries({
+      reflections: 'aura_reflections',
+      intentions: 'aura_intentions',
+      lessons: 'aura_lessons',
+      routines: 'aura_routines',
+      outcomes: 'aura_outcomes',
+      improvements: 'aura_improvement_proposals',
+      initiatives: 'aura_initiatives',
+    })) {
       const row = await one(`SELECT COUNT(*) AS total FROM ${table}`);
       counts[key] = Number(row?.total || 0);
     }

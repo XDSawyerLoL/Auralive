@@ -430,6 +430,35 @@ function initLivingAuraScene(){
   return scene;
 }
 
+function renderCommandCenter(command,work,attention){
+  if(!command){
+    $('commandState').textContent='Indisponible';
+    $('commandFleet').textContent='—';
+    $('commandMode').textContent='—';
+    $('commandCount').textContent='—';
+    renderNext(work,attention);
+    return;
+  }
+  const fleet=command.fleet||{};
+  const counts=command.counts||{};
+  const active=Number(counts.queued||0)+Number(counts.running||0)+Number(counts.waiting||0);
+  $('commandState').textContent=command.running?'Cycle actif':(command.enabled?'Autonome':'Arrêté');
+  $('commandFleet').textContent=fleet.score==null?'En observation':String(fleet.score)+'%';
+  $('commandFleet').className=(fleet.score!=null&&Number(fleet.score)>=80)?'good':((fleet.score!=null&&Number(fleet.score)<60)?'warn':'');
+  $('commandMode').textContent=command.github_write_authority?'Agit + observe':'Observe + planifie';
+  $('commandMode').className=command.github_write_authority?'good':'warn';
+  $('commandCount').textContent=active+' active'+(active>1?'s':'');
+  const top=command.top_initiative||null;
+  if(top){
+    $('nextAction').textContent=String(top.title||top.objective||'Initiative autonome');
+    const priority=pct(top.priority||0);
+    const confidence=pct(top.confidence||0);
+    $('confidenceValue').textContent=priority+'% / '+confidence+'%';
+    $('confidenceBar').style.width=priority+'%';
+    return;
+  }
+  renderNext(work,attention);
+}
 function renderNext(work,attention){
   const item=(work&&work[0])||null;
   const node=attention&&attention.nodes?attention.nodes.find(function(n){return n.dominant;}):null;
@@ -486,6 +515,8 @@ async function refresh(){
       $('evolutionDot').className='live-dot';
       $('evolutionText').textContent='Évolution · attente';
     }
+    let commandStatus=null;
+    try{commandStatus=await api('/api/command/status');}catch(_){commandStatus=null;}
     metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     renderEmotion(organism);
@@ -507,13 +538,13 @@ async function refresh(){
         api('/api/kernel/work?limit=5'),
         api('/api/kernel/attention')
       ]);
-      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderNext(results[3],results[4]);
+      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderCommandCenter(commandStatus,results[3],results[4]);
     }else{
       $('intentList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('memoryList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('activityList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
-      renderNext([],null);
+      renderCommandCenter(commandStatus,[],null);
     }
   }catch(error){
     setLive(false,'Indisponible');

@@ -19,6 +19,12 @@ function csv(name, fallback = '') {
     .filter(Boolean);
 }
 
+function num(name, fallback, min = -Infinity, max = Infinity) {
+  const parsed = Number.parseFloat(process.env[name] ?? '');
+  const value = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.max(min, Math.min(max, value));
+}
+
 const AI_MODE = String(process.env.AI_MODE || 'off').trim().toLowerCase();
 const AI_DEFAULT_BASE_URL = AI_MODE === 'gemini'
   ? 'https://generativelanguage.googleapis.com/v1beta'
@@ -78,6 +84,55 @@ export const config = Object.freeze({
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
+
+  commandCenterEnabled: bool('AURA_COMMAND_CENTER_ENABLED', true),
+  commandCenterAutoExecute: bool('AURA_COMMAND_CENTER_AUTO_EXECUTE', true),
+  commandCenterTickSeconds: int('AURA_COMMAND_CENTER_TICK_SECONDS', 60, 15, 86400),
+  commandCenterWarmupSeconds: int('AURA_COMMAND_CENTER_WARMUP_SECONDS', 20, 10, 300),
+  commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 4, 1, 24),
+  commandCenterCooldownSeconds: int('AURA_COMMAND_CENTER_COOLDOWN_SECONDS', 1800, 60, 86400),
+  commandCenterMinConfidence: num('AURA_COMMAND_CENTER_MIN_CONFIDENCE', 0.66, 0.1, 1),
+  commandCenterAllowedRisks: new Set(csv(
+    'AURA_COMMAND_CENTER_ALLOWED_RISKS',
+    'safe,ai,local-control,local-write',
+  )),
+  commandCenterFleetPollSeconds: int('AURA_COMMAND_CENTER_FLEET_POLL_SECONDS', 1200, 300, 86400),
+  commandCenterRequestTimeoutMs: int('AURA_COMMAND_CENTER_REQUEST_TIMEOUT_MS', 9000, 1000, 60000),
+  commandCenterGithubToken:
+    process.env.AURA_COMMAND_GITHUB_TOKEN
+    || process.env.AURA_EVOLUTION_GITHUB_MACHINE_TOKEN
+    || process.env.GITHUB_TOKEN
+    || '',
+  commandCenterGithubRepos: csv(
+    'AURA_COMMAND_GITHUB_REPOS',
+    [
+      'XDSawyerLoL/Auralive',
+      'XDSawyerLoL/QuanticSillage',
+      'XDSawyerLoL/QuanticMail',
+      'XDSawyerLoL/QUANTIC-OS',
+      'XDSawyerLoL/Quantic-Browser',
+      'XDSawyerLoL/Human-Agency-Engine',
+    ].join(','),
+  ),
+  commandCenterAutoRerunFailedCi: bool('AURA_COMMAND_AUTO_RERUN_FAILED_CI', true),
+  commandCenterAutoCreateFailureIssue: bool('AURA_COMMAND_AUTO_CREATE_FAILURE_ISSUE', true),
+  commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 2, 0, 6),
+
+  webSubstrateEnabled: bool('AURA_WEB_SUBSTRATE_ENABLED', true),
+  webSearchUrl: String(process.env.AURA_WEB_SEARCH_URL || '').trim(),
+  webSearchApiKey: process.env.AURA_WEB_SEARCH_API_KEY || '',
+  webSearchLanguage: process.env.AURA_WEB_SEARCH_LANGUAGE || 'fr-FR',
+  webSearchResults: int('AURA_WEB_SEARCH_RESULTS', 8, 2, 20),
+  webMaxQueries: int('AURA_WEB_MAX_QUERIES', 3, 1, 8),
+  webMaxSources: int('AURA_WEB_MAX_SOURCES', 8, 2, 20),
+  webMaxSourceBytes: int('AURA_WEB_MAX_SOURCE_BYTES', 240000, 20000, 1000000),
+  webRequestTimeoutMs: int('AURA_WEB_REQUEST_TIMEOUT_MS', 12000, 1000, 60000),
+  webMemoryTtlSeconds: int('AURA_WEB_MEMORY_TTL_SECONDS', 604800, 3600, 2592000),
+  webAllowedDomains: new Set(csv('AURA_WEB_ALLOWED_DOMAINS', '')),
+  webBlockedDomains: new Set(csv(
+    'AURA_WEB_BLOCKED_DOMAINS',
+    'localhost,metadata.google.internal,169.254.169.254',
+  )),
 
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
