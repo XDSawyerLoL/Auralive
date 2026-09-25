@@ -3,10 +3,11 @@
   "studio": "2.8.1",
   "native_engine": "0.4.1",
   "schema": {
-    "mysql": 3,
+    "mysql": 4,
     "evolution": 3
   },
   "channel": "stable-next",
   "updated_at": "2026-09-25",
-  "command_center": 1
+  "command_center": 1,
+  "web_substrate": 1
 }
