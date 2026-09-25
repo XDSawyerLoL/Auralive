@@ -10,6 +10,16 @@ import { NativePolicyLearner } from './native_learning.js';
 
 const now = () => new Date().toISOString();
 
+export function requiresExternalKnowledge(value) {
+  const text = String(value || '').toLowerCase();
+  return [
+    'internet',' web ','aujourd','actuel','actuelle','dernière','derniere','récent','recent',
+    'marché','marche','concurrent','documentation',' api ','version','prix','actualité','actualite',
+    'source','vérifie','verifie','cherche','recherche','technolog','benchmark','norme','standard',
+    'licence','compatib','sortie','release','mise à jour','mise a jour',
+  ].some((token) => text.includes(token));
+}
+
 const AGENT_ROLES = {
   planner: 'Tu es l’agent planificateur d’AURA. Découpe la mission en étapes courtes, vérifiables et exécutables. Repère dépendances et points de contrôle.',
   research: 'Tu es l’agent recherche d’AURA. Sépare les faits des hypothèses, compare les éléments disponibles et signale clairement ce qui manque.',
@@ -668,6 +678,67 @@ export class CognitiveKernel {
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
     const inference = this.inferenceAssessment();
 
+    // Quand une question dépend du monde extérieur, le modèle n'est pas
+    // autorisé à répondre depuis ses seuls paramètres. Il doit d'abord
+    // transformer le Web en mémoire de travail externe, puis passer par
+    // la boucle de corroboration/contradiction du Web Substrate.
+    let externalResearch = null;
+    if (
+      plan.needs_semantic_support
+      && this.webSubstrate?.enabled
+      && requiresExternalKnowledge(content)
+    ) {
+      try {
+        externalResearch = await this.webSubstrate.research(
+          content,
+          { trigger: 'chat' },
+        );
+        plan = {
+          ...plan,
+          external_evidence_required: true,
+          external_epistemic_status: externalResearch?.epistemic_status || 'unverified',
+          external_confidence: Number(externalResearch?.confidence || 0),
+          external_evidence_count: Number(externalResearch?.evidence_count || 0),
+          facts: [
+            ...(plan.facts || []),
+            'Recherche Web effectuée avant réponse: statut='
+              + String(externalResearch?.epistemic_status || 'unverified')
+              + ', confiance=' + Number(externalResearch?.confidence || 0).toFixed(2)
+              + ', preuves=' + Number(externalResearch?.evidence_count || 0) + '.',
+          ],
+        };
+        await this.trace(
+          'web-research',
+          'Mémoire externe',
+          String(externalResearch?.conclusion || '').slice(0, 3000),
+          {
+            session_id: externalResearch?.session_id || '',
+            epistemic_status: externalResearch?.epistemic_status || 'unverified',
+            confidence: Number(externalResearch?.confidence || 0),
+            evidence_count: Number(externalResearch?.evidence_count || 0),
+          },
+        );
+      } catch (error) {
+        plan = {
+          ...plan,
+          external_evidence_required: true,
+          external_epistemic_status: 'unavailable',
+          external_confidence: 0,
+          external_evidence_count: 0,
+          facts: [
+            ...(plan.facts || []),
+            'La vérification Web nécessaire à cette question est indisponible; ne pas présenter de connaissance externe comme vérifiée.',
+          ],
+        };
+        await this.trace(
+          'web-research-error',
+          'Vérification externe indisponible',
+          String(error?.message || error).slice(0, 1000),
+          {},
+        );
+      }
+    }
+
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
@@ -720,6 +791,12 @@ export class CognitiveKernel {
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       semantic_support_used: Boolean(plan.semantic_support),
+      external_research: externalResearch ? {
+        session_id: externalResearch.session_id,
+        epistemic_status: externalResearch.epistemic_status,
+        confidence: externalResearch.confidence,
+        evidence_count: externalResearch.evidence_count,
+      } : null,
       compute: inference,
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
     };
