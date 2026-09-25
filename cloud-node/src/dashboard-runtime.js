@@ -5,6 +5,7 @@ let lastAttention = null;
 let livingScene = null;
 let voicePlayer = null;
 let voicePrimed = false;
+let browserSpeechToken = 0;
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
 
 function escapeHtml(value){
@@ -81,20 +82,59 @@ function primeVoice(){
     if(attempt&&attempt.then)attempt.then(function(){voicePlayer.pause();voicePlayer.currentTime=0;voicePlayer.muted=false;}).catch(function(){voicePrimed=false;});
   }catch(_){voicePrimed=false;}
 }
+function splitBrowserSpeech(text,maxChars){
+  const value=String(text||'').replace(/\s+/g,' ').trim();
+  const limit=Math.max(140,Math.min(Number(maxChars)||220,320));
+  if(!value)return[];
+  const sentences=value.match(/[^.!?…]+[.!?…]+[»”"')\]]*|[^.!?…]+$/g)||[value];
+  const out=[];let current='';
+  function flush(){if(current){out.push(current);current='';}}
+  sentences.forEach(function(raw){
+    const sentence=String(raw||'').trim();if(!sentence)return;
+    if(sentence.length<=limit){
+      if(!current)current=sentence;
+      else if((current+' '+sentence).length<=limit)current+=' '+sentence;
+      else{flush();current=sentence;}
+      return;
+    }
+    flush();
+    const words=sentence.split(/\s+/);let part='';
+    words.forEach(function(word){
+      if(!part)part=word;
+      else if((part+' '+word).length<=limit)part+=' '+word;
+      else{out.push(part);part=word;}
+    });
+    if(part)out.push(part);
+  });
+  flush();
+  return out;
+}
 function speakBrowserFallback(text){
   if(!browserVoiceAvailable()||!text)return false;
   try{
+    const token=++browserSpeechToken;
     speechSynthesis.cancel();
-    const utterance=new SpeechSynthesisUtterance(text);
-    utterance.lang='fr-FR';utterance.rate=1.02;utterance.pitch=1.08;utterance.volume=1;
+    const chunks=splitBrowserSpeech(text,220);
     const voices=speechSynthesis.getVoices();
     const fr=voices.find(function(v){return /^fr(-|_)/i.test(v.lang||'')&&/female|audrey|hortense|denise|eloquence|google/i.test(v.name||'');})
       || voices.find(function(v){return /^fr(-|_)/i.test(v.lang||'');});
-    if(fr)utterance.voice=fr;
-    utterance.onstart=function(){document.body.classList.add('aura-speaking');};
-    utterance.onend=function(){document.body.classList.remove('aura-speaking');};
-    utterance.onerror=function(){document.body.classList.remove('aura-speaking');};
-    speechSynthesis.speak(utterance);
+    let index=0;
+    function next(){
+      if(token!==browserSpeechToken)return;
+      if(index>=chunks.length){
+        document.body.classList.remove('aura-speaking');
+        $('voiceText').textContent='Mairaiy · en ligne';
+        return;
+      }
+      const utterance=new SpeechSynthesisUtterance(chunks[index++]);
+      utterance.lang='fr-FR';utterance.rate=1.02;utterance.pitch=1.08;utterance.volume=1;
+      if(fr)utterance.voice=fr;
+      utterance.onstart=function(){document.body.classList.add('aura-speaking');$('voiceText').textContent='Mairaiy · parle';};
+      utterance.onend=next;
+      utterance.onerror=function(){document.body.classList.remove('aura-speaking');};
+      speechSynthesis.speak(utterance);
+    }
+    next();
     return true;
   }catch(_){return false;}
 }
@@ -247,18 +287,18 @@ function initLivingAuraScene(){
     return null;
   }
   const reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const scene={w:0,h:0,dpr:1,time:0,raf:0,dust:[],sparks:[],running:true,organism:{}};
+  const scene={w:0,h:0,dpr:1,time:0,lastFrame:0,raf:0,dust:[],sparks:[],running:true,organism:{}};
 
   function rand(min,max){return min+Math.random()*(max-min);}
   function seed(){
     const mobile=window.innerWidth<820;
-    const dustCount=reduceMotion?36:(mobile?92:185);
-    const sparkCount=reduceMotion?8:(mobile?18:34);
+    const dustCount=reduceMotion?24:(mobile?44:108);
+    const sparkCount=reduceMotion?5:(mobile?9:18);
     scene.dust=Array.from({length:dustCount},function(_,i){
-      return {x:Math.random(),y:Math.random(),r:rand(.35,1.55),vx:rand(-.000045,.000045),vy:rand(-.000035,.000035),a:rand(.12,.72),phase:rand(0,Math.PI*2),hue:i%5};
+      return {x:Math.random(),y:Math.random(),r:rand(.35,1.35),vx:rand(-.000022,.000022),vy:rand(-.000018,.000018),a:rand(.10,.48),phase:rand(0,Math.PI*2),hue:i%5};
     });
     scene.sparks=Array.from({length:sparkCount},function(){
-      return {angle:rand(0,Math.PI*2),radius:rand(.12,.44),speed:rand(.00005,.00016),size:rand(.7,2.2),phase:rand(0,Math.PI*2)};
+      return {angle:rand(0,Math.PI*2),radius:rand(.14,.40),speed:rand(.000025,.00008),size:rand(.7,1.7),phase:rand(0,Math.PI*2)};
     });
   }
 
@@ -300,11 +340,11 @@ function initLivingAuraScene(){
     const cx=scene.w*.5, cy=scene.h*.50;
     const tempo=.00042+tension*.00038+(1-fatigue)*.00008;
     const breath=.5+.5*Math.sin(t*tempo);
-    glow(cx+Math.sin(t*.00022)*28,cy+Math.cos(t*.00018)*20,Math.max(scene.w,scene.h)*(.28+dream*.06),'rgba(141,84,255,ALPHA)',.14+.10*dream+.055*breath);
-    glow(cx-scene.w*.22+Math.sin(t*.00013)*55,cy-scene.h*.18,scene.w*.24,'rgba(55,235,210,ALPHA)',.055+.12*curiosity);
-    glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00017)*34,scene.w*.25,'rgba(76,135,255,ALPHA)',.055+.095*stability);
-    glow(cx+scene.w*.29+Math.cos(t*.00011)*34,cy+scene.h*.19,scene.w*.20,'rgba(255,185,82,ALPHA)',.035+.09*attachment);
-    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00015)*30,scene.w*.20,'rgba(245,86,196,ALPHA)',.035+.15*tension);
+    glow(cx+Math.sin(t*.00016)*10,cy+Math.cos(t*.00013)*8,Math.max(scene.w,scene.h)*(.28+dream*.06),'rgba(141,84,255,ALPHA)',.14+.10*dream+.055*breath);
+    glow(cx-scene.w*.22+Math.sin(t*.00010)*18,cy-scene.h*.18,scene.w*.24,'rgba(55,235,210,ALPHA)',.055+.12*curiosity);
+    glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00012)*12,scene.w*.25,'rgba(76,135,255,ALPHA)',.055+.095*stability);
+    glow(cx+scene.w*.29+Math.cos(t*.00009)*12,cy+scene.h*.19,scene.w*.20,'rgba(255,185,82,ALPHA)',.035+.09*attachment);
+    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00011)*11,scene.w*.20,'rgba(245,86,196,ALPHA)',.035+.15*tension);
     glow(cx,cy,Math.min(scene.w,scene.h)*(.15+.08*stability),'rgba(205,185,255,ALPHA)',.05+.08*(1-fatigue));
     nctx.globalCompositeOperation='source-over';
   }
@@ -348,10 +388,10 @@ function initLivingAuraScene(){
     if(core){
       const o=scene.organism||{};
       const tension=Number(o.tension||0), stability=Number(o.stabilite||0), fatigue=Number(o.fatigue_cognitive||0);
-      const amp=.026+tension*.055+(1-stability)*.018;
+      const amp=.014+tension*.026+(1-stability)*.010;
       const speed=.0009+tension*.0012+(1-fatigue)*.00025;
       const pulse=reduceMotion?1:(1+Math.sin(t*speed)*amp+Math.sin(t*.00041)*.012);
-      const rot=reduceMotion?0:Math.sin(t*(.00011+tension*.00012))*(1.2+tension*4.2);
+      const rot=reduceMotion?0:Math.sin(t*(.00008+tension*.00007))*(.35+tension*1.35);
       core.setAttribute('transform','translate(450 325) rotate('+rot+') scale('+pulse+') translate(-450 -325)');
     }
     document.querySelectorAll('.aura-node').forEach(function(node,index){
@@ -359,16 +399,18 @@ function initLivingAuraScene(){
       const by=Number(node.getAttribute('data-base-y'))||0;
       const scale=Number(node.getAttribute('data-scale'))||1;
       const phase=Number(node.getAttribute('data-phase'))||index;
-      const dx=reduceMotion?0:Math.sin(t*.00055+phase)*4.5;
-      const dy=reduceMotion?0:Math.cos(t*.00047+phase*1.31)*3.8;
-      const breathe=reduceMotion?1:(1+Math.sin(t*.0011+phase)*.045);
+      const dx=reduceMotion?0:Math.sin(t*.00042+phase)*1.6;
+      const dy=reduceMotion?0:Math.cos(t*.00036+phase*1.31)*1.35;
+      const breathe=reduceMotion?1:(1+Math.sin(t*.0008+phase)*.018);
       node.setAttribute('transform','translate('+(bx+dx)+' '+(by+dy)+') scale('+(scale*breathe)+')');
-      node.style.opacity=String(.88+.12*(.5+.5*Math.sin(t*.001+phase)));
+      node.style.opacity=String(.95+.05*(.5+.5*Math.sin(t*.0007+phase)));
     });
   }
 
   function frame(t){
     if(!scene.running)return;
+    if(scene.lastFrame && t-scene.lastFrame<30){scene.raf=requestAnimationFrame(frame);return;}
+    scene.lastFrame=t;
     scene.time=t;
     drawNebula(t);
     drawParticles(t);
@@ -478,32 +520,51 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
+function playVoiceSegment(payload){
+  return new Promise(function(resolve,reject){
+    if(!payload||!payload.audio_base64){reject(new Error('Segment audio absent'));return;}
+    try{
+      const raw=atob(payload.audio_base64);
+      const bytes=new Uint8Array(raw.length);
+      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      const blob=new Blob([bytes],{type:payload.mime_type||'audio/wav'});
+      const url=URL.createObjectURL(blob);
+      const audio=voicePlayer||new Audio();
+      voicePlayer=audio;
+      audio.pause();audio.muted=false;audio.src=url;
+      let closed=false;
+      const finish=function(ok,error){
+        if(closed)return;closed=true;
+        URL.revokeObjectURL(url);
+        if(ok)resolve();else reject(error||new Error('Lecture audio impossible'));
+      };
+      audio.onended=function(){finish(true);};
+      audio.onerror=function(){finish(false,new Error('Lecture du segment Mairaiy impossible'));};
+      const play=audio.play();
+      if(play&&play.catch)play.catch(function(error){finish(false,error);});
+    }catch(error){reject(error);}
+  });
+}
 async function speakAura(text,ticket){
   if(!text)return;
+  browserSpeechToken+=1;
   try{
     if(!ticket)throw new Error('Ticket vocal absent');
     const out=await api('/api/voice/speak',{
       method:'POST',
       body:JSON.stringify({text:text,ticket:ticket,context:'aura-cloud-chat',rate:1,pitch:1,volume:1})
     });
-    if(!out||!out.audio_base64)throw new Error('Audio Mairaiy absent');
-    const raw=atob(out.audio_base64);
-    const bytes=new Uint8Array(raw.length);
-    for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    const blob=new Blob([bytes],{type:out.mime_type||'audio/wav'});
-    const url=URL.createObjectURL(blob);
-    const audio=voicePlayer||new Audio();
-    voicePlayer=audio;
-    audio.pause();
-    audio.muted=false;
-    audio.src=url;
-    audio.onplay=function(){document.body.classList.add('aura-speaking');};
-    const stop=function(){document.body.classList.remove('aura-speaking');URL.revokeObjectURL(url);};
-    audio.onended=stop;audio.onerror=stop;
-    await audio.play();
-    $('voiceText').textContent='Mairaiy · parle';
-    setTimeout(function(){$('voiceText').textContent='Mairaiy · en ligne';},1200);
+    const segments=Array.isArray(out&&out.segments)&&out.segments.length?out.segments:[out];
+    if(!segments.length||!segments[0]||!segments[0].audio_base64)throw new Error('Audio Mairaiy absent');
+    document.body.classList.add('aura-speaking');
+    for(let i=0;i<segments.length;i++){
+      $('voiceText').textContent=segments.length>1?'Mairaiy · '+(i+1)+'/'+segments.length:'Mairaiy · parle';
+      await playVoiceSegment(segments[i]);
+    }
+    document.body.classList.remove('aura-speaking');
+    $('voiceText').textContent='Mairaiy · en ligne';
   }catch(error){
+    document.body.classList.remove('aura-speaking');
     console.debug('Mairaiy Cloud indisponible, repli navigateur',error);
     speakBrowserFallback(text);
   }

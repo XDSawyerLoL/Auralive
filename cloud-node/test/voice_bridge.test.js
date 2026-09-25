@@ -25,7 +25,8 @@ test('voice playback no longer requires a manual dashboard token', () => {
 
 test('voice ticket is bound to exact text and expires quickly', () => {
   assert.match(serverSource, /voiceSignature\(expiresAt, text\)/);
-  assert.match(serverSource, /slice\(0, 430\)/);
+  assert.doesNotMatch(serverSource, /aura-voice:\$\{String\(text \|\| ''\)\.trim\(\)\.slice\(0, 430\)\}/);
+  assert.match(serverSource, /\.update\(String\(text \|\| ''\)\.trim\(\)\)/);
   assert.match(serverSource, /Math\.min\(maxAgeSeconds, 300\)/);
   assert.match(serverSource, /expiresAt > Math\.floor\(Date\.now\(\) \/ 1000\) \+ 300/);
 });

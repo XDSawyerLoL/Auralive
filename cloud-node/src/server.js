@@ -78,7 +78,8 @@ function validPrivateSession(value) {
 function voiceSignature(expiresAt, text) {
   if (!config.cloudToken) return '';
   return createHmac('sha256', config.cloudToken)
-    .update(`${expiresAt}:aura-voice:${String(text || '').trim().slice(0, 430)}`)
+    .update(`${expiresAt}:aura-voice:`)
+    .update(String(text || '').trim())
     .digest('base64url');
 }
 
@@ -291,7 +292,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.8.2',
+  version: '1.8.3',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
