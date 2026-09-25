@@ -236,7 +236,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     <aside class="right-stack">
       <section class="panel">
         <div class="panel-head"><span>◉</span><div class="panel-title">Pensée dominante</div></div>
-        <div class="panel-body"><div class="thought-card" id="dominantThought">Connexion privée requise pour afficher la pensée dominante.</div></div>
+        <div class="panel-body"><div class="thought-card" id="dominantThought">Chargement de la pensée dominante…</div></div>
       </section>
       <section class="panel">
         <div class="panel-head"><span>▣</span><div class="panel-title">Travail en cours</div><div class="spacer"></div><div class="panel-meta" id="workMeta">—</div></div>
