@@ -11,6 +11,12 @@ import {
   normalizeCapability,
   scoreCapability,
 } from '../src/capability_fabric.js';
+import fs from 'node:fs';
+
+const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+const dbSource = fs.readFileSync(new URL('../src/db.js', import.meta.url), 'utf8');
+const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
+const kernelSource = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
 
 test('typed DAG validation keeps every node when parallelism is bounded', () => {
   const graph = validateTaskGraph({
@@ -115,4 +121,27 @@ test('compiler fallback uses a research capability without pretending it knows t
   assert.equal(graph.nodes.length, 1);
   assert.equal(graph.nodes[0].capability, 'web.research');
   assert.equal(graph.nodes[0].verification, 'evidence');
+});
+
+
+test('Fabric is wired into AURA runtime, memory and live cognition', () => {
+  assert.match(serverSource, /new CapabilityFabric/);
+  assert.match(serverSource, /new DagCompiler/);
+  assert.match(serverSource, /new TaskGraphExecutor/);
+  assert.match(serverSource, /await fabric\.start\(\)/);
+  assert.match(serverSource, /fabric\.stop\(\)/);
+  assert.match(serverSource, /\/api\/fabric\/plan/);
+  assert.match(serverSource, /\/api\/fabric\/execute/);
+  assert.match(kernelSource, /this\.fabric\.execute/);
+  assert.match(configSource, /AURA_FABRIC_DISCOVERY_URLS/);
+  assert.match(dbSource, /aura_fabric_capabilities/);
+  assert.match(dbSource, /aura_fabric_graphs/);
+  assert.match(dbSource, /aura_fabric_node_runs/);
+});
+
+test('Fabric remote execution is compute/read only by construction', () => {
+  const source = fs.readFileSync(new URL('../src/capability_fabric.js', import.meta.url), 'utf8');
+  assert.match(source, /effet de bord remote interdit par politique AURA/);
+  assert.match(source, /arbitrary_remote_shell:\s*false/);
+  assert.match(source, /policy:\s*'typed-capabilities-only'/);
 });
