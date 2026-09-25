@@ -619,7 +619,10 @@ async function refresh(){
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
       $('setupIssues').innerHTML=issues.length?issues.map(function(i){return '<li>'+escapeHtml(i.message||i.code||String(i))+'</li>';}).join(''):'<li>Base MySQL ou secrets de production à vérifier.</li>';
-      $('setupSummary').textContent='L’interface est en ligne, mais les cycles cognitifs, la mémoire et le chat génératif ne sont pas encore actifs.';
+      const startup=String(boot.startup_error||'').trim();
+      $('setupSummary').textContent=startup
+        ? 'Le serveur est en ligne mais le noyau redémarre automatiquement : '+startup
+        : 'L’interface est en ligne, mais le noyau attend encore MySQL. Reconnexion automatique en cours.';
     }
     const ks=await api('/api/kernel/status');
     const soul=await api('/api/kernel/soul');
