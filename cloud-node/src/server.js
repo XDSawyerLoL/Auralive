@@ -101,7 +101,7 @@ const horizon = new HorizonBridge(async (type, payload, source) => {
   }
 });
 kernel = new CognitiveKernel(ai, horizon, bridge);
-const evolution = new EvolutionLab(ai, kernel);
+const evolution = new EvolutionLab(ai, kernel, bridge);
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
@@ -246,7 +246,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '1.7.6',
+  version: '1.7.7',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
@@ -258,6 +258,7 @@ app.get('/api/bootstrap/status', async () => ({
   last_attempt_at: bootstrap.lastAttemptAt,
   last_ready_at: bootstrap.lastReadyAt,
   cloud_token_configured: Boolean(config.cloudToken),
+  canary_required: Boolean(config.evolutionCanaryRequired),
   canary_token_configured: Boolean(config.canaryToken),
   ai_mode: config.aiMode,
   ai_enabled: ai.enabled,
@@ -659,10 +660,7 @@ app.post('/api/evolution/run', async (request, reply) => {
   const objective = String(
     request.body?.objective || 'Chercher une optimisation faible risque du noyau AURA Cloud Node.',
   );
-  if (bridge.enabled && await bridge.workerOnline()) {
-    return bridge.evolve(objective);
-  }
-  return evolution.runCycle(objective, String(request.body?.trigger || 'private-api'));
+  return evolution.dispatchCycle(objective, String(request.body?.trigger || 'private-api'));
 });
 
 app.get('/api/evolution/canary/:cycleId', async (request, reply) =>
