@@ -183,7 +183,7 @@ export class WebSubstrate {
           Accept: 'text/html,application/json,text/plain;q=0.9,*/*;q=0.2',
           'User-Agent': 'AURA-Web-Substrate/1.0',
         },
-        redirect: 'follow',
+        redirect: 'error',
         signal: controller.signal,
       });
       if (!response.ok) throw new Error('HTTP ' + response.status);
