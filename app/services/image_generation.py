@@ -164,15 +164,17 @@ class AuraImageService:
                     seed=wanted_seed,
                     model=wanted_model,
                 )
+            actual_model = str(result.pop("actual_model", wanted_model) or wanted_model)
             self.last_latency_ms = round((time.monotonic() - started) * 1000)
             self.last_backend = backend
-            self.last_model = wanted_model
+            self.last_model = actual_model
             self.last_file = str(result.get("path") or "")
             self.last_error = ""
             return {
                 "ok": True,
                 "backend": backend,
-                "model": wanted_model,
+                "model": actual_model,
+                "requested_model": wanted_model,
                 "prompt": text,
                 "negative_prompt": str(negative_prompt or "")[:3000],
                 "width": w,
@@ -200,6 +202,7 @@ class AuraImageService:
         await self.start()
         assert self.session is not None
 
+        actual_model = model
         if model:
             try:
                 async with self.session.post(
@@ -207,14 +210,22 @@ class AuraImageService:
                     json={"sd_model_checkpoint": model},
                     timeout=aiohttp.ClientTimeout(total=60),
                 ) as response:
+                    body = await response.text()
                     if response.status >= 400:
-                        logger.info(
-                            "Sélection checkpoint image ignorée (%s): %s",
-                            response.status,
-                            (await response.text())[:300],
+                        raise RuntimeError(
+                            f"A1111 refuse le checkpoint {model!r} "
+                            f"(HTTP {response.status}): {body[:300]}"
                         )
-            except Exception:
-                logger.debug("Sélection du checkpoint A1111 impossible", exc_info=True)
+
+                options = await self._get_json(
+                    f"{self.settings.image_a1111_url}/sdapi/v1/options",
+                    timeout=10,
+                )
+                actual_model = str(options.get("sd_model_checkpoint") or model).strip()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Impossible d'activer le checkpoint image demandé {model!r}: {exc}"
+                ) from exc
 
         payload = {
             "prompt": prompt,
@@ -250,6 +261,7 @@ class AuraImageService:
             "filename": path.name,
             "mime_type": "image/png",
             "bytes": len(binary),
+            "actual_model": actual_model,
         }
 
     def _replace_workflow_values(
