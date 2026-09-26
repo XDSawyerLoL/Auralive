@@ -360,6 +360,7 @@ app.post('/api/bridge/heartbeat', async (request, reply) => {
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   const result = await bridge.heartbeat(workerId, request.body || {});
+  await fabric.refreshMesh().catch(() => {});
   if (request.body?.organism && typeof request.body.organism === 'object') {
     await kernel.importOrganismState(request.body.organism);
   }
@@ -819,6 +820,41 @@ app.post('/api/reasoning/research', async (request, reply) => {
     return result;
   } catch (error) {
     return reply.code(502).send({ error: String(error?.message || error) });
+  }
+});
+
+app.get('/api/mesh/status', async () => {
+  const status = await bridge.status();
+  return {
+    version: status.mesh?.version || 'aura-compute-mesh-v0.1',
+    enabled: Boolean(status.enabled),
+    consenting_online_nodes: Number(status.mesh?.consenting_online_nodes || 0),
+    capabilities: status.mesh?.capabilities || [],
+    best_reputation: Number(status.mesh?.best_reputation || 0),
+    max_quorum: Number(status.mesh?.max_quorum || 1),
+  };
+});
+
+app.get('/api/mesh/workers', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? { workers: await bridge.workers({ onlineOnly: true, computeOnly: true }) }
+    : undefined);
+
+app.post('/api/mesh/execute', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const kind = String(request.body?.kind || 'compute').trim().toLowerCase();
+  if (!['compute', 'inference'].includes(kind)) {
+    return reply.code(422).send({ error: 'kind Compute Mesh non autorisé' });
+  }
+  try {
+    return await bridge.executeMesh(kind, request.body?.payload || {}, {
+      capability: kind,
+      quorum: request.body?.quorum || 1,
+      verification: String(request.body?.verification || 'none'),
+      timeoutMs: request.body?.timeout_ms,
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
   }
 });
 
