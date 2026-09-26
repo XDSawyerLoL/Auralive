@@ -415,8 +415,9 @@ export class CapabilityFabric {
         output_contract: { value: 'json', engine: 'webgpu|cpu-js' },
         provider: 'aura-peer-mesh',
         enabled: false,
-      }, async (input) => this.peerMesh.execute('webgpu', input, {
+      }, async (input, options) => this.peerMesh.execute('webgpu', input, {
         timeoutMs: config.meshP2pTimeoutMs,
+        quorum: options?.quorum || 1,
       }));
     }
   }

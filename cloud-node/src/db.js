@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 7;
+export const LATEST_SCHEMA_VERSION = 8;
 
 export function getDb() {
   if (pool) return pool;
@@ -399,6 +399,44 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(7,?,?)',
       ['peer-mesh-webrtc-signaling-and-cryptographic-identity', new Date().toISOString()],
+    );
+    current = 7;
+  }
+
+  if (current < 8) {
+    await ensureColumn(
+      db,
+      'aura_mesh_peers',
+      'jobs_completed',
+      "jobs_completed BIGINT NOT NULL DEFAULT 0 AFTER reputation",
+    );
+    await ensureColumn(
+      db,
+      'aura_mesh_peers',
+      'jobs_failed',
+      "jobs_failed BIGINT NOT NULL DEFAULT 0 AFTER jobs_completed",
+    );
+    await ensureColumn(
+      db,
+      'aura_mesh_peers',
+      'avg_latency_ms',
+      "avg_latency_ms DOUBLE NOT NULL DEFAULT 0 AFTER jobs_failed",
+    );
+    await ensureColumn(
+      db,
+      'aura_mesh_sessions',
+      'started_ms',
+      "started_ms BIGINT NOT NULL DEFAULT 0 AFTER status",
+    );
+    await ensureIndex(
+      db,
+      'aura_mesh_peers',
+      'idx_aura_mesh_peers_quality',
+      'idx_aura_mesh_peers_quality(enabled,reputation,avg_latency_ms,last_seen_ms)',
+    );
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(8,?,?)',
+      ['peer-mesh-quorum-replay-protection-and-quality-routing', new Date().toISOString()],
     );
   }
 }

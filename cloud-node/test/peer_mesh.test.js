@@ -81,3 +81,24 @@ test('WebCrypto ECDSA signatures interoperate with the Node verifier used by bro
     true,
   );
 });
+
+
+test('peer envelopes reject stale timestamps', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const publicJwk = publicKey.export({ format: 'jwk' });
+  const envelope = {
+    type: 'heartbeat',
+    peer_id: peerIdForJwk(publicJwk),
+    worker_id: 'mesh-stale',
+    capabilities: ['webrtc'],
+    resources: {},
+    timestamp: 1,
+    nonce: 'stale-nonce',
+  };
+  const signature = sign(
+    'sha256',
+    Buffer.from(stableStringify(envelope), 'utf8'),
+    { key: privateKey, dsaEncoding: 'ieee-p1363' },
+  ).toString('base64url');
+  assert.equal(verifyPeerEnvelope(publicJwk, envelope, signature), false);
+});
