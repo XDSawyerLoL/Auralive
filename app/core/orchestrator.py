@@ -26,6 +26,7 @@ from app.services.ai import AuraAI
 from app.services.image_generation import AuraImageService
 from app.services.obs import OBSClient
 from app.services.twitch import TwitchClient
+from app.services.vector_memory import VectorMemory
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +39,14 @@ class AuraOrchestrator:
         self.identity.load()
         self.overlay = OverlayBus()
         self.ai = AuraAI(settings, self.identity)
+        self.vector_memory = VectorMemory(db, self.ai, settings)
         self.image = AuraImageService(settings)
         self.obs = OBSClient(settings)
         self.twitch = TwitchClient(settings, db, self.handle_twitch_event)
 
         self.loyalty = LoyaltyModule(db)
         self.moderation = ModerationModule(db)
-        self.memory = MemoryModule(db)
+        self.memory = MemoryModule(db, self.vector_memory)
         self.games = GamesModule(db)
         self.shop = ShopModule(db)
         self.engagement = EngagementModule(db)
@@ -67,6 +69,7 @@ class AuraOrchestrator:
         await self.power.initialize()
         await self.complete.initialize()
         await self.ai.start()
+        await self.vector_memory.start()
         await self.image.start()
         await self.twitch.start()
         await self.power.start(self)
@@ -87,6 +90,7 @@ class AuraOrchestrator:
         await self.power.close()
         await self.twitch.close()
         await self.image.close()
+        await self.vector_memory.close()
         await self.ai.close()
         self.started = False
 
@@ -303,7 +307,7 @@ class AuraOrchestrator:
         # Aucun message intermédiaire n'est envoyé. Le chat ne reçoit que la réponse finale.
         async with self.ai_lock:
             try:
-                context = await self.memory.context(viewer)
+                context = await self.memory.context(viewer, query=message)
                 history = await self.memory.conversation(viewer["user_id"], limit=12)
                 world_context_parts: list[str] = []
                 horizon = getattr(self, "horizon", None)
