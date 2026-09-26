@@ -48,3 +48,9 @@ test('legacy Quantic bridges remain compatible with AURA Everywhere', () => {
   ]) assert.equal(server.includes(route), true, route);
   assert.equal(server.includes("curiosity.enqueue({"), true);
 });
+
+
+test('AURA Everywhere exposes both registry and curiosity runtime versions', () => {
+  assert.equal(registry.includes("aura-everywhere-v0.1"), true);
+  assert.equal(curiosity.includes("aura-curiosity-v0.1"), true);
+});
