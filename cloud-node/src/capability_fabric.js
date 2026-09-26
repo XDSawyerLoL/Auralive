@@ -27,7 +27,7 @@ export function normalizeCapability(raw = {}) {
   const id = stableId(raw.id);
   if (!id) throw new Error('capability id manquant');
   const transport = clean(raw.transport || 'local', 80);
-  if (!['local', 'edge-http', 'studio-bridge', 'mesh-worker'].includes(transport)) {
+  if (!['local', 'edge-http', 'studio-bridge', 'mesh-worker', 'peer-p2p'].includes(transport)) {
     throw new Error(`transport capability non autorisé: ${transport}`);
   }
   const tags = [...new Set(
@@ -88,9 +88,10 @@ export function scoreCapability(capability, {
 export class CapabilityFabric {
   static VERSION = 'aura-capability-fabric-v1';
 
-  constructor({ webSubstrate = null, bridge = null } = {}) {
+  constructor({ webSubstrate = null, bridge = null, peerMesh = null } = {}) {
     this.webSubstrate = webSubstrate;
     this.bridge = bridge;
+    this.peerMesh = peerMesh;
     this.registry = new Map();
     this.handlers = new Map();
     this.lastDiscoveryAt = '';
@@ -233,6 +234,7 @@ export class CapabilityFabric {
     this.started = true;
     await this.hydrate();
     await this.refreshMesh().catch(() => {});
+    await this.refreshPeers().catch(() => {});
     if (!this.enabled || !config.fabricDiscoveryUrls.length) return;
     const discover = () => this.discoverRemote().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
@@ -397,6 +399,26 @@ export class CapabilityFabric {
         });
       });
     }
+
+    if (this.peerMesh) {
+      this.register({
+        id: 'mesh.webgpu',
+        name: 'AURA signed WebRTC/WebGPU peer compute',
+        transport: 'peer-p2p',
+        tags: ['compute', 'mesh', 'p2p', 'webrtc', 'webgpu', 'vector'],
+        trust: 0.78,
+        observed_reliability: 0.74,
+        latency_ms: 2200,
+        side_effects: false,
+        risk: 'safe',
+        input_contract: { op: 'dot|vector_add', left: 'array', right: 'array' },
+        output_contract: { value: 'json', engine: 'webgpu|cpu-js' },
+        provider: 'aura-peer-mesh',
+        enabled: false,
+      }, async (input) => this.peerMesh.execute('webgpu', input, {
+        timeoutMs: config.meshP2pTimeoutMs,
+      }));
+    }
   }
 
   list({ includeDisabled = false } = {}) {
@@ -452,6 +474,28 @@ export class CapabilityFabric {
     update('mesh.compute', compute);
     update('mesh.inference', inference);
     return { nodes: workers.length, compute: compute.length, inference: inference.length };
+  }
+
+  async refreshPeers() {
+    if (!this.peerMesh || typeof this.peerMesh.peers !== 'function') return { peers: 0, webgpu: 0 };
+    const peers = await this.peerMesh.peers({ onlineOnly: true });
+    const webgpu = peers.filter((item) =>
+      item.capabilities?.includes('webrtc') && item.capabilities?.includes('webgpu'));
+    const current = this.registry.get('mesh.webgpu');
+    if (current) {
+      const best = webgpu.length
+        ? Math.max(...webgpu.map((item) => Number(item.reputation || 0.5)))
+        : 0;
+      this.register({
+        ...current,
+        enabled: webgpu.length >= 2,
+        trust: webgpu.length >= 2 ? Math.min(0.94, 0.62 + best * 0.32) : current.trust,
+        observed_reliability: webgpu.length >= 2
+          ? Math.min(0.96, 0.52 + best * 0.44)
+          : current.observed_reliability,
+      });
+    }
+    return { peers: peers.length, webgpu: webgpu.length };
   }
 
   async discoverRemote() {
@@ -619,6 +663,7 @@ export class CapabilityFabric {
       studio: all.filter((item) => item.transport === 'studio-bridge').length,
       mesh: all.filter((item) => item.transport === 'mesh-worker' && item.enabled).length,
       mesh_nodes: this.meshNodes,
+      p2p: all.filter((item) => item.transport === 'peer-p2p' && item.enabled).length,
       remote_side_effects: false,
       discovery_urls: config.fabricDiscoveryUrls.length,
       last_discovery_at: this.lastDiscoveryAt,
