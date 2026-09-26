@@ -469,6 +469,29 @@ export class PeerMesh {
       target_signature: true,
       task_hash: expectedTaskHash,
     };
+    if (result && typeof result === 'object' && result.ok === false) {
+      const peerError = clean(result.error || 'échec de calcul P2P', 4000);
+      await query(
+        `UPDATE aura_mesh_sessions
+         SET status='error',result=?,verification=?,error=?,updated_at=?
+         WHERE id=?`,
+        [
+          JSON.stringify(result).slice(0, 500000),
+          JSON.stringify(verification).slice(0, 16000),
+          peerError,
+          nowIso(),
+          session.id,
+        ],
+      );
+      await query(
+        `UPDATE aura_mesh_peers SET
+          reputation=LEAST(0.99,GREATEST(0.05,reputation*0.9)),
+          jobs_failed=jobs_failed+1,
+          updated_at=? WHERE peer_id=?`,
+        [nowIso(), target.peer_id],
+      ).catch(() => {});
+      throw new Error(peerError);
+    }
     await query(
       `UPDATE aura_mesh_sessions
        SET status='completed',result=?,verification=?,error='',updated_at=?
@@ -560,17 +583,25 @@ export class PeerMesh {
       };
     }
 
-    const sessions = [];
-    const excludedTargets = new Set();
-    for (let index = 0; index < requestedQuorum; index += 1) {
-      const candidates = await this.peers({ capability, onlineOnly: true });
-      const target = candidates.find((item) => !excludedTargets.has(item.peer_id));
-      if (!target) break;
-      const allPeers = await this.peers({ capability: 'webrtc', onlineOnly: true });
+    const candidates = await this.peers({ capability, onlineOnly: true });
+    const allPeers = await this.peers({ capability: 'webrtc', onlineOnly: true });
+    const assignments = [];
+    const targetWorkers = new Set();
+    for (const target of candidates) {
+      if (targetWorkers.has(target.worker_id)) continue;
       const initiator = allPeers.find((item) =>
-        item.peer_id !== target.peer_id && !excludedTargets.has(item.peer_id));
-      if (!initiator) break;
-      excludedTargets.add(target.peer_id);
+        item.peer_id !== target.peer_id && item.worker_id !== target.worker_id);
+      if (!initiator) continue;
+      assignments.push({ initiator, target });
+      targetWorkers.add(target.worker_id);
+      if (assignments.length >= requestedQuorum) break;
+    }
+    if (assignments.length < requestedQuorum) {
+      throw new Error(`Machines P2P distinctes insuffisantes pour quorum ${requestedQuorum}`);
+    }
+
+    const sessions = [];
+    for (const { initiator, target } of assignments) {
       const id = randomUUID();
       const timestamp = nowIso();
       await query(
@@ -590,9 +621,6 @@ export class PeerMesh {
         ice_transport_policy: config.meshIceTransportPolicy,
       });
       sessions.push({ id, initiator, target });
-    }
-    if (sessions.length < requestedQuorum) {
-      throw new Error(`Pairs P2P insuffisants pour quorum ${requestedQuorum}`);
     }
 
     const settled = await Promise.allSettled(
