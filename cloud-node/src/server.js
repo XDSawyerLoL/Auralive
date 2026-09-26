@@ -1227,7 +1227,14 @@ app.post('/api/evolution/run', async (request, reply) => {
   const objective = String(
     request.body?.objective || 'Chercher une optimisation faible risque du noyau AURA Cloud Node.',
   );
-  return evolution.dispatchCycle(objective, String(request.body?.trigger || 'private-api'));
+  return evolution.dispatchCycle(
+    objective,
+    String(request.body?.trigger || 'private-api'),
+    {
+      repository: String(request.body?.repository || '').trim(),
+      base_branch: String(request.body?.base_branch || 'main').trim() || 'main',
+    },
+  );
 });
 
 app.get('/api/evolution/canary/:cycleId', async (request, reply) =>
