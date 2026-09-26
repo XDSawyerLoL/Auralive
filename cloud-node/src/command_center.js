@@ -623,7 +623,7 @@ export class CommandCenter {
       const meta = (await this.github(`/repos/${repository}`)).data || {};
       const baseBranch = String(meta.default_branch || 'main');
       const baseRef = await this.github(
-        `/repos/${repository}/git/ref/heads/${encodeURIComponent(baseBranch)}`,
+        `/repos/${repository}/git/ref/heads/${encodeGithubPath(baseBranch)}`,
       );
       const baseSha = String(baseRef.data?.object?.sha || '');
       if (!baseSha) throw new Error('SHA de branche de base introuvable');
@@ -631,7 +631,7 @@ export class CommandCenter {
       const branch = githubBranchName(initiative.fingerprint);
       try {
         await this.github(
-          `/repos/${repository}/git/ref/heads/${encodeURIComponent(branch)}`,
+          `/repos/${repository}/git/ref/heads/${encodeGithubPath(branch)}`,
         );
       } catch (error) {
         if (Number(error?.status || 0) !== 404) throw error;
