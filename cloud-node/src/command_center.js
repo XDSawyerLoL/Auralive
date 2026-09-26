@@ -99,13 +99,18 @@ function encodeGithubPath(value) {
   return String(value || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
-function normalizePatchPath(value) {
-  const raw = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
-  if (!raw || raw.includes('..') || raw.length > 320) throw new Error('chemin de patch invalide');
-  if (PATCH_BLOCKED_PATHS.some((pattern) => pattern.test(raw))) {
-    throw new Error('chemin sensible interdit au Patch PR autonome: ' + raw);
+export function normalizePatchPath(value) {
+  const raw = String(value || '').replace(/\\/g, '/').trim();
+  const segments = raw.split('/');
+  if (segments.some((segment) => segment === '..')) throw new Error('chemin de patch invalide');
+  const canonical = segments
+    .filter((segment) => segment && segment !== '.')
+    .join('/');
+  if (!canonical || canonical.length > 320) throw new Error('chemin de patch invalide');
+  if (PATCH_BLOCKED_PATHS.some((pattern) => pattern.test(canonical))) {
+    throw new Error('chemin sensible interdit au Patch PR autonome: ' + canonical);
   }
-  return raw;
+  return canonical;
 }
 
 function patchBranchSlug(value) {
@@ -405,6 +410,10 @@ export class CommandCenter {
       });
       return;
     }
+    const currentMetadata = parseJson((await one(
+      'SELECT metadata FROM aura_command_services WHERE id=?',
+      [serviceId],
+    ))?.metadata, {});
     await query(
       `UPDATE aura_command_services
        SET repository=?,state=?,state_detail=?,last_observed_at=?,metadata=?,updated_at=?
@@ -418,7 +427,7 @@ export class CommandCenter {
             : `Santé GitHub ${snapshot.health_score}%`
         )).slice(0, 4000),
         snapshot.observed_at,
-        JSON.stringify({ github: snapshot }).slice(0, 20000),
+        JSON.stringify({ ...currentMetadata, github: snapshot }).slice(0, 20000),
         now(),
         serviceId,
       ],
@@ -917,7 +926,14 @@ export class CommandCenter {
     const serviceId = String(id || '').trim().slice(0, 80);
     const state = String(payload.state || 'unknown').trim().toLowerCase().slice(0, 40);
     const detail = String(payload.detail || payload.state_detail || '').slice(0, 4000);
-    const metadata = JSON.stringify(payload.metadata || {}).slice(0, 20000);
+    const current = await one('SELECT metadata FROM aura_command_services WHERE id=?', [serviceId]);
+    const currentMetadata = parseJson(current?.metadata, {});
+    const metadataObject = {
+      ...currentMetadata,
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    if (currentMetadata.writable_by_aura === false) metadataObject.writable_by_aura = false;
+    const metadata = JSON.stringify(metadataObject).slice(0, 20000);
     const stamp = now();
     const result = await query(
       `UPDATE aura_command_services
@@ -930,7 +946,7 @@ export class CommandCenter {
       'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
       [
         'service-observation',
-        JSON.stringify({ service_id: serviceId, state, detail, metadata: payload.metadata || {} }).slice(0, 30000),
+        JSON.stringify({ service_id: serviceId, state, detail, metadata: metadataObject }).slice(0, 30000),
         stamp,
       ],
     );
@@ -1224,7 +1240,7 @@ export class CommandCenter {
         candidate.confidence,
         JSON.stringify(candidate.requested_risks || []),
         candidate.action_type || '',
-        JSON.stringify(candidate.action_payload || {}).slice(0, 200000),
+        JSON.stringify(candidate.action_payload || {}),
         stamp,
         stamp,
       ],
