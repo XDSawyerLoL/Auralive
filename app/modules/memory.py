@@ -20,7 +20,9 @@ class MemoryModule:
         if memories:
             parts.append("faits mémorisés : " + "; ".join(item["content"] for item in memories))
 
-        if query and self.vector_memory is not None and self.vector_memory.enabled:
+        if query and self.vector_memory is not None
+            and self.vector_memory.enabled
+            and self.vector_memory.started:
             user_rows = await self.vector_memory.search(
                 query,
                 namespaces=["viewer-memory", "conversation"],
@@ -58,6 +60,7 @@ class MemoryModule:
             message_id
             and self.vector_memory is not None
             and self.vector_memory.enabled
+            and self.vector_memory.started
         ):
             await self.vector_memory.upsert(
                 f"conversation:{message_id}",
@@ -70,7 +73,7 @@ class MemoryModule:
 
     async def reset_conversation(self, user_id: str) -> None:
         await self.db.clear_conversation(user_id)
-        if self.vector_memory is not None:
+        if self.vector_memory is not None and self.vector_memory.started:
             await self.vector_memory.delete_owner(user_id, namespaces=["conversation"])
 
     async def set_opt_in(self, user_id: str, enabled: bool) -> None:
@@ -81,5 +84,5 @@ class MemoryModule:
         if not enabled:
             await self.db.clear_viewer_memory(user_id)
             await self.db.clear_conversation(user_id)
-            if self.vector_memory is not None:
+            if self.vector_memory is not None and self.vector_memory.started:
                 await self.vector_memory.delete_owner(user_id)
