@@ -338,6 +338,93 @@ app.post('/api/aura/curiosity/run', async (request, reply) => {
   return curiosity.runCycle(String(request.body?.trigger || 'manual'));
 });
 
+app.post('/api/aura/everywhere/:id/observe', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  return productRegistry.observe(request.params?.id, request.body || {});
+});
+
+app.post('/api/aura/everywhere/:id/event', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  const productId = String(request.params?.id || '').trim().slice(0,100);
+  const type = String(request.body?.type || 'product.event').trim().slice(0,160);
+  const payload = request.body?.payload && typeof request.body.payload === 'object'
+    ? request.body.payload
+    : {};
+  await kernel.observeEvent(type, payload, 'product:' + productId);
+  if (/error|failure|failed|degrad|anomal|timeout|crash/i.test(type)) {
+    await curiosity.enqueue({
+      source: productId || 'product',
+      domain: 'ecosystem',
+      question: `Quelle est la cause de l’événement ${type} signalé par ${productId || 'un produit Quantic'}, quelles preuves permettraient de la confirmer et quelle action minimale serait sûre ?`,
+      why_now: 'Un produit Quantic a signalé une anomalie opérationnelle.',
+      novelty: 0.65,
+      uncertainty: 0.8,
+      impact: 0.75,
+      relevance: 0.95,
+    }).catch(() => {});
+  }
+  return { ok:true, product_id:productId, type };
+});
+
+// Compatibilité avec les ponts AURA Universal Bridge v1 déjà embarqués dans
+// Quantic Mail, Quantic OS, Quantic Sillage et Human Agency Engine.
+app.post('/api/aura/products/register', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  const body = request.body || {};
+  return productRegistry.register({
+    id: body.id,
+    name: body.name,
+    version: body.version || body.bridge_version || '',
+    repository: body.repository || '',
+    endpoint: body.endpoint || '',
+    capabilities: body.capabilities || [],
+    permissions: body.permissions || (body.writable_by_aura ? ['observe','propose-change'] : ['observe']),
+    surfaces: body.surfaces || [],
+    instance_id: body.instance_id || 'default',
+    metadata: {
+      objective: body.objective || '',
+      criticality: body.criticality ?? null,
+      writable_by_aura: body.writable_by_aura === true,
+      modification_policy: body.modification_policy || '',
+      bridge_version: body.bridge_version || '',
+      runtime: body.runtime || {},
+    },
+  });
+});
+
+app.post('/api/aura/products/:id/observe', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  return productRegistry.observe(request.params?.id, request.body || {});
+});
+
+app.post('/api/aura/products/:id/event', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  const productId = String(request.params?.id || '').trim().slice(0,100);
+  const type = String(request.body?.type || 'product.event').trim().slice(0,160);
+  const payload = request.body?.payload && typeof request.body.payload === 'object'
+    ? request.body.payload
+    : {};
+  await kernel.observeEvent(type, payload, 'product:' + productId);
+  if (/error|failure|failed|degrad|anomal|timeout|crash/i.test(type)) {
+    await curiosity.enqueue({
+      source: productId || 'product',
+      domain: 'ecosystem',
+      question: `Pourquoi ${productId || 'ce produit'} signale-t-il ${type}, et quelle vérification sûre faut-il lancer en premier ?`,
+      why_now: 'Anomalie opérationnelle remontée par AURA Universal Bridge v1.',
+      novelty: 0.62,
+      uncertainty: 0.8,
+      impact: 0.72,
+      relevance: 0.95,
+    }).catch(() => {});
+  }
+  return { ok:true, product_id:productId, type };
+});
+
 app.get('/downloads/glide/windows', async (_request, reply) => {
   return reply.redirect(GLIDE_WINDOWS_DOWNLOAD);
 });
