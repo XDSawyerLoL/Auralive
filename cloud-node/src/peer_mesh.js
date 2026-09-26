@@ -88,8 +88,21 @@ function normalizeResources(value) {
   };
 }
 
+function peerQualityScore(peer = {}) {
+  const reputation = Math.max(0, Math.min(1, Number(peer.reputation || 0.5)));
+  const latency = Math.max(0, Number(peer.avg_latency_ms || 0));
+  const latencyScore = latency > 0 ? 1 - Math.min(1, latency / 15000) : 0.5;
+  const concurrency = Math.min(64, Math.max(0, Number(peer.resources?.hardware_concurrency || 0))) / 64;
+  const memory = Math.min(64, Math.max(0, Number(peer.resources?.device_memory_gb || 0))) / 64;
+  return Number((reputation * 0.72 + latencyScore * 0.16 + concurrency * 0.07 + memory * 0.05).toFixed(6));
+}
+
+function resultFingerprint(result) {
+  return createHash('sha256').update(stableStringify(result ?? null)).digest('hex');
+}
+
 export class PeerMesh {
-  static VERSION = 'aura-peer-mesh-v0.2';
+  static VERSION = 'aura-peer-mesh-v0.3';
 
   constructor() {
     this.lastError = '';
@@ -174,6 +187,9 @@ export class PeerMesh {
       capabilities: normalizeCaps(parseJson(row.capabilities, [])),
       resources: normalizeResources(parseJson(row.resources, {})),
       reputation: Math.max(0, Math.min(1, Number(row.reputation || 0.5))),
+      jobs_completed: Number(row.jobs_completed || 0),
+      jobs_failed: Number(row.jobs_failed || 0),
+      avg_latency_ms: Math.max(0, Number(row.avg_latency_ms || 0)),
       enabled: Boolean(Number(row.enabled || 0)),
       last_seen_at: row.last_seen_at || '',
       last_seen_ms: Number(row.last_seen_ms || 0),
@@ -186,7 +202,7 @@ export class PeerMesh {
               enabled,last_seen_at,last_seen_ms
        FROM aura_mesh_peers
        WHERE enabled=1
-       ORDER BY reputation DESC,last_seen_ms DESC LIMIT 256`,
+       ORDER BY reputation DESC,avg_latency_ms ASC,last_seen_ms DESC LIMIT 256`,
     );
     const required = clean(capability, 80);
     const owner = clean(workerId, 160);
@@ -205,7 +221,8 @@ export class PeerMesh {
       if (required && !item.capabilities.includes(required)) return false;
       if (owner && item.worker_id !== owner) return false;
       return true;
-    });
+    }).map((item) => ({ ...item, quality_score: peerQualityScore(item) }))
+      .sort((a, b) => b.quality_score - a.quality_score || b.reputation - a.reputation);
   }
 
   async assertOwnedPeer(peerId, workerId) {
@@ -231,6 +248,20 @@ export class PeerMesh {
     const signalType = clean(envelope.signal_type, 40);
     const nonce = clean(envelope.nonce, 100);
     if (!toPeer || !sessionId || !signalType || !nonce) throw new Error('signal P2P incomplet');
+    if (!['offer', 'answer', 'ice-candidate'].includes(signalType)) {
+      throw new Error('type de signal P2P interdit');
+    }
+    const session = await one(
+      'SELECT initiator_peer_id,target_peer_id,status FROM aura_mesh_sessions WHERE id=?',
+      [sessionId],
+    );
+    if (!session || !['negotiating', 'running'].includes(String(session.status || ''))) {
+      throw new Error('session P2P inactive');
+    }
+    const participants = new Set([String(session.initiator_peer_id), String(session.target_peer_id)]);
+    if (!participants.has(fromPeer.peer_id) || !participants.has(toPeer)) {
+      throw new Error('signal P2P hors session');
+    }
     if (!await this.getPeer(toPeer)) throw new Error('pair destinataire inconnu');
     const result = await query(
       `INSERT IGNORE INTO aura_mesh_signals(
@@ -324,15 +355,16 @@ export class PeerMesh {
     const timestamp = nowIso();
     await query(
       `INSERT INTO aura_mesh_sessions(
-        id,capability,initiator_peer_id,target_peer_id,task,status,result,error,
+        id,capability,initiator_peer_id,target_peer_id,task,status,started_ms,result,error,
         verification,created_at,updated_at
-      ) VALUES(?,?,?,?,?,'negotiating','{}','','{}',?,?)`,
+      ) VALUES(?,?,?,?,?,'negotiating',?,'{}','','{}',?,?)`,
       [
         id,
         required,
         initiator.peer_id,
         target.peer_id,
         JSON.stringify(task || {}).slice(0, 500000),
+        nowMs(),
         timestamp,
         timestamp,
       ],
@@ -354,11 +386,13 @@ export class PeerMesh {
       : {};
     const sessionId = clean(envelope.session_id, 80);
     const session = await one(
-      `SELECT id,capability,initiator_peer_id,target_peer_id,task,status
+      `SELECT id,capability,initiator_peer_id,target_peer_id,task,status,started_ms
        FROM aura_mesh_sessions WHERE id=?`,
       [sessionId],
     );
     if (!session) throw new Error('session P2P inconnue');
+    if (session.status === 'completed') throw new Error('session P2P déjà finalisée');
+    if (session.status === 'error') throw new Error('session P2P déjà échouée');
     if (String(envelope.peer_id || '') !== session.initiator_peer_id) {
       throw new Error('seul le pair initiateur peut finaliser la session');
     }
@@ -411,11 +445,19 @@ export class PeerMesh {
         session.id,
       ],
     );
+    const elapsed = Number(session.started_ms || 0) > 0
+      ? Math.max(0, nowMs() - Number(session.started_ms))
+      : 0;
     await query(
       `UPDATE aura_mesh_peers SET
-        reputation=LEAST(0.99,GREATEST(0.05,reputation*0.9+0.1)),
+        reputation=LEAST(0.99,GREATEST(0.05,reputation*0.88+0.12)),
+        jobs_completed=jobs_completed+1,
+        avg_latency_ms=CASE
+          WHEN ?>0 THEN CASE WHEN avg_latency_ms<=0 THEN ? ELSE avg_latency_ms*0.82+?*0.18 END
+          ELSE avg_latency_ms
+        END,
         updated_at=? WHERE peer_id IN (?,?)`,
-      [nowIso(), initiator.peer_id, target.peer_id],
+      [elapsed, elapsed, elapsed, nowIso(), initiator.peer_id, target.peer_id],
     ).catch(() => {});
     return { ok: true, id: session.id, result, verification };
   }
@@ -455,18 +497,92 @@ export class PeerMesh {
 
   async execute(capability, task = {}, options = {}) {
     const started = nowMs();
-    const session = await this.createSession(capability, task);
-    const completed = await this.waitSession(session.id, options.timeoutMs);
+    const requestedQuorum = Math.max(1, Math.min(Number(options.quorum || 1), 3));
+    if (requestedQuorum === 1) {
+      const session = await this.createSession(capability, task);
+      const completed = await this.waitSession(session.id, options.timeoutMs);
+      return {
+        ok: true,
+        result: completed.result,
+        verification: completed.verification,
+        metrics: {
+          elapsed_ms: nowMs() - started,
+          p2p_peers: 2,
+          quorum: 1,
+          cost_microunits: 0,
+        },
+        session_id: completed.id,
+      };
+    }
+
+    const sessions = [];
+    const excludedTargets = new Set();
+    for (let index = 0; index < requestedQuorum; index += 1) {
+      const candidates = await this.peers({ capability, onlineOnly: true });
+      const target = candidates.find((item) => !excludedTargets.has(item.peer_id));
+      if (!target) break;
+      const allPeers = await this.peers({ capability: 'webrtc', onlineOnly: true });
+      const initiator = allPeers.find((item) =>
+        item.peer_id !== target.peer_id && !excludedTargets.has(item.peer_id));
+      if (!initiator) break;
+      excludedTargets.add(target.peer_id);
+      const id = randomUUID();
+      const timestamp = nowIso();
+      await query(
+        `INSERT INTO aura_mesh_sessions(
+          id,capability,initiator_peer_id,target_peer_id,task,status,started_ms,result,error,
+          verification,created_at,updated_at
+        ) VALUES(?,?,?,?,?,'negotiating',?,'{}','','{}',?,?)`,
+        [id, clean(capability, 80), initiator.peer_id, target.peer_id,
+          JSON.stringify(task || {}).slice(0, 500000), nowMs(), timestamp, timestamp],
+      );
+      await this.pushServerSignal(initiator.peer_id, id, 'server-start', {
+        target_peer_id: target.peer_id,
+        target_public_jwk: target.public_jwk,
+        capability: clean(capability, 80),
+        task,
+        ice_servers: config.meshIceServers.map((urls) => ({ urls })),
+      });
+      sessions.push({ id, initiator, target });
+    }
+    if (sessions.length < requestedQuorum) {
+      throw new Error(`Pairs P2P insuffisants pour quorum ${requestedQuorum}`);
+    }
+
+    const settled = await Promise.allSettled(
+      sessions.map((item) => this.waitSession(item.id, options.timeoutMs)),
+    );
+    const completed = settled.filter((item) => item.status === 'fulfilled').map((item) => item.value);
+    if (!completed.length) throw new Error('Aucune session P2P du quorum n’a abouti');
+    const counts = new Map();
+    for (const item of completed) {
+      const fingerprint = resultFingerprint(item.result);
+      counts.set(fingerprint, (counts.get(fingerprint) || 0) + 1);
+    }
+    const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const majority = Math.floor(requestedQuorum / 2) + 1;
+    if (!winner || winner[1] < majority) {
+      throw new Error(`Quorum P2P non atteint: ${winner?.[1] || 0}/${requestedQuorum}`);
+    }
+    const chosen = completed.find((item) => resultFingerprint(item.result) === winner[0]);
     return {
       ok: true,
-      result: completed.result,
-      verification: completed.verification,
+      result: chosen?.result || {},
+      verification: {
+        mode: 'p2p-quorum',
+        verified: true,
+        requested_quorum: requestedQuorum,
+        completed: completed.length,
+        agreeing: winner[1],
+        result_fingerprint: winner[0],
+        sessions: completed.map((item) => item.id),
+      },
       metrics: {
         elapsed_ms: nowMs() - started,
-        p2p_peers: 2,
+        p2p_sessions: completed.length,
+        quorum: requestedQuorum,
         cost_microunits: 0,
       },
-      session_id: completed.id,
     };
   }
 
