@@ -20,9 +20,12 @@ class MemoryModule:
         if memories:
             parts.append("faits mémorisés : " + "; ".join(item["content"] for item in memories))
 
-        if query and self.vector_memory is not None
+        if (
+            query
+            and self.vector_memory is not None
             and self.vector_memory.enabled
-            and self.vector_memory.started:
+            and self.vector_memory.started
+        ):
             user_rows = await self.vector_memory.search(
                 query,
                 namespaces=["viewer-memory", "conversation"],
