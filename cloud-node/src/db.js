@@ -268,7 +268,7 @@ async function applyMigrations(db) {
       db,
       'aura_execution_jobs',
       'required_capabilities',
-      "required_capabilities LONGTEXT NOT NULL AFTER target_worker_id",
+      "required_capabilities LONGTEXT NULL AFTER target_worker_id",
     );
     await ensureColumn(
       db,
@@ -298,13 +298,13 @@ async function applyMigrations(db) {
       db,
       'aura_execution_workers',
       'mesh_capabilities',
-      "mesh_capabilities LONGTEXT NOT NULL AFTER compute_consent",
+      "mesh_capabilities LONGTEXT NULL AFTER compute_consent",
     );
     await ensureColumn(
       db,
       'aura_execution_workers',
       'resources',
-      "resources LONGTEXT NOT NULL AFTER mesh_capabilities",
+      "resources LONGTEXT NULL AFTER mesh_capabilities",
     );
     await ensureColumn(
       db,
