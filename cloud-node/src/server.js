@@ -1205,6 +1205,15 @@ app.post('/api/command/run', async (request, reply) => {
   return commandCenter.runCycle(String(request.body?.trigger || 'private-api'));
 });
 
+app.post('/api/command/change-proposals', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.proposeGithubChange(request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
 app.post('/api/command/initiatives/:id/retry', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   try {
