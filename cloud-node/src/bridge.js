@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { one, query } from './db.js';
 
 const nowIso = () => new Date().toISOString();
@@ -26,6 +26,40 @@ function parseJson(value, fallback = {}) {
   }
 }
 
+function clamp01(value, fallback = 0.5) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(1, number));
+}
+
+function stringList(value, limit = 64) {
+  const rows = Array.isArray(value) ? value : [];
+  return [...new Set(rows.map((item) => String(item || '').trim()).filter(Boolean))].slice(0, limit);
+}
+
+export function scoreMeshWorker(worker = {}) {
+  const resources = worker.resources && typeof worker.resources === 'object'
+    ? worker.resources
+    : {};
+  const reputation = clamp01(worker.reputation, 0.5);
+  const threads = Math.min(64, Math.max(0, Number(resources.cpu_threads || 0))) / 64;
+  const ram = Math.min(64, Math.max(0, Number(resources.ram_bytes || 0)) / (1024 ** 3)) / 64;
+  const accelerator = resources.gpu || resources.accelerator ? 1 : 0;
+  const resourceScore = threads * 0.35 + ram * 0.35 + accelerator * 0.3;
+  const latency = Math.max(0, Number(worker.avg_latency_ms || 0));
+  const latencyScore = latency > 0 ? 1 - Math.min(1, latency / 20_000) : 0.5;
+  return Number((reputation * 0.7 + resourceScore * 0.2 + latencyScore * 0.1).toFixed(6));
+}
+
+export function meshResultFingerprint(kind, result = {}) {
+  let canonical = result;
+  if (kind === 'inference') canonical = String(result?.answer || '').trim();
+  if (kind === 'compute' && Object.prototype.hasOwnProperty.call(result || {}, 'value')) {
+    canonical = result.value;
+  }
+  return createHash('sha256').update(JSON.stringify(canonical ?? null)).digest('hex');
+}
+
 const settings = Object.freeze({
   token: String(process.env.AURA_BRIDGE_TOKEN || process.env.AURA_CLOUD_TOKEN || ''),
   leaseSeconds: intEnv('AURA_BRIDGE_LEASE_SECONDS', 90, 15, 900),
@@ -36,6 +70,8 @@ const settings = Object.freeze({
   imageTimeoutMs: intEnv('AURA_BRIDGE_IMAGE_TIMEOUT_MS', 300_000, 10_000, 600_000),
   operatorMaxSteps: intEnv('AURA_BRIDGE_OPERATOR_MAX_STEPS', 6, 1, 8),
   preferLocalAi: boolEnv('AURA_LOCAL_AI_PREFERRED', true),
+  meshMaxQuorum: intEnv('AURA_MESH_MAX_QUORUM', 3, 1, 5),
+  meshTimeoutMs: intEnv('AURA_MESH_TIMEOUT_MS', 120_000, 5_000, 600_000),
 });
 
 export class ExecutionBridge {
@@ -62,30 +98,86 @@ export class ExecutionBridge {
     return Boolean(row && nowMs() - Number(row.last_seen_ms || 0) <= settings.workerOnlineMs);
   }
 
-  async enqueue(kind, payload = {}, requestedRisks = []) {
+  async workers({ onlineOnly = true, computeOnly = false, capability = '' } = {}) {
+    if (!this.enabled) return [];
+    const rows = await query(
+      `SELECT worker_id,capabilities,model,voice,version,compute_consent,mesh_capabilities,
+              resources,reputation,jobs_completed,jobs_failed,avg_latency_ms,last_seen_at,last_seen_ms
+       FROM aura_execution_workers
+       ORDER BY reputation DESC,last_seen_ms DESC LIMIT 256`,
+    );
+    const required = String(capability || '').trim();
+    return rows.map((row) => {
+      const item = {
+        worker_id: String(row.worker_id || ''),
+        capabilities: parseJson(row.capabilities, []),
+        model: String(row.model || ''),
+        voice: String(row.voice || ''),
+        version: String(row.version || ''),
+        compute_consent: Boolean(Number(row.compute_consent || 0)),
+        mesh_capabilities: stringList(parseJson(row.mesh_capabilities, [])),
+        resources: parseJson(row.resources, {}),
+        reputation: clamp01(row.reputation, 0.5),
+        jobs_completed: Number(row.jobs_completed || 0),
+        jobs_failed: Number(row.jobs_failed || 0),
+        avg_latency_ms: Math.max(0, Number(row.avg_latency_ms || 0)),
+        last_seen_at: String(row.last_seen_at || ''),
+        last_seen_ms: Number(row.last_seen_ms || 0),
+      };
+      return { ...item, mesh_score: scoreMeshWorker(item) };
+    }).filter((worker) => {
+      if (onlineOnly && nowMs() - worker.last_seen_ms > settings.workerOnlineMs) return false;
+      if (computeOnly && !worker.compute_consent) return false;
+      if (required && !worker.mesh_capabilities.includes(required)) return false;
+      return true;
+    }).sort((a, b) => b.mesh_score - a.mesh_score || b.reputation - a.reputation);
+  }
+
+  async enqueue(kind, payload = {}, requestedRisks = [], options = {}) {
     if (!this.enabled) throw new Error('Pont AURA Cloud ↔ Quantic Studio non configuré');
     const id = randomUUID();
     const timestamp = nowIso();
+    const targetWorkerId = String(options.targetWorkerId || '').trim().slice(0, 160);
+    const requiredCapabilities = stringList(options.requiredCapabilities);
+    const verificationMode = String(options.verificationMode || 'none').trim().slice(0, 40);
+    const quorum = Math.max(1, Math.min(Number(options.quorum || 1), settings.meshMaxQuorum));
     await query(
       `INSERT INTO aura_execution_jobs(
-        id,kind,payload,requested_risks,status,attempts,lease_owner,lease_until,result,error,created_at,updated_at
-      ) VALUES(?,?,?,?, 'queued',0,'',0,'{}','',?,?)`,
+        id,kind,payload,requested_risks,target_worker_id,required_capabilities,
+        verification_mode,quorum,status,attempts,lease_owner,lease_until,assigned_at,
+        result,error,created_at,updated_at
+      ) VALUES(?,?,?,?,?,?,?,?,'queued',0,'',0,0,'{}','',?,?)`,
       [
         id,
         String(kind).slice(0, 40),
         JSON.stringify(payload || {}).slice(0, 1_000_000),
         JSON.stringify(Array.from(requestedRisks || [])).slice(0, 20_000),
+        targetWorkerId,
+        JSON.stringify(requiredCapabilities).slice(0, 20_000),
+        verificationMode,
+        quorum,
         timestamp,
         timestamp,
       ],
     );
     this.lastJobAt = timestamp;
-    return { id, kind, status: 'queued', created_at: timestamp };
+    return {
+      id,
+      kind,
+      status: 'queued',
+      target_worker_id: targetWorkerId,
+      required_capabilities: requiredCapabilities,
+      verification_mode: verificationMode,
+      quorum,
+      created_at: timestamp,
+    };
   }
 
   async getJob(id) {
     const row = await one(
-      `SELECT id,kind,payload,requested_risks,status,attempts,lease_owner,lease_until,result,error,created_at,updated_at
+      `SELECT id,kind,payload,requested_risks,target_worker_id,required_capabilities,
+              verification_mode,quorum,status,attempts,lease_owner,lease_until,assigned_at,
+              result,error,created_at,updated_at
        FROM aura_execution_jobs WHERE id=?`,
       [String(id)],
     );
@@ -94,9 +186,12 @@ export class ExecutionBridge {
       ...row,
       payload: parseJson(row.payload, {}),
       requested_risks: parseJson(row.requested_risks, []),
+      required_capabilities: stringList(parseJson(row.required_capabilities, [])),
       result: parseJson(row.result, {}),
       attempts: Number(row.attempts || 0),
+      quorum: Math.max(1, Number(row.quorum || 1)),
       lease_until: Number(row.lease_until || 0),
+      assigned_at: Number(row.assigned_at || 0),
     };
   }
 
@@ -106,13 +201,17 @@ export class ExecutionBridge {
     const timestamp = nowIso();
     await query(
       `INSERT INTO aura_execution_workers(
-        worker_id,capabilities,model,voice,version,last_seen_at,last_seen_ms
-      ) VALUES(?,?,?,?,?,?,?)
+        worker_id,capabilities,model,voice,version,compute_consent,mesh_capabilities,
+        resources,reputation,jobs_completed,jobs_failed,avg_latency_ms,last_seen_at,last_seen_ms
+      ) VALUES(?,?,?,?,?,?,?,?,0.5,0,0,0,?,?)
       ON DUPLICATE KEY UPDATE
         capabilities=VALUES(capabilities),
         model=VALUES(model),
         voice=VALUES(voice),
         version=VALUES(version),
+        compute_consent=VALUES(compute_consent),
+        mesh_capabilities=VALUES(mesh_capabilities),
+        resources=VALUES(resources),
         last_seen_at=VALUES(last_seen_at),
         last_seen_ms=VALUES(last_seen_ms)`,
       [
@@ -121,6 +220,9 @@ export class ExecutionBridge {
         String(payload.model || '').slice(0, 240),
         String(payload.voice || '').slice(0, 240),
         String(payload.version || '').slice(0, 120),
+        payload.compute_consent === true ? 1 : 0,
+        JSON.stringify(stringList(payload.mesh_capabilities)).slice(0, 20_000),
+        JSON.stringify(payload.resources && typeof payload.resources === 'object' ? payload.resources : {}).slice(0, 80_000),
         timestamp,
         nowMs(),
       ],
@@ -133,23 +235,43 @@ export class ExecutionBridge {
     const worker = String(workerId || '').trim().slice(0, 160);
     if (!worker) throw new Error('worker_id requis');
 
+    const workerRow = await one(
+      'SELECT compute_consent,mesh_capabilities FROM aura_execution_workers WHERE worker_id=?',
+      [worker],
+    );
+    const computeConsent = Boolean(Number(workerRow?.compute_consent || 0));
+    const meshCapabilities = new Set(stringList(parseJson(workerRow?.mesh_capabilities, [])));
     const leaseUntil = nowMs() + settings.leaseSeconds * 1000;
+
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      const candidate = await one(
-        `SELECT id FROM aura_execution_jobs
+      const candidates = await query(
+        `SELECT id,target_worker_id,required_capabilities FROM aura_execution_jobs
          WHERE status='queued' OR (status='leased' AND lease_until<?)
-         ORDER BY created_at ASC LIMIT 1`,
+         ORDER BY created_at ASC LIMIT 32`,
         [nowMs()],
       );
-      if (!candidate) return null;
-      const result = await query(
-        `UPDATE aura_execution_jobs
-         SET status='leased',lease_owner=?,lease_until=?,attempts=attempts+1,updated_at=?
-         WHERE id=? AND (status='queued' OR (status='leased' AND lease_until<?))`,
-        [worker, leaseUntil, nowIso(), candidate.id, nowMs()],
-      );
-      if (!Number(result.affectedRows || 0)) continue;
-      return this.getJob(candidate.id);
+      if (!candidates.length) return null;
+
+      let claimed = false;
+      for (const candidate of candidates) {
+        const target = String(candidate.target_worker_id || '');
+        if (target && target !== worker) continue;
+        const required = stringList(parseJson(candidate.required_capabilities, []));
+        if (required.length) {
+          if (!computeConsent) continue;
+          if (required.some((item) => !meshCapabilities.has(item))) continue;
+        }
+        const result = await query(
+          `UPDATE aura_execution_jobs
+           SET status='leased',lease_owner=?,lease_until=?,assigned_at=?,attempts=attempts+1,updated_at=?
+           WHERE id=? AND (status='queued' OR (status='leased' AND lease_until<?))`,
+          [worker, leaseUntil, nowMs(), nowIso(), candidate.id, nowMs()],
+        );
+        if (!Number(result.affectedRows || 0)) continue;
+        claimed = true;
+        return this.getJob(candidate.id);
+      }
+      if (!claimed) return null;
     }
     return null;
   }
@@ -176,7 +298,7 @@ export class ExecutionBridge {
   async complete(id, workerId, payload = {}) {
     const worker = String(workerId || '').trim().slice(0, 160);
     const row = await one(
-      'SELECT id,status,lease_owner FROM aura_execution_jobs WHERE id=?',
+      'SELECT id,status,lease_owner,assigned_at FROM aura_execution_jobs WHERE id=?',
       [String(id)],
     );
     if (!row) throw new Error('job inconnu');
@@ -199,6 +321,22 @@ export class ExecutionBridge {
         String(id),
       ],
     );
+
+    const assignedAt = Number(row.assigned_at || 0);
+    const elapsed = assignedAt > 0 ? Math.max(0, nowMs() - assignedAt) : 0;
+    await query(
+      `UPDATE aura_execution_workers
+       SET reputation=LEAST(0.99,GREATEST(0.05,reputation*0.85+?*0.15)),
+           jobs_completed=jobs_completed+?,
+           jobs_failed=jobs_failed+?,
+           avg_latency_ms=CASE
+             WHEN ?>0 THEN CASE WHEN avg_latency_ms<=0 THEN ? ELSE avg_latency_ms*0.8+?*0.2 END
+             ELSE avg_latency_ms
+           END
+       WHERE worker_id=?`,
+      [ok ? 1 : 0, ok ? 1 : 0, ok ? 0 : 1, elapsed, elapsed, elapsed, worker],
+    ).catch(() => {});
+
     this.lastJobAt = nowIso();
     return this.getJob(id);
   }
@@ -213,6 +351,104 @@ export class ExecutionBridge {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
     throw new Error('AURA bridge timeout');
+  }
+
+  async executeMesh(kind, payload = {}, {
+    capability = kind,
+    quorum = 1,
+    verification = 'none',
+    timeoutMs = settings.meshTimeoutMs,
+  } = {}) {
+    const requestedQuorum = Math.max(1, Math.min(Number(quorum || 1), settings.meshMaxQuorum));
+    const mode = String(verification || 'none').trim().toLowerCase();
+    const workers = await this.workers({
+      onlineOnly: true,
+      computeOnly: true,
+      capability: String(capability || kind),
+    });
+    if (workers.length < requestedQuorum) {
+      throw new Error(
+        `Compute Mesh insuffisant: ${workers.length} nœud(s) compatible(s), quorum ${requestedQuorum}`,
+      );
+    }
+
+    const selected = workers.slice(0, requestedQuorum);
+    const jobs = await Promise.all(selected.map((worker) => this.enqueue(
+      kind,
+      payload,
+      ['ai'],
+      {
+        targetWorkerId: worker.worker_id,
+        requiredCapabilities: [String(capability || kind)],
+        verificationMode: mode,
+        quorum: requestedQuorum,
+      },
+    )));
+    const settled = await Promise.allSettled(
+      jobs.map((job) => this.wait(job.id, timeoutMs)),
+    );
+    const completed = [];
+    const failures = [];
+    for (let index = 0; index < settled.length; index += 1) {
+      const item = settled[index];
+      if (item.status === 'fulfilled') {
+        completed.push({
+          worker_id: selected[index].worker_id,
+          reputation: selected[index].reputation,
+          result: item.value,
+          fingerprint: meshResultFingerprint(kind, item.value),
+        });
+      } else {
+        failures.push({
+          worker_id: selected[index].worker_id,
+          error: String(item.reason?.message || item.reason || 'mesh-worker-failure').slice(0, 1000),
+        });
+      }
+    }
+    if (!completed.length) {
+      throw new Error(failures[0]?.error || 'Aucun nœud Compute Mesh n’a répondu');
+    }
+
+    const counts = new Map();
+    for (const item of completed) counts.set(item.fingerprint, (counts.get(item.fingerprint) || 0) + 1);
+    const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const winnerFingerprint = winner?.[0] || completed[0].fingerprint;
+    const agreeing = Number(winner?.[1] || 1);
+    const majority = Math.floor(requestedQuorum / 2) + 1;
+    const verified = mode === 'none'
+      ? completed.length > 0
+      : mode === 'duplicate'
+        ? agreeing >= 2 || requestedQuorum === 1
+        : agreeing >= majority && completed.length >= majority;
+    if (mode === 'quorum' && !verified) {
+      throw new Error(
+        `Quorum Compute Mesh non atteint: ${agreeing}/${requestedQuorum} résultat(s) concordant(s)`,
+      );
+    }
+    const chosen = completed.find((item) => item.fingerprint === winnerFingerprint) || completed[0];
+    return {
+      ok: true,
+      result: chosen.result,
+      verification: {
+        mode,
+        requested_quorum: requestedQuorum,
+        completed: completed.length,
+        agreeing,
+        verified,
+        fingerprints: completed.map((item) => item.fingerprint),
+      },
+      mesh: {
+        workers: completed.map((item) => ({
+          worker_id: item.worker_id,
+          reputation: item.reputation,
+        })),
+        failures,
+      },
+      metrics: {
+        mesh_nodes: completed.length,
+        cost_microunits: 0,
+      },
+    };
   }
 
   async infer(prompt, system, maxTokens = 700, taskRole = 'auto') {
@@ -324,6 +560,7 @@ export class ExecutionBridge {
     const online = Boolean(
       worker && nowMs() - Number(worker.last_seen_ms || 0) <= settings.workerOnlineMs,
     );
+    const meshWorkers = await this.workers({ onlineOnly: true, computeOnly: true });
     return {
       version: ExecutionBridge.VERSION,
       enabled: this.enabled,
@@ -338,6 +575,13 @@ export class ExecutionBridge {
         version: worker.version || '',
         last_seen_at: worker.last_seen_at || '',
       } : null,
+      mesh: {
+        version: 'aura-compute-mesh-v0.1',
+        consenting_online_nodes: meshWorkers.length,
+        capabilities: [...new Set(meshWorkers.flatMap((item) => item.mesh_capabilities))].sort(),
+        best_reputation: meshWorkers.length ? meshWorkers[0].reputation : 0,
+        max_quorum: settings.meshMaxQuorum,
+      },
       counts: {
         queued: Number(counts?.queued || 0),
         leased: Number(counts?.leased || 0),
