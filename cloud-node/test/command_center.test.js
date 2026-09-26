@@ -6,6 +6,7 @@ import {
   repositoryHealth,
   summarizeWorkflowRuns,
   needsExternalEvidence,
+  safeGithubChangePath,
 } from '../src/command_center.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
@@ -139,4 +140,21 @@ test('autonomous research initiatives use AURA Fabric DAGs when available', () =
   assert.match(commandSource, /aura-fabric-research-dag/);
   assert.match(commandSource, /filter\(\(item\) => !item\.side_effects\)/);
   assert.match(serverSource, /new CommandCenter\([\s\S]*fabric,[\s\S]*dagCompiler,[\s\S]*graphExecutor/);
+});
+
+
+test('AURA cross-product changes are branch-only, allowlisted and PR-gated', () => {
+  assert.equal(safeGithubChangePath('src/main.js'), 'src/main.js');
+  assert.equal(safeGithubChangePath('.env'), '');
+  assert.equal(safeGithubChangePath('.github/workflows/release.yml'), '');
+  assert.equal(safeGithubChangePath('certs/signing.pfx'), '');
+  assert.equal(safeGithubChangePath('../escape.js'), '');
+  assert.match(configSource, /AURA_COMMAND_AUTO_CREATE_CHANGE_PR/);
+  assert.match(configSource, /AURA_COMMAND_CHANGE_PR_MIN_CONFIDENCE/);
+  assert.match(commandSource, /github\.propose_file_change/);
+  assert.match(commandSource, /github-bounded-change-pr/);
+  assert.match(commandSource, /auto_merge:\s*false/);
+  assert.match(commandSource, /refs\/heads\/.*branch/);
+  assert.doesNotMatch(commandSource, /github\.propose_file_change[\s\S]{0,6000}\/git\/refs\/heads\/main/);
+  assert.match(serverSource, /\/api\/command\/change-proposals/);
 });
