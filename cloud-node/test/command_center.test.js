@@ -6,6 +6,7 @@ import {
   repositoryHealth,
   summarizeWorkflowRuns,
   needsExternalEvidence,
+  normalizePatchPath,
 } from '../src/command_center.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
@@ -155,4 +156,19 @@ test('cross-product Patch PR writes are branch-only and bounded', () => {
   assert.match(configSource, /AURA_COMMAND_MAX_PATCH_FILES/);
   assert.match(configSource, /AURA_COMMAND_MAX_PATCH_BYTES/);
   assert.match(serverSource, /\/api\/command\/products\/:id\/patch-pr/);
+});
+
+
+test('Patch PR path canonicalization blocks workflow and credential bypasses', () => {
+  assert.throws(() => normalizePatchPath('.github//workflows/release.yml'), /chemin sensible interdit/);
+  assert.throws(() => normalizePatchPath('./.github/actions/build/action.yml'), /chemin sensible interdit/);
+  assert.throws(() => normalizePatchPath('safe/../.github/workflows/release.yml'), /chemin de patch invalide/);
+  assert.throws(() => normalizePatchPath('config/.env.production'), /chemin sensible interdit/);
+  assert.equal(normalizePatchPath('src//./feature.js'), 'src/feature.js');
+});
+
+test('product write denial metadata survives observations and fleet sync', () => {
+  assert.match(commandSource, /currentMetadata\.writable_by_aura === false/);
+  assert.match(commandSource, /\.\.\.currentMetadata, github: snapshot/);
+  assert.doesNotMatch(commandSource, /action_payload \|\| \{\}\)\.slice\(0, 200000\)/);
 });
