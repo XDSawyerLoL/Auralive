@@ -415,7 +415,6 @@ export class CapabilityFabric {
       }, async (input) => this.bridge.executeMoA(input, {
         maxAgents: input?.max_agents,
       }));
-      });
     }
 
     if (this.peerMesh) {
