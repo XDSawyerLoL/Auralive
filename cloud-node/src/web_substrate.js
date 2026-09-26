@@ -271,6 +271,34 @@ export class WebSubstrate {
     }));
   }
 
+  async searchGithub(queryText, limit) {
+    const url = new URL('https://api.github.com/search/repositories');
+    url.searchParams.set('q', cleanText(queryText, 240));
+    url.searchParams.set('sort', 'updated');
+    url.searchParams.set('order', 'desc');
+    url.searchParams.set('per_page', String(Math.min(limit, 5)));
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'AURA-Web-Substrate/1.0',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(config.webRequestTimeoutMs),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return [];
+    return (Array.isArray(body?.items) ? body.items : []).map((row) => ({
+      url: String(row.html_url || ''),
+      title: cleanText(row.full_name || row.name || '', 300),
+      snippet: cleanText(
+        [row.description || '', `stars=${Number(row.stargazers_count || 0)} language=${row.language || 'n/a'}`].join(' · '),
+        1200,
+      ),
+      engine: 'github',
+      published_at: String(row.updated_at || ''),
+    })).filter((row) => row.url.startsWith('https://github.com/'));
+  }
+
   async searchCrossref(queryText, limit) {
     const url = new URL('https://api.crossref.org/works');
     url.searchParams.set('query.bibliographic', queryText);
@@ -298,6 +326,7 @@ export class WebSubstrate {
       this.searchSearx(q, limit),
       this.searchWikipedia(q, Math.min(4, limit)),
       this.searchCrossref(q, Math.min(4, limit)),
+      this.searchGithub(q, Math.min(4, limit)),
     ]);
     const seen = new Set();
     const rows = [];
