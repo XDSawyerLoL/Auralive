@@ -398,6 +398,36 @@ export class CapabilityFabric {
           verification: options?.verification || 'none',
         });
       });
+
+      this.register({
+        id: 'mesh.moa',
+        name: 'AURA distributed Mixture-of-Agents reasoning',
+        transport: 'mesh-worker',
+        tags: ['compute', 'mesh', 'inference', 'ai', 'reasoning', 'moa', 'ensemble'],
+        trust: 0.76,
+        observed_reliability: 0.72,
+        latency_ms: 7000,
+        side_effects: false,
+        risk: 'safe',
+        input_contract: { prompt: 'string', system: 'string', max_tokens: 'integer', max_models: 'integer' },
+        output_contract: { answer: 'string', candidates: 'array', agreement_score: 'number' },
+        provider: 'aura-compute-mesh',
+        enabled: false,
+      }, async (input, options) => {
+        const prompt = clean(input?.prompt || input?.question || input?.objective, 50000);
+        if (!prompt) throw new Error('mesh.moa exige prompt, question ou objective');
+        return this.bridge.executeMesh('moa', {
+          prompt,
+          system: clean(input?.system, 20000),
+          max_tokens: Math.max(96, Math.min(Number(input?.max_tokens || 700), 1600)),
+          max_models: Math.max(2, Math.min(Number(input?.max_models || 3), 6)),
+          task_role: clean(input?.task_role || 'reasoning', 80),
+        }, {
+          capability: 'moa',
+          quorum: options?.quorum || 1,
+          verification: options?.verification || 'none',
+        });
+      });
     }
 
     if (this.peerMesh) {
@@ -456,6 +486,7 @@ export class CapabilityFabric {
     const workers = await this.bridge.workers({ onlineOnly: true, computeOnly: true });
     const compute = workers.filter((item) => item.mesh_capabilities?.includes('compute'));
     const inference = workers.filter((item) => item.mesh_capabilities?.includes('inference'));
+    const moa = workers.filter((item) => item.mesh_capabilities?.includes('moa'));
     this.meshNodes = workers.length;
 
     const update = (id, rows) => {
@@ -473,7 +504,13 @@ export class CapabilityFabric {
     };
     update('mesh.compute', compute);
     update('mesh.inference', inference);
-    return { nodes: workers.length, compute: compute.length, inference: inference.length };
+    update('mesh.moa', moa);
+    return {
+      nodes: workers.length,
+      compute: compute.length,
+      inference: inference.length,
+      moa: moa.length,
+    };
   }
 
   async refreshPeers() {
