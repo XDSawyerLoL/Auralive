@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { meshResultFingerprint, scoreMeshWorker } from '../src/bridge.js';
+import { meshResultFingerprint, scoreMeshWorker, selectMoaAgents } from '../src/bridge.js';
 
 test('mesh worker score rewards reputation and useful resources', () => {
   const weak = scoreMeshWorker({
@@ -39,4 +39,35 @@ test('mesh inference fingerprints are based on the answer', () => {
     diagnostic: { model: 'b' },
   });
   assert.equal(first, second);
+});
+
+
+test('distributed MoA selects distinct workers and prefers model diversity', () => {
+  const agents = selectMoaAgents([
+    {
+      worker_id: 'worker-a',
+      model: 'qwen3:8b',
+      resources: { models: ['qwen3:8b', 'deepseek-r1:8b'] },
+      reputation: 0.9,
+      mesh_score: 0.9,
+    },
+    {
+      worker_id: 'worker-b',
+      model: 'qwen3:8b',
+      resources: { models: ['qwen3:8b', 'hermes4:14b'] },
+      reputation: 0.85,
+      mesh_score: 0.85,
+    },
+    {
+      worker_id: 'worker-c',
+      model: 'deepseek-r1:8b',
+      resources: { models: ['deepseek-r1:8b'] },
+      reputation: 0.8,
+      mesh_score: 0.8,
+    },
+  ], 3);
+
+  assert.equal(agents.length, 3);
+  assert.equal(new Set(agents.map((item) => item.worker_id)).size, 3);
+  assert.equal(new Set(agents.map((item) => item.model)).size, 3);
 });
