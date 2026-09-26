@@ -8,6 +8,8 @@ import {
 
 import {
   peerIdForJwk,
+  peerResultFingerprint,
+  publicIceServerView,
   stableStringify,
   verifyPeerEnvelope,
 } from '../src/peer_mesh.js';
@@ -101,4 +103,28 @@ test('peer envelopes reject stale timestamps', () => {
     { key: privateKey, dsaEncoding: 'ieee-p1363' },
   ).toString('base64url');
   assert.equal(verifyPeerEnvelope(publicJwk, envelope, signature), false);
+});
+
+
+test('public ICE status never exposes TURN credentials', () => {
+  const view = publicIceServerView([
+    {
+      urls: ['stun:stun.example.org:3478', 'turns:turn.example.org:5349'],
+      username: 'private-user',
+      credential: 'private-secret',
+    },
+  ]);
+  const serialized = JSON.stringify(view);
+  assert.equal(view[0].relay, true);
+  assert.equal(view[0].credentialed, true);
+  assert.equal(serialized.includes('private-user'), false);
+  assert.equal(serialized.includes('private-secret'), false);
+});
+
+test('P2P quorum fingerprint tolerates insignificant Float32 drift', () => {
+  const first = peerResultFingerprint({ value: [0.123456789, 0.333333343], engine: 'webgpu' });
+  const second = peerResultFingerprint({ value: [0.123456791, 0.333333341], engine: 'webgpu' });
+  const different = peerResultFingerprint({ value: [0.1234, 0.3333], engine: 'webgpu' });
+  assert.equal(first, second);
+  assert.notEqual(first, different);
 });
