@@ -135,6 +135,12 @@ class AuraAI:
             "last_latency_ms": self.last_latency_ms,
             "request_timeout_seconds": self.settings.ai_request_timeout_seconds,
             "constellation_enabled": self.settings.ai_constellation_enabled,
+            "moa_enabled": bool(self.settings.ai_moa_enabled),
+            "moa_models_available": len(self.constellation.installed),
+            "moa_ready": bool(
+                self.settings.ai_moa_enabled
+                and len(self.constellation.installed) >= self.settings.ai_moa_min_models
+            ),
             "last_role": self.last_role,
             "last_model": self.last_model,
             "last_route": dict(self.constellation.last_route),
