@@ -95,11 +95,13 @@ export async function seedQuanticProducts(commandCenter) {
   const results = [];
   for (const product of CORE_QUANTIC_PRODUCTS) {
     const existing = (await commandCenter.services()).find((row) => row.id === product.id);
-    const state = existing?.state || (product.aura_bridge === 'native' ? 'online' : 'unknown');
+    const state = existing?.state || (product.id === 'aura' ? 'online' : 'unknown');
     const stateDetail = existing?.state_detail
-      || (product.aura_bridge === 'native'
-        ? 'Pont AURA natif déclaré.'
-        : 'Pont AURA universel requis; observation runtime attendue.');
+      || (product.id === 'aura'
+        ? 'Noyau AURA actif.'
+        : product.aura_bridge === 'native'
+          ? 'Pont AURA natif déclaré; observation runtime attendue.'
+          : 'Pont AURA universel requis; observation runtime attendue.');
     results.push(await commandCenter.upsertService({
       id: product.id,
       name: product.name,
