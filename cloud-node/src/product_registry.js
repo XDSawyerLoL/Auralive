@@ -124,6 +124,38 @@ export class ProductRegistry {
     }));
   }
 
+  async observe(id, payload = {}) {
+    const key = productId(id);
+    if (!key) throw new Error('product id requis');
+    const existing = await one('SELECT * FROM aura_products WHERE id=?',[key]);
+    if (!existing) {
+      return this.register({
+        id:key,
+        name:payload.name || key,
+        version:payload.version || '',
+        repository:payload.repository || '',
+        endpoint:payload.endpoint || '',
+        capabilities:payload.capabilities || [],
+        permissions:payload.permissions || [],
+        surfaces:payload.surfaces || [],
+        metadata:payload.metadata || {},
+        instance_id:payload.instance_id || payload.instanceId || 'default',
+      });
+    }
+    const stamp = now();
+    const state = clean(payload.state || 'online',40) || 'online';
+    const metadata = {
+      ...json(existing.metadata,{}),
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    if (payload.detail) metadata.state_detail = clean(payload.detail,4000);
+    await query(
+      'UPDATE aura_products SET state=?,last_seen_at=?,last_seen_ms=?,metadata=?,updated_at=? WHERE id=?',
+      [state,stamp,nowMs(),JSON.stringify(metadata).slice(0,80000),stamp,key],
+    );
+    return { ok:true,id:key,state,last_seen_at:stamp };
+  }
+
   async capabilities() {
     const products = await this.list();
     const map = {};
