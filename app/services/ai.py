@@ -134,9 +134,11 @@ class AuraAI:
             "last_latency_ms": self.last_latency_ms,
             "request_timeout_seconds": self.settings.ai_request_timeout_seconds,
             "constellation_enabled": self.settings.ai_constellation_enabled,
+            "moa_enabled": bool(getattr(self.settings, "ai_constellation_moa_enabled", False)),
             "last_role": self.last_role,
             "last_model": self.last_model,
             "last_route": dict(self.constellation.last_route),
+            "last_ensemble": dict(self.constellation.last_ensemble),
         }
 
     async def reply(
@@ -294,6 +296,15 @@ class AuraAI:
 
         if self.settings.ai_mode == "ollama":
             await self._prepare_runtime_model()
+            if self._should_moa(role, max_tokens):
+                ensemble = await self._moa_generate(
+                    messages,
+                    max_tokens=max_tokens,
+                    role=role,
+                    preferred_model=preferred_model,
+                )
+                if ensemble:
+                    return ensemble
             if self.settings.ai_constellation_enabled:
                 route = await self.constellation.choose(
                     role,
@@ -351,6 +362,144 @@ class AuraAI:
                 )
         self.last_model = self.settings.ai_fast_model or self.settings.ai_model
         return await self._openai_compatible(messages, max_tokens)
+
+    def _should_moa(self, role: str, max_tokens: int) -> bool:
+        return bool(
+            self.settings.ai_constellation_enabled
+            and getattr(self.settings, "ai_constellation_moa_enabled", False)
+            and role in {"reasoning", "code", "research", "critic", "security", "evolution"}
+            and int(max_tokens) >= max(
+                160,
+                int(getattr(self.settings, "ai_constellation_moa_min_tokens", 260)),
+            )
+        )
+
+    async def _moa_generate(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        max_tokens: int,
+        role: str,
+        preferred_model: str = "",
+    ) -> str:
+        started = monotonic()
+        count = max(2, min(int(getattr(self.settings, "ai_constellation_max_models", 2)), 3))
+        routes = await self.constellation.choose_many(
+            role,
+            count=count,
+            preferred=preferred_model,
+        )
+        models = []
+        for route in routes:
+            name = str(route.get("name") or "").strip()
+            if name and name not in models:
+                models.append(name)
+        if len(models) < 2:
+            return ""
+
+        async def proposal(model: str) -> tuple[str, str]:
+            answer = await self._ollama(
+                messages,
+                min(max_tokens, 420),
+                model=model,
+                timeout_seconds=max(15, self.settings.ai_request_timeout_seconds),
+                context_window=min(max(self.settings.ai_context_window, 4096), 8192),
+            )
+            return model, answer
+
+        raw_results: list[Any]
+        if bool(getattr(self.settings, "ai_constellation_moa_parallel", True)):
+            raw_results = list(await asyncio.gather(
+                *(proposal(model) for model in models),
+                return_exceptions=True,
+            ))
+        else:
+            raw_results = []
+            for model in models:
+                try:
+                    raw_results.append(await proposal(model))
+                except Exception as exc:  # noqa: BLE001
+                    raw_results.append(exc)
+
+        proposals: list[tuple[str, str]] = []
+        for item in raw_results:
+            if isinstance(item, BaseException):
+                logger.info("Spécialiste MoA indisponible: %s", item)
+                continue
+            model, answer = item
+            if str(answer or "").strip():
+                proposals.append((model, str(answer).strip()))
+
+        if not proposals:
+            return ""
+        if len(proposals) == 1:
+            model, answer = proposals[0]
+            self.constellation.record_ensemble(
+                role=role,
+                models=models,
+                synthesizer=model,
+                successful=1,
+                elapsed_ms=round((monotonic() - started) * 1000),
+            )
+            self.last_model = model
+            return answer
+
+        critic_route = await self.constellation.choose(
+            "critic",
+            exclude=set(models),
+        )
+        synthesizer = str(critic_route.get("name") or "").strip()
+        if not synthesizer or synthesizer in models:
+            synthesizer = proposals[0][0]
+
+        mission = "\n".join(
+            f"{item.get('role','user')}: {str(item.get('content') or '')[:5000]}"
+            for item in messages[-5:]
+        )
+        candidates = "\n\n".join(
+            f"PROPOSITION {index + 1} — {model}\n{answer[:7000]}"
+            for index, (model, answer) in enumerate(proposals)
+        )
+        synthesis_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Tu es le synthétiseur du Mixture-of-Agents d’AURA. "
+                    "Combine les meilleures parties des propositions, corrige les contradictions "
+                    "et erreurs, conserve les faits utiles et rends uniquement la réponse finale. "
+                    "Ne mentionne ni les modèles ni le processus de vote."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "MISSION\n" + mission[:12000]
+                    + "\n\nPROPOSITIONS INDÉPENDANTES\n" + candidates[:22000]
+                ),
+            },
+        ]
+        try:
+            final = await self._ollama(
+                synthesis_messages,
+                min(max_tokens, 600),
+                model=synthesizer,
+                timeout_seconds=max(20, self.settings.ai_request_timeout_seconds),
+                context_window=min(max(self.settings.ai_context_window, 6144), 12288),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Synthèse MoA indisponible, meilleur spécialiste conservé: %s", exc)
+            synthesizer = proposals[0][0]
+            final = proposals[0][1]
+
+        self.constellation.record_ensemble(
+            role=role,
+            models=models,
+            synthesizer=synthesizer,
+            successful=len(proposals),
+            elapsed_ms=round((monotonic() - started) * 1000),
+        )
+        self.last_model = synthesizer
+        return final or proposals[0][1]
 
     def _should_multi_review(self, role: str, max_tokens: int) -> bool:
         return bool(

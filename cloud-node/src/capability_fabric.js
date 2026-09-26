@@ -398,6 +398,24 @@ export class CapabilityFabric {
           verification: options?.verification || 'none',
         });
       });
+
+      this.register({
+        id: 'mesh.moa',
+        name: 'AURA distributed Mixture-of-Agents inference',
+        transport: 'mesh-worker',
+        tags: ['compute', 'mesh', 'moa', 'ensemble', 'inference', 'reasoning'],
+        trust: 0.74,
+        observed_reliability: 0.72,
+        latency_ms: 7000,
+        side_effects: false,
+        risk: 'safe',
+        input_contract: { prompt: 'string', system: 'string', max_tokens: 'integer', max_agents: 'integer?' },
+        output_contract: { answer: 'string', verification: 'ensemble' },
+        provider: 'aura-compute-mesh',
+        enabled: false,
+      }, async (input) => this.bridge.executeMoA(input, {
+        maxAgents: input?.max_agents,
+      }));
     }
 
     if (this.peerMesh) {
@@ -457,6 +475,8 @@ export class CapabilityFabric {
     const workers = await this.bridge.workers({ onlineOnly: true, computeOnly: true });
     const compute = workers.filter((item) => item.mesh_capabilities?.includes('compute'));
     const inference = workers.filter((item) => item.mesh_capabilities?.includes('inference'));
+    const moa = inference.filter((item) =>
+      Array.isArray(item.resources?.models) && item.resources.models.length > 0);
     this.meshNodes = workers.length;
 
     const update = (id, rows) => {
@@ -474,7 +494,26 @@ export class CapabilityFabric {
     };
     update('mesh.compute', compute);
     update('mesh.inference', inference);
-    return { nodes: workers.length, compute: compute.length, inference: inference.length };
+    const moaCapability = this.registry.get('mesh.moa');
+    if (moaCapability) {
+      const best = moa.length
+        ? Math.max(...moa.map((item) => Number(item.reputation || 0.5)))
+        : 0;
+      this.register({
+        ...moaCapability,
+        enabled: moa.length >= 2,
+        trust: moa.length >= 2 ? Math.min(0.94, 0.58 + best * 0.34) : moaCapability.trust,
+        observed_reliability: moa.length >= 2
+          ? Math.min(0.96, 0.5 + best * 0.44)
+          : moaCapability.observed_reliability,
+      });
+    }
+    return {
+      nodes: workers.length,
+      compute: compute.length,
+      inference: inference.length,
+      moa: moa.length,
+    };
   }
 
   async refreshPeers() {

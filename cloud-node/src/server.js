@@ -913,10 +913,16 @@ app.get('/api/mesh/workers', async (request, reply) =>
 app.post('/api/mesh/execute', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   const kind = String(request.body?.kind || 'compute').trim().toLowerCase();
-  if (!['compute', 'inference'].includes(kind)) {
+  if (!['compute', 'inference', 'moa'].includes(kind)) {
     return reply.code(422).send({ error: 'kind Compute Mesh non autorisé' });
   }
   try {
+    if (kind === 'moa') {
+      return await bridge.executeMoA(request.body?.payload || {}, {
+        maxAgents: request.body?.max_agents || request.body?.payload?.max_agents,
+        timeoutMs: request.body?.timeout_ms,
+      });
+    }
     return await bridge.executeMesh(kind, request.body?.payload || {}, {
       capability: kind,
       quorum: request.body?.quorum || 1,

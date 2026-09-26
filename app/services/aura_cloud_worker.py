@@ -104,12 +104,35 @@ class AuraCloudWorker:
                 pass
         return 0
 
+    def _available_models(self) -> list[str]:
+        ai_service = getattr(self.aura, "ai", None)
+        constellation = getattr(ai_service, "constellation", None)
+        installed = list(getattr(constellation, "installed", []) or [])
+        models = [
+            str(item.get("name") or "").strip()
+            for item in installed
+            if isinstance(item, dict) and str(item.get("name") or "").strip()
+        ]
+        fallback = str(
+            getattr(ai_service, "active_model", "")
+            or getattr(self.settings, "ai_model", "")
+            or ""
+        ).strip()
+        if fallback and fallback not in models:
+            models.append(fallback)
+        return models[:16]
+
     def _mesh_capabilities(self) -> list[str]:
         if not self.compute_consent:
             return []
         capabilities = ["compute"]
         if bool(getattr(getattr(self.aura, "ai", None), "enabled", False)):
             capabilities.append("inference")
+            if (
+                bool(getattr(self.settings, "ai_constellation_moa_enabled", False))
+                and len(self._available_models()) >= 2
+            ):
+                capabilities.append("moa")
         return capabilities
 
     def _resource_profile(self) -> dict[str, Any]:
@@ -130,7 +153,7 @@ class AuraCloudWorker:
             "cpu_threads": int(os.cpu_count() or 1),
             "ram_bytes": self._physical_ram_bytes(),
             "gpu": accelerator,
-            "models": [model] if model else [],
+            "models": self._available_models() or ([model] if model else []),
             "platform": platform.system(),
             "architecture": platform.machine(),
         }
@@ -424,6 +447,7 @@ class AuraCloudWorker:
             max_tokens,
             system_is_complete=True,
             task_role=str(payload.get("task_role") or "auto"),
+            preferred_model=str(payload.get("preferred_model") or ""),
         )
         return {
             "answer": str(answer or ""),
