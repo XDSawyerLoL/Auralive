@@ -192,3 +192,18 @@ test('dashboard exposes operational command-center state instead of decorative a
   }
   assert.equal(DASHBOARD_SCRIPT.includes("github_write_authority?'Agit + observe':'Observe + planifie'"), true);
 });
+
+
+test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
+  for (const token of [
+    'Télécharger Quantic Glide',
+    'Windows x64',
+    'Android',
+    'href="/downloads/glide/windows"',
+    'href="/downloads/glide/android"',
+    'Télécharger .exe',
+    'Télécharger .apk',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+  }
+});
