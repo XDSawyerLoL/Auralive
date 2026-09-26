@@ -305,6 +305,7 @@
 
     const alpha = Number(task?.alpha ?? 1);
     if (!Number.isFinite(alpha)) throw new Error("Coefficient alpha invalide");
+    const alphaLiteral = alpha.toFixed(8);
     const device = await state.gpuAdapter.requestDevice();
     const a = new Float32Array(left);
     const b = new Float32Array(right);
@@ -329,7 +330,7 @@
       vector_add: "a[i] + b[i]",
       vector_sub: "a[i] - b[i]",
       vector_mul: "a[i] * b[i]",
-      axpy: `${alpha} * a[i] + b[i]`,
+      axpy: `${alphaLiteral} * a[i] + b[i]`,
     };
     const module = device.createShaderModule({
       code: `
