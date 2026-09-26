@@ -217,32 +217,72 @@
     });
   }
 
-  function rtcConfig(iceServers) {
+  function rtcConfig(iceServers, transportPolicy = "all") {
     const rows = Array.isArray(iceServers) ? iceServers : [];
     return {
       iceServers: rows
         .map(item => typeof item === "string" ? { urls: item } : item)
         .filter(item => item?.urls),
+      iceTransportPolicy: transportPolicy === "relay" ? "relay" : "all",
       bundlePolicy: "max-bundle",
     };
   }
 
-  function waitIceComplete(pc, timeoutMs = 8000) {
-    if (pc.iceGatheringState === "complete") return Promise.resolve();
-    return new Promise(resolve => {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        pc.removeEventListener("icegatheringstatechange", onChange);
-        resolve();
-      };
-      const onChange = () => {
-        if (pc.iceGatheringState === "complete") finish();
-      };
-      pc.addEventListener("icegatheringstatechange", onChange);
-      setTimeout(finish, timeoutMs);
+  function iceCandidatePayload(candidate) {
+    if (!candidate) return null;
+    if (typeof candidate.toJSON === "function") return candidate.toJSON();
+    return {
+      candidate: candidate.candidate || "",
+      sdpMid: candidate.sdpMid ?? null,
+      sdpMLineIndex: candidate.sdpMLineIndex ?? null,
+      usernameFragment: candidate.usernameFragment ?? null,
+    };
+  }
+
+  function attachIceTrickle(sessionId, record, remotePeerId) {
+    record.remotePeerId = remotePeerId;
+    record.trickleReady = false;
+    record.pendingLocalCandidates = [];
+    record.pendingRemoteCandidates = [];
+    record.pc.addEventListener("icecandidate", event => {
+      const candidate = iceCandidatePayload(event.candidate);
+      if (!candidate) return;
+      if (!record.trickleReady) {
+        record.pendingLocalCandidates.push(candidate);
+        return;
+      }
+      sendSignal(remotePeerId, sessionId, "ice-candidate", { candidate }).catch(error => {
+        state.lastError = String(error?.message || error);
+      });
     });
+  }
+
+  async function flushLocalCandidates(sessionId, record) {
+    record.trickleReady = true;
+    const pending = record.pendingLocalCandidates.splice(0);
+    for (const candidate of pending) {
+      await sendSignal(record.remotePeerId, sessionId, "ice-candidate", { candidate });
+    }
+  }
+
+  async function flushRemoteCandidates(record) {
+    if (!record?.pc?.remoteDescription) return;
+    const pending = record.pendingRemoteCandidates.splice(0);
+    for (const candidate of pending) {
+      await record.pc.addIceCandidate(candidate);
+    }
+  }
+
+  async function handleIceCandidate(signal) {
+    const record = sessions.get(signal.session_id);
+    if (!record) return;
+    const candidate = signal.payload?.candidate;
+    if (!candidate?.candidate) return;
+    if (!record.pc.remoteDescription) {
+      record.pendingRemoteCandidates.push(candidate);
+      return;
+    }
+    await record.pc.addIceCandidate(candidate);
   }
 
   function boundedVectors(task) {
@@ -259,9 +299,12 @@
   async function webGpuVector(task) {
     const { left, right } = boundedVectors(task);
     const op = String(task?.op || "").toLowerCase();
-    if (!["dot", "vector_add"].includes(op)) throw new Error(`Opération WebGPU interdite: ${op}`);
+    const allowed = ["dot", "cosine", "vector_add", "vector_sub", "vector_mul", "axpy"];
+    if (!allowed.includes(op)) throw new Error(`Opération WebGPU interdite: ${op}`);
     if (!state.gpuAdapter) throw new Error("WebGPU indisponible");
 
+    const alpha = Number(task?.alpha ?? 1);
+    if (!Number.isFinite(alpha)) throw new Error("Coefficient alpha invalide");
     const device = await state.gpuAdapter.requestDevice();
     const a = new Float32Array(left);
     const b = new Float32Array(right);
@@ -280,7 +323,14 @@
     device.queue.writeBuffer(bufferA, 0, a);
     device.queue.writeBuffer(bufferB, 0, b);
 
-    const expression = op === "dot" ? "a[i] * b[i]" : "a[i] + b[i]";
+    const expressions = {
+      dot: "a[i] * b[i]",
+      cosine: "a[i] * b[i]",
+      vector_add: "a[i] + b[i]",
+      vector_sub: "a[i] - b[i]",
+      vector_mul: "a[i] * b[i]",
+      axpy: `${alpha} * a[i] + b[i]`,
+    };
     const module = device.createShaderModule({
       code: `
         @group(0) @binding(0) var<storage, read> a: array<f32>;
@@ -290,7 +340,7 @@
         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
           let i = gid.x;
           if (i < arrayLength(&out)) {
-            out[i] = ${expression};
+            out[i] = ${expressions[op]};
           }
         }
       `,
@@ -319,9 +369,17 @@
     const values = new Float32Array(readback.getMappedRange().slice(0));
     readback.unmap();
 
-    const value = op === "dot"
-      ? Array.from(values).reduce((sum, item) => sum + item, 0)
-      : Array.from(values);
+    let value = Array.from(values);
+    if (op === "dot" || op === "cosine") {
+      const dot = value.reduce((sum, item) => sum + item, 0);
+      if (op === "dot") {
+        value = dot;
+      } else {
+        const normA = Math.sqrt(left.reduce((sum, item) => sum + item * item, 0));
+        const normB = Math.sqrt(right.reduce((sum, item) => sum + item * item, 0));
+        value = normA && normB ? dot / (normA * normB) : 0;
+      }
+    }
     for (const buffer of [bufferA, bufferB, output, readback]) {
       try { buffer.destroy(); } catch {}
     }
@@ -330,6 +388,7 @@
       op,
       value,
       length: left.length,
+      alpha: op === "axpy" ? alpha : undefined,
       engine: "webgpu",
       deterministic_input: true,
     };
@@ -352,7 +411,10 @@
     const payload = signal.payload || {};
     const targetPeerId = String(payload.target_peer_id || "");
     if (!targetPeerId || !payload.target_public_jwk) return;
-    const pc = new RTCPeerConnection(rtcConfig(payload.ice_servers));
+    const pc = new RTCPeerConnection(rtcConfig(
+      payload.ice_servers,
+      payload.ice_transport_policy,
+    ));
     const channel = pc.createDataChannel("aura-mesh", {
       ordered: true,
       protocol: "aura-mesh-v1",
@@ -367,6 +429,7 @@
     };
     sessions.set(signal.session_id, record);
     attachConnectionLifecycle(signal.session_id, pc);
+    attachIceTrickle(signal.session_id, record, targetPeerId);
 
     channel.addEventListener("open", async () => {
       const taskHash = await sha256Hex(record.task);
@@ -414,22 +477,25 @@
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await waitIceComplete(pc);
     await sendSignal(targetPeerId, signal.session_id, "offer", {
       description: pc.localDescription,
       ice_servers: payload.ice_servers || [],
+      ice_transport_policy: payload.ice_transport_policy || "all",
     });
+    await flushLocalCandidates(signal.session_id, record);
   }
 
   async function handleOffer(signal) {
     const remotePeerId = String(signal.from_peer_id || "");
     if (!remotePeerId) return;
-    const pc = new RTCPeerConnection(rtcConfig(signal.payload?.ice_servers || [
-      { urls: "stun:stun.cloudflare.com:3478" },
-    ]));
+    const pc = new RTCPeerConnection(rtcConfig(
+      signal.payload?.ice_servers || [{ urls: "stun:stun.cloudflare.com:3478" }],
+      signal.payload?.ice_transport_policy || "all",
+    ));
     const record = { role: "target", pc, remotePeerId };
     sessions.set(signal.session_id, record);
     attachConnectionLifecycle(signal.session_id, pc);
+    attachIceTrickle(signal.session_id, record, remotePeerId);
 
     pc.addEventListener("datachannel", event => {
       const channel = event.channel;
@@ -476,24 +542,27 @@
     });
 
     await pc.setRemoteDescription(signal.payload?.description);
+    await flushRemoteCandidates(record);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    await waitIceComplete(pc);
     await sendSignal(remotePeerId, signal.session_id, "answer", {
       description: pc.localDescription,
     });
+    await flushLocalCandidates(signal.session_id, record);
   }
 
   async function handleAnswer(signal) {
     const current = sessions.get(signal.session_id);
     if (!current || current.role !== "initiator") return;
     await current.pc.setRemoteDescription(signal.payload?.description);
+    await flushRemoteCandidates(current);
   }
 
   async function processSignal(signal) {
     if (signal.signal_type === "server-start") return handleServerStart(signal);
     if (signal.signal_type === "offer") return handleOffer(signal);
     if (signal.signal_type === "answer") return handleAnswer(signal);
+    if (signal.signal_type === "ice-candidate") return handleIceCandidate(signal);
   }
 
   async function pollLoop() {
