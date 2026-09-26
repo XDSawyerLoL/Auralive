@@ -24,6 +24,7 @@ import { EvolutionLab } from './evolution.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
+import { PeerMesh } from './peer_mesh.js';
 import { CloudVoice } from './voice.js';
 import { WebSubstrate } from './web_substrate.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
@@ -134,9 +135,10 @@ const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
 
 const bridge = new ExecutionBridge();
+const peerMesh = new PeerMesh();
 const ai = new AiClient(bridge);
 const webSubstrate = new WebSubstrate(ai);
-const fabric = new CapabilityFabric({ webSubstrate, bridge });
+const fabric = new CapabilityFabric({ webSubstrate, bridge, peerMesh });
 const dagCompiler = new DagCompiler(ai);
 const graphExecutor = new TaskGraphExecutor(fabric);
 let kernel;
@@ -346,6 +348,7 @@ app.get('/api/bootstrap/status', async () => ({
   fabric_started: Boolean(fabric.started),
   fabric_capabilities: fabric.list().length,
   fabric_discovery_configured: Boolean(config.fabricDiscoveryUrls.length),
+  peer_mesh_enabled: Boolean(config.meshP2pEnabled),
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -835,6 +838,70 @@ app.get('/api/mesh/status', async () => {
   };
 });
 
+app.get('/api/mesh/p2p/status', async () => ({
+  ...(await peerMesh.status()),
+  fabric_capability: fabric.list({ includeDisabled: true })
+    .find((item) => item.id === 'mesh.webgpu') || null,
+}));
+
+app.post('/api/mesh/peer/register', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const result = await peerMesh.register(request.body || {});
+    await fabric.refreshPeers().catch(() => {});
+    return result;
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/peer/signal', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await peerMesh.signal(request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/peer/poll', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await peerMesh.poll(
+      request.body?.peer_id,
+      request.body?.worker_id,
+      request.body?.after_id || 0,
+    );
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/peer/complete', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const result = await peerMesh.completeSession(request.body || {});
+    await fabric.refreshPeers().catch(() => {});
+    return result;
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/mesh/p2p/execute', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    await fabric.refreshPeers().catch(() => {});
+    return await peerMesh.execute(
+      String(request.body?.capability || 'webgpu'),
+      request.body?.task || {},
+      { timeoutMs: request.body?.timeout_ms },
+    );
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
 app.get('/api/mesh/workers', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? { workers: await bridge.workers({ onlineOnly: true, computeOnly: true }) }
@@ -885,6 +952,7 @@ app.post('/api/fabric/plan', async (request, reply) => {
   if (!objective) return reply.code(422).send({ error: 'Objectif Fabric requis' });
   try {
     await fabric.refreshMesh().catch(() => {});
+    await fabric.refreshPeers().catch(() => {});
     return await dagCompiler.compile(objective, fabric.list(), {
       maxNodes: config.fabricMaxGraphNodes,
       maxParallel: config.fabricMaxParallel,
@@ -899,6 +967,7 @@ app.post('/api/fabric/execute', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   try {
     await fabric.refreshMesh().catch(() => {});
+    await fabric.refreshPeers().catch(() => {});
     const graph = request.body?.graph || await dagCompiler.compile(
       String(request.body?.objective || ''),
       fabric.list(),

@@ -297,6 +297,90 @@ async def cloud_worker_status_v3() -> dict[str, Any]:
     return cloud_worker.diagnostic()
 
 
+def _require_local_mesh_request(request: Request) -> None:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Peer Mesh disponible uniquement depuis ce PC")
+    origin = str(request.headers.get("origin") or "").strip().lower()
+    if origin and not (
+        origin.startswith("http://127.0.0.1:")
+        or origin.startswith("http://localhost:")
+        or origin.startswith("http://[::1]:")
+    ):
+        raise HTTPException(status_code=403, detail="Origine Peer Mesh refusée")
+
+
+@app.get("/api/mesh-peer/status")
+async def mesh_peer_status_v3(request: Request) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    return {
+        "enabled": bool(cloud_worker.enabled and cloud_worker.compute_consent),
+        "compute_consent": cloud_worker.compute_consent,
+        "worker_id": cloud_worker.worker_id,
+        "cloud_connected": bool(cloud_worker.enabled),
+        "version": "aura-browser-peer-v0.2",
+    }
+
+
+@app.post("/api/mesh-peer/register")
+async def mesh_peer_register_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    if not cloud_worker.compute_consent:
+        raise HTTPException(status_code=403, detail="Consentement Compute Mesh désactivé")
+    try:
+        return await cloud_worker.mesh_peer_register(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mesh-peer/signal")
+async def mesh_peer_signal_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    if not cloud_worker.compute_consent:
+        raise HTTPException(status_code=403, detail="Consentement Compute Mesh désactivé")
+    try:
+        return await cloud_worker.mesh_peer_signal(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mesh-peer/poll")
+async def mesh_peer_poll_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    if not cloud_worker.compute_consent:
+        raise HTTPException(status_code=403, detail="Consentement Compute Mesh désactivé")
+    try:
+        return await cloud_worker.mesh_peer_poll(
+            str(payload.get("peer_id") or ""),
+            int(payload.get("after_id") or 0),
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/mesh-peer/complete")
+async def mesh_peer_complete_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    if not cloud_worker.compute_consent:
+        raise HTTPException(status_code=403, detail="Consentement Compute Mesh désactivé")
+    try:
+        return await cloud_worker.mesh_peer_complete(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.post("/api/cloud-worker/configure")
 async def cloud_worker_configure_v3(
     request: Request,
@@ -314,10 +398,12 @@ async def cloud_worker_configure_v3(
         raise HTTPException(status_code=422, detail="Jeton AURA Cloud requis")
 
     github_token = str(payload.get("github_token") or "").strip()
+    compute_consent = payload.get("compute_consent") is True
     env_values = {
         "AURA_CLOUD_BASE_URL": base_url,
         "AURA_CLOUD_TOKEN": token,
         "AURA_CLOUD_WORKER_ENABLED": "true",
+        "AURA_COMPUTE_MESH_CONSENT": "true" if compute_consent else "false",
         "AURA_EVOLUTION_AUTO_SUBMIT": "true",
         "AURA_EVOLUTION_AUTO_MERGE": "true",
     }
@@ -329,6 +415,8 @@ async def cloud_worker_configure_v3(
     settings.aura_cloud_base_url = base_url
     settings.aura_cloud_token = token
     settings.aura_cloud_worker_enabled = True
+    settings.aura_compute_mesh_consent = compute_consent
+    cloud_worker.worker_id = cloud_worker._resolve_worker_id()
     settings.evolution_auto_submit = True
     settings.evolution_auto_merge = True
     if github_token:
@@ -342,6 +430,7 @@ async def cloud_worker_configure_v3(
         "evolution_github_configured": bool(
             str(getattr(settings, "evolution_github_token", "") or "").strip()
         ),
+        "compute_mesh_consent": compute_consent,
         **cloud_worker.diagnostic(),
     }
 
