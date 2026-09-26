@@ -438,6 +438,56 @@ async function applyMigrations(db) {
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(8,?,?)',
       ['peer-mesh-quorum-replay-protection-and-quality-routing', new Date().toISOString()],
     );
+    current = 8;
+  }
+
+  if (current < 9) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_products (
+      id VARCHAR(100) PRIMARY KEY,
+      name VARCHAR(160) NOT NULL,
+      version VARCHAR(120) NOT NULL DEFAULT '',
+      repository VARCHAR(300) NOT NULL DEFAULT '',
+      endpoint VARCHAR(1000) NOT NULL DEFAULT '',
+      capabilities LONGTEXT NOT NULL,
+      permissions LONGTEXT NOT NULL,
+      surfaces LONGTEXT NOT NULL,
+      state VARCHAR(40) NOT NULL DEFAULT 'unknown',
+      instance_id VARCHAR(160) NOT NULL DEFAULT 'default',
+      fingerprint VARCHAR(64) NOT NULL DEFAULT '',
+      last_seen_at VARCHAR(40) NOT NULL DEFAULT '',
+      last_seen_ms BIGINT NOT NULL DEFAULT 0,
+      metadata LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_products_state(state,last_seen_ms),
+      INDEX idx_aura_products_seen(last_seen_ms)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_curiosity_questions (
+      id CHAR(36) PRIMARY KEY,
+      source VARCHAR(120) NOT NULL DEFAULT 'self',
+      domain VARCHAR(120) NOT NULL DEFAULT 'general',
+      question TEXT NOT NULL,
+      why_now TEXT NOT NULL,
+      novelty DOUBLE NOT NULL DEFAULT 0.5,
+      uncertainty DOUBLE NOT NULL DEFAULT 0.5,
+      impact DOUBLE NOT NULL DEFAULT 0.5,
+      relevance DOUBLE NOT NULL DEFAULT 0.5,
+      repetition DOUBLE NOT NULL DEFAULT 0,
+      score DOUBLE NOT NULL DEFAULT 0.5,
+      status VARCHAR(40) NOT NULL DEFAULT 'queued',
+      evidence LONGTEXT NOT NULL,
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_curiosity_status(status,score,created_at),
+      INDEX idx_aura_curiosity_domain(domain,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(9,?,?)',
+      ['aura-everywhere-product-registry-and-curiosity', new Date().toISOString()],
+    );
+    current = 9;
   }
 }
 
