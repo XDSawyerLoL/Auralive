@@ -1265,6 +1265,7 @@ export async function stopAura() {
     metricsTimer = null;
   }
   commandCenter.stop();
+  curiosity.stop();
   fabric.stop();
   evolution.stop();
   horizon.stop();
