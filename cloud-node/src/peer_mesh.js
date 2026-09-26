@@ -101,8 +101,21 @@ function resultFingerprint(result) {
   return createHash('sha256').update(stableStringify(result ?? null)).digest('hex');
 }
 
+export function publicIceServerView(rows = config.meshIceServers) {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const urls = Array.isArray(row?.urls) ? row.urls : [row?.urls];
+    const cleanUrls = urls.map((item) => clean(item, 1000)).filter(Boolean);
+    const usesTurn = cleanUrls.some((item) => /^turns?:/i.test(item));
+    return {
+      urls: cleanUrls.length === 1 ? cleanUrls[0] : cleanUrls,
+      relay: usesTurn,
+      credentialed: Boolean(usesTurn && row?.username && row?.credential),
+    };
+  }).filter((row) => Array.isArray(row.urls) ? row.urls.length : Boolean(row.urls));
+}
+
 export class PeerMesh {
-  static VERSION = 'aura-peer-mesh-v0.3';
+  static VERSION = 'aura-peer-mesh-v0.4';
 
   constructor() {
     this.lastError = '';
@@ -169,6 +182,7 @@ export class PeerMesh {
       capabilities,
       server_time: timestamp,
       ice_servers: config.meshIceServers,
+      ice_transport_policy: config.meshIceTransportPolicy,
     };
   }
 
@@ -377,7 +391,8 @@ export class PeerMesh {
       target_public_jwk: target.public_jwk,
       capability: required,
       task,
-      ice_servers: config.meshIceServers.map((urls) => ({ urls })),
+      ice_servers: config.meshIceServers,
+      ice_transport_policy: config.meshIceTransportPolicy,
     });
     this.lastSessionAt = timestamp;
     return { id, capability: required, initiator, target, status: 'negotiating' };
@@ -544,7 +559,8 @@ export class PeerMesh {
         target_public_jwk: target.public_jwk,
         capability: clean(capability, 80),
         task,
-        ice_servers: config.meshIceServers.map((urls) => ({ urls })),
+        ice_servers: config.meshIceServers,
+        ice_transport_policy: config.meshIceTransportPolicy,
       });
       sessions.push({ id, initiator, target });
     }
@@ -604,7 +620,12 @@ export class PeerMesh {
       online_peers: peers.length,
       webgpu_peers: peers.filter((item) => item.capabilities.includes('webgpu')).length,
       webrtc_peers: peers.filter((item) => item.capabilities.includes('webrtc')).length,
-      ice_servers: config.meshIceServers,
+      ice_servers: publicIceServerView(),
+      ice_transport_policy: config.meshIceTransportPolicy,
+      turn_configured: config.meshIceServers.some((row) => {
+        const urls = Array.isArray(row?.urls) ? row.urls : [row?.urls];
+        return urls.some((url) => /^turns?:/i.test(String(url || '')));
+      }),
       sessions: {
         negotiating: Number(sessions?.negotiating || 0),
         completed: Number(sessions?.completed || 0),
