@@ -108,6 +108,9 @@ class Settings:
     ai_constellation_multi_review: bool = _bool("AI_CONSTELLATION_MULTI_REVIEW", True)
     ai_constellation_review_min_tokens: int = _int("AI_CONSTELLATION_REVIEW_MIN_TOKENS", 220)
     ai_constellation_max_models: int = _int("AI_CONSTELLATION_MAX_MODELS", 2)
+    ai_constellation_moa_enabled: bool = _bool("AI_CONSTELLATION_MOA_ENABLED", True)
+    ai_constellation_moa_min_tokens: int = _int("AI_CONSTELLATION_MOA_MIN_TOKENS", 260)
+    ai_constellation_moa_parallel: bool = _bool("AI_CONSTELLATION_MOA_PARALLEL", True)
 
     # Génération d'images locale. "auto" essaie A1111 puis ComfyUI.
     image_mode: str = os.getenv("AURA_IMAGE_MODE", "auto").strip().lower()
