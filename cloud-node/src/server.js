@@ -298,6 +298,7 @@ const GLIDE_ANDROID_DOWNLOAD = String(
 
 app.get('/api/aura/everywhere/status', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
   return productRegistry.status();
 });
 
@@ -315,11 +316,13 @@ app.post('/api/aura/everywhere/:id/heartbeat', async (request, reply) => {
 
 app.get('/api/aura/everywhere/capabilities', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
   return productRegistry.capabilities();
 });
 
 app.get('/api/aura/curiosity/status', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
   return { ...curiosity.status(), questions: await curiosity.recent(30) };
 });
 
