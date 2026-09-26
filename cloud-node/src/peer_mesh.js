@@ -97,8 +97,25 @@ function peerQualityScore(peer = {}) {
   return Number((reputation * 0.72 + latencyScore * 0.16 + concurrency * 0.07 + memory * 0.05).toFixed(6));
 }
 
-function resultFingerprint(result) {
-  return createHash('sha256').update(stableStringify(result ?? null)).digest('hex');
+function normalizeNumericConsensus(value) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return String(value);
+    if (value === 0) return 0;
+    return Number(value.toPrecision(7));
+  }
+  if (Array.isArray(value)) return value.map((item) => normalizeNumericConsensus(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeNumericConsensus(item)]),
+    );
+  }
+  return value;
+}
+
+export function peerResultFingerprint(result) {
+  return createHash('sha256')
+    .update(stableStringify(normalizeNumericConsensus(result ?? null)))
+    .digest('hex');
 }
 
 export function publicIceServerView(rows = config.meshIceServers) {
@@ -505,11 +522,21 @@ export class PeerMesh {
       if (row.status === 'error') throw new Error(row.error || 'échec session P2P');
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
+    const timedOut = await this.getSession(id).catch(() => null);
     await query(
       `UPDATE aura_mesh_sessions SET status='error',error='timeout P2P',updated_at=?
        WHERE id=? AND status NOT IN ('completed','error')`,
       [nowIso(), clean(id, 80)],
     ).catch(() => {});
+    if (timedOut) {
+      await query(
+        `UPDATE aura_mesh_peers SET
+          reputation=LEAST(0.99,GREATEST(0.05,reputation*0.96)),
+          jobs_failed=jobs_failed+1,
+          updated_at=? WHERE peer_id IN (?,?)`,
+        [nowIso(), timedOut.initiator_peer_id, timedOut.target_peer_id],
+      ).catch(() => {});
+    }
     throw new Error('AURA Peer Mesh timeout');
   }
 
@@ -575,7 +602,7 @@ export class PeerMesh {
     if (!completed.length) throw new Error('Aucune session P2P du quorum n’a abouti');
     const counts = new Map();
     for (const item of completed) {
-      const fingerprint = resultFingerprint(item.result);
+      const fingerprint = peerResultFingerprint(item.result);
       counts.set(fingerprint, (counts.get(fingerprint) || 0) + 1);
     }
     const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -583,7 +610,7 @@ export class PeerMesh {
     if (!winner || winner[1] < majority) {
       throw new Error(`Quorum P2P non atteint: ${winner?.[1] || 0}/${requestedQuorum}`);
     }
-    const chosen = completed.find((item) => resultFingerprint(item.result) === winner[0]);
+    const chosen = completed.find((item) => peerResultFingerprint(item.result) === winner[0]);
     return {
       ok: true,
       result: chosen?.result || {},
