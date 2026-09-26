@@ -60,6 +60,33 @@ export function meshResultFingerprint(kind, result = {}) {
   return createHash('sha256').update(JSON.stringify(canonical ?? null)).digest('hex');
 }
 
+export function selectMoaAgents(workers = [], maxAgents = 3) {
+  const limit = Math.max(2, Math.min(Number(maxAgents || 3), 4));
+  const selected = [];
+  const usedWorkers = new Set();
+  const usedModels = new Set();
+  for (const worker of workers) {
+    const workerId = String(worker?.worker_id || '').trim();
+    if (!workerId || usedWorkers.has(workerId)) continue;
+    const models = stringList([
+      ...(Array.isArray(worker?.resources?.models) ? worker.resources.models : []),
+      worker?.model,
+    ], 16);
+    const preferred = models.find((model) => !usedModels.has(model.toLowerCase())) || models[0] || '';
+    if (!preferred) continue;
+    selected.push({
+      worker_id: workerId,
+      model: preferred,
+      reputation: clamp01(worker.reputation, 0.5),
+      mesh_score: Number(worker.mesh_score || 0),
+    });
+    usedWorkers.add(workerId);
+    usedModels.add(preferred.toLowerCase());
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
 const settings = Object.freeze({
   token: String(process.env.AURA_BRIDGE_TOKEN || process.env.AURA_CLOUD_TOKEN || ''),
   leaseSeconds: intEnv('AURA_BRIDGE_LEASE_SECONDS', 90, 15, 900),
@@ -72,6 +99,7 @@ const settings = Object.freeze({
   preferLocalAi: boolEnv('AURA_LOCAL_AI_PREFERRED', true),
   meshMaxQuorum: intEnv('AURA_MESH_MAX_QUORUM', 3, 1, 5),
   meshTimeoutMs: intEnv('AURA_MESH_TIMEOUT_MS', 120_000, 5_000, 600_000),
+  meshMoaMaxAgents: intEnv('AURA_MESH_MOA_MAX_AGENTS', 3, 2, 4),
 });
 
 export class ExecutionBridge {
@@ -451,6 +479,144 @@ export class ExecutionBridge {
     };
   }
 
+  async executeMoA(payload = {}, {
+    maxAgents = settings.meshMoaMaxAgents,
+    timeoutMs = settings.meshTimeoutMs,
+  } = {}) {
+    const workers = await this.workers({
+      onlineOnly: true,
+      computeOnly: true,
+      capability: 'inference',
+    });
+    const agents = selectMoaAgents(workers, maxAgents);
+    if (agents.length < 2) {
+      throw new Error('MoA distribué exige au moins deux nœuds d’inférence avec modèle annoncé');
+    }
+
+    const prompt = String(payload.prompt || payload.question || payload.objective || '').trim().slice(0, 50_000);
+    if (!prompt) throw new Error('MoA distribué exige un prompt');
+    const system = String(payload.system || '').slice(0, 20_000);
+    const maxTokens = Math.max(128, Math.min(Number(payload.max_tokens || 700), 4000));
+
+    const jobs = await Promise.all(agents.map((agent) => this.enqueue(
+      'inference',
+      {
+        prompt,
+        system: [
+          system,
+          'Tu es un spécialiste indépendant dans un Mixture-of-Agents AURA. Produis ta meilleure réponse technique/factuelle sans commenter le processus.',
+        ].filter(Boolean).join('\n'),
+        max_tokens: maxTokens,
+        task_role: 'moa-specialist',
+        preferred_model: agent.model,
+      },
+      ['ai'],
+      {
+        targetWorkerId: agent.worker_id,
+        requiredCapabilities: ['inference'],
+        verificationMode: 'ensemble',
+        quorum: agents.length,
+      },
+    )));
+
+    const settled = await Promise.allSettled(jobs.map((job) => this.wait(job.id, timeoutMs)));
+    const candidates = [];
+    const failures = [];
+    for (let index = 0; index < settled.length; index += 1) {
+      const item = settled[index];
+      const agent = agents[index];
+      if (item.status === 'fulfilled' && String(item.value?.answer || '').trim()) {
+        candidates.push({
+          worker_id: agent.worker_id,
+          model: agent.model,
+          reputation: agent.reputation,
+          answer: String(item.value.answer).trim(),
+        });
+      } else {
+        failures.push({
+          worker_id: agent.worker_id,
+          model: agent.model,
+          error: String(item.status === 'rejected' ? item.reason?.message || item.reason : 'réponse vide').slice(0, 1000),
+        });
+      }
+    }
+    if (!candidates.length) {
+      throw new Error(failures[0]?.error || 'Aucun spécialiste MoA n’a répondu');
+    }
+    if (candidates.length === 1) {
+      return {
+        ok: true,
+        result: { answer: candidates[0].answer },
+        verification: {
+          mode: 'distributed-moa',
+          verified: false,
+          requested_agents: agents.length,
+          completed_agents: 1,
+          reason: 'single-specialist-fallback',
+        },
+        mesh: { candidates: candidates.map(({ answer, ...meta }) => meta), failures },
+        metrics: { mesh_nodes: 1, cost_microunits: 0 },
+      };
+    }
+
+    const usedWorkers = new Set(candidates.map((item) => item.worker_id));
+    const synthesizerWorker = workers.find((item) => !usedWorkers.has(item.worker_id)) || workers[0];
+    const synthModels = stringList([
+      ...(Array.isArray(synthesizerWorker?.resources?.models) ? synthesizerWorker.resources.models : []),
+      synthesizerWorker?.model,
+    ], 16);
+    const synthesizerModel = synthModels[0] || '';
+    const candidateText = candidates.map((item, index) =>
+      'PROPOSITION ' + (index + 1) + '\n' + item.answer.slice(0, 9000)).join('\n\n');
+    const synthJob = await this.enqueue(
+      'inference',
+      {
+        prompt: [
+          'MISSION ORIGINALE',
+          prompt,
+          '',
+          'PROPOSITIONS INDÉPENDANTES',
+          candidateText,
+          '',
+          'Synthétise une réponse finale exacte et complète. Corrige les contradictions. Ne mentionne pas les agents, modèles ou le processus interne.',
+        ].join('\n').slice(0, 50_000),
+        system: 'Tu es le synthétiseur du Mixture-of-Agents distribué d’AURA.',
+        max_tokens: maxTokens,
+        task_role: 'moa-synthesizer',
+        preferred_model: synthesizerModel,
+      },
+      ['ai'],
+      {
+        targetWorkerId: synthesizerWorker.worker_id,
+        requiredCapabilities: ['inference'],
+        verificationMode: 'ensemble-synthesis',
+        quorum: 1,
+      },
+    );
+    const synthesis = await this.wait(synthJob.id, timeoutMs);
+    const answer = String(synthesis?.answer || '').trim() || candidates[0].answer;
+    return {
+      ok: true,
+      result: { answer },
+      verification: {
+        mode: 'distributed-moa',
+        verified: candidates.length >= 2,
+        requested_agents: agents.length,
+        completed_agents: candidates.length,
+        synthesizer_worker_id: synthesizerWorker.worker_id,
+        synthesizer_model: synthesizerModel,
+      },
+      mesh: {
+        candidates: candidates.map(({ answer: _answer, ...meta }) => meta),
+        failures,
+      },
+      metrics: {
+        mesh_nodes: new Set([...candidates.map((item) => item.worker_id), synthesizerWorker.worker_id]).size,
+        specialist_responses: candidates.length,
+        cost_microunits: 0,
+      },
+    };
+  }
   async infer(prompt, system, maxTokens = 700, taskRole = 'auto') {
     if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
     const job = await this.enqueue(
