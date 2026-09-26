@@ -19,6 +19,53 @@ function csv(name, fallback = '') {
     .filter(Boolean);
 }
 
+function normalizeIceServer(row) {
+  const raw = typeof row === 'string' ? { urls: row } : (row && typeof row === 'object' ? row : {});
+  const sourceUrls = Array.isArray(raw.urls) ? raw.urls : [raw.urls];
+  const urls = sourceUrls
+    .map((item) => String(item || '').trim())
+    .filter((item) => /^(stun|stuns|turn|turns):/i.test(item))
+    .slice(0, 8);
+  if (!urls.length) return null;
+  const normalized = {
+    urls: urls.length === 1 ? urls[0] : urls,
+  };
+  const usesTurn = urls.some((item) => /^turns?:/i.test(item));
+  if (usesTurn && raw.username != null) {
+    normalized.username = String(raw.username).slice(0, 512);
+  }
+  if (usesTurn && raw.credential != null) {
+    normalized.credential = String(raw.credential).slice(0, 2048);
+  }
+  if (usesTurn && raw.credentialType === 'password') {
+    normalized.credentialType = 'password';
+  }
+  return normalized;
+}
+
+export function configuredIceServers() {
+  const json = String(process.env.AURA_MESH_ICE_SERVERS_JSON || '').trim();
+  if (json) {
+    try {
+      const parsed = JSON.parse(json);
+      const rows = Array.isArray(parsed) ? parsed : [parsed];
+      const normalized = rows.map(normalizeIceServer).filter(Boolean).slice(0, 12);
+      if (normalized.length) return normalized;
+    } catch {
+      // Invalid optional JSON falls back to the safe comma-separated STUN list.
+    }
+  }
+  return csv('AURA_MESH_ICE_SERVERS', 'stun:stun.cloudflare.com:3478')
+    .map(normalizeIceServer)
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function iceTransportPolicy() {
+  const value = String(process.env.AURA_MESH_ICE_TRANSPORT_POLICY || 'all').trim().toLowerCase();
+  return value === 'relay' ? 'relay' : 'all';
+}
+
 function num(name, fallback, min = -Infinity, max = Infinity) {
   const parsed = Number.parseFloat(process.env[name] ?? '');
   const value = Number.isFinite(parsed) ? parsed : fallback;
@@ -149,7 +196,8 @@ export const config = Object.freeze({
   meshPeerOnlineMs: int('AURA_MESH_PEER_ONLINE_MS', 45_000, 5_000, 300_000),
   meshPeerClockSkewMs: int('AURA_MESH_PEER_CLOCK_SKEW_MS', 300_000, 30_000, 900_000),
   meshP2pTimeoutMs: int('AURA_MESH_P2P_TIMEOUT_MS', 45_000, 5_000, 180_000),
-  meshIceServers: csv('AURA_MESH_ICE_SERVERS', 'stun:stun.cloudflare.com:3478'),
+  meshIceServers: configuredIceServers(),
+  meshIceTransportPolicy: iceTransportPolicy(),
 
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
@@ -216,6 +264,15 @@ export function productionConfigIssues() {
     issues.push({
       code: 'fabric_token_missing',
       message: 'AURA_FABRIC_DISCOVERY_URLS est configuré mais AURA_FABRIC_TOKEN est absent.',
+    });
+  }
+  if (config.meshIceTransportPolicy === 'relay' && !config.meshIceServers.some((row) => {
+    const urls = Array.isArray(row?.urls) ? row.urls : [row?.urls];
+    return urls.some((url) => /^turns?:/i.test(String(url || '')));
+  })) {
+    issues.push({
+      code: 'mesh_turn_missing',
+      message: 'AURA_MESH_ICE_TRANSPORT_POLICY=relay exige au moins un serveur TURN/TURNS.',
     });
   }
   return issues;

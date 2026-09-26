@@ -318,7 +318,7 @@ async def mesh_peer_status_v3(request: Request) -> dict[str, Any]:
         "compute_consent": cloud_worker.compute_consent,
         "worker_id": cloud_worker.worker_id,
         "cloud_connected": bool(cloud_worker.enabled),
-        "version": "aura-browser-peer-v0.2",
+        "version": "aura-browser-peer-v0.4",
     }
 
 

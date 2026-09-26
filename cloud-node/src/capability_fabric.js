@@ -411,7 +411,7 @@ export class CapabilityFabric {
         latency_ms: 2200,
         side_effects: false,
         risk: 'safe',
-        input_contract: { op: 'dot|vector_add', left: 'array', right: 'array' },
+        input_contract: { op: 'dot|cosine|vector_add|vector_sub|vector_mul|axpy', left: 'array', right: 'array', alpha: 'number?' },
         output_contract: { value: 'json', engine: 'webgpu|cpu-js' },
         provider: 'aura-peer-mesh',
         enabled: false,

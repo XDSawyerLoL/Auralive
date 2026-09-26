@@ -97,12 +97,42 @@ function peerQualityScore(peer = {}) {
   return Number((reputation * 0.72 + latencyScore * 0.16 + concurrency * 0.07 + memory * 0.05).toFixed(6));
 }
 
-function resultFingerprint(result) {
-  return createHash('sha256').update(stableStringify(result ?? null)).digest('hex');
+function normalizeNumericConsensus(value) {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return String(value);
+    if (value === 0) return 0;
+    return Number(value.toPrecision(7));
+  }
+  if (Array.isArray(value)) return value.map((item) => normalizeNumericConsensus(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeNumericConsensus(item)]),
+    );
+  }
+  return value;
+}
+
+export function peerResultFingerprint(result) {
+  return createHash('sha256')
+    .update(stableStringify(normalizeNumericConsensus(result ?? null)))
+    .digest('hex');
+}
+
+export function publicIceServerView(rows = config.meshIceServers) {
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const urls = Array.isArray(row?.urls) ? row.urls : [row?.urls];
+    const cleanUrls = urls.map((item) => clean(item, 1000)).filter(Boolean);
+    const usesTurn = cleanUrls.some((item) => /^turns?:/i.test(item));
+    return {
+      urls: cleanUrls.length === 1 ? cleanUrls[0] : cleanUrls,
+      relay: usesTurn,
+      credentialed: Boolean(usesTurn && row?.username && row?.credential),
+    };
+  }).filter((row) => Array.isArray(row.urls) ? row.urls.length : Boolean(row.urls));
 }
 
 export class PeerMesh {
-  static VERSION = 'aura-peer-mesh-v0.3';
+  static VERSION = 'aura-peer-mesh-v0.4';
 
   constructor() {
     this.lastError = '';
@@ -169,6 +199,7 @@ export class PeerMesh {
       capabilities,
       server_time: timestamp,
       ice_servers: config.meshIceServers,
+      ice_transport_policy: config.meshIceTransportPolicy,
     };
   }
 
@@ -377,7 +408,8 @@ export class PeerMesh {
       target_public_jwk: target.public_jwk,
       capability: required,
       task,
-      ice_servers: config.meshIceServers.map((urls) => ({ urls })),
+      ice_servers: config.meshIceServers,
+      ice_transport_policy: config.meshIceTransportPolicy,
     });
     this.lastSessionAt = timestamp;
     return { id, capability: required, initiator, target, status: 'negotiating' };
@@ -437,6 +469,29 @@ export class PeerMesh {
       target_signature: true,
       task_hash: expectedTaskHash,
     };
+    if (result && typeof result === 'object' && result.ok === false) {
+      const peerError = clean(result.error || 'échec de calcul P2P', 4000);
+      await query(
+        `UPDATE aura_mesh_sessions
+         SET status='error',result=?,verification=?,error=?,updated_at=?
+         WHERE id=?`,
+        [
+          JSON.stringify(result).slice(0, 500000),
+          JSON.stringify(verification).slice(0, 16000),
+          peerError,
+          nowIso(),
+          session.id,
+        ],
+      );
+      await query(
+        `UPDATE aura_mesh_peers SET
+          reputation=LEAST(0.99,GREATEST(0.05,reputation*0.9)),
+          jobs_failed=jobs_failed+1,
+          updated_at=? WHERE peer_id=?`,
+        [nowIso(), target.peer_id],
+      ).catch(() => {});
+      throw new Error(peerError);
+    }
     await query(
       `UPDATE aura_mesh_sessions
        SET status='completed',result=?,verification=?,error='',updated_at=?
@@ -490,11 +545,21 @@ export class PeerMesh {
       if (row.status === 'error') throw new Error(row.error || 'échec session P2P');
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
+    const timedOut = await this.getSession(id).catch(() => null);
     await query(
       `UPDATE aura_mesh_sessions SET status='error',error='timeout P2P',updated_at=?
        WHERE id=? AND status NOT IN ('completed','error')`,
       [nowIso(), clean(id, 80)],
     ).catch(() => {});
+    if (timedOut) {
+      await query(
+        `UPDATE aura_mesh_peers SET
+          reputation=LEAST(0.99,GREATEST(0.05,reputation*0.96)),
+          jobs_failed=jobs_failed+1,
+          updated_at=? WHERE peer_id IN (?,?)`,
+        [nowIso(), timedOut.initiator_peer_id, timedOut.target_peer_id],
+      ).catch(() => {});
+    }
     throw new Error('AURA Peer Mesh timeout');
   }
 
@@ -518,17 +583,25 @@ export class PeerMesh {
       };
     }
 
-    const sessions = [];
-    const excludedTargets = new Set();
-    for (let index = 0; index < requestedQuorum; index += 1) {
-      const candidates = await this.peers({ capability, onlineOnly: true });
-      const target = candidates.find((item) => !excludedTargets.has(item.peer_id));
-      if (!target) break;
-      const allPeers = await this.peers({ capability: 'webrtc', onlineOnly: true });
+    const candidates = await this.peers({ capability, onlineOnly: true });
+    const allPeers = await this.peers({ capability: 'webrtc', onlineOnly: true });
+    const assignments = [];
+    const targetWorkers = new Set();
+    for (const target of candidates) {
+      if (targetWorkers.has(target.worker_id)) continue;
       const initiator = allPeers.find((item) =>
-        item.peer_id !== target.peer_id && !excludedTargets.has(item.peer_id));
-      if (!initiator) break;
-      excludedTargets.add(target.peer_id);
+        item.peer_id !== target.peer_id && item.worker_id !== target.worker_id);
+      if (!initiator) continue;
+      assignments.push({ initiator, target });
+      targetWorkers.add(target.worker_id);
+      if (assignments.length >= requestedQuorum) break;
+    }
+    if (assignments.length < requestedQuorum) {
+      throw new Error(`Machines P2P distinctes insuffisantes pour quorum ${requestedQuorum}`);
+    }
+
+    const sessions = [];
+    for (const { initiator, target } of assignments) {
       const id = randomUUID();
       const timestamp = nowIso();
       await query(
@@ -544,12 +617,10 @@ export class PeerMesh {
         target_public_jwk: target.public_jwk,
         capability: clean(capability, 80),
         task,
-        ice_servers: config.meshIceServers.map((urls) => ({ urls })),
+        ice_servers: config.meshIceServers,
+        ice_transport_policy: config.meshIceTransportPolicy,
       });
       sessions.push({ id, initiator, target });
-    }
-    if (sessions.length < requestedQuorum) {
-      throw new Error(`Pairs P2P insuffisants pour quorum ${requestedQuorum}`);
     }
 
     const settled = await Promise.allSettled(
@@ -559,7 +630,7 @@ export class PeerMesh {
     if (!completed.length) throw new Error('Aucune session P2P du quorum n’a abouti');
     const counts = new Map();
     for (const item of completed) {
-      const fingerprint = resultFingerprint(item.result);
+      const fingerprint = peerResultFingerprint(item.result);
       counts.set(fingerprint, (counts.get(fingerprint) || 0) + 1);
     }
     const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -567,7 +638,7 @@ export class PeerMesh {
     if (!winner || winner[1] < majority) {
       throw new Error(`Quorum P2P non atteint: ${winner?.[1] || 0}/${requestedQuorum}`);
     }
-    const chosen = completed.find((item) => resultFingerprint(item.result) === winner[0]);
+    const chosen = completed.find((item) => peerResultFingerprint(item.result) === winner[0]);
     return {
       ok: true,
       result: chosen?.result || {},
@@ -604,7 +675,12 @@ export class PeerMesh {
       online_peers: peers.length,
       webgpu_peers: peers.filter((item) => item.capabilities.includes('webgpu')).length,
       webrtc_peers: peers.filter((item) => item.capabilities.includes('webrtc')).length,
-      ice_servers: config.meshIceServers,
+      ice_servers: publicIceServerView(),
+      ice_transport_policy: config.meshIceTransportPolicy,
+      turn_configured: config.meshIceServers.some((row) => {
+        const urls = Array.isArray(row?.urls) ? row.urls : [row?.urls];
+        return urls.some((url) => /^turns?:/i.test(String(url || '')));
+      }),
       sessions: {
         negotiating: Number(sessions?.negotiating || 0),
         completed: Number(sessions?.completed || 0),

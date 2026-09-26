@@ -895,7 +895,10 @@ app.post('/api/mesh/p2p/execute', async (request, reply) => {
     return await peerMesh.execute(
       String(request.body?.capability || 'webgpu'),
       request.body?.task || {},
-      { timeoutMs: request.body?.timeout_ms },
+      {
+        timeoutMs: request.body?.timeout_ms,
+        quorum: request.body?.quorum || 1,
+      },
     );
   } catch (error) {
     return reply.code(422).send({ error: String(error?.message || error) });
