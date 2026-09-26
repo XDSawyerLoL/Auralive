@@ -27,7 +27,7 @@ export function normalizeCapability(raw = {}) {
   const id = stableId(raw.id);
   if (!id) throw new Error('capability id manquant');
   const transport = clean(raw.transport || 'local', 80);
-  if (!['local', 'edge-http', 'studio-bridge'].includes(transport)) {
+  if (!['local', 'edge-http', 'studio-bridge', 'mesh-worker'].includes(transport)) {
     throw new Error(`transport capability non autorisé: ${transport}`);
   }
   const tags = [...new Set(
@@ -97,6 +97,7 @@ export class CapabilityFabric {
     this.lastExecutionAt = '';
     this.lastError = '';
     this.executionCount = 0;
+    this.meshNodes = 0;
     this.started = false;
     this.discoveryTimer = null;
     this.registerBuiltins();
@@ -231,6 +232,7 @@ export class CapabilityFabric {
     if (this.started) return;
     this.started = true;
     await this.hydrate();
+    await this.refreshMesh().catch(() => {});
     if (!this.enabled || !config.fabricDiscoveryUrls.length) return;
     const discover = () => this.discoverRemote().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
@@ -345,6 +347,55 @@ export class CapabilityFabric {
           metrics: { cost_microunits: 0 },
         };
       });
+
+      this.register({
+        id: 'mesh.compute',
+        name: 'AURA voluntary deterministic compute mesh',
+        transport: 'mesh-worker',
+        tags: ['compute', 'mesh', 'deterministic', 'vector'],
+        trust: 0.72,
+        observed_reliability: 0.72,
+        latency_ms: 1800,
+        side_effects: false,
+        risk: 'safe',
+        input_contract: { op: 'sha256|sum|dot|cosine', values: 'array', left: 'array', right: 'array' },
+        output_contract: { value: 'json', op: 'string' },
+        provider: 'aura-compute-mesh',
+        enabled: false,
+      }, async (input, options) => this.bridge.executeMesh('compute', input, {
+        capability: 'compute',
+        quorum: options?.quorum || 1,
+        verification: options?.verification || 'none',
+      }));
+
+      this.register({
+        id: 'mesh.inference',
+        name: 'AURA voluntary local-model mesh inference',
+        transport: 'mesh-worker',
+        tags: ['compute', 'mesh', 'inference', 'ai', 'reasoning'],
+        trust: 0.68,
+        observed_reliability: 0.68,
+        latency_ms: 3500,
+        side_effects: false,
+        risk: 'safe',
+        input_contract: { prompt: 'string', system: 'string', max_tokens: 'integer' },
+        output_contract: { answer: 'string' },
+        provider: 'aura-compute-mesh',
+        enabled: false,
+      }, async (input, options) => {
+        const prompt = clean(input?.prompt || input?.question || input?.objective, 50000);
+        if (!prompt) throw new Error('mesh.inference exige prompt, question ou objective');
+        return this.bridge.executeMesh('inference', {
+          prompt,
+          system: clean(input?.system, 20000),
+          max_tokens: Math.max(64, Math.min(Number(input?.max_tokens || 700), 8000)),
+          task_role: clean(input?.task_role || 'reasoning', 80),
+        }, {
+          capability: 'inference',
+          quorum: options?.quorum || 1,
+          verification: options?.verification || 'none',
+        });
+      });
     }
   }
 
@@ -373,6 +424,34 @@ export class CapabilityFabric {
       if (!best || score > best.routing_score) best = { ...item, routing_score: score };
     }
     return best;
+  }
+
+  async refreshMesh() {
+    if (!this.bridge || typeof this.bridge.workers !== 'function') {
+      this.meshNodes = 0;
+      return { nodes: 0, compute: 0, inference: 0 };
+    }
+    const workers = await this.bridge.workers({ onlineOnly: true, computeOnly: true });
+    const compute = workers.filter((item) => item.mesh_capabilities?.includes('compute'));
+    const inference = workers.filter((item) => item.mesh_capabilities?.includes('inference'));
+    this.meshNodes = workers.length;
+
+    const update = (id, rows) => {
+      const current = this.registry.get(id);
+      if (!current) return;
+      const best = rows.length
+        ? Math.max(...rows.map((item) => Number(item.reputation || 0.5)))
+        : 0;
+      this.register({
+        ...current,
+        enabled: rows.length > 0,
+        trust: rows.length ? Math.min(0.92, 0.55 + best * 0.35) : current.trust,
+        observed_reliability: rows.length ? Math.min(0.95, 0.45 + best * 0.5) : current.observed_reliability,
+      });
+    };
+    update('mesh.compute', compute);
+    update('mesh.inference', inference);
+    return { nodes: workers.length, compute: compute.length, inference: inference.length };
   }
 
   async discoverRemote() {
@@ -538,6 +617,8 @@ export class CapabilityFabric {
       local: all.filter((item) => item.transport === 'local').length,
       edge: all.filter((item) => item.transport === 'edge-http').length,
       studio: all.filter((item) => item.transport === 'studio-bridge').length,
+      mesh: all.filter((item) => item.transport === 'mesh-worker' && item.enabled).length,
+      mesh_nodes: this.meshNodes,
       remote_side_effects: false,
       discovery_urls: config.fabricDiscoveryUrls.length,
       last_discovery_at: this.lastDiscoveryAt,
