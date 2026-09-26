@@ -18,13 +18,13 @@ function parseJson(value, fallback = {}) {
   }
 }
 
-function normalizeQuestion(value) {
+export function normalizeQuestion(value) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text) return '';
   return /[?？]$/.test(text) ? text.slice(0, 1000) : (text.slice(0, 999) + '?');
 }
 
-function requiresFreshWeb(question) {
+export function requiresFreshWeb(question) {
   const text = String(question || '').toLowerCase();
   return [
     'récent','recent','nouveau','nouvelle','aujourd','actuel','actuelle','internet','web',
@@ -38,7 +38,7 @@ function ageMs(iso) {
   return Number.isFinite(ms) ? Date.now() - ms : Infinity;
 }
 
-function explicitUserIntent(text) {
+export function explicitUserIntent(text) {
   return /\b(je veux|je souhaite|j'aimerais|j’aimerais|je trouve|je pense|mon objectif|ma priorité|important|doit|devrait|il faut)\b/i
     .test(String(text || ''));
 }
