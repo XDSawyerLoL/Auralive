@@ -19,8 +19,6 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity {
     private WebView webView;
@@ -57,6 +55,8 @@ public final class MainActivity extends Activity {
 
         Button back = button("‹");
         Button reload = button("↻");
+        Button aura = button("✦");
+        aura.setContentDescription("Ouvrir AURA 2.0");
         address = new EditText(this);
         address.setSingleLine(true);
         address.setTextColor(Color.WHITE);
@@ -70,6 +70,7 @@ public final class MainActivity extends Activity {
         Button go = button("→");
         bar.addView(back, new LinearLayout.LayoutParams(dp(46), dp(46)));
         bar.addView(reload, new LinearLayout.LayoutParams(dp(46), dp(46)));
+        bar.addView(aura, new LinearLayout.LayoutParams(dp(46), dp(46)));
         bar.addView(address, addressLp);
         bar.addView(go, new LinearLayout.LayoutParams(dp(46), dp(46)));
 
@@ -134,6 +135,7 @@ public final class MainActivity extends Activity {
             if (webView.canGoBack()) webView.goBack();
         });
         reload.setOnClickListener(v -> webView.reload());
+        aura.setOnClickListener(v -> webView.loadUrl("https://antiquewhite-dolphin-780448.hostingersite.com/"));
 
         root.addView(bar);
         root.addView(badge, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)));
@@ -154,7 +156,7 @@ public final class MainActivity extends Activity {
             webView.loadUrl("https://" + input);
             return;
         }
-        String encoded = URLEncoder.encode(input, StandardCharsets.UTF_8);
+        String encoded = Uri.encode(input);
         webView.loadUrl("https://duckduckgo.com/?q=" + encoded);
     }
 
