@@ -181,6 +181,17 @@ export const config = Object.freeze({
     'localhost,metadata.google.internal,169.254.169.254',
   )),
 
+  // AURA Curiosity: exploration proactive bornée par score, fréquence et budget de recherche.
+  curiosityEnabled: bool('AURA_CURIOSITY_ENABLED', true),
+  curiosityTickSeconds: int('AURA_CURIOSITY_TICK_SECONDS', 900, 60, 86400),
+  curiosityWarmupSeconds: int('AURA_CURIOSITY_WARMUP_SECONDS', 45, 10, 600),
+  curiosityQuestionsPerCycle: int('AURA_CURIOSITY_QUESTIONS_PER_CYCLE', 5, 1, 12),
+  curiosityResearchPerCycle: int('AURA_CURIOSITY_RESEARCH_PER_CYCLE', 2, 0, 6),
+  curiosityMinScore: num('AURA_CURIOSITY_MIN_SCORE', 0.58, 0.1, 1),
+
+  // AURA Everywhere: un produit est considéré hors ligne s'il cesse de battre.
+  productOfflineSeconds: int('AURA_PRODUCT_OFFLINE_SECONDS', 180, 30, 86400),
+
   fabricEnabled: bool('AURA_FABRIC_ENABLED', true),
   fabricDiscoveryUrls: csv('AURA_FABRIC_DISCOVERY_URLS', ''),
   fabricToken: process.env.AURA_FABRIC_TOKEN || '',
