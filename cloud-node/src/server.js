@@ -908,6 +908,16 @@ app.get('/api/curiosity/status', async (request, reply) => {
       questions_last_hour: status.questions_last_hour,
       last_run_at: status.last_run_at,
       last_research_at: status.last_research_at,
+      recent_questions: (status.recent_questions || [])
+        .filter((item) => ['system','web'].includes(String(item?.context?.target || '')))
+        .slice(0, 4)
+        .map((item) => ({
+          title: item.title,
+          content: item.content,
+          created_at: item.created_at,
+          target: item.context?.target || '',
+          domain: item.context?.domain || '',
+        })),
     };
 });
 
