@@ -140,3 +140,19 @@ test('autonomous research initiatives use AURA Fabric DAGs when available', () =
   assert.match(commandSource, /filter\(\(item\) => !item\.side_effects\)/);
   assert.match(serverSource, /new CommandCenter\([\s\S]*fabric,[\s\S]*dagCompiler,[\s\S]*graphExecutor/);
 });
+
+
+test('cross-product Patch PR writes are branch-only and bounded', () => {
+  assert.match(commandSource, /github\.create_patch_pr/);
+  assert.match(commandSource, /github-draft-patch-pr/);
+  assert.match(commandSource, /draft:\s*true/);
+  assert.match(commandSource, /auto_merge:\s*false/);
+  assert.match(commandSource, /PATCH_BLOCKED_PATHS/);
+  assert.match(commandSource, /config\.commandCenterMaxPatchFiles/);
+  assert.match(commandSource, /config\.commandCenterMaxPatchBytes/);
+  assert.match(commandSource, /createProductPatchInitiative/);
+  assert.match(configSource, /AURA_COMMAND_AUTO_PATCH_PR/);
+  assert.match(configSource, /AURA_COMMAND_MAX_PATCH_FILES/);
+  assert.match(configSource, /AURA_COMMAND_MAX_PATCH_BYTES/);
+  assert.match(serverSource, /\/api\/command\/products\/:id\/patch-pr/);
+});
