@@ -132,16 +132,6 @@ export const config = Object.freeze({
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
 
-  curiosityEnabled: bool('AURA_CURIOSITY_ENABLED', true),
-  curiosityTickSeconds: int('AURA_CURIOSITY_TICK_SECONDS', 180, 30, 86400),
-  curiosityWarmupSeconds: int('AURA_CURIOSITY_WARMUP_SECONDS', 45, 10, 600),
-  curiosityQuestionsPerCycle: int('AURA_CURIOSITY_QUESTIONS_PER_CYCLE', 3, 1, 8),
-  curiosityResearchPerCycle: int('AURA_CURIOSITY_RESEARCH_PER_CYCLE', 1, 0, 4),
-  curiosityMaxQuestionsPerHour: int('AURA_CURIOSITY_MAX_QUESTIONS_PER_HOUR', 10, 1, 60),
-  curiosityMaxWebResearchPerHour: int('AURA_CURIOSITY_MAX_WEB_RESEARCH_PER_HOUR', 3, 0, 20),
-  curiosityMaxInterlocutorQuestionsPerHour: int('AURA_CURIOSITY_MAX_INTERLOCUTOR_QUESTIONS_PER_HOUR', 2, 0, 12),
-  curiosityProductStaleSeconds: int('AURA_CURIOSITY_PRODUCT_STALE_SECONDS', 900, 60, 86400),
-
   commandCenterEnabled: bool('AURA_COMMAND_CENTER_ENABLED', true),
   commandCenterAutoExecute: bool('AURA_COMMAND_CENTER_AUTO_EXECUTE', true),
   commandCenterTickSeconds: int('AURA_COMMAND_CENTER_TICK_SECONDS', 60, 15, 86400),
@@ -190,6 +180,17 @@ export const config = Object.freeze({
     'AURA_WEB_BLOCKED_DOMAINS',
     'localhost,metadata.google.internal,169.254.169.254',
   )),
+
+  // AURA Curiosity: exploration proactive bornée par score, fréquence et budget de recherche.
+  curiosityEnabled: bool('AURA_CURIOSITY_ENABLED', true),
+  curiosityTickSeconds: int('AURA_CURIOSITY_TICK_SECONDS', 900, 60, 86400),
+  curiosityWarmupSeconds: int('AURA_CURIOSITY_WARMUP_SECONDS', 45, 10, 600),
+  curiosityQuestionsPerCycle: int('AURA_CURIOSITY_QUESTIONS_PER_CYCLE', 5, 1, 12),
+  curiosityResearchPerCycle: int('AURA_CURIOSITY_RESEARCH_PER_CYCLE', 2, 0, 6),
+  curiosityMinScore: num('AURA_CURIOSITY_MIN_SCORE', 0.58, 0.1, 1),
+
+  // AURA Everywhere: un produit est considéré hors ligne s'il cesse de battre.
+  productOfflineSeconds: int('AURA_PRODUCT_OFFLINE_SECONDS', 180, 30, 86400),
 
   fabricEnabled: bool('AURA_FABRIC_ENABLED', true),
   fabricDiscoveryUrls: csv('AURA_FABRIC_DISCOVERY_URLS', ''),
