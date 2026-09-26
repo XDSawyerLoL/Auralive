@@ -168,13 +168,14 @@ input{width:100%;padding:13px 14px;border-radius:12px;border:1px solid #31405d;b
 <div class="grid"><label>Adresse AURA Cloud<input id="url" value="https://antiquewhite-dolphin-780448.hostingersite.com"></label>
 <label>Jeton privé AURA<input id="token" type="password" autocomplete="new-password" placeholder="AURA_CLOUD_TOKEN"></label>
 <label>Jeton GitHub Evolution <span class="small">(optionnel, requis pour PR/CI/merge autonomes)</span><input id="github" type="password" autocomplete="new-password" placeholder="AURA_EVOLUTION_GITHUB_TOKEN"></label>
+<label style="display:flex;gap:10px;align-items:center"><input id="mesh" type="checkbox" style="width:auto">Participer volontairement au Compute Mesh</label>
 <button id="save">Connecter AURA à ce PC</button></div>
 <div id="status" class="status">Lecture de l'état…</div>
 <p class="small">Le jeton reste enregistré uniquement dans le .env local de Quantic Studio.</p>
 <script>
 const s=document.getElementById('status');
 async function refresh(){try{const r=await fetch('/api/cloud-worker/status');const j=await r.json();s.className='status '+(j.started&&j.enabled?'ok':'bad');s.textContent=JSON.stringify(j,null,2)}catch(e){s.className='status bad';s.textContent=String(e)}}
-document.getElementById('save').onclick=async()=>{s.textContent='Connexion…';try{const r=await fetch('/api/cloud-worker/configure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_url:document.getElementById('url').value,token:document.getElementById('token').value,github_token:document.getElementById('github').value})});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error||'Erreur');document.getElementById('token').value='';document.getElementById('github').value='';await refresh()}catch(e){s.className='status bad';s.textContent=String(e)}};refresh();setInterval(refresh,5000);
+document.getElementById('save').onclick=async()=>{s.textContent='Connexion…';try{const r=await fetch('/api/cloud-worker/configure',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_url:document.getElementById('url').value,token:document.getElementById('token').value,github_token:document.getElementById('github').value,compute_consent:document.getElementById('mesh').checked})});const j=await r.json();if(!r.ok)throw new Error(j.detail||j.error||'Erreur');document.getElementById('token').value='';document.getElementById('github').value='';await refresh()}catch(e){s.className='status bad';s.textContent=String(e)}};refresh();setInterval(refresh,5000);
 </script></main></body></html>"""
     )
 
@@ -308,6 +309,45 @@ def _require_local_mesh_request(request: Request) -> None:
         or origin.startswith("http://[::1]:")
     ):
         raise HTTPException(status_code=403, detail="Origine Peer Mesh refusée")
+
+
+@app.get("/api/vector-memory/status")
+async def vector_memory_status_v3(request: Request) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    return await aura.vector_memory.status()
+
+
+@app.post("/api/vector-memory/search")
+async def vector_memory_search_v3(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    query = str(payload.get("query") or "").strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="Requête sémantique vide")
+    return {
+        "results": await aura.vector_memory.search(
+            query,
+            namespaces=[
+                str(item)
+                for item in (payload.get("namespaces") or [])
+                if str(item).strip()
+            ],
+            owner=(
+                str(payload.get("owner"))
+                if payload.get("owner") is not None
+                else None
+            ),
+            limit=int(payload.get("limit") or settings.vector_top_k),
+        )
+    }
+
+
+@app.post("/api/vector-memory/sync")
+async def vector_memory_sync_v3(request: Request) -> dict[str, Any]:
+    _require_local_mesh_request(request)
+    return await aura.vector_memory.sync_sources()
 
 
 @app.get("/api/mesh-peer/status")

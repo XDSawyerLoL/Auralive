@@ -24,9 +24,30 @@ class FakeAI:
         *,
         system_is_complete=False,
         task_role="auto",
+        preferred_model="",
     ):
         assert system_is_complete is True
-        return f"réponse locale:{task_role}"
+        return f"réponse locale:{task_role}:{preferred_model or 'auto'}"
+
+    async def moa(
+        self,
+        prompt,
+        system_instruction="",
+        max_tokens=700,
+        *,
+        task_role="reasoning",
+        max_models=3,
+    ):
+        return {
+            "answer": f"moa:{task_role}:{max_models}",
+            "candidates": [
+                {"model": "deepseek-r1:8b", "role": "reasoning", "answer": "A"},
+                {"model": "qwen3:8b", "role": "critic", "answer": "B"},
+            ],
+            "models": ["deepseek-r1:8b", "qwen3:8b"],
+            "agreement_score": 0.5,
+            "mode": "parallel-specialists+synthesis",
+        }
 
 
 class FakeCognitive:
@@ -93,7 +114,7 @@ async def test_worker_runs_local_language_engine():
             "task_role": "conversation",
         }
     )
-    assert result["answer"] == "réponse locale:conversation"
+    assert result["answer"] == "réponse locale:conversation:auto"
     assert result["diagnostic"]["mode"] == "ollama"
 
 
@@ -247,3 +268,18 @@ async def test_peer_mesh_browser_proxy_adds_worker_identity_without_exposing_clo
     assert calls[2][1]["peer_id"] == "peer-test"
     assert calls[2][1]["after_id"] == 12
     assert all("secret" not in str(item[1]) for item in calls)
+
+
+@pytest.mark.asyncio
+async def test_cloud_worker_executes_local_moa_job():
+    worker = AuraCloudWorker(FakeAura(), settings())
+    result = await worker._run_moa(
+        {
+            "prompt": "Compare deux architectures",
+            "task_role": "reasoning",
+            "max_models": 2,
+        }
+    )
+    assert result["answer"] == "moa:reasoning:2"
+    assert result["engine"] == "local-moa"
+    assert len(result["candidates"]) == 2

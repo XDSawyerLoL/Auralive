@@ -226,6 +226,7 @@ async def _v2_lifespan(application):
     async with _original_lifespan(application):
         await automation.initialize()
         await cognitive.start()
+        asyncio.create_task(aura.vector_memory.sync_sources(), name="aura-vector-cognitive-sync")
         await evolution.start()
         await horizon.start(automation.dispatch)
         await cohost.start()

@@ -30,6 +30,18 @@ class ModelProfile:
 
 CATALOG: tuple[ModelProfile, ...] = (
     ModelProfile(
+        key="embeddinggemma",
+        patterns=("embeddinggemma",),
+        roles={"embedding": 1.00},
+        license="Gemma Terms",
+        legal_class="custom-license",
+        family="gemma-embedding",
+        notes="Modèle local dédié aux embeddings de la mémoire vectorielle AURA.",
+        install_hint="embeddinggemma",
+        min_ram_gb=2,
+        tags=("embedding", "semantic-memory", "local"),
+    ),
+    ModelProfile(
         key="gpt-oss-20b",
         patterns=("gpt-oss:20b", "gpt-oss"),
         roles={
@@ -210,7 +222,7 @@ class ModelConstellation:
     le moteur linguistique/sémantique le plus rentable pour la tâche.
     """
 
-    VERSION = "aura-model-constellation-v1"
+    VERSION = "aura-model-constellation-v2"
 
     def __init__(self, settings: Any):
         self.settings = settings
@@ -413,6 +425,42 @@ class ModelConstellation:
         self.last_route = route
         self.route_counts[row["name"]] = self.route_counts.get(row["name"], 0) + 1
         return route
+
+    async def choose_many(
+        self,
+        role: str,
+        *,
+        count: int = 3,
+        preferred: str = "",
+    ) -> list[dict[str, Any]]:
+        """Sélectionne plusieurs spécialistes distincts sans charger de nouveau modèle."""
+        wanted = max(1, min(int(count or 1), 6))
+        base_role = str(role or "general").casefold()
+        role_plan = {
+            "reasoning": ["reasoning", "critic", "research", "math", "general"],
+            "code": ["code", "critic", "reasoning", "tools", "general"],
+            "tools": ["tools", "reasoning", "critic", "code", "general"],
+            "research": ["research", "critic", "reasoning", "general"],
+            "security": ["critic", "reasoning", "code", "tools", "general"],
+            "evolution": ["reasoning", "critic", "research", "code", "general"],
+            "conversation": ["conversation", "empathy", "general", "critic"],
+        }.get(base_role, [base_role, "critic", "general", "reasoning"])
+
+        selected: list[dict[str, Any]] = []
+        excluded: set[str] = set()
+        for index in range(wanted):
+            specialist_role = role_plan[index % len(role_plan)]
+            route = await self.choose(
+                specialist_role,
+                preferred=preferred if index == 0 else "",
+                exclude=excluded,
+            )
+            name = str(route.get("name") or "").strip()
+            if not name or name.casefold() in excluded:
+                break
+            selected.append({**route, "specialist_role": specialist_role})
+            excluded.add(name.casefold())
+        return selected
 
     def record_latency(self, model: str, latency_ms: int) -> None:
         if not model:

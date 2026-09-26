@@ -40,3 +40,16 @@ test('mesh inference fingerprints are based on the answer', () => {
   });
   assert.equal(first, second);
 });
+
+
+test('mesh MoA fingerprints ignore candidate telemetry and use final answer', () => {
+  const first = meshResultFingerprint('moa', {
+    answer: 'synthèse finale',
+    candidates: [{ model: 'a', latency_ms: 100 }],
+  });
+  const second = meshResultFingerprint('moa', {
+    answer: 'synthèse finale',
+    candidates: [{ model: 'b', latency_ms: 9000 }],
+  });
+  assert.equal(first, second);
+});

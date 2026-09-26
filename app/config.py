@@ -107,7 +107,17 @@ class Settings:
     ai_constellation_enabled: bool = _bool("AI_CONSTELLATION_ENABLED", True)
     ai_constellation_multi_review: bool = _bool("AI_CONSTELLATION_MULTI_REVIEW", True)
     ai_constellation_review_min_tokens: int = _int("AI_CONSTELLATION_REVIEW_MIN_TOKENS", 220)
-    ai_constellation_max_models: int = _int("AI_CONSTELLATION_MAX_MODELS", 2)
+    ai_constellation_max_models: int = _int("AI_CONSTELLATION_MAX_MODELS", 3)
+    ai_moa_enabled: bool = _bool("AI_MOA_ENABLED", True)
+    ai_moa_min_models: int = _int("AI_MOA_MIN_MODELS", 2)
+    ai_moa_max_models: int = _int("AI_MOA_MAX_MODELS", 3)
+
+    vector_memory_enabled: bool = _bool("AURA_VECTOR_MEMORY_ENABLED", True)
+    vector_embedding_model: str = os.getenv("AURA_VECTOR_EMBEDDING_MODEL", "embeddinggemma").strip()
+    vector_dimensions: int = _int("AURA_VECTOR_DIMENSIONS", 768)
+    vector_sync_seconds: int = _int("AURA_VECTOR_SYNC_SECONDS", 45)
+    vector_top_k: int = _int("AURA_VECTOR_TOP_K", 6)
+    vector_memory_path: Path = _runtime_path("AURA_VECTOR_MEMORY_PATH", "data/aura_vector.db")
 
     # Génération d'images locale. "auto" essaie A1111 puis ComfyUI.
     image_mode: str = os.getenv("AURA_IMAGE_MODE", "auto").strip().lower()

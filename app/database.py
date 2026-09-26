@@ -594,16 +594,24 @@ class Database:
     async def clear_viewer_memory(self, user_id: str) -> None:
         await self.execute("DELETE FROM memories WHERE user_id=?", (user_id,))
 
-    async def add_conversation_message(self, user_id: str, role: str, content: str) -> None:
+    async def add_conversation_message(self, user_id: str, role: str, content: str) -> int:
         if role not in {"user", "assistant"}:
             raise ValueError("Rôle de conversation invalide")
         clean = " ".join(str(content).strip().split())[:900]
         if not clean:
-            return
+            return 0
+        stamp = utcnow()
         await self.execute(
             "INSERT INTO ai_conversation_messages(user_id,role,content,created_at) VALUES(?,?,?,?)",
-            (user_id, role, clean, utcnow()),
+            (user_id, role, clean, stamp),
         )
+        inserted = await self.fetchone(
+            """SELECT id FROM ai_conversation_messages
+               WHERE user_id=? AND role=? AND content=? AND created_at=?
+               ORDER BY id DESC LIMIT 1""",
+            (user_id, role, clean, stamp),
+        )
+        message_id = int(inserted["id"]) if inserted else 0
         # Garde une mémoire courte et lisible : les 24 derniers tours maximum.
         await self.execute(
             """
@@ -615,6 +623,7 @@ class Database:
             """,
             (user_id, user_id),
         )
+        return message_id
 
     async def conversation_for(self, user_id: str, limit: int = 12) -> list[dict[str, Any]]:
         rows = await self.fetchall(

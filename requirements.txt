@@ -11,3 +11,4 @@ misaki-fork==0.9.6
 phonemizer-fork==3.3.2
 espeakng-loader>=0.2.4,<1.0
 soundfile==0.13.1
+sqlite-vec==0.1.9

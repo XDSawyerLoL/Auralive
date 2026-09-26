@@ -6,6 +6,7 @@ import random
 import re
 from time import monotonic
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -134,6 +135,12 @@ class AuraAI:
             "last_latency_ms": self.last_latency_ms,
             "request_timeout_seconds": self.settings.ai_request_timeout_seconds,
             "constellation_enabled": self.settings.ai_constellation_enabled,
+            "moa_enabled": bool(self.settings.ai_moa_enabled),
+            "moa_models_available": len(self.constellation.installed),
+            "moa_ready": bool(
+                self.settings.ai_moa_enabled
+                and len(self.constellation.installed) >= self.settings.ai_moa_min_models
+            ),
             "last_role": self.last_role,
             "last_model": self.last_model,
             "last_route": dict(self.constellation.last_route),
@@ -275,6 +282,202 @@ class AuraAI:
         )
         self._register_success()
         return answer
+
+    async def embed(
+        self,
+        inputs: str | list[str],
+        *,
+        model: str = "",
+        dimensions: int | None = None,
+    ) -> list[list[float]]:
+        """Embeddings locaux uniquement : la mémoire privée ne part jamais vers un fournisseur distant."""
+        await self.start()
+        if self.settings.ai_mode != "ollama":
+            raise RuntimeError("Les embeddings AURA exigent Ollama local")
+        parsed = urlparse(str(self.settings.ai_base_url or ""))
+        if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+            raise RuntimeError("Le moteur d'embeddings doit rester local")
+        assert self.session
+        payload: dict[str, Any] = {
+            "model": str(model or self.settings.vector_embedding_model or "embeddinggemma"),
+            "input": inputs,
+            "truncate": True,
+            "keep_alive": self.settings.ai_keep_alive,
+        }
+        if dimensions:
+            payload["dimensions"] = max(32, min(int(dimensions), 4096))
+        async with self.session.post(
+            f"{self.settings.ai_base_url}/api/embed",
+            timeout=aiohttp.ClientTimeout(total=max(10, self.settings.ai_request_timeout_seconds)),
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            body = await response.json()
+        rows = body.get("embeddings") or []
+        if not isinstance(rows, list) or not rows:
+            raise RuntimeError("Ollama n'a renvoyé aucun embedding")
+        return [[float(value) for value in row] for row in rows]
+
+    @staticmethod
+    def _agreement_score(answers: list[str]) -> float:
+        if len(answers) < 2:
+            return 1.0 if answers else 0.0
+        token_sets = [
+            set(re.findall(r"[\wÀ-ÿ'-]{3,}", str(answer).casefold()))
+            for answer in answers
+        ]
+        scores: list[float] = []
+        for index, left in enumerate(token_sets):
+            for right in token_sets[index + 1:]:
+                union = left | right
+                scores.append(len(left & right) / len(union) if union else 1.0)
+        return round(sum(scores) / max(1, len(scores)), 4)
+
+    async def moa(
+        self,
+        prompt: str,
+        system_instruction: str = "",
+        max_tokens: int = 700,
+        *,
+        task_role: str = "reasoning",
+        max_models: int | None = None,
+    ) -> dict[str, Any]:
+        """Mixture-of-Agents local : spécialistes en parallèle, puis synthèse vérifiée."""
+        await self.start()
+        if self.settings.ai_mode != "ollama" or not self.settings.ai_moa_enabled:
+            answer = await self.generate(
+                prompt,
+                system_instruction,
+                max_tokens,
+                system_is_complete=bool(system_instruction),
+                task_role=task_role,
+            )
+            return {
+                "answer": answer,
+                "candidates": [],
+                "models": [self.last_model] if self.last_model else [],
+                "agreement_score": 1.0,
+                "mode": "single-model-fallback",
+            }
+
+        base_system = system_instruction or self.identity.system_prompt
+        base_messages = [
+            {"role": "system", "content": base_system},
+            {"role": "user", "content": str(prompt)},
+        ]
+        role = self.constellation.infer_role(base_messages, explicit=task_role)
+        wanted = max(
+            int(self.settings.ai_moa_min_models),
+            min(
+                int(max_models or self.settings.ai_moa_max_models),
+                int(self.settings.ai_constellation_max_models),
+                6,
+            ),
+        )
+        routes = await self.constellation.choose_many(role, count=wanted)
+        if len(routes) < 2:
+            answer = await self._chat(base_messages, max_tokens, task_role=role)
+            return {
+                "answer": answer,
+                "candidates": [],
+                "models": [self.last_model] if self.last_model else [],
+                "agreement_score": 1.0,
+                "mode": "insufficient-specialists",
+            }
+
+        async def run_specialist(route: dict[str, Any]) -> dict[str, Any]:
+            model = str(route.get("name") or "")
+            specialist_role = str(route.get("specialist_role") or role)
+            specialist_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        base_system
+                        + "\n\nTu es un spécialiste temporaire du collectif AURA. "
+                        + f"Angle assigné: {specialist_role}. "
+                        + "Travaille indépendamment, relève les incertitudes utiles et donne une réponse candidate "
+                        + "concrète. Tu ne décides pas à la place d'AURA."
+                    ),
+                },
+                {"role": "user", "content": str(prompt)},
+            ]
+            started = monotonic()
+            answer = await self._ollama(
+                specialist_messages,
+                min(max(64, int(max_tokens)), 900),
+                model=model,
+                timeout_seconds=max(15, self.settings.ai_request_timeout_seconds),
+                context_window=min(max(self.settings.ai_context_window, 4096), 8192),
+            )
+            return {
+                "model": model,
+                "role": specialist_role,
+                "answer": answer,
+                "latency_ms": round((monotonic() - started) * 1000),
+                "route_score": float(route.get("score") or 0),
+            }
+
+        settled = await asyncio.gather(
+            *(run_specialist(route) for route in routes),
+            return_exceptions=True,
+        )
+        candidates = [
+            row for row in settled
+            if isinstance(row, dict) and str(row.get("answer") or "").strip()
+        ]
+        if not candidates:
+            raise RuntimeError("Aucun spécialiste MoA n'a répondu")
+        if len(candidates) == 1:
+            only = candidates[0]
+            return {
+                "answer": only["answer"],
+                "candidates": candidates,
+                "models": [only["model"]],
+                "agreement_score": 1.0,
+                "mode": "single-survivor",
+            }
+
+        agreement = self._agreement_score([str(row["answer"]) for row in candidates])
+        synthesis_model = str(candidates[0]["model"])
+        candidate_text = "\n\n".join(
+            f"[{index + 1}] Modèle={row['model']} rôle={row['role']}\n{str(row['answer'])[:7000]}"
+            for index, row in enumerate(candidates)
+        )
+        synthesis_messages = [
+            {
+                "role": "system",
+                "content": (
+                    base_system
+                    + "\n\nTu es maintenant le synthétiseur d'AURA. Plusieurs spécialistes ont travaillé "
+                    + "en parallèle. Compare leurs propositions, conserve les points solides, élimine les erreurs "
+                    + "et contradictions, n'invente pas un consensus et produis uniquement la réponse finale."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"MISSION\n{str(prompt)[:12000]}\n\n"
+                    f"RÉPONSES SPÉCIALISTES\n{candidate_text}"
+                ),
+            },
+        ]
+        final = await self._ollama(
+            synthesis_messages,
+            min(max(96, int(max_tokens)), 1200),
+            model=synthesis_model,
+            timeout_seconds=max(20, self.settings.ai_request_timeout_seconds),
+            context_window=min(max(self.settings.ai_context_window, 6144), 12288),
+        )
+        self.last_model = synthesis_model
+        self.last_role = role
+        return {
+            "answer": final,
+            "candidates": candidates,
+            "models": [str(row["model"]) for row in candidates],
+            "agreement_score": agreement,
+            "mode": "parallel-specialists+synthesis",
+            "role": role,
+        }
 
     async def _chat(
         self,
