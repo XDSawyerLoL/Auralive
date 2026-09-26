@@ -6,7 +6,7 @@ const dbSource = fs.readFileSync(new URL('../src/db.js', import.meta.url), 'utf8
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 
 test('database schema uses explicit migrations and resilience tables', () => {
-  assert.match(dbSource, /LATEST_SCHEMA_VERSION = 7/);
+  assert.match(dbSource, /LATEST_SCHEMA_VERSION = 8/);
   assert.match(dbSource, /aura_schema_migrations/);
   assert.match(dbSource, /aura_state_snapshots/);
   assert.match(dbSource, /aura_runtime_metric_rollups/);
@@ -33,6 +33,7 @@ test('database schema uses explicit migrations and resilience tables', () => {
   assert.match(dbSource, /aura_mesh_signals/);
   assert.match(dbSource, /aura_mesh_sessions/);
   assert.match(dbSource, /peer-mesh-webrtc-signaling-and-cryptographic-identity/);
+  assert.match(dbSource, /peer-mesh-quorum-replay-protection-and-quality-routing/);
   assert.match(dbSource, /createLogicalBackup/);
 });
 
