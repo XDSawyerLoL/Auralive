@@ -104,12 +104,38 @@ class AuraCloudWorker:
                 pass
         return 0
 
+    def _installed_models(self) -> list[str]:
+        ai_service = getattr(self.aura, "ai", None)
+        constellation = getattr(ai_service, "constellation", None)
+        rows = list(getattr(constellation, "installed", []) or [])
+        names = [
+            str(row.get("name") or "").strip()
+            for row in rows
+            if isinstance(row, dict) and str(row.get("name") or "").strip()
+        ]
+        diagnostic = self._ai_diagnostic()
+        current = str(
+            diagnostic.get("runtime_model")
+            or diagnostic.get("active_model")
+            or diagnostic.get("model")
+            or getattr(self.settings, "ai_model", "")
+            or ""
+        ).strip()
+        if current and current not in names:
+            names.append(current)
+        return names[:32]
+
     def _mesh_capabilities(self) -> list[str]:
         if not self.compute_consent:
             return []
         capabilities = ["compute"]
         if bool(getattr(getattr(self.aura, "ai", None), "enabled", False)):
             capabilities.append("inference")
+        if (
+            bool(getattr(self.settings, "ai_moa_enabled", True))
+            and len(self._installed_models()) >= 2
+        ):
+            capabilities.append("moa")
         return capabilities
 
     def _resource_profile(self) -> dict[str, Any]:
@@ -130,7 +156,7 @@ class AuraCloudWorker:
             "cpu_threads": int(os.cpu_count() or 1),
             "ram_bytes": self._physical_ram_bytes(),
             "gpu": accelerator,
-            "models": [model] if model else [],
+            "models": self._installed_models() or ([model] if model else []),
             "platform": platform.system(),
             "architecture": platform.machine(),
         }
@@ -424,10 +450,28 @@ class AuraCloudWorker:
             max_tokens,
             system_is_complete=True,
             task_role=str(payload.get("task_role") or "auto"),
+            preferred_model=str(payload.get("preferred_model") or ""),
         )
         return {
             "answer": str(answer or ""),
             "engine": "local",
+            "diagnostic": self._ai_diagnostic(),
+        }
+
+    async def _run_moa(self, payload: dict[str, Any]) -> dict[str, Any]:
+        prompt = str(payload.get("prompt") or payload.get("objective") or "").strip()
+        if not prompt:
+            raise ValueError("Prompt MoA vide")
+        result = await self.aura.ai.moa(
+            prompt,
+            str(payload.get("system") or ""),
+            max(96, min(int(payload.get("max_tokens") or 700), 1600)),
+            task_role=str(payload.get("task_role") or "reasoning"),
+            max_models=max(2, min(int(payload.get("max_models") or 3), 6)),
+        )
+        return {
+            **result,
+            "engine": "local-moa",
             "diagnostic": self._ai_diagnostic(),
         }
 
@@ -568,6 +612,8 @@ class AuraCloudWorker:
             return await self._run_compute(payload)
         if kind == "inference":
             return await self._run_inference(payload)
+        if kind == "moa":
+            return await self._run_moa(payload)
         if kind == "operator":
             return await self._run_operator(payload, risks)
         if kind == "tts":
