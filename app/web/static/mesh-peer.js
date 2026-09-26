@@ -417,13 +417,16 @@
     await waitIceComplete(pc);
     await sendSignal(targetPeerId, signal.session_id, "offer", {
       description: pc.localDescription,
+      ice_servers: payload.ice_servers || [],
     });
   }
 
   async function handleOffer(signal) {
     const remotePeerId = String(signal.from_peer_id || "");
     if (!remotePeerId) return;
-    const pc = new RTCPeerConnection(rtcConfig([{ urls: "stun:stun.cloudflare.com:3478" }]));
+    const pc = new RTCPeerConnection(rtcConfig(signal.payload?.ice_servers || [
+      { urls: "stun:stun.cloudflare.com:3478" },
+    ]));
     const record = { role: "target", pc, remotePeerId };
     sessions.set(signal.session_id, record);
     attachConnectionLifecycle(signal.session_id, pc);
@@ -432,8 +435,9 @@
       const channel = event.channel;
       record.channel = channel;
       channel.addEventListener("message", async message => {
+        let packet = {};
         try {
-          const packet = JSON.parse(String(message.data || "{}"));
+          packet = JSON.parse(String(message.data || "{}"));
           if (packet.type !== "task" || packet.session_id !== signal.session_id) {
             throw new Error("Paquet tâche P2P invalide");
           }
