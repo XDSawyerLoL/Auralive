@@ -99,7 +99,6 @@ class VectorMemory:
             return
         self.started = True
         await asyncio.to_thread(self._initialize_sync)
-        await self.sync_sources()
         self.task = asyncio.create_task(self._sync_loop(), name="aura-vector-memory-sync")
 
     async def close(self) -> None:
@@ -115,13 +114,13 @@ class VectorMemory:
     async def _sync_loop(self) -> None:
         interval = max(15, min(int(getattr(self.settings, "vector_sync_seconds", 45) or 45), 3600))
         while self.started:
-            await asyncio.sleep(interval)
             try:
                 await self.sync_sources()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
                 self.last_error = f"{exc.__class__.__name__}: {exc}"[:800]
+            await asyncio.sleep(interval)
 
     def _hashed_embedding(self, text: str) -> list[float]:
         """Fallback local sans modèle : feature hashing lexical borné et déterministe."""
@@ -348,24 +347,40 @@ class VectorMemory:
         self.last_search_at = utcnow()
         return rows
 
-    async def delete_owner(self, owner: str) -> None:
+    async def delete_owner(
+        self,
+        owner: str,
+        *,
+        namespaces: list[str] | None = None,
+    ) -> None:
         wanted = str(owner or "")
         if not wanted:
             return
+        scoped = [str(item) for item in (namespaces or []) if str(item).strip()]
 
         def _delete() -> None:
+            clauses = ["owner=?"]
+            params: list[Any] = [wanted]
+            if scoped:
+                placeholders = ",".join("?" for _ in scoped)
+                clauses.append(f"namespace IN ({placeholders})")
+                params.extend(scoped)
+            where = " AND ".join(clauses)
             with self._connect() as conn:
                 ids = [
                     int(row["id"])
                     for row in conn.execute(
-                        "SELECT id FROM aura_vector_items WHERE owner=?",
-                        (wanted,),
+                        f"SELECT id FROM aura_vector_items WHERE {where}",
+                        tuple(params),
                     ).fetchall()
                 ]
                 if self.sqlite_vec_available:
                     for rowid in ids:
                         conn.execute("DELETE FROM aura_vector_index WHERE rowid=?", (rowid,))
-                conn.execute("DELETE FROM aura_vector_items WHERE owner=?", (wanted,))
+                conn.execute(
+                    f"DELETE FROM aura_vector_items WHERE {where}",
+                    tuple(params),
+                )
 
         await asyncio.to_thread(_delete)
 
