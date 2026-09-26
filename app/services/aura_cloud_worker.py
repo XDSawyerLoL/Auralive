@@ -245,6 +245,34 @@ class AuraCloudWorker:
                 raise RuntimeError("AURA Cloud a renvoyé une réponse non JSON") from exc
             return data if isinstance(data, dict) else {}
 
+    async def mesh_peer_register(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self._post(
+            "/api/mesh/peer/register",
+            {**dict(payload or {}), "worker_id": self.worker_id},
+        )
+
+    async def mesh_peer_signal(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self._post(
+            "/api/mesh/peer/signal",
+            {**dict(payload or {}), "worker_id": self.worker_id},
+        )
+
+    async def mesh_peer_poll(self, peer_id: str, after_id: int = 0) -> dict[str, Any]:
+        return await self._post(
+            "/api/mesh/peer/poll",
+            {
+                "worker_id": self.worker_id,
+                "peer_id": str(peer_id or "")[:80],
+                "after_id": max(0, int(after_id or 0)),
+            },
+        )
+
+    async def mesh_peer_complete(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return await self._post(
+            "/api/mesh/peer/complete",
+            {**dict(payload or {}), "worker_id": self.worker_id},
+        )
+
     def _capabilities(self) -> list[dict[str, Any]]:
         cognitive = getattr(self.aura, "cognitive", None)
         automation = getattr(cognitive, "automation", None)
@@ -617,6 +645,7 @@ class AuraCloudWorker:
             "worker_id": self.worker_id,
             "compute_consent": self.compute_consent,
             "mesh_capabilities": self._mesh_capabilities(),
+            "peer_mesh_enabled": self.compute_consent,
             "resources": self._resource_profile(),
             "cloud_url": self.base_url,
             "token_configured": bool(self.token),
