@@ -30,6 +30,18 @@ class ModelProfile:
 
 CATALOG: tuple[ModelProfile, ...] = (
     ModelProfile(
+        key="embeddinggemma",
+        patterns=("embeddinggemma",),
+        roles={"embedding": 1.00},
+        license="Gemma Terms",
+        legal_class="custom-license",
+        family="gemma-embedding",
+        notes="Modèle local dédié aux embeddings de la mémoire vectorielle AURA.",
+        install_hint="embeddinggemma",
+        min_ram_gb=2,
+        tags=("embedding", "semantic-memory", "local"),
+    ),
+    ModelProfile(
         key="gpt-oss-20b",
         patterns=("gpt-oss:20b", "gpt-oss"),
         roles={
@@ -210,7 +222,7 @@ class ModelConstellation:
     le moteur linguistique/sémantique le plus rentable pour la tâche.
     """
 
-    VERSION = "aura-model-constellation-v1"
+    VERSION = "aura-model-constellation-v2"
 
     def __init__(self, settings: Any):
         self.settings = settings
