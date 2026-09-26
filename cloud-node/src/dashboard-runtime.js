@@ -459,6 +459,27 @@ function renderCommandCenter(command,work,attention){
   }
   renderNext(work,attention);
 }
+function renderCuriosity(status){
+  const list=$('curiosityList');
+  const meta=$('curiosityMeta');
+  if(!list||!meta)return;
+  if(!status||!status.enabled){
+    meta.textContent='Arrêtée';
+    list.innerHTML='<div class="empty">Moteur de curiosité indisponible.</div>';
+    return;
+  }
+  meta.textContent=String(Number(status.questions_last_hour||0))+' question'+(Number(status.questions_last_hour||0)>1?'s':'')+'/h';
+  const rows=Array.isArray(status.recent_questions)?status.recent_questions:[];
+  if(!rows.length){
+    list.innerHTML='<div class="empty">AURA observe avant de formuler une nouvelle question.</div>';
+    return;
+  }
+  list.innerHTML=rows.slice(0,4).map(function(row){
+    const target=String(row.target||'system');
+    const domain=String(row.domain||'aura');
+    return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.content||'')+'</div><span class="badge">'+escapeHtml(target)+'</span></div><div class="memory-date">'+escapeHtml(domain)+'</div></div>';
+  }).join('');
+}
 function renderNext(work,attention){
   const item=(work&&work[0])||null;
   const node=attention&&attention.nodes?attention.nodes.find(function(n){return n.dominant;}):null;
@@ -516,7 +537,9 @@ async function refresh(){
       $('evolutionText').textContent='Évolution · attente';
     }
     let commandStatus=null;
+    let curiosityStatus=null;
     try{commandStatus=await api('/api/command/status');}catch(_){commandStatus=null;}
+    try{curiosityStatus=await api('/api/curiosity/status');}catch(_){curiosityStatus=null;}
     metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     renderEmotion(organism);
@@ -538,13 +561,14 @@ async function refresh(){
         api('/api/kernel/work?limit=5'),
         api('/api/kernel/attention')
       ]);
-      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderCommandCenter(commandStatus,results[3],results[4]);
+      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderCommandCenter(commandStatus,results[3],results[4]);renderCuriosity(curiosityStatus);
     }else{
       $('intentList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('memoryList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('activityList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       renderCommandCenter(commandStatus,[],null);
+      renderCuriosity(curiosityStatus);
     }
   }catch(error){
     setLive(false,'Indisponible');
