@@ -175,7 +175,7 @@ export class PeerMesh {
   async getPeer(peerId) {
     const row = await one(
       `SELECT peer_id,worker_id,public_jwk,capabilities,resources,reputation,
-              enabled,last_seen_at,last_seen_ms
+               jobs_completed,jobs_failed,avg_latency_ms,enabled,last_seen_at,last_seen_ms
        FROM aura_mesh_peers WHERE peer_id=?`,
       [clean(peerId, 80)],
     );
@@ -199,7 +199,7 @@ export class PeerMesh {
   async peers({ capability = '', workerId = '', onlineOnly = true } = {}) {
     const rows = await query(
       `SELECT peer_id,worker_id,public_jwk,capabilities,resources,reputation,
-              enabled,last_seen_at,last_seen_ms
+               jobs_completed,jobs_failed,avg_latency_ms,enabled,last_seen_at,last_seen_ms
        FROM aura_mesh_peers
        WHERE enabled=1
        ORDER BY reputation DESC,avg_latency_ms ASC,last_seen_ms DESC LIMIT 256`,
@@ -213,6 +213,9 @@ export class PeerMesh {
       capabilities: normalizeCaps(parseJson(row.capabilities, [])),
       resources: normalizeResources(parseJson(row.resources, {})),
       reputation: Math.max(0, Math.min(1, Number(row.reputation || 0.5))),
+      jobs_completed: Number(row.jobs_completed || 0),
+      jobs_failed: Number(row.jobs_failed || 0),
+      avg_latency_ms: Math.max(0, Number(row.avg_latency_ms || 0)),
       enabled: Boolean(Number(row.enabled || 0)),
       last_seen_at: row.last_seen_at || '',
       last_seen_ms: Number(row.last_seen_ms || 0),
