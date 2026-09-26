@@ -210,7 +210,7 @@ class ModelConstellation:
     le moteur linguistique/sémantique le plus rentable pour la tâche.
     """
 
-    VERSION = "aura-model-constellation-v1"
+    VERSION = "aura-model-constellation-v2"
 
     def __init__(self, settings: Any):
         self.settings = settings
@@ -218,6 +218,7 @@ class ModelConstellation:
         self.last_refresh = 0.0
         self.installed: list[dict[str, Any]] = []
         self.last_route: dict[str, Any] = {}
+        self.last_ensemble: dict[str, Any] = {}
         self.last_error = ""
         self.route_counts: dict[str, int] = {}
         self.latencies: dict[str, list[int]] = {}
@@ -414,6 +415,54 @@ class ModelConstellation:
         self.route_counts[row["name"]] = self.route_counts.get(row["name"], 0) + 1
         return route
 
+    async def choose_many(
+        self,
+        role: str,
+        *,
+        count: int = 2,
+        preferred: str = "",
+        exclude: set[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        wanted = max(1, min(int(count or 1), 4))
+        blocked = {str(item).casefold() for item in (exclude or set())}
+        chosen: list[dict[str, Any]] = []
+        for index in range(wanted):
+            route = await self.choose(
+                role,
+                preferred=preferred if index == 0 else "",
+                exclude=blocked,
+            )
+            name = str(route.get("name") or "").strip()
+            if not name or name.casefold() in blocked:
+                break
+            chosen.append(route)
+            blocked.add(name.casefold())
+        self.last_ensemble = {
+            "role": str(role or "general"),
+            "models": [str(item.get("name") or "") for item in chosen],
+            "count": len(chosen),
+            "mode": "ranked-specialists",
+        }
+        return chosen
+
+    def record_ensemble(
+        self,
+        *,
+        role: str,
+        models: list[str],
+        synthesizer: str,
+        successful: int,
+        elapsed_ms: int,
+    ) -> None:
+        self.last_ensemble = {
+            "role": str(role or "general"),
+            "models": [str(item) for item in models if item],
+            "synthesizer": str(synthesizer or ""),
+            "successful": max(0, int(successful)),
+            "elapsed_ms": max(0, int(elapsed_ms)),
+            "mode": "mixture-of-agents",
+        }
+
     def record_latency(self, model: str, latency_ms: int) -> None:
         if not model:
             return
@@ -495,6 +544,7 @@ class ModelConstellation:
             "installed": list(self.installed),
             "recommendations": recommendations,
             "last_route": dict(self.last_route),
+            "last_ensemble": dict(self.last_ensemble),
             "route_counts": dict(self.route_counts),
             "last_error": self.last_error,
             "principle": "AURA decides; models are replaceable specialist tools.",
