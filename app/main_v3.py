@@ -416,6 +416,7 @@ async def cloud_worker_configure_v3(
     settings.aura_cloud_token = token
     settings.aura_cloud_worker_enabled = True
     settings.aura_compute_mesh_consent = compute_consent
+    cloud_worker.worker_id = cloud_worker._resolve_worker_id()
     settings.evolution_auto_submit = True
     settings.evolution_auto_merge = True
     if github_token:
