@@ -276,6 +276,38 @@ app.get('/', async (_request, reply) => {
   return DASHBOARD_HTML;
 });
 
+const GLIDE_WINDOWS_DOWNLOAD = String(
+  process.env.AURA_GLIDE_WINDOWS_URL
+  || 'https://github.com/XDSawyerLoL/QuanticSillage/releases/download/quantic-glide-v1.2.6/Quantic-Glide-1.2.6-x64.exe'
+).trim();
+
+const GLIDE_ANDROID_DOWNLOAD = String(
+  process.env.AURA_GLIDE_ANDROID_URL
+  || 'https://raw.githubusercontent.com/XDSawyerLoL/Auralive/main/downloads/Quantic-Glide-Android-1.3.0-beta.apk'
+).trim();
+
+app.get('/downloads/glide/windows', async (_request, reply) => {
+  return reply.redirect(GLIDE_WINDOWS_DOWNLOAD);
+});
+
+app.get('/downloads/glide/android', async (_request, reply) => {
+  return reply.redirect(GLIDE_ANDROID_DOWNLOAD);
+});
+
+app.get('/api/downloads/glide', async () => ({
+  product: 'Quantic Glide',
+  windows: {
+    version: '1.2.6',
+    channel: 'stable',
+    url: '/downloads/glide/windows',
+  },
+  android: {
+    version: '1.3.0-beta.1',
+    channel: 'beta',
+    url: '/downloads/glide/android',
+  },
+}));
+
 app.get('/api/auth/session', async (request) => ({
   authenticated: isPrivate(request),
   method: validPrivateSession(cookies(request).aura_session)
