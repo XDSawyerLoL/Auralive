@@ -200,6 +200,7 @@ async function startRuntime() {
   try {
     await initSchema();
     bootstrap.dbReady = true;
+    await productRegistry.seed();
     await fabric.start();
 
     // Le noyau AURA est le cœur critique. Les services optionnels ne doivent
