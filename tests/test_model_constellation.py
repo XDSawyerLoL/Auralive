@@ -128,3 +128,24 @@ async def test_pull_refuses_non_local_install_endpoint():
     router.session = _TransitionSession()
     with pytest.raises(ValueError, match="Ollama doit être local"):
         await router.pull("deepseek-r1:8b", base_url="https://remote.example")
+
+
+@pytest.mark.asyncio
+async def test_constellation_selects_distinct_specialists_for_moa(monkeypatch):
+    router = ModelConstellation(settings())
+    router.installed = router._decode_installed([
+        {"name": "deepseek-r1:8b", "size": 5_000_000_000},
+        {"name": "qwen3:8b", "size": 5_000_000_000},
+        {"name": "dolphin-mistral:7b", "size": 4_000_000_000},
+    ])
+
+    async def no_refresh(*, force=False):
+        return router.installed
+
+    monkeypatch.setattr(router, "refresh", no_refresh)
+    selected = await router.choose_many("reasoning", count=3)
+
+    assert len(selected) == 3
+    assert len({row["name"] for row in selected}) == 3
+    assert selected[0]["specialist_role"] == "reasoning"
+    assert selected[1]["specialist_role"] == "critic"
