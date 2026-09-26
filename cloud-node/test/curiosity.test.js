@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   normalizeQuestion,
   requiresFreshWeb,
@@ -65,4 +66,18 @@ test('registry seeding uses command-center products and modification policy', as
     calls.every((item) => item.metadata.modification_policy === 'branch-test-canary-promote'),
     true,
   );
+});
+
+
+test('high-agency curiosity keeps Web research diversified without increasing interlocutor pressure', () => {
+  const source = fs.readFileSync(new URL('../src/curiosity.js', import.meta.url), 'utf8');
+  const config = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
+  assert.match(source, /aura-local-ai/);
+  assert.match(source, /aura-web-agents/);
+  assert.match(source, /aura-mesh/);
+  assert.match(source, /aura-security/);
+  assert.match(source, /Veille R&D autonome diversifiée/);
+  assert.match(config, /AURA_CURIOSITY_TICK_SECONDS', 90/);
+  assert.match(config, /AURA_CURIOSITY_MAX_WEB_RESEARCH_PER_HOUR', 8/);
+  assert.match(config, /AURA_CURIOSITY_MAX_INTERLOCUTOR_QUESTIONS_PER_HOUR', 2/);
 });
