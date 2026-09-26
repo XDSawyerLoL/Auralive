@@ -479,6 +479,7 @@ export class CapabilityFabric {
   async refreshPeers() {
     if (!this.peerMesh || typeof this.peerMesh.peers !== 'function') return { peers: 0, webgpu: 0 };
     const peers = await this.peerMesh.peers({ onlineOnly: true });
+    const webrtc = peers.filter((item) => item.capabilities?.includes('webrtc'));
     const webgpu = peers.filter((item) =>
       item.capabilities?.includes('webrtc') && item.capabilities?.includes('webgpu'));
     const current = this.registry.get('mesh.webgpu');
@@ -488,14 +489,14 @@ export class CapabilityFabric {
         : 0;
       this.register({
         ...current,
-        enabled: webgpu.length >= 2,
-        trust: webgpu.length >= 2 ? Math.min(0.94, 0.62 + best * 0.32) : current.trust,
-        observed_reliability: webgpu.length >= 2
+        enabled: webgpu.length >= 1 && webrtc.length >= 2,
+        trust: webgpu.length >= 1 && webrtc.length >= 2 ? Math.min(0.94, 0.62 + best * 0.32) : current.trust,
+        observed_reliability: webgpu.length >= 1 && webrtc.length >= 2
           ? Math.min(0.96, 0.52 + best * 0.44)
           : current.observed_reliability,
       });
     }
-    return { peers: peers.length, webgpu: webgpu.length };
+    return { peers: peers.length, webrtc: webrtc.length, webgpu: webgpu.length };
   }
 
   async discoverRemote() {
