@@ -44,6 +44,7 @@ class AuraCloudWorker:
         self.jobs_completed = 0
         self.jobs_failed = 0
         self._last_heartbeat = 0.0
+        self._product_observed_at: dict[str, float] = {}
 
     @property
     def compute_consent(self) -> bool:
@@ -269,6 +270,43 @@ class AuraCloudWorker:
             except Exception as exc:
                 raise RuntimeError("AURA Cloud a renvoyé une réponse non JSON") from exc
             return data if isinstance(data, dict) else {}
+
+    async def observe_product(
+        self,
+        product_id: str,
+        *,
+        state: str = "online",
+        detail: str = "",
+        metadata: dict[str, Any] | None = None,
+        min_interval_seconds: float = 60.0,
+    ) -> bool:
+        """Forward operational product presence to AURA Cloud, never user content."""
+        if not self.enabled:
+            return False
+        product = str(product_id or "").strip().lower()[:80]
+        if not product:
+            return False
+        now = time.monotonic()
+        previous = float(self._product_observed_at.get(product, 0.0))
+        if now - previous < max(5.0, float(min_interval_seconds)):
+            return True
+        try:
+            await self._post(
+                f"/api/aura/products/{product}/observe",
+                {
+                    "state": str(state or "online")[:40],
+                    "detail": str(detail or "")[:500],
+                    "metadata": {
+                        **(metadata or {}),
+                        "via": "quantic-studio-local-aura",
+                        "content_forwarded": False,
+                    },
+                },
+            )
+            self._product_observed_at[product] = now
+            return True
+        except Exception:
+            return False
 
     async def mesh_peer_register(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await self._post(
