@@ -6,6 +6,7 @@ import {
   repositoryHealth,
   summarizeWorkflowRuns,
   needsExternalEvidence,
+  normalizePatchPath,
 } from '../src/command_center.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
@@ -139,4 +140,35 @@ test('autonomous research initiatives use AURA Fabric DAGs when available', () =
   assert.match(commandSource, /aura-fabric-research-dag/);
   assert.match(commandSource, /filter\(\(item\) => !item\.side_effects\)/);
   assert.match(serverSource, /new CommandCenter\([\s\S]*fabric,[\s\S]*dagCompiler,[\s\S]*graphExecutor/);
+});
+
+
+test('cross-product Patch PR writes are branch-only and bounded', () => {
+  assert.match(commandSource, /github\.create_patch_pr/);
+  assert.match(commandSource, /github-draft-patch-pr/);
+  assert.match(commandSource, /draft:\s*true/);
+  assert.match(commandSource, /auto_merge:\s*false/);
+  assert.match(commandSource, /PATCH_BLOCKED_PATHS/);
+  assert.match(commandSource, /config\.commandCenterMaxPatchFiles/);
+  assert.match(commandSource, /config\.commandCenterMaxPatchBytes/);
+  assert.match(commandSource, /createProductPatchInitiative/);
+  assert.match(configSource, /AURA_COMMAND_AUTO_PATCH_PR/);
+  assert.match(configSource, /AURA_COMMAND_MAX_PATCH_FILES/);
+  assert.match(configSource, /AURA_COMMAND_MAX_PATCH_BYTES/);
+  assert.match(serverSource, /\/api\/command\/products\/:id\/patch-pr/);
+});
+
+
+test('Patch PR path canonicalization blocks workflow and credential bypasses', () => {
+  assert.throws(() => normalizePatchPath('.github//workflows/release.yml'), /chemin sensible interdit/);
+  assert.throws(() => normalizePatchPath('./.github/actions/build/action.yml'), /chemin sensible interdit/);
+  assert.throws(() => normalizePatchPath('safe/../.github/workflows/release.yml'), /chemin de patch invalide/);
+  assert.throws(() => normalizePatchPath('config/.env.production'), /chemin sensible interdit/);
+  assert.equal(normalizePatchPath('src//./feature.js'), 'src/feature.js');
+});
+
+test('product write denial metadata survives observations and fleet sync', () => {
+  assert.match(commandSource, /currentMetadata\.writable_by_aura === false/);
+  assert.match(commandSource, /\.\.\.currentMetadata, github: snapshot/);
+  assert.doesNotMatch(commandSource, /action_payload \|\| \{\}\)\.slice\(0, 200000\)/);
 });

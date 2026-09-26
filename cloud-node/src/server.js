@@ -1200,6 +1200,18 @@ app.post('/api/command/services/:id/state', async (request, reply) => {
   }
 });
 
+app.post('/api/command/products/:id/patch-pr', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.createProductPatchInitiative(
+      request.params.id,
+      request.body || {},
+    );
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
 app.post('/api/command/run', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   return commandCenter.runCycle(String(request.body?.trigger || 'private-api'));

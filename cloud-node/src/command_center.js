@@ -87,6 +87,40 @@ const REPO_SERVICE_MAP = new Map([
   ['xdsawyerlol/quantic-browser', 'quantic-glide'],
   ['xdsawyerlol/human-agency-engine', 'providence'],
 ]);
+const PATCH_BLOCKED_PATHS = [
+  /^\.github\/workflows\//i,
+  /^\.github\/actions\//i,
+  /(^|\/)\.env(?:\.|$)/i,
+  /(^|\/)(?:secrets?|credentials?)(?:\/|$)/i,
+  /\.(?:pem|key|p12|pfx)$/i,
+];
+
+function encodeGithubPath(value) {
+  return String(value || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
+
+export function normalizePatchPath(value) {
+  const raw = String(value || '').replace(/\\/g, '/').trim();
+  const segments = raw.split('/');
+  if (segments.some((segment) => segment === '..')) throw new Error('chemin de patch invalide');
+  const canonical = segments
+    .filter((segment) => segment && segment !== '.')
+    .join('/');
+  if (!canonical || canonical.length > 320) throw new Error('chemin de patch invalide');
+  if (PATCH_BLOCKED_PATHS.some((pattern) => pattern.test(canonical))) {
+    throw new Error('chemin sensible interdit au Patch PR autonome: ' + canonical);
+  }
+  return canonical;
+}
+
+function patchBranchSlug(value) {
+  return String(value || 'change')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'change';
+}
+
 const REPO_PRODUCT_LABELS = new Map([
   ['xdsawyerlol/auralive', 'AURA'],
   ['xdsawyerlol/quanticsillage', 'Quantic Sillage'],
@@ -376,6 +410,10 @@ export class CommandCenter {
       });
       return;
     }
+    const currentMetadata = parseJson((await one(
+      'SELECT metadata FROM aura_command_services WHERE id=?',
+      [serviceId],
+    ))?.metadata, {});
     await query(
       `UPDATE aura_command_services
        SET repository=?,state=?,state_detail=?,last_observed_at=?,metadata=?,updated_at=?
@@ -389,7 +427,7 @@ export class CommandCenter {
             : `Santé GitHub ${snapshot.health_score}%`
         )).slice(0, 4000),
         snapshot.observed_at,
-        JSON.stringify({ github: snapshot }).slice(0, 20000),
+        JSON.stringify({ ...currentMetadata, github: snapshot }).slice(0, 20000),
         now(),
         serviceId,
       ],
@@ -554,6 +592,113 @@ export class CommandCenter {
       };
     }
 
+    if (action === 'github.create_patch_pr') {
+      if (!config.commandCenterAutoPatchPr) {
+        return {
+          status: 'waiting',
+          execution_mode: 'github-action-disabled',
+          result: { reason: 'AURA_COMMAND_AUTO_PATCH_PR=false' },
+        };
+      }
+      const allowedRepos = new Set(
+        config.commandCenterGithubRepos.map((item) => String(item || '').toLowerCase()),
+      );
+      if (!allowedRepos.has(repository.toLowerCase())) {
+        throw new Error('dépôt hors allowlist AURA: ' + repository);
+      }
+      const rawFiles = Array.isArray(payload.files) ? payload.files : [];
+      if (!rawFiles.length) throw new Error('aucun fichier de patch fourni');
+      if (rawFiles.length > config.commandCenterMaxPatchFiles) {
+        throw new Error('trop de fichiers dans le Patch PR AURA');
+      }
+      const files = rawFiles.map((item) => {
+        const path = normalizePatchPath(item?.path);
+        const content = String(item?.content ?? '');
+        return { path, content };
+      });
+      const totalBytes = files.reduce((sum, item) => sum + Buffer.byteLength(item.content, 'utf8'), 0);
+      if (totalBytes > config.commandCenterMaxPatchBytes) {
+        throw new Error('Patch PR AURA trop volumineux');
+      }
+
+      const meta = (await this.github(`/repos/${repository}`)).data || {};
+      const baseBranch = String(payload.base_branch || meta.default_branch || 'main').slice(0, 160);
+      const ref = await this.github(
+        `/repos/${repository}/git/ref/heads/${encodeGithubPath(baseBranch)}`,
+      );
+      const baseSha = String(ref.data?.object?.sha || '');
+      if (!baseSha) throw new Error('SHA de base GitHub introuvable');
+
+      const branchName = `aura/${patchBranchSlug(payload.branch_slug || initiative.title)}-${String(initiative.id).slice(0, 8)}`;
+      await this.github(`/repos/${repository}/git/refs`, {
+        method: 'POST',
+        body: { ref: `refs/heads/${branchName}`, sha: baseSha },
+      });
+
+      try {
+        for (const file of files) {
+          let existing = null;
+          try {
+            existing = await this.github(
+              `/repos/${repository}/contents/${encodeGithubPath(file.path)}?ref=${encodeURIComponent(branchName)}`,
+            );
+          } catch (error) {
+            if (Number(error?.status || 0) !== 404) throw error;
+          }
+          const writeBody = {
+            message: String(payload.commit_message || `AURA: ${initiative.title}`).slice(0, 240),
+            content: Buffer.from(file.content, 'utf8').toString('base64'),
+            branch: branchName,
+          };
+          const existingSha = String(existing?.data?.sha || '');
+          if (existingSha) writeBody.sha = existingSha;
+          await this.github(
+            `/repos/${repository}/contents/${encodeGithubPath(file.path)}`,
+            { method: 'PUT', body: writeBody },
+          );
+        }
+
+        const marker = `<!-- aura-patch-pr:${initiative.fingerprint} -->`;
+        const pull = await this.github(`/repos/${repository}/pulls`, {
+          method: 'POST',
+          body: {
+            title: String(payload.title || initiative.title).slice(0, 240),
+            body: [
+              marker,
+              String(payload.body || initiative.objective || '').slice(0, 12000),
+              '',
+              'Créé par AURA en mode branch-test-canary-promote.',
+              'Aucun merge ni déploiement automatique n’a été effectué.',
+            ].join('\n'),
+            head: branchName,
+            base: baseBranch,
+            draft: true,
+          },
+        });
+        return {
+          status: 'completed',
+          execution_mode: 'github-draft-patch-pr',
+          result: {
+            executed: true,
+            repository,
+            branch: branchName,
+            base_branch: baseBranch,
+            files: files.map((item) => item.path),
+            pull_request_number: Number(pull.data?.number || 0),
+            pull_request_url: String(pull.data?.html_url || ''),
+            draft: true,
+            auto_merge: false,
+          },
+        };
+      } catch (error) {
+        await this.github(
+          `/repos/${repository}/git/refs/heads/${encodeGithubPath(branchName)}`,
+          { method: 'DELETE' },
+        ).catch(() => {});
+        throw error;
+      }
+    }
+
     if (action === 'github.create_failure_issue') {
       if (!config.commandCenterAutoCreateFailureIssue) {
         return {
@@ -594,6 +739,59 @@ export class CommandCenter {
     }
 
     throw new Error(`action GitHub autonome non autorisée: ${action}`);
+  }
+
+  async createProductPatchInitiative(productId, payload = {}) {
+    const service = await one(
+      'SELECT id,name,kind,repository,metadata FROM aura_command_services WHERE id=?',
+      [String(productId || '').trim().slice(0, 80)],
+    );
+    if (!service) throw new Error('produit Quantic inconnu');
+    const metadata = parseJson(service.metadata, {});
+    const repository = String(service.repository || '').trim();
+    if (!repository.includes('/')) throw new Error('dépôt produit non configuré');
+    if (metadata.writable_by_aura === false) throw new Error('produit non modifiable par AURA');
+
+    const rawFiles = Array.isArray(payload.files) ? payload.files : [];
+    if (!rawFiles.length) throw new Error('files requis');
+    const normalizedFiles = rawFiles.map((item) => ({
+      path: normalizePatchPath(item?.path),
+      content: String(item?.content ?? ''),
+    }));
+    const signatureHash = createHash('sha256')
+      .update(JSON.stringify(normalizedFiles))
+      .digest('hex')
+      .slice(0, 20);
+    const candidate = this.candidate({
+      domain: String(service.id || productId),
+      kind: 'github',
+      action_type: 'github.create_patch_pr',
+      action_payload: {
+        repository,
+        base_branch: String(payload.base_branch || ''),
+        branch_slug: String(payload.branch_slug || ''),
+        title: String(payload.title || `AURA · ${service.name}`),
+        body: String(payload.body || payload.objective || ''),
+        commit_message: String(payload.commit_message || ''),
+        files: normalizedFiles,
+      },
+      title: String(payload.title || `Modifier ${service.name} via Patch PR AURA`),
+      objective: String(payload.objective || 'Appliquer une modification Quantic vérifiable via branche et Pull Request.'),
+      rationale: String(payload.rationale || 'Modification inter-produit demandée à AURA avec isolation par branche.'),
+      priority: clamp(payload.priority ?? 0.78),
+      confidence: clamp(payload.confidence ?? 0.90),
+      requested_risks: ['safe'],
+      signature: `patch-pr:${repository}:${signatureHash}`,
+    });
+    const persisted = await this.persistInitiative(candidate);
+    if (!persisted.created) {
+      return { created: false, initiative: persisted.initiative };
+    }
+    if (payload.execute === false) {
+      return { created: true, initiative: persisted.initiative };
+    }
+    const executed = await this.executeInitiative(persisted.initiative);
+    return { created: true, initiative: executed };
   }
 
   async setServiceState(id, state, detail = '', metadata = {}) {
@@ -728,7 +926,14 @@ export class CommandCenter {
     const serviceId = String(id || '').trim().slice(0, 80);
     const state = String(payload.state || 'unknown').trim().toLowerCase().slice(0, 40);
     const detail = String(payload.detail || payload.state_detail || '').slice(0, 4000);
-    const metadata = JSON.stringify(payload.metadata || {}).slice(0, 20000);
+    const current = await one('SELECT metadata FROM aura_command_services WHERE id=?', [serviceId]);
+    const currentMetadata = parseJson(current?.metadata, {});
+    const metadataObject = {
+      ...currentMetadata,
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    if (currentMetadata.writable_by_aura === false) metadataObject.writable_by_aura = false;
+    const metadata = JSON.stringify(metadataObject).slice(0, 20000);
     const stamp = now();
     const result = await query(
       `UPDATE aura_command_services
@@ -741,7 +946,7 @@ export class CommandCenter {
       'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
       [
         'service-observation',
-        JSON.stringify({ service_id: serviceId, state, detail, metadata: payload.metadata || {} }).slice(0, 30000),
+        JSON.stringify({ service_id: serviceId, state, detail, metadata: metadataObject }).slice(0, 30000),
         stamp,
       ],
     );
@@ -1035,7 +1240,7 @@ export class CommandCenter {
         candidate.confidence,
         JSON.stringify(candidate.requested_risks || []),
         candidate.action_type || '',
-        JSON.stringify(candidate.action_payload || {}).slice(0, 30000),
+        JSON.stringify(candidate.action_payload || {}),
         stamp,
         stamp,
       ],

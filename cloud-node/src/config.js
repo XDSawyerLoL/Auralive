@@ -173,6 +173,9 @@ export const config = Object.freeze({
   ),
   commandCenterAutoRerunFailedCi: bool('AURA_COMMAND_AUTO_RERUN_FAILED_CI', true),
   commandCenterAutoCreateFailureIssue: bool('AURA_COMMAND_AUTO_CREATE_FAILURE_ISSUE', true),
+  commandCenterAutoPatchPr: bool('AURA_COMMAND_AUTO_PATCH_PR', true),
+  commandCenterMaxPatchFiles: int('AURA_COMMAND_MAX_PATCH_FILES', 4, 1, 12),
+  commandCenterMaxPatchBytes: int('AURA_COMMAND_MAX_PATCH_BYTES', 120000, 1000, 500000),
   commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 2, 0, 6),
 
   webSubstrateEnabled: bool('AURA_WEB_SUBSTRATE_ENABLED', true),
