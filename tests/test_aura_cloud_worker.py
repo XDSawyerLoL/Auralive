@@ -219,3 +219,31 @@ def test_compute_mesh_requires_explicit_opt_in_and_persists_node_identity(tmp_pa
     assert "compute" in first._mesh_capabilities()
     assert "inference" in first._mesh_capabilities()
     assert first._resource_profile()["cpu_threads"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_peer_mesh_browser_proxy_adds_worker_identity_without_exposing_cloud_token(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    calls = []
+
+    async def fake_post(path, payload):
+        calls.append((path, payload))
+        return {"ok": True}
+
+    monkeypatch.setattr(worker, "_post", fake_post)
+
+    await worker.mesh_peer_register({"peer_id": "peer-test", "signature": "sig"})
+    await worker.mesh_peer_signal({"envelope": {"signal_type": "offer"}, "signature": "sig"})
+    await worker.mesh_peer_poll("peer-test", 12)
+    await worker.mesh_peer_complete({"envelope": {"session_id": "session"}, "signature": "sig"})
+
+    assert [item[0] for item in calls] == [
+        "/api/mesh/peer/register",
+        "/api/mesh/peer/signal",
+        "/api/mesh/peer/poll",
+        "/api/mesh/peer/complete",
+    ]
+    assert all(item[1]["worker_id"] == worker.worker_id for item in calls)
+    assert calls[2][1]["peer_id"] == "peer-test"
+    assert calls[2][1]["after_id"] == 12
+    assert all("secret" not in str(item[1]) for item in calls)
