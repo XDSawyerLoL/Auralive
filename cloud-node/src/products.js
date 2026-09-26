@@ -117,8 +117,8 @@ export async function seedQuanticProducts(commandCenter) {
         ...(existing?.metadata || {}),
         capabilities: product.capabilities,
         aura_bridge: product.aura_bridge,
-        writable_by_aura: true,
-        modification_policy: 'branch-test-canary-promote',
+        writable_by_aura: existing?.metadata?.writable_by_aura === false ? false : true,
+        modification_policy: existing?.metadata?.modification_policy || 'branch-test-canary-promote',
         ecosystem: 'quantic-sillage',
       },
     }));
