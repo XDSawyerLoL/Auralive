@@ -53,7 +53,7 @@ export function scoreMeshWorker(worker = {}) {
 
 export function meshResultFingerprint(kind, result = {}) {
   let canonical = result;
-  if (kind === 'inference') canonical = String(result?.answer || '').trim();
+  if (kind === 'inference' || kind === 'moa') canonical = String(result?.answer || '').trim();
   if (kind === 'compute' && Object.prototype.hasOwnProperty.call(result || {}, 'value')) {
     canonical = result.value;
   }
