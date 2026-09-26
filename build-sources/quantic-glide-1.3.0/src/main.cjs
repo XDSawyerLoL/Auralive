@@ -10,6 +10,7 @@ const { normalizeAppearance, generatePromptWallpaper, importWallpaper, clearWall
 const { SideStageManager } = require('./services/sidestage-manager.cjs');
 const { installQuanticUiProtocol, SHELL_URL: QUANTIC_UI_URL } = require('./services/ui-protocol.cjs');
 const { QuanticAuraClient } = require('./services/aura-client.cjs');
+const { AuraEverywherePresence } = require('./services/aura-everywhere.cjs');
 
 const HOME = 'quantic://newtab';
 const CHROME_H = 86;
@@ -60,6 +61,7 @@ let store;
 let veil;
 let sideStage;
 let auraClient;
+let auraPresence;
 let browserSession;
 let normalSession;
 let privateSession;
@@ -980,6 +982,7 @@ function createWindow() {
     roundedCorners: true,
     thickFrame: true,
     show: false,
+    icon: path.join(__dirname, 'assets', 'quantic-icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
 
@@ -1039,6 +1042,11 @@ app.whenReady().then(async () => {
 
   veil = new QuanticVeil(app);
   auraClient = new QuanticAuraClient();
+  auraPresence = new AuraEverywherePresence({
+    version: app.getVersion(),
+    canSend: () => !isPrivateMode(),
+  });
+  auraPresence.start();
   sideStage = new SideStageManager({ store, session: normalSession, getWindow: () => win, openInMain: (url) => createTab(url, true), onChange: () => { layout(); emitState(true); } });
   if (isPrivateMode()) {
     await applyFailClosedProxy(privateSession);
@@ -1136,6 +1144,7 @@ app.on('will-quit', () => {
   clearTimeout(stateEmitTimer);
   clearTimeout(layoutTimer);
   sideStage?.destroyAll();
+  auraPresence?.stop();
   veil?.stop();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

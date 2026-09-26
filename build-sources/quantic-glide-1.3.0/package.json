@@ -8,7 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "check": "node --check src/bootstrap.cjs && node --check src/main.cjs && node --check src/preload.cjs && node --check src/security/ipc-firewall.cjs && node --check src/core/navigation.cjs && node --check src/core/internal-state.cjs && node --check src/services/store.cjs && node --check src/services/privacy.cjs && node --check src/services/veil.cjs && node --check src/services/intents.cjs && node --check src/services/aura-client.cjs && node --check src/renderer/renderer.js && node --check src/renderer/product-suite.js && node --check scripts/compat-smoke-electron.cjs && node --check scripts/evs-vmp-after-sign.cjs && node scripts/self-test.cjs && node scripts/contract-test.cjs && node scripts/privacy-audit.cjs && node scripts/ipc-firewall-test.cjs && node scripts/compat-contract.cjs && node scripts/release-contract.cjs && node scripts/private-session-contract.cjs && node scripts/tab-lifecycle-contract.cjs && node scripts/wallpaper-quanticmail-contract.cjs && node scripts/netflix-vmp-contract.cjs && node scripts/portable-sidestage-contract.cjs && node scripts/public-release-contract.cjs && node scripts/tor-bundle-contract.cjs && node scripts/windows-icon-contract.cjs && node scripts/aura-integration-contract.cjs",
+    "check": "node --check src/bootstrap.cjs && node --check src/main.cjs && node --check src/preload.cjs && node --check src/security/ipc-firewall.cjs && node --check src/core/navigation.cjs && node --check src/core/internal-state.cjs && node --check src/services/store.cjs && node --check src/services/privacy.cjs && node --check src/services/veil.cjs && node --check src/services/intents.cjs && node --check src/services/aura-client.cjs && node --check src/services/aura-everywhere.cjs && node --check src/renderer/renderer.js && node --check src/renderer/product-suite.js && node --check scripts/compat-smoke-electron.cjs && node --check scripts/evs-vmp-after-sign.cjs && node scripts/self-test.cjs && node scripts/contract-test.cjs && node scripts/privacy-audit.cjs && node scripts/ipc-firewall-test.cjs && node scripts/compat-contract.cjs && node scripts/release-contract.cjs && node scripts/private-session-contract.cjs && node scripts/tab-lifecycle-contract.cjs && node scripts/wallpaper-quanticmail-contract.cjs && node scripts/netflix-vmp-contract.cjs && node scripts/portable-sidestage-contract.cjs && node scripts/public-release-contract.cjs && node scripts/tor-bundle-contract.cjs && node scripts/windows-icon-contract.cjs && node scripts/aura-integration-contract.cjs && node scripts/aura-everywhere-contract.cjs",
     "fetch:tor": "powershell -ExecutionPolicy Bypass -File scripts/fetch-tor.ps1",
     "dist": "electron-builder --win nsis --x64 --publish never",
     "dist:portable": "electron-builder --win portable --x64 --publish never",
@@ -16,7 +16,7 @@
     "dist:netflix": "powershell -ExecutionPolicy Bypass -File scripts/BUILD-NETFLIX-WINDOWS.ps1",
     "dist:public": "powershell -ExecutionPolicy Bypass -File scripts/BUILD-PUBLIC-WINDOWS.ps1",
     "dist:community": "powershell -ExecutionPolicy Bypass -File scripts/BUILD-COMMUNITY-WINDOWS.ps1",
-    "test": "node scripts/self-test.cjs && node scripts/contract-test.cjs && node scripts/privacy-audit.cjs && node scripts/ipc-firewall-test.cjs && node scripts/compat-contract.cjs && node scripts/release-contract.cjs && node scripts/private-session-contract.cjs && node scripts/tab-lifecycle-contract.cjs && node scripts/wallpaper-quanticmail-contract.cjs && node scripts/netflix-vmp-contract.cjs && node scripts/portable-sidestage-contract.cjs && node scripts/public-release-contract.cjs && node scripts/tor-bundle-contract.cjs && node scripts/windows-icon-contract.cjs && node scripts/aura-integration-contract.cjs",
+    "test": "node scripts/self-test.cjs && node scripts/contract-test.cjs && node scripts/privacy-audit.cjs && node scripts/ipc-firewall-test.cjs && node scripts/compat-contract.cjs && node scripts/release-contract.cjs && node scripts/private-session-contract.cjs && node scripts/tab-lifecycle-contract.cjs && node scripts/wallpaper-quanticmail-contract.cjs && node scripts/netflix-vmp-contract.cjs && node scripts/portable-sidestage-contract.cjs && node scripts/public-release-contract.cjs && node scripts/tor-bundle-contract.cjs && node scripts/windows-icon-contract.cjs && node scripts/aura-integration-contract.cjs && node scripts/aura-everywhere-contract.cjs",
     "perf": "node scripts/perf-smoke.cjs",
     "privacy:audit": "node scripts/privacy-audit.cjs",
     "compat:contract": "node scripts/compat-contract.cjs",
@@ -31,6 +31,8 @@
     "appId": "com.quantic.browser",
     "productName": "Quantic Glide",
     "asar": true,
+    "electronDist": "node_modules/electron/dist",
+    "afterSign": "scripts/evs-vmp-after-sign.cjs",
     "electronFuses": {
       "runAsNode": false,
       "enableCookieEncryption": true,
@@ -54,6 +56,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon-source.svg",
       "target": [
         {
           "target": "nsis",
@@ -76,14 +79,13 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Quantic Glide"
     },
-    "artifactName": "Quantic-Glide-1.3.0-${arch}.${ext}",
+    "artifactName": "Quantic-Glide-${version}-${arch}.${ext}",
     "portable": {
-      "artifactName": "Quantic-Glide-Portable-1.3.0-${arch}.${ext}"
+      "artifactName": "Quantic-Glide-Portable-${version}-${arch}.${ext}"
     },
     "directories": {
       "buildResources": "build",
       "output": "dist"
-    },
-    "electronDist": "node_modules/electron/dist"
+    }
   }
 }
