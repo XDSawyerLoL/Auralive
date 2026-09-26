@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
+import { CuriosityEngine } from './curiosity.js';
 import { CapabilityFabric } from './capability_fabric.js';
 import {
   config,
@@ -25,6 +26,7 @@ import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
+import { ProductRegistry } from './product_registry.js';
 import { CloudVoice } from './voice.js';
 import { WebSubstrate } from './web_substrate.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
@@ -138,6 +140,7 @@ const bridge = new ExecutionBridge();
 const peerMesh = new PeerMesh();
 const ai = new AiClient(bridge);
 const webSubstrate = new WebSubstrate(ai);
+const productRegistry = new ProductRegistry({ offlineMs: config.productOfflineSeconds * 1000 });
 const fabric = new CapabilityFabric({ webSubstrate, bridge, peerMesh });
 const dagCompiler = new DagCompiler(ai);
 const graphExecutor = new TaskGraphExecutor(fabric);
@@ -158,6 +161,7 @@ const commandCenter = new CommandCenter(
   dagCompiler,
   graphExecutor,
 );
+const curiosity = new CuriosityEngine(ai, webSubstrate, productRegistry, kernel);
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
@@ -219,6 +223,11 @@ async function startRuntime() {
       await commandCenter.start();
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: centre de commande indisponible, noyau maintenu actif.');
+    }
+    try {
+      await curiosity.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: moteur de curiosité indisponible, noyau maintenu actif.');
     }
     startMaintenance();
   } catch (error) {
@@ -285,6 +294,45 @@ const GLIDE_ANDROID_DOWNLOAD = String(
   process.env.AURA_GLIDE_ANDROID_URL
   || 'https://raw.githubusercontent.com/XDSawyerLoL/Auralive/main/downloads/Quantic-Glide-Android-1.3.0-beta.apk'
 ).trim();
+
+app.get('/api/aura/everywhere/status', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return productRegistry.status();
+});
+
+app.post('/api/aura/everywhere/register', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  return productRegistry.register(request.body || {});
+});
+
+app.post('/api/aura/everywhere/:id/heartbeat', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  return productRegistry.heartbeat(request.params?.id, request.body || {});
+});
+
+app.get('/api/aura/everywhere/capabilities', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return productRegistry.capabilities();
+});
+
+app.get('/api/aura/curiosity/status', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return { ...curiosity.status(), questions: await curiosity.recent(30) };
+});
+
+app.post('/api/aura/curiosity/question', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  return curiosity.enqueue(request.body || {});
+});
+
+app.post('/api/aura/curiosity/run', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRuntime(reply)) return;
+  return curiosity.runCycle(String(request.body?.trigger || 'manual'));
+});
 
 app.get('/downloads/glide/windows', async (_request, reply) => {
   return reply.redirect(GLIDE_WINDOWS_DOWNLOAD);
