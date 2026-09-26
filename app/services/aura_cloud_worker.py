@@ -15,6 +15,8 @@ from uuid import uuid4
 
 import aiohttp
 
+from app.cognitive.evolution_fleet import EvolutionFleet
+
 logger = logging.getLogger(__name__)
 
 
@@ -605,9 +607,23 @@ class AuraCloudWorker:
         if evolution is None:
             raise RuntimeError("AURA Evolution local indisponible")
         objective = str(payload.get("objective") or "").strip()
+        trigger = str(payload.get("trigger") or "aura-cloud-worker")
+        repository = str(payload.get("repository") or "").strip()
+        base_branch = str(payload.get("base_branch") or "main").strip() or "main"
+
+        if repository and repository.casefold() != str(evolution.github_repository).casefold():
+            fleet = EvolutionFleet(evolution)
+            return await fleet.run_cycle(
+                objective or "Diagnostiquer et améliorer ce produit Quantic de façon minimale et réversible.",
+                repository=repository,
+                base_branch=base_branch,
+                trigger=trigger,
+                submit=True,
+            )
+
         return await evolution.run_cycle(
             objective or await evolution._next_objective(),
-            trigger=str(payload.get("trigger") or "aura-cloud-worker"),
+            trigger=trigger,
             submit=None,
         )
 
