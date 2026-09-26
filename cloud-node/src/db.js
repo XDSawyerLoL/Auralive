@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 8;
+export const LATEST_SCHEMA_VERSION = 9;
 
 export function getDb() {
   if (pool) return pool;
@@ -438,6 +438,41 @@ async function applyMigrations(db) {
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(8,?,?)',
       ['peer-mesh-quorum-replay-protection-and-quality-routing', new Date().toISOString()],
     );
+    current = 8;
+  }
+
+  if (current < 9) {
+    const [rows] = await db.query(
+      "SELECT id,state,state_detail,last_observed_at,metadata FROM aura_command_services WHERE id IN ('glide','quantic-glide')",
+    );
+    const legacy = rows.find((row) => row.id === 'glide');
+    const canonical = rows.find((row) => row.id === 'quantic-glide');
+    if (legacy && !canonical) {
+      await db.query("UPDATE aura_command_services SET id='quantic-glide',name='Quantic Glide',updated_at=? WHERE id='glide'", [new Date().toISOString()]);
+    } else if (legacy && canonical) {
+      let legacyMetadata = {};
+      let canonicalMetadata = {};
+      try { legacyMetadata = JSON.parse(legacy.metadata || '{}') || {}; } catch {}
+      try { canonicalMetadata = JSON.parse(canonical.metadata || '{}') || {}; } catch {}
+      const legacyNewer = String(legacy.last_observed_at || '') > String(canonical.last_observed_at || '');
+      const source = legacyNewer ? legacy : canonical;
+      await db.query(
+        "UPDATE aura_command_services SET state=?,state_detail=?,last_observed_at=?,metadata=?,updated_at=? WHERE id='quantic-glide'",
+        [
+          source.state || 'unknown',
+          source.state_detail || '',
+          source.last_observed_at || '',
+          JSON.stringify({ ...legacyMetadata, ...canonicalMetadata }),
+          new Date().toISOString(),
+        ],
+      );
+      await db.query("DELETE FROM aura_command_services WHERE id='glide'");
+    }
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(9,?,?)',
+      ['canonical-quantic-glide-product-id', new Date().toISOString()],
+    );
+    current = 9;
   }
 }
 
