@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
+import { CuriosityEngine } from './curiosity.js';
 import { CapabilityFabric } from './capability_fabric.js';
 import {
   config,
@@ -25,6 +26,7 @@ import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
+import { seedQuanticProducts } from './products.js';
 import { CloudVoice } from './voice.js';
 import { WebSubstrate } from './web_substrate.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
@@ -158,6 +160,12 @@ const commandCenter = new CommandCenter(
   dagCompiler,
   graphExecutor,
 );
+const curiosity = new CuriosityEngine({
+  kernel,
+  webSubstrate,
+  commandCenter,
+  ai,
+});
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
@@ -217,8 +225,14 @@ async function startRuntime() {
     }
     try {
       await commandCenter.start();
+      await seedQuanticProducts(commandCenter);
     } catch (error) {
-      app.log.warn({ err: error }, 'AURA Cloud: centre de commande indisponible, noyau maintenu actif.');
+      app.log.warn({ err: error }, 'AURA Cloud: centre de commande/registre produits indisponible, noyau maintenu actif.');
+    }
+    try {
+      await curiosity.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: moteur de curiosité indisponible, noyau maintenu actif.');
     }
     startMaintenance();
   } catch (error) {
@@ -768,9 +782,16 @@ app.post('/api/chat', async (request, reply) => {
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
   const response = await kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
-  const answer = String(response?.answer || '').trim();
+  const curiosityItem = await curiosity.questionForInteraction(text).catch(() => null);
+  const baseAnswer = String(response?.answer || '').trim();
+  const curiosityQuestion = String(curiosityItem?.question || '').trim();
+  const answer = curiosityQuestion
+    ? `${baseAnswer}\n\n${curiosityQuestion}`
+    : baseAnswer;
   return {
     ...response,
+    answer,
+    curiosity_question: curiosityItem || null,
     voice_ticket: answer ? createVoiceTicket(answer) : '',
     voice_profile: 'mairaiy',
   };
@@ -795,6 +816,112 @@ app.post('/api/cloud/outcomes', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.recordOutcome(request.body || {})
     : undefined);
+
+app.get('/api/aura/products', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const rows = await commandCenter.services();
+  return {
+    products: rows.filter((row) => String(row.kind || '') === 'quantic-product'),
+  };
+});
+
+app.post('/api/aura/products/register', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const body = request.body || {};
+  try {
+    const product = await commandCenter.upsertService({
+      id: body.id,
+      name: body.name,
+      kind: 'quantic-product',
+      objective: body.objective || '',
+      endpoint: body.endpoint || '',
+      repository: body.repository || '',
+      criticality: body.criticality ?? 0.5,
+      enabled: body.enabled !== false,
+      state: body.state || 'online',
+      state_detail: body.state_detail || 'Pont AURA universel actif.',
+      last_observed_at: new Date().toISOString(),
+      metadata: {
+        capabilities: Array.isArray(body.capabilities) ? body.capabilities : [],
+        writable_by_aura: body.writable_by_aura !== false,
+        modification_policy: body.modification_policy || 'branch-test-canary-promote',
+        bridge_version: String(body.bridge_version || 'aura-universal-bridge-v1').slice(0, 120),
+        runtime: body.runtime || {},
+      },
+    });
+    await kernel.observeEvent('quantic.product.registered', {
+      product_id: product.id,
+      product_name: product.name,
+      capabilities: product.metadata?.capabilities || [],
+    }, String(body.id || 'quantic-product'));
+    return { ok: true, product };
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/aura/products/:id/observe', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const product = await commandCenter.observeService(request.params.id, {
+      state: request.body?.state || 'online',
+      detail: request.body?.detail || request.body?.message || '',
+      metadata: request.body?.metadata || {},
+    });
+    await kernel.observeEvent(
+      'quantic.product.observation',
+      {
+        product_id: request.params.id,
+        state: product.state,
+        detail: product.state_detail,
+        metadata: product.metadata || {},
+      },
+      request.params.id,
+    );
+    return { ok: true, product };
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/aura/products/:id/event', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const type = String(request.body?.type || 'quantic.product.event').slice(0, 120);
+  const payload = request.body?.payload || {};
+  await kernel.observeEvent(type, {
+    product_id: request.params.id,
+    ...payload,
+  }, request.params.id);
+  return { ok: true };
+});
+
+app.get('/api/curiosity/status', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  const status = await curiosity.status();
+  return isPrivate(request)
+    ? status
+    : {
+      version: status.version,
+      enabled: status.enabled,
+      started: status.started,
+      running: status.running,
+      questions_last_hour: status.questions_last_hour,
+      last_run_at: status.last_run_at,
+      last_research_at: status.last_research_at,
+    };
+});
+
+app.get('/api/curiosity/questions', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return {
+    questions: await curiosity.recentQuestions(request.query?.limit, request.query?.target || ''),
+  };
+});
+
+app.post('/api/curiosity/run', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return curiosity.runCycle(String(request.body?.trigger || 'private-api'));
+});
 
 app.get('/api/horizon/status', async (request) => {
   const status = horizon.status();
@@ -1216,6 +1343,7 @@ export async function stopAura() {
     clearInterval(metricsTimer);
     metricsTimer = null;
   }
+  curiosity.stop();
   commandCenter.stop();
   fabric.stop();
   evolution.stop();
