@@ -18,7 +18,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     aura_bridge: 'native',
   },
   {
-    id: 'glide',
+    id: 'quantic-glide',
     name: 'Quantic Glide',
     repository: 'XDSawyerLoL/Quantic-Browser',
     objective: 'Perception Web et interface de navigation AURA.',

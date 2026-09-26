@@ -140,3 +140,11 @@ test('autonomous research initiatives use AURA Fabric DAGs when available', () =
   assert.match(commandSource, /filter\(\(item\) => !item\.side_effects\)/);
   assert.match(serverSource, /new CommandCenter\([\s\S]*fabric,[\s\S]*dagCompiler,[\s\S]*graphExecutor/);
 });
+
+
+test('product liveness updates preserve canonical metadata', () => {
+  assert.match(commandSource, /\.\.\.parseJson\(current\.metadata, \{\}\)/);
+  assert.match(commandSource, /\.\.\.parseJson\(current\?\.metadata, \{\}\)/);
+  assert.match(commandSource, /state=VALUES\(state\)/);
+  assert.match(commandSource, /last_observed_at=VALUES\(last_observed_at\)/);
+});
