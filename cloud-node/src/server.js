@@ -884,6 +884,7 @@ app.post('/api/fabric/plan', async (request, reply) => {
   const objective = String(request.body?.objective || '').trim();
   if (!objective) return reply.code(422).send({ error: 'Objectif Fabric requis' });
   try {
+    await fabric.refreshMesh().catch(() => {});
     return await dagCompiler.compile(objective, fabric.list(), {
       maxNodes: config.fabricMaxGraphNodes,
       maxParallel: config.fabricMaxParallel,
@@ -897,6 +898,7 @@ app.post('/api/fabric/plan', async (request, reply) => {
 app.post('/api/fabric/execute', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   try {
+    await fabric.refreshMesh().catch(() => {});
     const graph = request.body?.graph || await dagCompiler.compile(
       String(request.body?.objective || ''),
       fabric.list(),
