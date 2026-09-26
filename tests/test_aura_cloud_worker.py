@@ -74,6 +74,7 @@ def settings():
         aura_cloud_worker_poll_seconds=1.5,
         aura_cloud_worker_heartbeat_seconds=15,
         aura_cloud_worker_timeout_seconds=95,
+        aura_compute_mesh_consent=False,
         ai_model="gemma3:12b",
         image_default_width=1024,
         image_default_height=1024,
@@ -182,3 +183,39 @@ async def test_cloud_worker_returns_mairaiy_kokoro_voice_payload(tmp_path):
     assert result["duration_ms"] == 900
     assert result["mime_type"] == "audio/wav"
     assert result["audio_base64"]
+
+
+@pytest.mark.asyncio
+async def test_worker_executes_deterministic_compute_primitives():
+    worker = AuraCloudWorker(FakeAura(), settings())
+
+    hashed = await worker._run_compute({"op": "sha256", "text": "AURA"})
+    summed = await worker._run_compute({"op": "sum", "values": [1, 2, 3.5]})
+    dotted = await worker._run_compute({"op": "dot", "left": [1, 2], "right": [3, 4]})
+    cosine = await worker._run_compute({"op": "cosine", "left": [1, 0], "right": [1, 0]})
+
+    assert hashed["deterministic"] is True
+    assert len(hashed["value"]) == 64
+    assert summed["value"] == 6.5
+    assert dotted["value"] == 11
+    assert cosine["value"] == 1.0
+
+
+def test_compute_mesh_requires_explicit_opt_in_and_persists_node_identity(tmp_path):
+    disabled = settings()
+    worker = AuraCloudWorker(FakeAura(), disabled)
+    assert worker.compute_consent is False
+    assert worker._mesh_capabilities() == []
+
+    enabled = settings()
+    enabled.aura_compute_mesh_consent = True
+    enabled.aura_compute_mesh_identity_file = tmp_path / "mesh-node-id"
+
+    first = AuraCloudWorker(FakeAura(), enabled)
+    second = AuraCloudWorker(FakeAura(), enabled)
+
+    assert first.worker_id == second.worker_id
+    assert first.worker_id.startswith("mesh-")
+    assert "compute" in first._mesh_capabilities()
+    assert "inference" in first._mesh_capabilities()
+    assert first._resource_profile()["cpu_threads"] >= 1
