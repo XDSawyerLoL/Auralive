@@ -148,9 +148,10 @@ export class CuriosityEngine {
       const generated = await this.generateQuestions(trigger);
       const added = [];
       for (const item of generated) {
+        const since = new Date(Date.now() - 86_400_000).toISOString();
         const duplicate = await one(
-          "SELECT id,status,score FROM aura_curiosity_questions WHERE question=? AND created_at >= DATE_FORMAT(DATE_SUB(UTC_TIMESTAMP(), INTERVAL 24 HOUR),'%Y-%m-%dT%H:%i:%s') ORDER BY created_at DESC LIMIT 1",
-          [clean(item.question,3000)],
+          'SELECT id,status,score FROM aura_curiosity_questions WHERE question=? AND created_at>=? ORDER BY created_at DESC LIMIT 1',
+          [clean(item.question,3000), since],
         ).catch(()=>null);
         if (duplicate) continue;
         const queued = await this.enqueue({source:item.source||'self',...item});
