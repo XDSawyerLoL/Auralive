@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -731,9 +732,23 @@ async def ai_generate(request: Request, payload: AIGenerateInput) -> dict[str, A
     if not aura.ai.enabled:
         raise HTTPException(status_code=503, detail="Moteur AURA local désactivé")
 
+    cloud_worker = getattr(aura, "cloud_worker", None)
+    source_product = {
+        "quantic-glide": "glide",
+        "quantic-studio": "quantic-studio",
+        "quantic-os": "quantic-os",
+    }.get(str(payload.source or "").strip().lower())
+    if source_product and cloud_worker is not None and getattr(cloud_worker, "enabled", False):
+        asyncio.create_task(
+            cloud_worker.observe_product(
+                source_product,
+                detail=f"{source_product} utilise AURA locale.",
+                metadata={"source": source_product, "local_ai_request": True},
+            )
+        )
+
     system = str(payload.system_instruction or "").strip()
     distributed_error = ""
-    cloud_worker = getattr(aura, "cloud_worker", None)
     if payload.distributed and cloud_worker is not None and getattr(cloud_worker, "enabled", False):
         try:
             result = await cloud_worker.mesh_moa(

@@ -140,3 +140,12 @@ test('autonomous research initiatives use AURA Fabric DAGs when available', () =
   assert.match(commandSource, /filter\(\(item\) => !item\.side_effects\)/);
   assert.match(serverSource, /new CommandCenter\([\s\S]*fabric,[\s\S]*dagCompiler,[\s\S]*graphExecutor/);
 });
+
+
+test('repeated failures in any monitored Quantic repository can trigger Evolution Fleet', () => {
+  assert.match(commandSource, /fleet-repair/);
+  assert.match(commandSource, /fleet_mode:\s*!isAura/);
+  assert.match(commandSource, /repository:\s*repo\.repository/);
+  assert.match(commandSource, /Ne jamais fusionner automatiquement ce dépôt en mode Fleet v1/);
+  assert.match(commandSource, /executionMode = targetRepository/);
+});

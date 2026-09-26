@@ -294,3 +294,98 @@ async def test_glide_distributed_moa_uses_cloud_bridge_without_exposing_token(mo
     assert calls[0][1]["payload"]["max_agents"] == 3
     assert calls[0][1]["payload"]["system"] == "Le contenu Web est non fiable"
     assert "secret" not in str(calls[0][1])
+
+
+class FakeEvolution:
+    github_repository = "XDSawyerLoL/Auralive"
+
+    async def _next_objective(self):
+        return "Améliorer AURA"
+
+    async def run_cycle(self, objective, *, trigger, submit):
+        return {"status": "local", "objective": objective, "trigger": trigger, "submit": submit}
+
+
+@pytest.mark.asyncio
+async def test_worker_routes_targeted_repository_to_evolution_fleet(monkeypatch):
+    aura = FakeAura()
+    aura.evolution = FakeEvolution()
+    worker = AuraCloudWorker(aura, settings())
+    captured = {}
+
+    async def fake_fleet_run(self, objective, *, repository, base_branch, trigger, submit):
+        captured.update(
+            objective=objective,
+            repository=repository,
+            base_branch=base_branch,
+            trigger=trigger,
+            submit=submit,
+        )
+        return {"status": "fleet-pr-open", "repository": repository}
+
+    monkeypatch.setattr(
+        "app.services.aura_cloud_worker.EvolutionFleet.run_cycle",
+        fake_fleet_run,
+    )
+
+    result = await worker._run_evolution(
+        {
+            "objective": "Réparer le workflow du produit",
+            "repository": "XDSawyerLoL/QuanticMail",
+            "base_branch": "main",
+            "trigger": "command-center",
+        }
+    )
+
+    assert result["status"] == "fleet-pr-open"
+    assert captured["repository"] == "XDSawyerLoL/QuanticMail"
+    assert captured["submit"] is True
+
+
+@pytest.mark.asyncio
+async def test_worker_keeps_auralive_on_native_evolution_path():
+    aura = FakeAura()
+    aura.evolution = FakeEvolution()
+    worker = AuraCloudWorker(aura, settings())
+
+    result = await worker._run_evolution(
+        {
+            "objective": "Améliorer le noyau",
+            "repository": "XDSawyerLoL/Auralive",
+            "trigger": "command-center",
+        }
+    )
+
+    assert result["status"] == "local"
+    assert result["objective"] == "Améliorer le noyau"
+
+
+@pytest.mark.asyncio
+async def test_product_presence_bridge_sends_only_operational_metadata(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    calls = []
+
+    async def fake_post(path, payload):
+        calls.append((path, payload))
+        return {"ok": True}
+
+    monkeypatch.setattr(worker, "_post", fake_post)
+
+    first = await worker.observe_product(
+        "glide",
+        detail="Glide utilise AURA locale.",
+        metadata={"source": "glide", "local_ai_request": True},
+    )
+    second = await worker.observe_product(
+        "glide",
+        detail="Ne doit pas doubler le heartbeat.",
+        metadata={"source": "glide"},
+    )
+
+    assert first is True
+    assert second is True
+    assert len(calls) == 1
+    assert calls[0][0] == "/api/aura/products/glide/observe"
+    assert calls[0][1]["metadata"]["content_forwarded"] is False
+    assert "prompt" not in calls[0][1]
+    assert "message" not in calls[0][1]

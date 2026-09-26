@@ -491,21 +491,32 @@ export class CommandCenter {
           }));
         }
 
-        if (
-          String(repo.repository).toLowerCase() === 'xdsawyerlol/auralive'
-          && run.failure_streak >= 2
-        ) {
+        if (run.failure_streak >= 2) {
+          const isAura = repoKey === 'xdsawyerlol/auralive';
           candidates.push(this.candidate({
-            domain: 'aura',
+            domain: REPO_SERVICE_MAP.get(repoKey) || 'quantic-sillage',
             kind: 'evolution',
-            title: 'Auto-réparer AURA après échecs CI répétés',
-            objective:
-              `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur son propre dépôt. Diagnostiquer la cause, produire le correctif minimal, valider par sandbox + CI + canary avant toute promotion.`,
-            rationale: 'Le centre de commande déclenche Evolution sur une preuve opérationnelle répétée.',
-            priority: 0.99,
+            action_payload: {
+              repository: repo.repository,
+              base_branch: repo.default_branch || 'main',
+              workflow: run.name,
+              head_sha: run.head_sha,
+              failure_streak: run.failure_streak,
+              fleet_mode: !isAura,
+            },
+            title: isAura
+              ? 'Auto-réparer AURA après échecs CI répétés'
+              : `Préparer une correction Evolution Fleet pour ${productName}`,
+            objective: isAura
+              ? `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur son propre dépôt. Diagnostiquer la cause, produire le correctif minimal, valider par sandbox + CI + canary avant toute promotion.`
+              : `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur ${repo.repository}. Lire le code du produit, diagnostiquer la cause et préparer une correction minimale via branche dédiée et pull request. Ne jamais fusionner automatiquement ce dépôt en mode Fleet v1.`,
+            rationale: isAura
+              ? 'Le centre de commande déclenche Evolution sur une preuve opérationnelle répétée.'
+              : 'Evolution Fleet est déclenché par un signal CI répété et reste soumis à la CI/revue du dépôt cible.',
+            priority: isAura ? 0.99 : Math.min(0.97, 0.80 + criticality * 0.15),
             confidence: 0.94,
             requested_risks: [],
-            signature: `self-repair:${run.name}:${run.head_sha}`,
+            signature: `${isAura ? 'self-repair' : 'fleet-repair'}:${repo.repository}:${run.name}:${run.head_sha}`,
           }));
         }
       }
@@ -1172,10 +1183,17 @@ export class CommandCenter {
           );
         }
       } else if (initiative.kind === 'evolution') {
-        executionMode = bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud';
+        const targetRepository = String(initiative.action_payload?.repository || '').trim();
+        executionMode = targetRepository && targetRepository.toLowerCase() !== 'xdsawyerlol/auralive'
+          ? 'evolution-fleet'
+          : (bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud');
         result = await this.evolution.dispatchCycle(
           initiative.objective,
           'command-center',
+          {
+            repository: targetRepository,
+            base_branch: String(initiative.action_payload?.base_branch || 'main'),
+          },
         );
       } else if (initiative.kind === 'operator') {
         executionMode = 'quantic-studio-operator';

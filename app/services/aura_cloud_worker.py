@@ -15,6 +15,8 @@ from uuid import uuid4
 
 import aiohttp
 
+from app.cognitive.evolution_fleet import EvolutionFleet
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,6 +44,7 @@ class AuraCloudWorker:
         self.jobs_completed = 0
         self.jobs_failed = 0
         self._last_heartbeat = 0.0
+        self._product_observed_at: dict[str, float] = {}
 
     @property
     def compute_consent(self) -> bool:
@@ -267,6 +270,43 @@ class AuraCloudWorker:
             except Exception as exc:
                 raise RuntimeError("AURA Cloud a renvoyé une réponse non JSON") from exc
             return data if isinstance(data, dict) else {}
+
+    async def observe_product(
+        self,
+        product_id: str,
+        *,
+        state: str = "online",
+        detail: str = "",
+        metadata: dict[str, Any] | None = None,
+        min_interval_seconds: float = 60.0,
+    ) -> bool:
+        """Forward operational product presence to AURA Cloud, never user content."""
+        if not self.enabled:
+            return False
+        product = str(product_id or "").strip().lower()[:80]
+        if not product:
+            return False
+        now = time.monotonic()
+        previous = float(self._product_observed_at.get(product, 0.0))
+        if now - previous < max(5.0, float(min_interval_seconds)):
+            return True
+        try:
+            await self._post(
+                f"/api/aura/products/{product}/observe",
+                {
+                    "state": str(state or "online")[:40],
+                    "detail": str(detail or "")[:500],
+                    "metadata": {
+                        **(metadata or {}),
+                        "via": "quantic-studio-local-aura",
+                        "content_forwarded": False,
+                    },
+                },
+            )
+            self._product_observed_at[product] = now
+            return True
+        except Exception:
+            return False
 
     async def mesh_peer_register(self, payload: dict[str, Any]) -> dict[str, Any]:
         return await self._post(
@@ -605,9 +645,23 @@ class AuraCloudWorker:
         if evolution is None:
             raise RuntimeError("AURA Evolution local indisponible")
         objective = str(payload.get("objective") or "").strip()
+        trigger = str(payload.get("trigger") or "aura-cloud-worker")
+        repository = str(payload.get("repository") or "").strip()
+        base_branch = str(payload.get("base_branch") or "main").strip() or "main"
+
+        if repository and repository.casefold() != str(evolution.github_repository).casefold():
+            fleet = EvolutionFleet(evolution)
+            return await fleet.run_cycle(
+                objective or "Diagnostiquer et améliorer ce produit Quantic de façon minimale et réversible.",
+                repository=repository,
+                base_branch=base_branch,
+                trigger=trigger,
+                submit=True,
+            )
+
         return await evolution.run_cycle(
             objective or await evolution._next_objective(),
-            trigger=str(payload.get("trigger") or "aura-cloud-worker"),
+            trigger=trigger,
             submit=None,
         )
 
