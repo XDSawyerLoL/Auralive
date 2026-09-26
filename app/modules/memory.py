@@ -71,7 +71,7 @@ class MemoryModule:
     async def reset_conversation(self, user_id: str) -> None:
         await self.db.clear_conversation(user_id)
         if self.vector_memory is not None:
-            await self.vector_memory.delete_owner(user_id)
+            await self.vector_memory.delete_owner(user_id, namespaces=["conversation"])
 
     async def set_opt_in(self, user_id: str, enabled: bool) -> None:
         await self.db.execute(
