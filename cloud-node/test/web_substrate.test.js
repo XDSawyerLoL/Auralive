@@ -72,3 +72,11 @@ test('live chat routes changing external questions through Web evidence first', 
   assert.match(expressionSource, /MÉMOIRE EXTERNE/);
   assert.match(expressionSource, /contested, unverified ou unavailable/);
 });
+
+
+test('Web substrate includes GitHub as a non-blocking technical discovery source', () => {
+  assert.match(webSource, /async searchGithub\(/);
+  assert.match(webSource, /api\.github\.com\/search\/repositories/);
+  assert.match(webSource, /engine: 'github'/);
+  assert.match(webSource, /Promise\.allSettled/);
+});
