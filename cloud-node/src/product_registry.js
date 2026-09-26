@@ -94,7 +94,7 @@ export class ProductRegistry {
   async heartbeat(id, payload = {}) {
     const key = productId(id);
     if (!key) throw new Error('product id requis');
-    const existing = await one('SELECT id,name,version,repository,endpoint,capabilities,permissions,surfaces,metadata FROM aura_products WHERE id=?',[key]);
+    const existing = await one('SELECT id,name,version,repository,endpoint,capabilities,permissions,surfaces,metadata,instance_id FROM aura_products WHERE id=?',[key]);
     if (!existing) return this.register({ id:key, name: payload.name || key, ...payload });
     return this.register({
       id:key,
@@ -106,7 +106,7 @@ export class ProductRegistry {
       permissions:payload.permissions || json(existing.permissions,[]),
       surfaces:payload.surfaces || json(existing.surfaces,[]),
       metadata:{ ...json(existing.metadata,{}), ...(payload.metadata || {}) },
-      instance_id:payload.instance_id || payload.instanceId || 'default',
+      instance_id:payload.instance_id || payload.instanceId || existing.instance_id || 'default',
     });
   }
 
@@ -120,7 +120,7 @@ export class ProductRegistry {
       surfaces: json(row.surfaces, []),
       metadata: json(row.metadata, {}),
       last_seen_ms: Number(row.last_seen_ms || 0),
-      state: stamp - Number(row.last_seen_ms || 0) > this.offlineMs ? 'offline' : String(row.state || 'unknown'),
+      state: Number(row.last_seen_ms || 0) > 0 && stamp - Number(row.last_seen_ms || 0) > this.offlineMs ? 'offline' : String(row.state || 'unknown'),
     }));
   }
 
