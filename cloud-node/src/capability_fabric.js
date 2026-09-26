@@ -397,6 +397,7 @@ export class CapabilityFabric {
           quorum: options?.quorum || 1,
           verification: options?.verification || 'none',
         });
+      });
 
       this.register({
         id: 'mesh.moa',
