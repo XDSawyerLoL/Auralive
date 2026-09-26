@@ -24,9 +24,11 @@ class FakeAI:
         *,
         system_is_complete=False,
         task_role="auto",
+        preferred_model="",
     ):
         assert system_is_complete is True
-        return f"réponse locale:{task_role}"
+        suffix = f":{preferred_model}" if preferred_model else ""
+        return f"réponse locale:{task_role}{suffix}"
 
 
 class FakeCognitive:
@@ -247,3 +249,18 @@ async def test_peer_mesh_browser_proxy_adds_worker_identity_without_exposing_clo
     assert calls[2][1]["peer_id"] == "peer-test"
     assert calls[2][1]["after_id"] == 12
     assert all("secret" not in str(item[1]) for item in calls)
+
+
+@pytest.mark.asyncio
+async def test_worker_propagates_preferred_model_to_local_inference():
+    worker = AuraCloudWorker(FakeAura(), settings())
+    result = await worker._run_inference(
+        {
+            "prompt": "Analyse",
+            "system": "Spécialiste MoA",
+            "max_tokens": 300,
+            "task_role": "moa-specialist",
+            "preferred_model": "deepseek-r1:8b",
+        }
+    )
+    assert result["answer"] == "réponse locale:moa-specialist:deepseek-r1:8b"
