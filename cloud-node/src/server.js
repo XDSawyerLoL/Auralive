@@ -225,9 +225,13 @@ async function startRuntime() {
     }
     try {
       await commandCenter.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: centre de commande indisponible, noyau maintenu actif.');
+    }
+    try {
       await seedQuanticProducts(commandCenter);
     } catch (error) {
-      app.log.warn({ err: error }, 'AURA Cloud: centre de commande/registre produits indisponible, noyau maintenu actif.');
+      app.log.warn({ err: error }, 'AURA Cloud: registre produits indisponible, noyau maintenu actif.');
     }
     try {
       await curiosity.start();
