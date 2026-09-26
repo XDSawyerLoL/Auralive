@@ -21,11 +21,38 @@ function tokenHash(value) {
   return createHash('sha256').update(String(value || '')).digest('hex');
 }
 
+const QUANTIC_PRODUCTS = [
+  ['aura','AURA','XDSawyerLoL/Auralive'],
+  ['quantic-studio','Quantic Studio','XDSawyerLoL/Auralive'],
+  ['quantic-glide','Quantic Glide','XDSawyerLoL/Quantic-Browser'],
+  ['quantic-mail','Quantic Mail','XDSawyerLoL/QuanticMail'],
+  ['quantic-os','Quantic OS','XDSawyerLoL/QUANTIC-OS'],
+  ['zoon','ZOON','XDSawyerLoL/QuanticSillage'],
+  ['pulse','Pulse','XDSawyerLoL/QuanticSillage'],
+  ['quantic-news','Quantic News','XDSawyerLoL/QuanticSillage'],
+  ['providence','Providence','XDSawyerLoL/Human-Agency-Engine'],
+];
+
 export class ProductRegistry {
   static VERSION = 'aura-everywhere-v0.1';
 
   constructor({ offlineMs = 180000 } = {}) {
     this.offlineMs = Math.max(30000, Number(offlineMs || 180000));
+  }
+
+  async seed() {
+    const stamp = now();
+    for (const [id,name,repository] of QUANTIC_PRODUCTS) {
+      await query(
+        `INSERT INTO aura_products(
+          id,name,version,repository,endpoint,capabilities,permissions,surfaces,state,
+          instance_id,fingerprint,last_seen_at,last_seen_ms,metadata,created_at,updated_at
+        ) VALUES(?,?, '',?, '', '[]','[]','[]','unseen','default','', '',0,'{}',?,?)
+        ON DUPLICATE KEY UPDATE name=VALUES(name),repository=IF(repository='',VALUES(repository),repository),updated_at=VALUES(updated_at)`,
+        [id,name,repository,stamp,stamp],
+      );
+    }
+    return { ok:true,products:QUANTIC_PRODUCTS.length };
   }
 
   async register(payload = {}) {
