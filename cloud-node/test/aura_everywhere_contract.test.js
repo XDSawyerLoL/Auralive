@@ -36,3 +36,15 @@ test('Curiosity is persistent, bounded and web-capable', () => {
   assert.equal(server.includes('await curiosity.start()'), true);
   assert.equal(server.includes('curiosity.stop()'), true);
 });
+
+
+test('legacy Quantic bridges remain compatible with AURA Everywhere', () => {
+  for (const route of [
+    '/api/aura/products/register',
+    '/api/aura/products/:id/observe',
+    '/api/aura/products/:id/event',
+    '/api/aura/everywhere/:id/observe',
+    '/api/aura/everywhere/:id/event',
+  ]) assert.equal(server.includes(route), true, route);
+  assert.equal(server.includes("curiosity.enqueue({"), true);
+});
