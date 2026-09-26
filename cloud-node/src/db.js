@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 6;
+export const LATEST_SCHEMA_VERSION = 7;
 
 export function getDb() {
   if (pool) return pool;
@@ -345,6 +345,60 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(6,?,?)',
       ['compute-mesh-worker-routing-and-reputation', new Date().toISOString()],
+    );
+    current = 6;
+  }
+
+  if (current < 7) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mesh_peers (
+      peer_id VARCHAR(80) PRIMARY KEY,
+      worker_id VARCHAR(160) NOT NULL,
+      public_jwk LONGTEXT NOT NULL,
+      capabilities LONGTEXT NOT NULL,
+      resources LONGTEXT NOT NULL,
+      reputation DOUBLE NOT NULL DEFAULT 0.5,
+      enabled TINYINT NOT NULL DEFAULT 1,
+      last_seen_at VARCHAR(40) NOT NULL,
+      last_seen_ms BIGINT NOT NULL DEFAULT 0,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mesh_peers_seen(enabled,last_seen_ms),
+      INDEX idx_aura_mesh_peers_worker(worker_id,last_seen_ms),
+      INDEX idx_aura_mesh_peers_reputation(reputation,last_seen_ms)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mesh_signals (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      session_id VARCHAR(80) NOT NULL,
+      from_peer_id VARCHAR(80) NOT NULL,
+      to_peer_id VARCHAR(80) NOT NULL,
+      signal_type VARCHAR(40) NOT NULL,
+      payload LONGTEXT NOT NULL,
+      signature LONGTEXT NOT NULL,
+      nonce VARCHAR(100) NOT NULL UNIQUE,
+      created_at VARCHAR(40) NOT NULL,
+      created_ms BIGINT NOT NULL DEFAULT 0,
+      consumed TINYINT NOT NULL DEFAULT 0,
+      INDEX idx_aura_mesh_signals_target(to_peer_id,id),
+      INDEX idx_aura_mesh_signals_session(session_id,id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mesh_sessions (
+      id CHAR(36) PRIMARY KEY,
+      capability VARCHAR(80) NOT NULL,
+      initiator_peer_id VARCHAR(80) NOT NULL,
+      target_peer_id VARCHAR(80) NOT NULL,
+      task LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'negotiating',
+      result LONGTEXT NOT NULL,
+      error TEXT NOT NULL,
+      verification LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mesh_sessions_status(status,updated_at),
+      INDEX idx_aura_mesh_sessions_peers(initiator_peer_id,target_peer_id,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(7,?,?)',
+      ['peer-mesh-webrtc-signaling-and-cryptographic-identity', new Date().toISOString()],
     );
   }
 }
