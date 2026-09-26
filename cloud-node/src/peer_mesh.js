@@ -128,7 +128,7 @@ export class PeerMesh {
       `INSERT INTO aura_mesh_peers(
         peer_id,worker_id,public_jwk,capabilities,resources,reputation,enabled,
         last_seen_at,last_seen_ms,created_at,updated_at
-      ) VALUES(?,?,?,?,?,0.5,1,?,?,?,?,?)
+      ) VALUES(?,?,?,?,?,0.5,1,?,?,?,?)
       ON DUPLICATE KEY UPDATE
         worker_id=VALUES(worker_id),
         public_jwk=VALUES(public_jwk),
