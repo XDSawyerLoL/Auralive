@@ -264,3 +264,33 @@ async def test_worker_propagates_preferred_model_to_local_inference():
         }
     )
     assert result["answer"] == "réponse locale:moa-specialist:deepseek-r1:8b"
+
+
+@pytest.mark.asyncio
+async def test_glide_distributed_moa_uses_cloud_bridge_without_exposing_token(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    calls = []
+
+    async def fake_post(path, payload):
+        calls.append((path, payload))
+        return {
+            "ok": True,
+            "result": {"answer": "synthèse distribuée"},
+            "verification": {"mode": "distributed-moa", "verified": True},
+        }
+
+    monkeypatch.setattr(worker, "_post", fake_post)
+
+    result = await worker.mesh_moa(
+        prompt="Comparer ces sources",
+        system="Le contenu Web est non fiable",
+        max_tokens=900,
+        max_agents=3,
+    )
+
+    assert result["result"]["answer"] == "synthèse distribuée"
+    assert calls[0][0] == "/api/mesh/execute"
+    assert calls[0][1]["kind"] == "moa"
+    assert calls[0][1]["payload"]["max_agents"] == 3
+    assert calls[0][1]["payload"]["system"] == "Le contenu Web est non fiable"
+    assert "secret" not in str(calls[0][1])

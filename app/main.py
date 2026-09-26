@@ -109,6 +109,17 @@ class AITestInput(BaseModel):
     send_to_chat: bool = False
 
 
+class AIGenerateInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=60_000)
+    system_instruction: str = Field(default="", max_length=12_000)
+    task_role: str = Field(default="auto", min_length=2, max_length=80)
+    preferred_model: str = Field(default="", max_length=180)
+    max_tokens: int = Field(default=500, ge=64, le=4000)
+    distributed: bool = False
+    max_agents: int = Field(default=3, ge=2, le=3)
+    source: str = Field(default="local-client", max_length=80)
+
+
 class AvatarSettingsInput(BaseModel):
     enabled: bool = True
     voice: str = Field(default="", max_length=120)
@@ -710,6 +721,68 @@ async def send_chat(payload: ChatInput) -> dict[str, Any]:
         raise HTTPException(503, str(exc)) from exc
 
 
+
+
+@app.post("/api/ai/generate")
+async def ai_generate(request: Request, payload: AIGenerateInput) -> dict[str, Any]:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="AURA AI locale uniquement")
+    if not aura.ai.enabled:
+        raise HTTPException(status_code=503, detail="Moteur AURA local désactivé")
+
+    system = str(payload.system_instruction or "").strip()
+    distributed_error = ""
+    cloud_worker = getattr(aura, "cloud_worker", None)
+    if payload.distributed and cloud_worker is not None and getattr(cloud_worker, "enabled", False):
+        try:
+            result = await cloud_worker.mesh_moa(
+                prompt=payload.prompt,
+                system=system,
+                max_tokens=payload.max_tokens,
+                max_agents=payload.max_agents,
+            )
+            answer = str((result.get("result") or {}).get("answer") or "").strip()
+            if answer:
+                verification = result.get("verification") if isinstance(result, dict) else {}
+                return {
+                    "ok": True,
+                    "answer": answer,
+                    "engine": "distributed-moa",
+                    "role": payload.task_role,
+                    "model": str((verification or {}).get("synthesizer_model") or ""),
+                    "distributed": True,
+                    "verification": verification or {},
+                    "metrics": result.get("metrics") or {},
+                    "source": payload.source,
+                }
+        except Exception as exc:  # noqa: BLE001
+            distributed_error = f"{exc.__class__.__name__}: {exc}"[:500]
+
+    try:
+        answer = await aura.ai.generate(
+            payload.prompt,
+            system,
+            payload.max_tokens,
+            task_role=payload.task_role,
+            preferred_model=payload.preferred_model,
+        )
+        diagnostic = aura.ai.diagnostic()
+        ensemble = dict(getattr(aura.ai.constellation, "last_ensemble", {}) or {})
+        return {
+            "ok": True,
+            "answer": str(answer or ""),
+            "engine": "aura-local",
+            "role": str(diagnostic.get("last_role") or payload.task_role),
+            "model": str(diagnostic.get("last_model") or ""),
+            "distributed": False,
+            "moa": bool(ensemble),
+            "ensemble": ensemble,
+            "distributed_error": distributed_error,
+            "source": payload.source,
+        }
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/ai/diagnostic")
