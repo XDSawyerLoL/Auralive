@@ -219,6 +219,14 @@ export class CuriosityEngine {
           priority: Math.min(0.98, 0.74 + Number(service.criticality || 0.5) * 0.20),
           reason: service.state_detail || 'État produit dégradé.',
         });
+        candidates.push({
+          question: `Quelles releases, régressions, vulnérabilités ou modifications techniques récentes liées à ${service.name} pourraient expliquer ou aider à résoudre son état ${state}`,
+          target: 'web',
+          domain: service.id,
+          priority: Math.min(0.9, 0.68 + Number(service.criticality || 0.5) * 0.16),
+          reason: 'Un produit dégradé doit aussi être confronté aux informations techniques récentes.',
+          autoResearch: true,
+        });
       } else if (stale) {
         candidates.push({
           question: `Quel est l'état réel actuel de ${service.name}, quelles capacités expose-t-il à AURA et quelles capacités restent inutilisées`,
@@ -275,14 +283,46 @@ export class CuriosityEngine {
       }
     }
 
-    candidates.push({
-      question: 'Quelles évolutions techniques récentes pourraient améliorer AURA, son Web Substrate, son Mesh, son routage de modèles ou sa sécurité sans augmenter sa dépendance à une plateforme centrale',
-      target: 'web',
-      domain: 'aura-rd',
-      priority: 0.64,
-      reason: 'Veille technique autonome permanente.',
-      autoResearch: true,
-    });
+    const researchThemes = [
+      {
+        domain: 'aura-local-ai',
+        priority: 0.71,
+        question: 'Quelles techniques, architectures ou publications récentes améliorent l inférence IA locale, le routage de modèles, le speculative decoding ou les petits modèles sans dépendance à un cloud central',
+      },
+      {
+        domain: 'aura-web-agents',
+        priority: 0.70,
+        question: 'Quelles avancées récentes sur les agents Web, la résistance aux prompt injections indirectes et la navigation agentique pourraient améliorer Glide et AURA sans affaiblir la confidentialité',
+      },
+      {
+        domain: 'aura-mesh',
+        priority: 0.70,
+        question: 'Quelles techniques ou implémentations récentes de calcul distribué WebGPU WebRTC edge inference ou mixture of agents pourraient améliorer le Mesh AURA en latence fiabilité ou frugalité',
+      },
+      {
+        domain: 'aura-memory',
+        priority: 0.67,
+        question: 'Quelles méthodes récentes de mémoire agentique, retrieval adaptatif, compression de contexte ou apprentissage continu pourraient améliorer la mémoire AURA avec des preuves mesurables',
+      },
+      {
+        domain: 'aura-security',
+        priority: 0.69,
+        question: 'Quelles vulnérabilités, standards de sécurité, techniques post quantiques ou nouvelles défenses récentes devraient être évalués pour les produits Quantic',
+      },
+      {
+        domain: 'aura-algorithms',
+        priority: 0.68,
+        question: 'Quels algorithmes, travaux scientifiques ou projets open source récents pourraient augmenter la qualité de raisonnement, la planification ou l efficacité matérielle d AURA',
+      },
+    ];
+    for (const theme of researchThemes) {
+      candidates.push({
+        ...theme,
+        target: 'web',
+        reason: 'Veille R&D autonome diversifiée.',
+        autoResearch: true,
+      });
+    }
 
     return candidates.sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
   }
