@@ -174,6 +174,29 @@ function normalizeRisks(value) {
   return [...new Set(source.map((item) => String(item).trim().toLowerCase()).filter(Boolean))];
 }
 
+export function safeGithubChangePath(value) {
+  const path = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
+  if (!path || path.length > 500 || path.includes('..') || path.includes('\0')) return '';
+  const lower = path.toLowerCase();
+  if (
+    lower === '.env'
+    || lower.startsWith('.env.')
+    || lower.startsWith('.git/')
+    || lower.startsWith('.github/workflows/')
+    || /(^|\/)(secrets?|credentials?|tokens?)(\.|\/|$)/i.test(path)
+    || /\.(pem|p12|pfx|key|keystore|jks)$/i.test(path)
+  ) return '';
+  return path;
+}
+
+function encodeGithubPath(value) {
+  return String(value || '').split('/').map((part) => encodeURIComponent(part)).join('/');
+}
+
+function githubBranchName(fingerprintValue) {
+  return 'aura/change-' + String(fingerprintValue || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).toLowerCase();
+}
+
 export function needsExternalEvidence(value) {
   const text = String(value || '').toLowerCase();
   return [
@@ -554,6 +577,131 @@ export class CommandCenter {
       };
     }
 
+    if (action === 'github.propose_file_change') {
+      if (!config.commandCenterAutoCreateChangePr) {
+        return {
+          status: 'waiting',
+          execution_mode: 'github-change-pr-disabled',
+          result: { reason: 'AURA_COMMAND_AUTO_CREATE_CHANGE_PR=false' },
+        };
+      }
+      if (Number(initiative.confidence || 0) < config.commandCenterChangePrMinConfidence) {
+        return {
+          status: 'waiting',
+          execution_mode: 'github-change-confidence-gate',
+          result: {
+            reason: 'confiance insuffisante pour créer une PR de modification',
+            confidence: Number(initiative.confidence || 0),
+            minimum: config.commandCenterChangePrMinConfidence,
+          },
+        };
+      }
+      const allowedRepos = new Set(config.commandCenterGithubRepos.map((item) => String(item).toLowerCase()));
+      if (!allowedRepos.has(repository.toLowerCase())) {
+        throw new Error('dépôt hors allowlist AURA: ' + repository);
+      }
+      const requestedFiles = Array.isArray(payload.files) ? payload.files : [];
+      if (!requestedFiles.length) throw new Error('aucun fichier de modification fourni');
+      if (requestedFiles.length > config.commandCenterChangePrMaxFiles) {
+        throw new Error('trop de fichiers dans une seule proposition AURA');
+      }
+
+      const files = requestedFiles.map((item) => {
+        const path = safeGithubChangePath(item?.path);
+        const content = String(item?.content ?? '');
+        if (!path) throw new Error('chemin de fichier interdit pour AURA');
+        if (Buffer.byteLength(content, 'utf8') > config.commandCenterChangePrMaxFileBytes) {
+          throw new Error('fichier trop volumineux pour une modification autonome AURA: ' + path);
+        }
+        return {
+          path,
+          content,
+          message: String(item?.message || payload.commit_message || 'AURA: proposition de modification').slice(0, 240),
+        };
+      });
+
+      const meta = (await this.github(`/repos/${repository}`)).data || {};
+      const baseBranch = String(meta.default_branch || 'main');
+      const baseRef = await this.github(
+        `/repos/${repository}/git/ref/heads/${encodeURIComponent(baseBranch)}`,
+      );
+      const baseSha = String(baseRef.data?.object?.sha || '');
+      if (!baseSha) throw new Error('SHA de branche de base introuvable');
+
+      const branch = githubBranchName(initiative.fingerprint);
+      try {
+        await this.github(
+          `/repos/${repository}/git/ref/heads/${encodeURIComponent(branch)}`,
+        );
+      } catch (error) {
+        if (Number(error?.status || 0) !== 404) throw error;
+        await this.github(
+          `/repos/${repository}/git/refs`,
+          { method: 'POST', body: { ref: 'refs/heads/' + branch, sha: baseSha } },
+        );
+      }
+
+      const changedFiles = [];
+      for (const file of files) {
+        const endpoint = `/repos/${repository}/contents/${encodeGithubPath(file.path)}`;
+        let existingSha = '';
+        try {
+          const existing = await this.github(endpoint + '?ref=' + encodeURIComponent(branch));
+          existingSha = String(existing.data?.sha || '');
+        } catch (error) {
+          if (Number(error?.status || 0) !== 404) throw error;
+        }
+        const body = {
+          message: file.message,
+          content: Buffer.from(file.content, 'utf8').toString('base64'),
+          branch,
+        };
+        if (existingSha) body.sha = existingSha;
+        const write = await this.github(endpoint, { method: 'PUT', body });
+        changedFiles.push({
+          path: file.path,
+          commit_sha: String(write.data?.commit?.sha || ''),
+        });
+      }
+
+      const owner = repository.split('/')[0];
+      const existingPrs = await this.github(
+        `/repos/${repository}/pulls?state=open&head=${encodeURIComponent(owner + ':' + branch)}&per_page=10`,
+      );
+      let pull = Array.isArray(existingPrs.data) ? existingPrs.data[0] : null;
+      if (!pull) {
+        const marker = `<!-- aura-change:${initiative.fingerprint} -->`;
+        const title = String(payload.title || initiative.title || 'AURA change proposal').slice(0, 240);
+        const body = [
+          marker,
+          String(payload.body || initiative.objective || '').slice(0, 12000),
+          '',
+          'Modification proposée automatiquement par AURA.',
+          'Politique: branche dédiée uniquement; aucun push direct sur la branche principale; aucun auto-merge.',
+          'La promotion reste conditionnée aux validations CI/canary du dépôt.',
+        ].join('\n');
+        const created = await this.github(
+          `/repos/${repository}/pulls`,
+          { method: 'POST', body: { title, body, head: branch, base: baseBranch } },
+        );
+        pull = created.data;
+      }
+      return {
+        status: 'completed',
+        execution_mode: 'github-bounded-change-pr',
+        result: {
+          executed: true,
+          repository,
+          base_branch: baseBranch,
+          branch,
+          changed_files: changedFiles,
+          pull_request_number: Number(pull?.number || 0),
+          pull_request_url: String(pull?.html_url || ''),
+          auto_merge: false,
+        },
+      };
+    }
+
     if (action === 'github.create_failure_issue') {
       if (!config.commandCenterAutoCreateFailureIssue) {
         return {
@@ -594,6 +742,36 @@ export class CommandCenter {
     }
 
     throw new Error(`action GitHub autonome non autorisée: ${action}`);
+  }
+
+  async proposeGithubChange(payload = {}) {
+    const repository = String(payload.repository || '').trim();
+    const title = String(payload.title || 'AURA · proposition de modification').trim().slice(0, 240);
+    const files = Array.isArray(payload.files) ? payload.files : [];
+    const candidate = this.candidate({
+      domain: REPO_SERVICE_MAP.get(repository.toLowerCase()) || 'quantic-sillage',
+      kind: 'github',
+      title,
+      objective: String(payload.objective || payload.body || title).slice(0, 8000),
+      rationale: String(payload.rationale || 'Modification structurée proposée par AURA.').slice(0, 5000),
+      priority: payload.priority ?? 0.82,
+      confidence: payload.confidence ?? 0.82,
+      requested_risks: ['safe', 'local-write'],
+      action_type: 'github.propose_file_change',
+      action_payload: {
+        repository,
+        files,
+        title,
+        body: String(payload.body || '').slice(0, 12000),
+        commit_message: String(payload.commit_message || 'AURA: proposition de modification').slice(0, 240),
+      },
+      signature: String(payload.signature || `change:${repository}:${files.map((item) => item?.path || '').join(',')}:${title}`),
+    });
+    const persisted = await this.persistInitiative(candidate);
+    const initiative = persisted.initiative;
+    if (!persisted.created) return { created: false, initiative };
+    if (!config.commandCenterAutoExecute) return { created: true, initiative };
+    return { created: true, initiative: await this.executeInitiative(initiative) };
   }
 
   async setServiceState(id, state, detail = '', metadata = {}) {
