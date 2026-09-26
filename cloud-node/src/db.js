@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 5;
+export const LATEST_SCHEMA_VERSION = 6;
 
 export function getDb() {
   if (pool) return pool;
@@ -47,6 +47,20 @@ async function ensureMigrationTable(db) {
     name VARCHAR(240) NOT NULL,
     applied_at VARCHAR(40) NOT NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+}
+
+async function ensureColumn(db, table, column, definition) {
+  const [rows] = await db.query(`SHOW COLUMNS FROM \`${table}\` LIKE ?`, [column]);
+  if (!rows.length) {
+    await db.query(`ALTER TABLE \`${table}\` ADD COLUMN ${definition}`);
+  }
+}
+
+async function ensureIndex(db, table, indexName, definition) {
+  const [rows] = await db.query(`SHOW INDEX FROM \`${table}\` WHERE Key_name=?`, [indexName]);
+  if (!rows.length) {
+    await db.query(`ALTER TABLE \`${table}\` ADD INDEX ${definition}`);
+  }
 }
 
 async function applyMigrations(db) {
@@ -239,6 +253,98 @@ async function applyMigrations(db) {
     await db.query(
       'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(5,?,?)',
       ['capability-fabric-routing-and-graph-ledger', new Date().toISOString()],
+    );
+    current = 5;
+  }
+
+  if (current < 6) {
+    await ensureColumn(
+      db,
+      'aura_execution_jobs',
+      'target_worker_id',
+      "target_worker_id VARCHAR(160) NOT NULL DEFAULT '' AFTER requested_risks",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_jobs',
+      'required_capabilities',
+      "required_capabilities LONGTEXT NULL AFTER target_worker_id",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_jobs',
+      'verification_mode',
+      "verification_mode VARCHAR(40) NOT NULL DEFAULT 'none' AFTER required_capabilities",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_jobs',
+      'quorum',
+      "quorum INT NOT NULL DEFAULT 1 AFTER verification_mode",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_jobs',
+      'assigned_at',
+      "assigned_at BIGINT NOT NULL DEFAULT 0 AFTER lease_until",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'compute_consent',
+      "compute_consent TINYINT NOT NULL DEFAULT 0 AFTER version",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'mesh_capabilities',
+      "mesh_capabilities LONGTEXT NULL AFTER compute_consent",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'resources',
+      "resources LONGTEXT NULL AFTER mesh_capabilities",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'reputation',
+      "reputation DOUBLE NOT NULL DEFAULT 0.5 AFTER resources",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'jobs_completed',
+      "jobs_completed BIGINT NOT NULL DEFAULT 0 AFTER reputation",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'jobs_failed',
+      "jobs_failed BIGINT NOT NULL DEFAULT 0 AFTER jobs_completed",
+    );
+    await ensureColumn(
+      db,
+      'aura_execution_workers',
+      'avg_latency_ms',
+      "avg_latency_ms DOUBLE NOT NULL DEFAULT 0 AFTER jobs_failed",
+    );
+    await ensureIndex(
+      db,
+      'aura_execution_jobs',
+      'idx_aura_execution_jobs_target',
+      'idx_aura_execution_jobs_target(target_worker_id,status,created_at)',
+    );
+    await ensureIndex(
+      db,
+      'aura_execution_workers',
+      'idx_aura_execution_workers_mesh',
+      'idx_aura_execution_workers_mesh(compute_consent,reputation,last_seen_ms)',
+    );
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(6,?,?)',
+      ['compute-mesh-worker-routing-and-reputation', new Date().toISOString()],
     );
   }
 }

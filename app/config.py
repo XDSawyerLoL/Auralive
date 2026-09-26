@@ -152,6 +152,11 @@ class Settings:
     aura_cloud_worker_poll_seconds: float = _float("AURA_CLOUD_WORKER_POLL_SECONDS", 1.5)
     aura_cloud_worker_heartbeat_seconds: int = _int("AURA_CLOUD_WORKER_HEARTBEAT_SECONDS", 15)
     aura_cloud_worker_timeout_seconds: int = _int("AURA_CLOUD_WORKER_TIMEOUT_SECONDS", 95)
+    aura_compute_mesh_consent: bool = _bool("AURA_COMPUTE_MESH_CONSENT", False)
+    aura_compute_mesh_identity_file: Path = _runtime_path(
+        "AURA_COMPUTE_MESH_IDENTITY_FILE",
+        "data/compute-mesh-node-id",
+    )
 
     # Mode Sovereign : toutes les familles d'actions déjà enregistrées peuvent
     # être planifiées. Les garde-fous internes restent actifs : programmes
