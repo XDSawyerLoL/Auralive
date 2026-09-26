@@ -1,0 +1,122 @@
+name: Build Quantic Glide 1.3.0 Windows via AURA
+
+on:
+  pull_request:
+    paths:
+      - "build-sources/quantic-glide-1.3.0/**"
+      - ".github/workflows/build-glide-130-windows.yml"
+  push:
+    branches: [main]
+    paths:
+      - "build-sources/quantic-glide-1.3.0/**"
+      - ".github/workflows/build-glide-130-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  glide-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: build-sources/quantic-glide-1.3.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: build-sources/quantic-glide-1.3.0/package-lock.json
+
+      - name: Install locked dependencies
+        shell: pwsh
+        run: npm ci --no-audit --no-fund
+
+      - name: Initialize CastLabs Electron runtime
+        shell: pwsh
+        run: |
+          npx --no-install electron --version
+          $electron = Join-Path $PWD 'node_modules\electron\dist\electron.exe'
+          if (!(Test-Path $electron)) { throw "CastLabs Electron runtime missing: $electron" }
+
+      - name: Validate Glide 1.3.0 source
+        shell: pwsh
+        run: |
+          node --check src/bootstrap.cjs
+          node --check src/main.cjs
+          node --check src/preload.cjs
+          node --check src/security/ipc-firewall.cjs
+          node --check src/core/navigation.cjs
+          node --check src/core/internal-state.cjs
+          node --check src/services/store.cjs
+          node --check src/services/privacy.cjs
+          node --check src/services/veil.cjs
+          node --check src/services/intents.cjs
+          node --check src/services/aura-client.cjs
+          node --check src/renderer/renderer.js
+          node --check src/renderer/product-suite.js
+          if ((node -p "require('./package.json').version") -ne "1.3.0") { throw "Unexpected Glide version" }
+
+      - name: Fetch verified Tor Expert Bundle
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-tor.ps1
+
+      - name: Build installer and portable EXE
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx --no-install electron-builder --win nsis portable --x64 --publish never
+
+      - name: Verify Windows executables
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter 'Quantic-Glide-1.3.0-x64.exe' | Select-Object -First 1
+          $portable = Get-ChildItem dist -Filter 'Quantic-Glide-Portable-1.3.0-x64.exe' | Select-Object -First 1
+          $unpacked = Join-Path $PWD 'dist\win-unpacked\Quantic Glide.exe'
+          if (-not $installer) { throw 'Glide 1.3.0 installer missing' }
+          if (-not $portable) { throw 'Glide 1.3.0 portable EXE missing' }
+          if (!(Test-Path $unpacked)) { throw 'Glide unpacked executable missing' }
+          foreach ($file in @($installer, $portable)) {
+            $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+            if ($bytes.Length -lt 1048576) { throw "Executable too small" }
+            if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Invalid PE header" }
+          }
+          $proc = Start-Process -FilePath $unpacked -ArgumentList '--disable-gpu' -PassThru
+          Start-Sleep -Seconds 8
+          if ($proc.HasExited -and $proc.ExitCode -ne 0) { throw "Packaged Glide failed smoke test" }
+          if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item $installer.FullName release\
+          Copy-Item $portable.FullName release\
+          $sumLines = foreach ($item in (Get-ChildItem release -Filter '*.exe')) {
+            $hash = (Get-FileHash -Algorithm SHA256 $item.FullName).Hash.ToLowerInvariant()
+            "$hash  $($item.Name)"
+          }
+          $sumLines | Set-Content -Encoding ascii release\SHA256SUMS.txt
+          @('Quantic Glide 1.3.0','AURA 2.0 integration: enabled',('Build commit: ' + $env:GITHUB_SHA),'Platform: Windows x64','Distribution: unsigned community build','Tor Expert Bundle: verified') | Set-Content -Encoding UTF8 release\BUILD-INFO.txt
+          Get-Content release\SHA256SUMS.txt
+
+      - name: Upload Glide 1.3.0 Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Quantic-Glide-1.3.0-Windows-x64
+          path: build-sources/quantic-glide-1.3.0/release/**
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Publish Glide 1.3.0 release from AURA
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = 'quantic-glide-v1.3.0'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) { gh release create $tag --title 'Quantic Glide 1.3.0 — AURA 2.0' --notes 'Windows x64 build of Quantic Glide 1.3.0 with AURA 2.0 integration. Unsigned community build; Windows SmartScreen may warn.' }
+          gh release upload $tag build-sources/quantic-glide-1.3.0/release/Quantic-Glide-1.3.0-x64.exe build-sources/quantic-glide-1.3.0/release/Quantic-Glide-Portable-1.3.0-x64.exe build-sources/quantic-glide-1.3.0/release/SHA256SUMS.txt build-sources/quantic-glide-1.3.0/release/BUILD-INFO.txt --clobber
