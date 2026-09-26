@@ -278,7 +278,7 @@ app.get('/', async (_request, reply) => {
 
 const GLIDE_WINDOWS_DOWNLOAD = String(
   process.env.AURA_GLIDE_WINDOWS_URL
-  || 'https://github.com/XDSawyerLoL/QuanticSillage/releases/download/quantic-glide-v1.2.6/Quantic-Glide-1.2.6-x64.exe'
+  || 'https://github.com/XDSawyerLoL/Auralive/releases/download/quantic-glide-v1.3.0/Quantic-Glide-1.3.0-x64.exe'
 ).trim();
 
 const GLIDE_ANDROID_DOWNLOAD = String(
@@ -297,7 +297,7 @@ app.get('/downloads/glide/android', async (_request, reply) => {
 app.get('/api/downloads/glide', async () => ({
   product: 'Quantic Glide',
   windows: {
-    version: '1.2.6',
+    version: '1.3.0',
     channel: 'stable',
     url: '/downloads/glide/windows',
   },

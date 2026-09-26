@@ -349,7 +349,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
         <div class="download-grid">
           <div class="download-card">
             <div class="download-icon">▣</div>
-            <div class="download-copy"><strong>Windows x64</strong><span>Version stable 1.2.6 · installateur EXE. La 1.3.0 avec AURA 2.0 remplacera automatiquement ce canal dès publication du binaire.</span></div>
+            <div class="download-copy"><strong>Windows x64</strong><span>Version stable 1.3.0 · installateur EXE avec AURA 2.0, MoA et Mesh intégrés.</span></div>
             <a class="download-btn" href="/downloads/glide/windows">Télécharger .exe</a>
           </div>
           <div class="download-card">
