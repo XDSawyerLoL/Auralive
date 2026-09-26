@@ -145,6 +145,12 @@ export const config = Object.freeze({
   fabricMaxParallel: int('AURA_FABRIC_MAX_PARALLEL', 12, 1, 64),
   fabricDefaultBudgetMicrounits: int('AURA_FABRIC_DEFAULT_BUDGET_MICROUNITS', 0, 0, 1_000_000_000),
 
+  meshP2pEnabled: bool('AURA_MESH_P2P_ENABLED', true),
+  meshPeerOnlineMs: int('AURA_MESH_PEER_ONLINE_MS', 45_000, 5_000, 300_000),
+  meshPeerClockSkewMs: int('AURA_MESH_PEER_CLOCK_SKEW_MS', 300_000, 30_000, 900_000),
+  meshP2pTimeoutMs: int('AURA_MESH_P2P_TIMEOUT_MS', 45_000, 5_000, 180_000),
+  meshIceServers: csv('AURA_MESH_ICE_SERVERS', 'stun:stun.cloudflare.com:3478'),
+
   horizonEnabled: bool('HORIZON_ENABLED', false),
   horizonBaseUrl: String(process.env.HORIZON_BASE_URL || '').replace(/\/$/, ''),
   horizonApiKey: process.env.HORIZON_API_KEY || '',
