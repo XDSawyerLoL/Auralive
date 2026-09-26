@@ -83,6 +83,7 @@
     "directories": {
       "buildResources": "build",
       "output": "dist"
-    }
+    },
+    "electronDist": "node_modules/electron/dist"
   }
 }
