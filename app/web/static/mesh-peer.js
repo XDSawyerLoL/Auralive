@@ -249,7 +249,7 @@
     const left = Array.from(task?.left || [], Number);
     const right = Array.from(task?.right || [], Number);
     if (!left.length || left.length !== right.length) throw new Error("Vecteurs P2P invalides");
-    if (left.length > 262144) throw new Error("Vecteurs P2P trop volumineux");
+    if (left.length > 8192) throw new Error("Vecteurs P2P trop volumineux");
     if (left.some(v => !Number.isFinite(v)) || right.some(v => !Number.isFinite(v))) {
       throw new Error("Valeur vectorielle non finie");
     }
