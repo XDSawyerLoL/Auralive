@@ -358,3 +358,34 @@ async def test_worker_keeps_auralive_on_native_evolution_path():
 
     assert result["status"] == "local"
     assert result["objective"] == "Améliorer le noyau"
+
+
+@pytest.mark.asyncio
+async def test_product_presence_bridge_sends_only_operational_metadata(monkeypatch):
+    worker = AuraCloudWorker(FakeAura(), settings())
+    calls = []
+
+    async def fake_post(path, payload):
+        calls.append((path, payload))
+        return {"ok": True}
+
+    monkeypatch.setattr(worker, "_post", fake_post)
+
+    first = await worker.observe_product(
+        "glide",
+        detail="Glide utilise AURA locale.",
+        metadata={"source": "glide", "local_ai_request": True},
+    )
+    second = await worker.observe_product(
+        "glide",
+        detail="Ne doit pas doubler le heartbeat.",
+        metadata={"source": "glide"},
+    )
+
+    assert first is True
+    assert second is True
+    assert len(calls) == 1
+    assert calls[0][0] == "/api/aura/products/glide/observe"
+    assert calls[0][1]["metadata"]["content_forwarded"] is False
+    assert "prompt" not in calls[0][1]
+    assert "message" not in calls[0][1]
