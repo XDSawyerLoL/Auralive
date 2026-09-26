@@ -296,6 +296,37 @@ class AuraCloudWorker:
             {**dict(payload or {}), "worker_id": self.worker_id},
         )
 
+    async def mesh_moa(
+        self,
+        *,
+        prompt: str,
+        system: str = "",
+        max_tokens: int = 700,
+        max_agents: int = 3,
+    ) -> dict[str, Any]:
+        """Ask AURA Cloud to orchestrate a distributed Mixture-of-Agents.
+
+        The Cloud token remains inside Quantic Studio; browser clients never
+        receive it. If the cloud mesh is unavailable, callers can fall back to
+        the local constellation without weakening privacy.
+        """
+        if not self.enabled:
+            raise RuntimeError("Pont AURA Cloud non configuré")
+        return await self._post(
+            "/api/mesh/execute",
+            {
+                "kind": "moa",
+                "payload": {
+                    "prompt": str(prompt or "")[:50_000],
+                    "system": str(system or "")[:20_000],
+                    "max_tokens": max(128, min(int(max_tokens or 700), 4000)),
+                    "max_agents": max(2, min(int(max_agents or 3), 3)),
+                },
+                "max_agents": max(2, min(int(max_agents or 3), 3)),
+                "timeout_ms": self.timeout_seconds * 1000,
+            },
+        )
+
     def _capabilities(self) -> list[dict[str, Any]]:
         cognitive = getattr(self.aura, "cognitive", None)
         automation = getattr(cognitive, "automation", None)
