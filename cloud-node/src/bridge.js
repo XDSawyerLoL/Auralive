@@ -376,7 +376,7 @@ export class ExecutionBridge {
     const jobs = await Promise.all(selected.map((worker) => this.enqueue(
       kind,
       payload,
-      ['ai'],
+      kind === 'inference' ? ['ai'] : ['safe'],
       {
         targetWorkerId: worker.worker_id,
         requiredCapabilities: [String(capability || kind)],
