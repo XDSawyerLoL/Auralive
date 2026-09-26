@@ -89,7 +89,7 @@ export class CuriosityEngine {
         why_now:'Produit Quantic non observé comme actif.',novelty:0.55,uncertainty:0.8,impact:0.7,relevance:0.9,
       });
     }
-    if (!this.ai?.enabled) return fallback.slice(0,config.curiosityQuestionsPerCycle);
+    if (!this.ai?.enabled) return fallback;
 
     try {
       const answer = await this.ai.generate(
@@ -106,7 +106,7 @@ export class CuriosityEngine {
       );
       const parsed = parseJsonObject(answer);
       const rows = Array.isArray(parsed.questions) ? parsed.questions : [];
-      return [...rows,...fallback].slice(0,config.curiosityQuestionsPerCycle);
+      return [...rows,...fallback];
     } catch {
       return fallback.slice(0,config.curiosityQuestionsPerCycle);
     }
@@ -148,6 +148,7 @@ export class CuriosityEngine {
       const generated = await this.generateQuestions(trigger);
       const added = [];
       for (const item of generated) {
+        if (added.length >= config.curiosityQuestionsPerCycle) break;
         const since = new Date(Date.now() - 86_400_000).toISOString();
         const duplicate = await one(
           'SELECT id,status,score FROM aura_curiosity_questions WHERE question=? AND created_at>=? ORDER BY created_at DESC LIMIT 1',
