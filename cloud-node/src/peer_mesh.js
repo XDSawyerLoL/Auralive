@@ -276,7 +276,7 @@ export class PeerMesh {
     const rows = await query(
       `SELECT id,session_id,from_peer_id,to_peer_id,signal_type,payload,signature,created_at
        FROM aura_mesh_signals
-       WHERE to_peer_id=? AND id>? ORDER BY id ASC LIMIT 100`,
+       WHERE to_peer_id=? AND consumed=0 AND id>? ORDER BY id ASC LIMIT 100`,
       [peer.peer_id, Math.max(0, Number(afterId || 0))],
     );
     const senderIds = [...new Set(rows.map((row) => row.from_peer_id).filter((id) => id !== 'aura-cloud'))];
@@ -284,6 +284,16 @@ export class PeerMesh {
     for (const id of senderIds) {
       const sender = await this.getPeer(id);
       if (sender) senders.set(id, sender);
+    }
+    if (rows.length) {
+      const ids = rows.map((row) => Number(row.id)).filter(Number.isFinite);
+      if (ids.length) {
+        await query(
+          `UPDATE aura_mesh_signals SET consumed=1
+           WHERE to_peer_id=? AND id<=?`,
+          [peer.peer_id, Math.max(...ids)],
+        ).catch(() => {});
+      }
     }
     return {
       peer_id: peer.peer_id,
