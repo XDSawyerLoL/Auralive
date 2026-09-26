@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import logging
+import math
+import os
 import platform
 import socket
 import time
@@ -23,14 +26,12 @@ class AuraCloudWorker:
     évolution sans exposer le PC sur Internet.
     """
 
-    VERSION = "aura-quantic-worker-v1.1"
+    VERSION = "aura-quantic-worker-v1.2"
 
     def __init__(self, aura: Any, settings: Any):
         self.aura = aura
         self.settings = settings
-        self.worker_id = (
-            f"quantic-{socket.gethostname().casefold()}-{uuid4().hex[:8]}"
-        )
+        self.worker_id = self._resolve_worker_id()
         self.session: aiohttp.ClientSession | None = None
         self.task: asyncio.Task[None] | None = None
         self.started = False
@@ -41,6 +42,98 @@ class AuraCloudWorker:
         self.jobs_completed = 0
         self.jobs_failed = 0
         self._last_heartbeat = 0.0
+
+    @property
+    def compute_consent(self) -> bool:
+        return bool(getattr(self.settings, "aura_compute_mesh_consent", False))
+
+    def _resolve_worker_id(self) -> str:
+        if not self.compute_consent:
+            return f"quantic-{socket.gethostname().casefold()}-{uuid4().hex[:8]}"
+        path = Path(
+            getattr(
+                self.settings,
+                "aura_compute_mesh_identity_file",
+                Path("data") / "compute-mesh-node-id",
+            )
+        )
+        try:
+            if path.is_file():
+                token = path.read_text(encoding="utf-8").strip()
+                if token:
+                    return f"mesh-{token[:48]}"
+            token = uuid4().hex
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(token, encoding="utf-8")
+            return f"mesh-{token}"
+        except Exception:
+            return f"mesh-{uuid4().hex}"
+
+    @staticmethod
+    def _physical_ram_bytes() -> int:
+        try:
+            if hasattr(os, "sysconf"):
+                pages = int(os.sysconf("SC_PHYS_PAGES"))
+                page_size = int(os.sysconf("SC_PAGE_SIZE"))
+                if pages > 0 and page_size > 0:
+                    return pages * page_size
+        except Exception:
+            pass
+        if os.name == "nt":
+            try:
+                import ctypes
+
+                class MemoryStatusEx(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+
+                status = MemoryStatusEx()
+                status.dwLength = ctypes.sizeof(MemoryStatusEx)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                    return int(status.ullTotalPhys)
+            except Exception:
+                pass
+        return 0
+
+    def _mesh_capabilities(self) -> list[str]:
+        if not self.compute_consent:
+            return []
+        capabilities = ["compute"]
+        if bool(getattr(getattr(self.aura, "ai", None), "enabled", False)):
+            capabilities.append("inference")
+        return capabilities
+
+    def _resource_profile(self) -> dict[str, Any]:
+        ai = self._ai_diagnostic()
+        model = str(
+            ai.get("runtime_model")
+            or ai.get("model")
+            or getattr(self.settings, "ai_model", "")
+            or ""
+        )
+        accelerator = str(
+            ai.get("device")
+            or ai.get("accelerator")
+            or ai.get("gpu")
+            or ""
+        )
+        return {
+            "cpu_threads": int(os.cpu_count() or 1),
+            "ram_bytes": self._physical_ram_bytes(),
+            "gpu": accelerator,
+            "models": [model] if model else [],
+            "platform": platform.system(),
+            "architecture": platform.machine(),
+        }
 
     @property
     def enabled(self) -> bool:
@@ -201,6 +294,9 @@ class AuraCloudWorker:
                 "worker_id": self.worker_id,
                 "version": self.VERSION,
                 "capabilities": self._capabilities(),
+                "compute_consent": self.compute_consent,
+                "mesh_capabilities": self._mesh_capabilities(),
+                "resources": self._resource_profile(),
                 "model": str(
                     ai.get("runtime_model")
                     or ai.get("model")
@@ -382,6 +478,45 @@ class AuraCloudWorker:
             "image_base64": encoded,
         }
 
+    async def _run_compute(self, payload: dict[str, Any]) -> dict[str, Any]:
+        op = str(payload.get("op") or "").strip().casefold()
+
+        def numbers(value: Any) -> list[float]:
+            rows = list(value or [])
+            if len(rows) > 4096:
+                raise ValueError("Vecteur Compute Mesh trop volumineux")
+            result = [float(item) for item in rows]
+            if any(not math.isfinite(item) for item in result):
+                raise ValueError("Valeur non finie interdite")
+            return result
+
+        if op == "sha256":
+            raw = str(payload.get("text") or payload.get("value") or "")
+            value: Any = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        elif op == "sum":
+            value = sum(numbers(payload.get("values")))
+        elif op in {"dot", "cosine"}:
+            left = numbers(payload.get("left"))
+            right = numbers(payload.get("right"))
+            if len(left) != len(right):
+                raise ValueError("Les vecteurs doivent avoir la même taille")
+            dot = sum(a * b for a, b in zip(left, right, strict=True))
+            if op == "dot":
+                value = dot
+            else:
+                norm_left = math.sqrt(sum(item * item for item in left))
+                norm_right = math.sqrt(sum(item * item for item in right))
+                value = 0.0 if not norm_left or not norm_right else dot / (norm_left * norm_right)
+        else:
+            raise ValueError(f"Opération Compute Mesh inconnue: {op}")
+
+        return {
+            "op": op,
+            "value": value,
+            "engine": "python-stdlib",
+            "deterministic": True,
+        }
+
     async def _run_evolution(self, payload: dict[str, Any]) -> dict[str, Any]:
         evolution = getattr(self.aura, "evolution", None)
         if evolution is None:
@@ -401,6 +536,8 @@ class AuraCloudWorker:
             for item in (job.get("requested_risks") or [])
             if str(item).strip()
         ]
+        if kind == "compute":
+            return await self._run_compute(payload)
         if kind == "inference":
             return await self._run_inference(payload)
         if kind == "operator":
@@ -478,6 +615,9 @@ class AuraCloudWorker:
             "enabled": self.enabled,
             "started": self.started,
             "worker_id": self.worker_id,
+            "compute_consent": self.compute_consent,
+            "mesh_capabilities": self._mesh_capabilities(),
+            "resources": self._resource_profile(),
             "cloud_url": self.base_url,
             "token_configured": bool(self.token),
             "last_seen_at": self.last_seen_at,
