@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   generateKeyPairSync,
   sign,
+  webcrypto,
 } from 'node:crypto';
 
 import {
@@ -49,5 +50,34 @@ test('stableStringify recursively normalizes object key order', () => {
   assert.equal(
     stableStringify({ z: 1, a: { y: 2, b: 3 } }),
     stableStringify({ a: { b: 3, y: 2 }, z: 1 }),
+  );
+});
+
+
+test('WebCrypto ECDSA signatures interoperate with the Node verifier used by browsers', async () => {
+  const pair = await webcrypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  );
+  const publicJwk = await webcrypto.subtle.exportKey('jwk', pair.publicKey);
+  const envelope = {
+    type: 'register',
+    peer_id: peerIdForJwk(publicJwk),
+    worker_id: 'mesh-webcrypto',
+    capabilities: ['webrtc', 'webgpu'],
+    resources: { webgpu: true },
+    timestamp: Date.now(),
+    nonce: 'browser-shaped-nonce',
+  };
+  const signature = await webcrypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    pair.privateKey,
+    new TextEncoder().encode(stableStringify(envelope)),
+  );
+
+  assert.equal(
+    verifyPeerEnvelope(publicJwk, envelope, Buffer.from(signature).toString('base64url')),
+    true,
   );
 });
