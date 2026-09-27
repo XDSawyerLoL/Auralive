@@ -429,6 +429,7 @@ export class VoiceStudioProvider {
       zero_cost_mode: Boolean(config.zeroCostMode),
       zero_cost_confirmed: Boolean(config.voiceFabricZeroCostConfirmed),
       zero_cost_trusted_endpoint: Boolean(this.zeroCostTrusted),
+      pinned_quantic_endpoint: Boolean(config.voiceFabricPinQuanticEndpoint),
       strict_identity: Boolean(config.voiceFabricStrictIdentity),
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
