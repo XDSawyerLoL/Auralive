@@ -480,7 +480,7 @@ class RuntimeOperator:
                     min(
                         int(
                             action.get("max_steps")
-                            or getattr(self.settings, "aura_runtime_browser_max_steps", 5)
+                            or getattr(self.settings, "aura_runtime_browser_max_steps", 25)
                         ),
                         50,
                     ),
