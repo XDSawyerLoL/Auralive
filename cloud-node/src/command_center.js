@@ -239,6 +239,7 @@ export class CommandCenter {
     fabric = null,
     dagCompiler = null,
     graphExecutor = null,
+    expertBridge = null,
   ) {
     this.kernel = kernel;
     this.evolution = evolution;
@@ -247,6 +248,7 @@ export class CommandCenter {
     this.fabric = fabric;
     this.dagCompiler = dagCompiler;
     this.graphExecutor = graphExecutor;
+    this.expertBridge = expertBridge;
     this.started = false;
     this.running = false;
     this.timer = null;
@@ -1723,6 +1725,214 @@ export class CommandCenter {
     return reconciled;
   }
 
+  expertRemediationCandidate(row, advice, threadId = '') {
+    if (!advice?.ok || advice.human_required) return null;
+    if (Number(advice.confidence || 0) < config.expertBridgeMinConfidence) return null;
+
+    const action = String(advice.action_kind || '').toLowerCase();
+    if (['wait', 'human'].includes(action)) return null;
+    if (String(advice.risk_level || '').toLowerCase() === 'high' && action !== 'research') {
+      return null;
+    }
+
+    const originalRisks = parseJson(row.requested_risks, []);
+    const originalPayload = parseJson(row.action_payload, {});
+    const kind = action === 'retry'
+      ? String(row.kind || 'reflection')
+      : action;
+    const recommended = String(advice.recommended_action || '').trim();
+    const diagnosis = String(advice.diagnosis || '').trim();
+    const probableCause = String(advice.probable_cause || '').trim();
+    const evidence = Array.isArray(advice.evidence_needed)
+      ? advice.evidence_needed.filter(Boolean).slice(0, 8)
+      : [];
+    const objective = [
+      recommended || `Résoudre l’échec de ${String(row.title || 'cette initiative')}.`,
+      diagnosis ? `Diagnostic expert: ${diagnosis}` : '',
+      probableCause ? `Cause probable: ${probableCause}` : '',
+      evidence.length ? `Vérifications attendues: ${evidence.join(' ; ')}` : '',
+      'Vérifier le résultat et conserver un rollback si une modification est appliquée.',
+    ].filter(Boolean).join(' ');
+
+    const expertThreadId = String(threadId || originalPayload.expert_thread_id || row.id || '');
+    const expertRepository = String(
+      originalPayload.repository || originalPayload.expert_repository || ''
+    ).trim();
+    let actionType = '';
+    let actionPayload = {
+      expert_thread_id: expertThreadId,
+      expert_repository: expertRepository,
+    };
+    if (action === 'retry') {
+      actionType = String(row.action_type || '');
+      actionPayload = {
+        ...originalPayload,
+        expert_thread_id: expertThreadId,
+        expert_repository: expertRepository,
+      };
+    } else if (action === 'evolution') {
+      actionPayload = {
+        repository: expertRepository,
+        base_branch: String(originalPayload.base_branch || 'main').trim() || 'main',
+        expert_origin: String(row.id || ''),
+        expert_thread_id: expertThreadId,
+        expert_repository: expertRepository,
+      };
+    }
+
+    return this.candidate({
+      domain: String(row.domain || 'aura'),
+      kind,
+      title: `Expert · ${String(row.title || 'remédiation AURA')}`,
+      objective,
+      rationale:
+        `Second avis autonome après échec de l’initiative ${row.id}. `
+        + `Risque expert=${String(advice.risk_level || 'review')}. `
+        + `L’expert ne possède aucun outil; AURA reste l’autorité d’exécution.`,
+      priority: Math.min(0.99, Number(row.priority || 0.6) + 0.06),
+      confidence: Number(advice.confidence || 0),
+      requested_risks: originalRisks,
+      action_type: actionType,
+      action_payload: actionPayload,
+      signature: `expert:${row.id}:${String(advice.fingerprint || '')}:${action}`,
+    });
+  }
+
+  async consultFailedInitiatives(limit = 2) {
+    if (!this.expertBridge?.status?.({ publicView: false })?.available) return [];
+
+    const threshold = new Date(
+      Date.now() - Math.max(60, config.expertBridgeCooldownSeconds) * 1000,
+    ).toISOString();
+    const rows = await query(
+      `SELECT i.*
+       FROM aura_initiatives i
+       WHERE i.status='failed'
+         AND NOT EXISTS (
+           SELECT 1 FROM aura_command_events e
+           WHERE e.initiative_id=i.id
+             AND e.kind='expert-consultation'
+             AND e.created_at>=?
+         )
+       ORDER BY i.priority DESC,i.updated_at DESC
+       LIMIT ?`,
+      [threshold, Math.max(1, Math.min(Number(limit || 2), 4))],
+    );
+
+    const candidates = [];
+    for (const row of rows) {
+      const originalPayload = parseJson(row.action_payload, {});
+      const threadId = String(originalPayload.expert_thread_id || row.id || '');
+      const historyRows = await query(
+        `SELECT payload,created_at
+         FROM aura_command_events
+         WHERE initiative_id=? AND kind='expert-thread'
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        [threadId, config.expertBridgeMaxRoundsPerIncident],
+      );
+      if (historyRows.length >= config.expertBridgeMaxRoundsPerIncident) {
+        await query(
+          'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+          [
+            row.id,
+            'expert-consultation',
+            JSON.stringify({
+              ok: false,
+              skipped: true,
+              reason: 'incident-round-limit',
+              thread_id: threadId,
+              rounds: historyRows.length,
+            }).slice(0, 30000),
+            now(),
+          ],
+        );
+        continue;
+      }
+      const dialogueHistory = [...historyRows]
+        .reverse()
+        .map((item) => parseJson(item.payload, {}))
+        .filter((item) => item && typeof item === 'object');
+
+      const context = {
+        incident_type: 'aura-initiative-failure',
+        initiative: {
+          id: row.id,
+          domain: row.domain,
+          kind: row.kind,
+          title: row.title,
+          objective: row.objective,
+          rationale: row.rationale,
+          execution_mode: row.execution_mode,
+          attempts: Number(row.attempts || 0),
+          error: row.error,
+          result: parseJson(row.result, {}),
+          action_type: row.action_type,
+          action_payload: parseJson(row.action_payload, {}),
+          requested_risks: parseJson(row.requested_risks, []),
+        },
+        expert_dialogue: {
+          thread_id: threadId,
+          round: dialogueHistory.length + 1,
+          previous_turns: dialogueHistory,
+        },
+        governance: {
+          operational_role: 'AURA dirige les opérations quotidiennes',
+          human_only: [
+            'secrets ou credentials',
+            'suppression irréversible',
+            'engagement juridique ou financier',
+            'autorité fondatrice',
+            'élévation de privilèges',
+            'décision stratégique réservée au fondateur',
+          ],
+        },
+      };
+
+      const advice = await this.expertBridge.consult(context);
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+        [
+          row.id,
+          'expert-consultation',
+          JSON.stringify({ ...advice, thread_id: threadId }).slice(0, 30000),
+          now(),
+        ],
+      );
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+        [
+          threadId,
+          'expert-thread',
+          JSON.stringify({
+            round: dialogueHistory.length + 1,
+            incident_id: row.id,
+            title: row.title,
+            execution_mode: row.execution_mode,
+            error: row.error,
+            result: parseJson(row.result, {}),
+            advice,
+          }).slice(0, 30000),
+          now(),
+        ],
+      );
+
+      const candidate = this.expertRemediationCandidate(row, advice, threadId);
+      if (!candidate) continue;
+      candidates.push(candidate);
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+        [
+          row.id,
+          'expert-remediation-proposed',
+          JSON.stringify(candidate).slice(0, 30000),
+          now(),
+        ],
+      );
+    }
+    return candidates;
+  }
+
   async promoteDirectorPullRequests() {
     if (
       !config.directorModeEnabled
@@ -1898,11 +2108,16 @@ export class CommandCenter {
           reason: 'initiative hourly budget reached',
         };
       }
+      const expertCandidates = await this.consultFailedInitiatives(2).catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return [];
+      });
       const fleet = await this.scanGithubFleet().catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);
         return this.fleetSnapshot;
       });
       const candidates = [
+        ...expertCandidates,
         ...this.githubCandidates(fleet),
         ...(await this.buildCandidates()),
       ].sort((a, b) => (b.priority + b.confidence * 0.15) - (a.priority + a.confidence * 0.15));
@@ -1919,6 +2134,7 @@ export class CommandCenter {
           ok: true,
           reconciled,
           promotions,
+          expert_candidates: expertCandidates.length,
           skipped: true,
           reason: 'all candidates are cooling down',
           candidates: candidates.length,
@@ -1932,6 +2148,7 @@ export class CommandCenter {
         candidate_count: candidates.length,
         reconciled,
         promotions,
+        expert_candidates: expertCandidates.length,
         initiative: result,
       };
     } catch (error) {
@@ -1991,6 +2208,10 @@ export class CommandCenter {
       creator_role: 'créateur et autorité fondatrice',
       aura_role: 'directrice opérationnelle de Quantic Sillage',
       web_substrate: this.webSubstrate?.status?.() || { enabled: false },
+      expert_bridge: this.expertBridge?.status?.({ publicView }) || {
+        enabled: false,
+        available: false,
+      },
       tick_seconds: config.commandCenterTickSeconds,
       max_initiatives_per_hour: config.commandCenterMaxInitiativesPerHour,
       min_confidence: config.commandCenterMinConfidence,
