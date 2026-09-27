@@ -207,6 +207,13 @@ export const config = Object.freeze({
     'AURA_COMMAND_CENTER_ALLOWED_RISKS',
     'safe,ai,network,process,local-control,local-write',
   )),
+  longHorizonEnabled: bool('AURA_LONG_HORIZON_ENABLED', true),
+  longHorizonAutoSeed: bool('AURA_LONG_HORIZON_AUTO_SEED', true),
+  longHorizonMinPriority: num('AURA_LONG_HORIZON_MIN_PRIORITY', 0.72, 0.1, 1),
+  longHorizonMaxSteps: int('AURA_LONG_HORIZON_MAX_STEPS', 8, 2, 16),
+  longHorizonMaxRevisions: int('AURA_LONG_HORIZON_MAX_REVISIONS', 4, 1, 12),
+  longHorizonStepMaxAttempts: int('AURA_LONG_HORIZON_STEP_MAX_ATTEMPTS', 2, 1, 5),
+  longHorizonReseedHours: int('AURA_LONG_HORIZON_RESEED_HOURS', 24, 1, 720),
   commandCenterFleetPollSeconds: int('AURA_COMMAND_CENTER_FLEET_POLL_SECONDS', 1200, 300, 86400),
   commandCenterRequestTimeoutMs: int('AURA_COMMAND_CENTER_REQUEST_TIMEOUT_MS', 9000, 1000, 60000),
   commandCenterGithubToken:
