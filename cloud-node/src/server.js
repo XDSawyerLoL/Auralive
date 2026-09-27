@@ -29,6 +29,7 @@ import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';
 import { CloudVoice } from './voice.js';
+import { VoiceStudioProvider } from './voice_fabric.js';
 import { WebSubstrate } from './web_substrate.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
@@ -236,6 +237,7 @@ const app = Fastify({
 });
 const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
+const voiceStudio = new VoiceStudioProvider();
 
 const bridge = new ExecutionBridge();
 const peerMesh = new PeerMesh();
@@ -578,6 +580,23 @@ app.post(
   }
 });
 
+app.get('/api/voice/status', async (request) => {
+  const privateView = isPrivate(request);
+  const localOnline = await bridge.workerOnline().catch(() => false);
+  return {
+    profile: 'mairaiy',
+    ready: Boolean(voiceStudio.enabled || cloudVoice.enabled || localOnline),
+    primary: voiceStudio.enabled ? 'aura-voice-fabric' : (cloudVoice.enabled ? 'legacy-gemini' : (localOnline ? 'runtime-local' : 'offline')),
+    strict_identity: Boolean(config.voiceFabricStrictIdentity),
+    fabric: voiceStudio.diagnostic({ publicView: !privateView }),
+    legacy_cloud: privateView ? cloudVoice.diagnostic() : {
+      enabled: Boolean(cloudVoice.enabled),
+      engine: cloudVoice.enabled ? 'gemini-cloud-tts' : 'unavailable',
+    },
+    runtime_local: Boolean(localOnline),
+  };
+});
+
 app.post('/api/voice/speak', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   const text = String(request.body?.text || '').trim();
@@ -587,10 +606,38 @@ app.post('/api/voice/speak', async (request, reply) => {
     return reply.code(401).send({ error: 'Ticket vocal AURA invalide ou expiré' });
   }
 
+  const errors = [];
+  const endpoint = voiceStudio.endpoint;
+
+  // Once Voice Fabric is configured, it owns Mairaiy's identity. In strict mode,
+  // AURA never silently changes to another voice if the provider is unavailable.
+  if (endpoint.configured) {
+    if (voiceStudio.enabled) {
+      try {
+        return await voiceStudio.synthesize(text, request.body || {});
+      } catch (error) {
+        errors.push(`voice-fabric: ${String(error?.message || error)}`);
+      }
+    } else {
+      const diagnostic = voiceStudio.diagnostic({ publicView: true });
+      errors.push(`voice-fabric: ${diagnostic.endpoint_reason || (diagnostic.zero_cost_mode && !diagnostic.zero_cost_confirmed ? 'zero-cost confirmation required' : 'provider unavailable')}`);
+    }
+
+    if (config.voiceFabricStrictIdentity) {
+      return reply.code(503).send({
+        error: errors.join(' | ') || 'Mairaiy Voice Fabric indisponible',
+        code: 'AURA_MAIRAIY_IDENTITY_UNAVAILABLE',
+        fabric: voiceStudio.diagnostic({ publicView: true }),
+        fallback_blocked: true,
+      });
+    }
+  }
+
+  // Legacy engines remain available only when Voice Fabric has not claimed the
+  // identity, or when strict identity has explicitly been disabled.
   const preferLocal = request.body?.prefer_local === true;
   const localOnline = await bridge.workerOnline().catch(() => false);
   const attempts = preferLocal && localOnline ? ['local', 'cloud'] : ['cloud', 'local'];
-  const errors = [];
 
   for (const mode of attempts) {
     if (mode === 'cloud' && cloudVoice.enabled) {
@@ -604,7 +651,7 @@ app.post('/api/voice/speak', async (request, reply) => {
       try {
         return await bridge.synthesize(text, request.body || {});
       } catch (error) {
-        errors.push(`studio: ${String(error?.message || error)}`);
+        errors.push(`runtime: ${String(error?.message || error)}`);
       }
     }
   }
@@ -612,8 +659,9 @@ app.post('/api/voice/speak', async (request, reply) => {
   return reply.code(503).send({
     error: errors.join(' | ') || 'Voix Mairaiy indisponible',
     code: 'AURA_VOICE_UNAVAILABLE',
+    fabric_ready: voiceStudio.enabled,
     cloud_ready: cloudVoice.enabled,
-    studio_ready: localOnline,
+    runtime_ready: localOnline,
   });
 });
 
@@ -656,14 +704,25 @@ app.get('/api/capabilities', async (request) => {
       local_worker: Boolean(bridgeStatus?.worker_online),
     },
     voice: {
-      ready: Boolean(cloudVoice.enabled || (bridgeStatus?.worker_online && bridgeStatus?.worker?.voice)),
+      ready: Boolean(
+        voiceStudio.enabled
+        || cloudVoice.enabled
+        || (bridgeStatus?.worker_online && bridgeStatus?.worker?.voice)
+      ),
       profile: 'mairaiy',
-      mode: cloudVoice.enabled ? 'cloud-primary' : (bridgeStatus?.worker_online ? 'studio-local' : 'offline'),
-      engine: cloudVoice.enabled
-        ? 'gemini-cloud-tts'
-        : (privateView ? String(bridgeStatus?.worker?.voice || '') : ''),
+      mode: voiceStudio.enabled
+        ? 'aura-voice-fabric'
+        : (cloudVoice.enabled ? 'legacy-cloud' : (bridgeStatus?.worker_online ? 'runtime-local' : 'offline')),
+      engine: voiceStudio.enabled
+        ? 'voicestudio-openai-compatible'
+        : (cloudVoice.enabled
+          ? 'gemini-cloud-tts'
+          : (privateView ? String(bridgeStatus?.worker?.voice || '') : '')),
+      fabric_ready: Boolean(voiceStudio.enabled),
       cloud_ready: Boolean(cloudVoice.enabled),
-      studio_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
+      runtime_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
+      strict_identity: Boolean(config.voiceFabricStrictIdentity),
+      fabric: voiceStudio.diagnostic({ publicView: !privateView }),
       cloud: privateView ? cloudVoice.diagnostic() : undefined,
     },
     image: {
