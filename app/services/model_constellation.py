@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 
 import aiohttp
 
+from app.services.model_scorecard import ModelScorecard
+
 logger = logging.getLogger(__name__)
 
 
@@ -210,7 +212,7 @@ class ModelConstellation:
     le moteur linguistique/sémantique le plus rentable pour la tâche.
     """
 
-    VERSION = "aura-model-constellation-v2"
+    VERSION = "aura-model-constellation-v3"
 
     def __init__(self, settings: Any):
         self.settings = settings
@@ -222,9 +224,14 @@ class ModelConstellation:
         self.last_error = ""
         self.route_counts: dict[str, int] = {}
         self.latencies: dict[str, list[int]] = {}
+        self.scorecard = ModelScorecard(
+            getattr(self.settings, "ai_constellation_scorecard_file", None),
+            exploration=float(getattr(self.settings, "ai_constellation_exploration", 0.08) or 0.08),
+        )
 
     async def start(self, session: aiohttp.ClientSession | None = None) -> None:
         self.session = session or self.session
+        self.scorecard.load()
         await self.refresh(force=True)
 
     async def close(self) -> None:
@@ -329,18 +336,26 @@ class ModelConstellation:
             return "fast"
         return "conversation"
 
-    def _performance_bonus(self, name: str) -> float:
+    def _performance_bonus(self, name: str, role: str) -> tuple[float, dict[str, Any]]:
+        learned = self.scorecard.metrics(name, role)
+        # Le score persistant porte fiabilité, feedback qualité et latence.
+        # Le petit historique RAM garde une réaction rapide pendant la session.
         samples = self.latencies.get(name) or []
-        if not samples:
-            return 0.0
-        avg = sum(samples[-8:]) / max(1, len(samples[-8:]))
-        if avg <= 1500:
-            return 0.12
-        if avg <= 4000:
-            return 0.06
-        if avg >= 15000:
-            return -0.12
-        return 0.0
+        session_bonus = 0.0
+        if samples:
+            avg = sum(samples[-8:]) / max(1, len(samples[-8:]))
+            if avg <= 1500:
+                session_bonus = 0.04
+            elif avg <= 4000:
+                session_bonus = 0.02
+            elif avg >= 15000:
+                session_bonus = -0.04
+        bonus = (
+            float(learned.get("learned_bonus") or 0.0)
+            + float(learned.get("exploration_bonus") or 0.0)
+            + session_bonus
+        )
+        return max(-0.30, min(0.30, bonus)), learned
 
     def _license_bonus(self, legal_class: str) -> float:
         if legal_class == "permissive":
@@ -370,21 +385,22 @@ class ModelConstellation:
             if exact and exact["name"].casefold() not in excluded:
                 return {**exact, "role": role, "score": 2.0, "reason": "preferred"}
 
-        candidates: list[tuple[float, dict[str, Any]]] = []
+        candidates: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
         for row in self.installed:
             if row["name"].casefold() in excluded:
                 continue
             profile = self.profile_for(row["name"])
+            learned_bonus, learned = self._performance_bonus(row["name"], role)
             if profile:
                 role_score = float(profile.roles.get(role, profile.roles.get("general", 0.55)))
-                score = role_score + self._performance_bonus(row["name"]) + self._license_bonus(profile.legal_class)
+                score = role_score + learned_bonus + self._license_bonus(profile.legal_class)
             else:
-                score = 0.46 + self._performance_bonus(row["name"])
+                score = 0.46 + learned_bonus
             # Évite de charger un gros modèle pour un réflexe simple.
             if role == "fast":
                 gb = float(row.get("size") or 0) / (1024**3)
                 score += max(-0.25, min(0.18, (8.0 - gb) * 0.025))
-            candidates.append((score, row))
+            candidates.append((score, row, learned))
 
         if not candidates:
             fallback = str(
@@ -404,12 +420,13 @@ class ModelConstellation:
             }
 
         candidates.sort(key=lambda pair: pair[0], reverse=True)
-        score, row = candidates[0]
+        score, row, learned = candidates[0]
         route = {
             **row,
             "role": role,
             "score": round(score, 4),
-            "reason": "adaptive-role-router",
+            "reason": "adaptive-learned-role-router",
+            "learned": learned,
         }
         self.last_route = route
         self.route_counts[row["name"]] = self.route_counts.get(row["name"], 0) + 1
@@ -470,6 +487,59 @@ class ModelConstellation:
         values.append(max(0, int(latency_ms)))
         if len(values) > 32:
             del values[:-32]
+
+    def record_outcome(
+        self,
+        model: str,
+        role: str,
+        *,
+        success: bool,
+        latency_ms: int | float = 0,
+        quality: float | None = None,
+        source: str = "inference",
+    ) -> None:
+        self.scorecard.record(
+            model,
+            role,
+            success=success,
+            latency_ms=latency_ms,
+            quality=quality,
+            source=source,
+        )
+
+    def model_scorecard(self) -> list[dict[str, Any]]:
+        """Expose un résumé compact au Compute Mesh, sans prompts ni données utilisateur."""
+        rows: list[dict[str, Any]] = []
+        for item in self.installed[:32]:
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            profile = self.profile_for(name)
+            roles = set((profile.roles if profile else {}).keys())
+            roles.update({"general", "reasoning", "code", "tools", "research", "critic"})
+            learned_roles = {}
+            for role in sorted(roles):
+                metrics = self.scorecard.metrics(name, role)
+                static_score = float(
+                    profile.roles.get(role, profile.roles.get("general", 0.55))
+                    if profile else 0.46
+                )
+                learned_roles[role] = {
+                    "score": round(
+                        static_score
+                        + float(metrics.get("learned_bonus") or 0.0),
+                        4,
+                    ),
+                    "samples": int(metrics.get("calls") or 0),
+                    "success_rate": float(metrics.get("success_rate") or 0.5),
+                    "latency_ms": float(metrics.get("ema_latency_ms") or 0.0),
+                }
+            rows.append({
+                "name": name,
+                "family": str(item.get("family") or "unknown"),
+                "roles": learned_roles,
+            })
+        return rows
 
     async def pull(
         self,
@@ -546,6 +616,8 @@ class ModelConstellation:
             "last_route": dict(self.last_route),
             "last_ensemble": dict(self.last_ensemble),
             "route_counts": dict(self.route_counts),
+            "scorecard": self.scorecard.snapshot(),
+            "mesh_scorecard": self.model_scorecard(),
             "last_error": self.last_error,
             "principle": "AURA decides; models are replaceable specialist tools.",
         }
