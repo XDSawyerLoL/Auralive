@@ -59,19 +59,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish APK into AURA downloads
+      - name: Publish APK to Glide release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p downloads
-          cp build/glide-android/Quantic-Glide-Android-1.3.0-beta.apk downloads/Quantic-Glide-Android-1.3.0-beta.apk
-          cp build/glide-android/SHA256SUMS.txt downloads/Quantic-Glide-Android-1.3.0-beta.sha256
-          git config user.name "AURA Release Bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add downloads/
-          if git diff --cached --quiet; then
-            echo "APK déjà publié."
-            exit 0
+          set -euo pipefail
+          tag="quantic-glide-v1.3.0"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "Quantic Glide 1.3.0 — AURA 2.0" --notes "Quantic Glide 1.3.0 release assets."
           fi
-          git commit -m "Publish Quantic Glide Android 1.3.0 beta APK [skip ci]"
-          git push
+          gh release upload "$tag" \
+            build/glide-android/Quantic-Glide-Android-1.3.0-beta.apk \
+            build/glide-android/SHA256SUMS.txt \
+            --clobber
