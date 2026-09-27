@@ -74,12 +74,19 @@ export class LongHorizonMissionEngine {
   async init() {
     if (!config.longHorizonEnabled) return;
     // A crash must not leave a mission or step permanently "running".
-    await query(
-      `UPDATE aura_missions
-       SET status='waiting',updated_at=?
-       WHERE status='planning'`,
-      [now()],
-    ).catch(() => {});
+    const interruptedPlans = await query(
+      `SELECT m.id
+       FROM aura_missions m
+       LEFT JOIN aura_mission_steps s ON s.mission_id=m.id
+       WHERE m.status='planning'
+       GROUP BY m.id
+       HAVING COUNT(s.id)=0`,
+    ).catch(() => []);
+    for (const row of interruptedPlans) {
+      await this.planMission(row.id, { reason: 'resume-interrupted-plan' }).catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 4000);
+      });
+    }
     await query(
       `UPDATE aura_mission_steps s
        JOIN aura_initiatives i ON i.id=s.initiative_id
@@ -624,6 +631,17 @@ export class LongHorizonMissionEngine {
     if (!config.longHorizonEnabled) return { enabled: false };
     let mission = await this.ensureAutonomousMission();
     if (!mission) return { enabled: true, idle: true, reason: 'no mission candidate' };
+
+    if (String(mission.status || '') === 'planning') {
+      const stepCount = await one(
+        'SELECT COUNT(*) AS total FROM aura_mission_steps WHERE mission_id=?',
+        [mission.id],
+      );
+      if (Number(stepCount?.total || 0) === 0) {
+        await this.planMission(mission.id, { reason: 'resume-empty-plan' });
+        mission = await one('SELECT * FROM aura_missions WHERE id=?', [mission.id]);
+      }
+    }
 
     const reconciliation = await this.reconcileActiveStep(mission);
     mission = await one('SELECT * FROM aura_missions WHERE id=?', [mission.id]);
