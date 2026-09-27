@@ -180,9 +180,9 @@ test('living visualization uses calmer motion and a 30fps stability cap', () => 
 
 
 test('dashboard refresh falls back to redacted public kernel state', () => {
-  assert.match(dashboardScript, /api\('\/api\/auth\/session'\)/);
-  assert.match(dashboardScript, /privateView\?'\/api\/kernel\/soul':'\/api\/kernel\/public'/);
-  assert.match(dashboardScript, /Détails privés/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/auth\/session'\)/);
+  assert.match(DASHBOARD_SCRIPT, /privateView\?'\/api\/kernel\/soul':'\/api\/kernel\/public'/);
+  assert.match(DASHBOARD_SCRIPT, /Détails privés/);
 });
 
 test('dashboard exposes operational command-center state instead of decorative autonomy', () => {
