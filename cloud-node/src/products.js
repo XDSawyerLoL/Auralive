@@ -148,7 +148,7 @@ export async function seedQuanticProducts(commandCenter) {
         capabilities: product.capabilities,
         aura_bridge: product.aura_bridge,
         role: product.role || 'product',
-        parent: product.parent ?? 'aura',
+        parent: Object.prototype.hasOwnProperty.call(product, 'parent') ? product.parent : 'aura',
         specialization: product.specialization || '',
         writable_by_aura: true,
         modification_policy: 'branch-test-canary-promote',
