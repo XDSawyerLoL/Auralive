@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
+import { LongHorizonMissionEngine } from './long_horizon.js';
 
 const now = () => new Date().toISOString();
 
@@ -242,7 +243,7 @@ export function needsExternalEvidence(value) {
 }
 
 export class CommandCenter {
-  static VERSION = 'aura-command-center-v1';
+  static VERSION = 'aura-command-center-v2-long-horizon';
 
   constructor(
     kernel,
@@ -262,6 +263,7 @@ export class CommandCenter {
     this.dagCompiler = dagCompiler;
     this.graphExecutor = graphExecutor;
     this.expertBridge = expertBridge;
+    this.longHorizon = new LongHorizonMissionEngine(kernel);
     this.started = false;
     this.running = false;
     this.timer = null;
@@ -342,6 +344,7 @@ export class CommandCenter {
       );
     }
     await this.dedupeActiveInitiatives();
+    await this.longHorizon.init();
   }
 
   async start() {
@@ -2122,6 +2125,29 @@ export class CommandCenter {
           reason: 'initiative hourly budget reached',
         };
       }
+      const missionAdvance = await this.longHorizon.nextCandidate().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return { enabled: true, error: this.lastError };
+      });
+      if (missionAdvance?.candidate && missionAdvance?.step?.id) {
+        const missionCandidate = this.candidate(missionAdvance.candidate);
+        const persisted = await this.persistInitiative(missionCandidate);
+        const initiative = persisted.initiative;
+        await this.longHorizon.bindInitiative(missionAdvance.step.id, initiative.id);
+        const missionResult = await this.executeInitiative(initiative);
+        this.lastCycleAt = now();
+        this.lastError = '';
+        return {
+          ok: true,
+          trigger,
+          mode: 'long-horizon-mission',
+          reconciled,
+          promotions,
+          mission: missionAdvance.mission,
+          mission_step: missionAdvance.step,
+          initiative: missionResult,
+        };
+      }
       const expertCandidates = await this.consultFailedInitiatives(2).catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);
         return [];
@@ -2149,6 +2175,7 @@ export class CommandCenter {
           reconciled,
           promotions,
           expert_candidates: expertCandidates.length,
+          long_horizon: missionAdvance,
           skipped: true,
           reason: 'all candidates are cooling down',
           candidates: candidates.length,
@@ -2163,6 +2190,7 @@ export class CommandCenter {
         reconciled,
         promotions,
         expert_candidates: expertCandidates.length,
+        long_horizon: missionAdvance,
         initiative: result,
       };
     } catch (error) {
@@ -2171,6 +2199,25 @@ export class CommandCenter {
     } finally {
       this.running = false;
     }
+  }
+
+  async missions(limit = 20, status = '') {
+    return this.longHorizon.list(limit, status);
+  }
+
+  async mission(id) {
+    return this.longHorizon.get(id);
+  }
+
+  async createMission(input = {}) {
+    return this.longHorizon.createMission({
+      ...input,
+      trigger: String(input.trigger || 'private-api'),
+    });
+  }
+
+  async controlMission(id, action) {
+    return this.longHorizon.control(id, action);
   }
 
   async retryInitiative(id) {
@@ -2183,7 +2230,7 @@ export class CommandCenter {
   }
 
   async status({ publicView = true } = {}) {
-    const [counts, bridgeStatus, services] = await Promise.all([
+    const [counts, bridgeStatus, services, longHorizon] = await Promise.all([
       one(
         `SELECT COUNT(*) AS total,
           SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
@@ -2195,6 +2242,7 @@ export class CommandCenter {
       ),
       this.bridge?.status?.() || Promise.resolve({ enabled: false, worker_online: false }),
       this.services(),
+      this.longHorizon.status().catch(() => ({ enabled: false, error: 'unavailable' })),
     ]);
     const degraded = services.filter((item) => BAD_SERVICE_STATES.has(String(item.state || '').toLowerCase()));
     const fleet = this.fleetSnapshot || [];
@@ -2218,6 +2266,7 @@ export class CommandCenter {
         ? 'director-autonomous-operations'
         : 'continuous-native-initiative-with-bounded-execution',
       director_mode: config.directorModeEnabled,
+      long_horizon: longHorizon,
       autonomous_low_risk_promotion: config.directorAutoMergeLowRisk,
       creator_role: 'créateur et autorité fondatrice',
       aura_role: 'directrice opérationnelle de Quantic Sillage',
