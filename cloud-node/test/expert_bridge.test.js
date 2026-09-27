@@ -87,6 +87,7 @@ test('expert remediation becomes a native AURA initiative, not an external tool 
   assert.equal(candidate.action_payload.repository, 'XDSawyerLoL/QuanticMail');
   assert.match(candidate.objective, /Inspect and patch/);
   assert.match(candidate.rationale, /AURA reste l’autorité d’exécution/);
+  assert.equal(candidate.action_payload.expert_thread_id, 'failed-1');
 });
 
 test('high-risk external recommendations cannot directly become operator/evolution work', () => {
@@ -121,6 +122,9 @@ test('Command Center autonomously consults failed initiatives and exposes Expert
   assert.match(commandSource, /async consultFailedInitiatives\(/);
   assert.match(commandSource, /expert-consultation/);
   assert.match(commandSource, /expert-remediation-proposed/);
+  assert.match(commandSource, /expert-thread/);
+  assert.match(commandSource, /expert_thread_id/);
+  assert.match(commandSource, /expertBridgeMaxRoundsPerIncident/);
   assert.match(commandSource, /expertCandidates/);
   assert.match(commandSource, /expert_bridge:/);
 });
@@ -131,6 +135,7 @@ test('Expert Bridge settings and private diagnostic endpoints exist', () => {
     'AURA_EXPERT_API_KEY',
     'AURA_EXPERT_MODEL',
     'AURA_EXPERT_MAX_CALLS_PER_HOUR',
+    'AURA_EXPERT_MAX_ROUNDS_PER_INCIDENT',
     'AURA_EXPERT_COOLDOWN_SECONDS',
     'AURA_EXPERT_MIN_CONFIDENCE',
   ]) {
