@@ -3,6 +3,16 @@ import { databaseConfigured, one, query } from './db.js';
 
 const COMPLEX_ROLES = new Set(['reasoning', 'code', 'research', 'critic', 'security', 'evolution', 'math']);
 const SAFE_OPENROUTER_MODEL = /^(?:openrouter\/free|[a-z0-9._-]+\/[a-z0-9._:-]+:free)$/i;
+const EXCLUDED_SPECIALIST_TERMS = [
+  'content safety',
+  'prompt guard',
+  'moderation',
+  'embedding',
+  'rerank',
+  'transcription',
+  'speech-to-text',
+  'text-to-speech',
+];
 
 function roleName(value) {
   const role = String(value || 'auto').trim().toLowerCase().slice(0, 80);
@@ -28,8 +38,68 @@ function todayUtc() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function exactZero(value) {
+  if (value == null || value === '') return false;
+  const number = Number(value);
+  return Number.isFinite(number) && number === 0;
+}
+
+function modelText(model) {
+  return [
+    model?.id,
+    model?.name,
+    model?.description,
+  ].map((item) => String(item || '').toLowerCase()).join(' ');
+}
+
+function roleAffinity(model, role) {
+  const text = modelText(model);
+  const keywords = {
+    code: ['code', 'coding', 'software', 'terminal', 'developer', 'agentic'],
+    evolution: ['code', 'coding', 'software', 'agentic', 'tool', 'workflow'],
+    reasoning: ['reasoning', 'thinking', 'logic', 'science', 'problem solving'],
+    critic: ['reasoning', 'verification', 'critic', 'analysis', 'thinking'],
+    math: ['math', 'mathematics', 'reasoning', 'science'],
+    research: ['research', 'knowledge', 'long-context', 'document', 'reasoning'],
+    security: ['security', 'cyber', 'reasoning', 'code'],
+    conversation: ['conversation', 'general-purpose', 'multilingual', 'instruction'],
+    translation: ['translation', 'multilingual', 'language'],
+  }[roleName(role)] || ['general-purpose', 'reasoning', 'instruction'];
+
+  const hits = keywords.reduce((sum, keyword) => sum + (text.includes(keyword) ? 1 : 0), 0);
+  return Math.min(1, hits / Math.max(2, Math.ceil(keywords.length / 2)));
+}
+
+function modelEligible(row) {
+  const id = String(row?.id || '').trim();
+  if (!isGuaranteedFreeOpenRouterModel(id)) return false;
+  if (!exactZero(row?.pricing?.prompt) || !exactZero(row?.pricing?.completion)) return false;
+  const outputs = Array.isArray(row?.architecture?.output_modalities)
+    ? row.architecture.output_modalities.map((item) => String(item).toLowerCase())
+    : [];
+  if (outputs.length && !outputs.includes('text')) return false;
+  const text = modelText(row);
+  if (id !== 'openrouter/free' && EXCLUDED_SPECIALIST_TERMS.some((term) => text.includes(term))) {
+    return false;
+  }
+  return true;
+}
+
 export function isGuaranteedFreeOpenRouterModel(model) {
   return SAFE_OPENROUTER_MODEL.test(String(model || '').trim());
+}
+
+export function isTrustedOpenRouterEndpoint(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return (
+      url.protocol === 'https:'
+      && url.hostname.toLowerCase() === 'openrouter.ai'
+      && url.pathname.replace(/\/$/, '') === '/api/v1'
+    );
+  } catch {
+    return false;
+  }
 }
 
 export class ZeroCostFederation {
@@ -42,6 +112,10 @@ export class ZeroCostFederation {
     this.lastRole = '';
     this.quarantined = new Set();
     this.memoryUsage = new Map();
+    this.catalog = [];
+    this.catalogUpdatedAt = 0;
+    this.catalogError = '';
+    this.selectionCounter = 0;
   }
 
   get enabled() {
@@ -49,11 +123,12 @@ export class ZeroCostFederation {
       config.zeroCostMode
       && config.freeFederationEnabled
       && config.openRouterApiKey
-      && this.#safeOpenRouterModels().length,
+      && isTrustedOpenRouterEndpoint(config.openRouterBaseUrl)
+      && this.#configuredModels().length,
     );
   }
 
-  #safeOpenRouterModels() {
+  #configuredModels() {
     return config.openRouterFreeModels
       .map((item) => String(item || '').trim())
       .filter(Boolean)
@@ -106,7 +181,7 @@ export class ZeroCostFederation {
         [provider, date, new Date().toISOString()],
       );
     } catch {
-      // The provider itself still has a hard free-model/rate-limit boundary.
+      // OpenRouter itself still enforces its own free-plan/model limits.
     }
   }
 
@@ -143,7 +218,7 @@ export class ZeroCostFederation {
       await query(
         `INSERT INTO aura_free_model_scorecards(
            provider,model,role,calls,successes,failures,ema_latency_ms,ema_quality,last_error,updated_at
-         ) VALUES(?,?,?,1,?,?,?, ?, ?, ?)
+         ) VALUES(?,?,?,1,?,?,?,?,?,?)
          ON DUPLICATE KEY UPDATE
            calls=calls+1,
            successes=successes+VALUES(successes),
@@ -176,11 +251,117 @@ export class ZeroCostFederation {
     }
   }
 
+  async #refreshCatalog() {
+    if (!config.freeFederationDiscoverModels) return this.catalog;
+    const freshForMs = config.freeFederationCatalogTtlSeconds * 1000;
+    if (this.catalog.length && Date.now() - this.catalogUpdatedAt < freshForMs) return this.catalog;
+    try {
+      const response = await fetch(`${config.openRouterBaseUrl}/models`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${config.openRouterApiKey}`,
+        },
+        signal: AbortSignal.timeout(Math.min(config.freeFederationTimeoutMs, 15000)),
+      });
+      const raw = await response.text();
+      if (!response.ok) throw new Error(`OpenRouter catalog HTTP ${response.status}: ${raw.slice(0, 300)}`);
+      const payload = raw ? JSON.parse(raw) : {};
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+      this.catalog = rows
+        .filter(modelEligible)
+        .sort((a, b) => Number(b?.context_length || 0) - Number(a?.context_length || 0))
+        .slice(0, config.freeFederationMaxCatalogModels);
+      this.catalogUpdatedAt = Date.now();
+      this.catalogError = '';
+    } catch (error) {
+      this.catalogError = safeText(error);
+    }
+    return this.catalog;
+  }
+
+  async #learnedScores(role, ids) {
+    if (!databaseConfigured() || !ids.length) return new Map();
+    try {
+      const placeholders = ids.map(() => '?').join(',');
+      const rows = await query(
+        `SELECT model,calls,successes,failures,ema_latency_ms,ema_quality
+         FROM aura_free_model_scorecards
+         WHERE provider='openrouter' AND role=? AND model IN (${placeholders})`,
+        [roleName(role), ...ids],
+      );
+      return new Map(rows.map((row) => [String(row.model), row]));
+    } catch {
+      return new Map();
+    }
+  }
+
+  async #selectModel(role) {
+    const configured = this.#configuredModels();
+    const catalog = await this.#refreshCatalog();
+    const verified = new Map(catalog.map((row) => [String(row.id), row]));
+
+    // openrouter/free is an official zero-priced router and is retained as a safe fallback.
+    const candidates = [];
+    if (config.freeFederationDiscoverModels) {
+      for (const row of catalog) {
+        if (row.id !== 'openrouter/free') candidates.push(row);
+      }
+    }
+    for (const id of configured) {
+      if (id === 'openrouter/free') continue;
+      const row = verified.get(id);
+      if (row && !candidates.some((item) => item.id === id)) candidates.push(row);
+    }
+
+    if (!candidates.length) return 'openrouter/free';
+
+    const learned = await this.#learnedScores(role, candidates.map((row) => row.id));
+    const ranked = candidates.map((row) => {
+      const stats = learned.get(row.id);
+      const calls = Number(stats?.calls || 0);
+      const successes = Number(stats?.successes || 0);
+      const successRate = (successes + 1) / (calls + 2);
+      const quality = stats?.ema_quality == null ? 0.5 : clamp01(stats.ema_quality);
+      const latencyMs = Number(stats?.ema_latency_ms || 0);
+      const latencyBonus = latencyMs > 0 ? Math.max(-0.08, 0.08 - latencyMs / 120000) : 0;
+      const contextBonus = Math.min(0.08, Math.log10(Math.max(1000, Number(row.context_length || 0))) / 100);
+      const tools = Array.isArray(row.supported_parameters) && row.supported_parameters.includes('tools') ? 0.04 : 0;
+      const affinity = roleAffinity(row, role);
+      return {
+        id: row.id,
+        score: (0.28 * successRate) + (0.16 * quality) + (0.38 * affinity) + latencyBonus + contextBonus + tools,
+        calls,
+      };
+    }).sort((a, b) => b.score - a.score || a.calls - b.calls || a.id.localeCompare(b.id));
+
+    this.selectionCounter += 1;
+    const exploreEvery = Math.max(2, Math.round(1 / Math.max(0.01, config.freeFederationExploration)));
+    if (ranked.length > 1 && this.selectionCounter % exploreEvery === 0) {
+      return ranked[1].id;
+    }
+    return ranked[0].id;
+  }
+
+  async #assertCatalogFree(model) {
+    if (model === 'openrouter/free') return true;
+    const catalog = await this.#refreshCatalog();
+    const row = catalog.find((item) => String(item?.id || '') === model);
+    if (!row || !modelEligible(row)) {
+      throw new Error(`Blocked model without current zero-price proof: ${model}`);
+    }
+    return true;
+  }
+
   async #openRouter(prompt, system, maxTokens, role, requestedModel) {
     if (this.quarantined.has('openrouter')) throw new Error('OpenRouter free provider quarantined');
+    if (!isTrustedOpenRouterEndpoint(config.openRouterBaseUrl)) {
+      throw new Error('Blocked untrusted OpenRouter endpoint');
+    }
     if (!isGuaranteedFreeOpenRouterModel(requestedModel)) {
       throw new Error('Blocked non-guaranteed-free OpenRouter model');
     }
+    await this.#assertCatalogFree(requestedModel);
 
     await this.#reserve('openrouter');
     const started = Date.now();
@@ -253,39 +434,10 @@ export class ZeroCostFederation {
     }
   }
 
-  async #preferredRequestedModel(role) {
-    const models = this.#safeOpenRouterModels();
-    if (!models.length) return '';
-    if (models.length === 1) return models[0];
-
-    // Learned technical reliability can choose among explicitly-free variants.
-    // openrouter/free remains the safe catch-all when no useful history exists.
-    try {
-      if (!databaseConfigured()) throw new Error('ledger-disabled');
-      const placeholders = models.map(() => '?').join(',');
-      const rows = await query(
-        `SELECT model,calls,successes,failures,ema_latency_ms,ema_quality
-         FROM aura_free_model_scorecards
-         WHERE provider='openrouter' AND role=? AND model IN (${placeholders})
-         ORDER BY
-           (successes+1)/(calls+2) DESC,
-           COALESCE(ema_quality,0.5) DESC,
-           CASE WHEN ema_latency_ms<=0 THEN 999999 ELSE ema_latency_ms END ASC
-         LIMIT 1`,
-        [roleName(role), ...models],
-      );
-      const learned = String(rows?.[0]?.model || '');
-      if (learned && models.includes(learned)) return learned;
-    } catch {
-      // Fall back to the first intrinsically-free model.
-    }
-    return models[0];
-  }
-
   async generate(prompt, system, maxTokens = 700, taskRole = 'auto') {
     if (!this.enabled) return null;
     const role = roleName(taskRole);
-    const requestedModel = await this.#preferredRequestedModel(role);
+    const requestedModel = await this.#selectModel(role);
     const started = Date.now();
     try {
       const result = await this.#openRouter(prompt, system, maxTokens, role, requestedModel);
@@ -297,6 +449,7 @@ export class ZeroCostFederation {
       this.lastError = '';
       return result;
     } catch (error) {
+      this.lastRole = role;
       this.lastLatencyMs = Date.now() - started;
       this.lastError = safeText(error);
       throw error;
@@ -306,14 +459,19 @@ export class ZeroCostFederation {
   snapshot() {
     const date = todayUtc();
     const usage = this.memoryUsage.get(`openrouter:${date}`) || { requests: 0, failures: 0 };
-    const safeModels = this.#safeOpenRouterModels();
+    const configured = this.#configuredModels();
     return {
       enabled: this.enabled,
       zero_cost_mode: Boolean(config.zeroCostMode),
       provider: 'openrouter-free',
+      endpoint_verified: isTrustedOpenRouterEndpoint(config.openRouterBaseUrl),
       api_key_configured: Boolean(config.openRouterApiKey),
-      configured_models: safeModels,
+      configured_models: configured,
       rejected_models: config.openRouterFreeModels.filter((item) => !isGuaranteedFreeOpenRouterModel(item)),
+      auto_discovery: Boolean(config.freeFederationDiscoverModels),
+      verified_catalog_models: this.catalog.length,
+      catalog_updated_at: this.catalogUpdatedAt ? new Date(this.catalogUpdatedAt).toISOString() : '',
+      catalog_error: this.catalogError,
       max_requests_per_day: config.freeFederationMaxRequestsPerDay,
       process_requests_today: Number(usage.requests || 0),
       process_failures_today: Number(usage.failures || 0),
@@ -325,7 +483,7 @@ export class ZeroCostFederation {
       last_latency_ms: this.lastLatencyMs,
       last_error: this.lastError,
       quarantined: [...this.quarantined],
-      financial_guard: 'intrinsically-free-models-only',
+      financial_guard: 'live-zero-price-proof+intrinsically-free-router',
     };
   }
 }
