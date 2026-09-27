@@ -731,7 +731,7 @@ export class ExecutionBridge {
       SUM(CASE WHEN status='error' THEN 1 ELSE 0 END) AS errors
       FROM aura_execution_jobs`);
     const worker = await one(
-      `SELECT worker_id,capabilities,model,voice,version,last_seen_at,last_seen_ms
+      `SELECT worker_id,capabilities,model,voice,version,resources,last_seen_at,last_seen_ms
        FROM aura_execution_workers ORDER BY last_seen_ms DESC LIMIT 1`,
     );
     const online = Boolean(
@@ -750,6 +750,9 @@ export class ExecutionBridge {
         model: worker.model || '',
         voice: worker.voice || '',
         version: worker.version || '',
+        host_product: String(parseJson(worker.resources, {})?.runtime_host_product || ''),
+        runtime_role: String(parseJson(worker.resources, {})?.runtime_role || 'aura-runtime'),
+        runtime_packaging: String(parseJson(worker.resources, {})?.runtime_packaging || ''),
         last_seen_at: worker.last_seen_at || '',
       } : null,
       mesh: {

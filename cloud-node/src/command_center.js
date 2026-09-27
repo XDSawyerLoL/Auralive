@@ -911,7 +911,9 @@ export class CommandCenter {
         worker_online: Boolean(bridgeStatus.worker_online),
         worker_version: String(bridgeStatus?.worker?.version || ''),
         execution_plane: 'aura-runtime',
-        compatibility_host: String(bridgeStatus?.worker?.host_product || 'quantic-studio'),
+        runtime_role: String(bridgeStatus?.worker?.runtime_role || 'aura-runtime'),
+        runtime_packaging: String(bridgeStatus?.worker?.runtime_packaging || ''),
+        compatibility_host: String(bridgeStatus?.worker?.host_product || ''),
       },
     );
     const horizonStatus = this.kernel?.horizon?.status?.() || {};

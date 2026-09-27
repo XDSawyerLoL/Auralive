@@ -89,6 +89,11 @@ def test_embedded_worker_identifies_as_aura_runtime_compatibility_host():
     assert worker.VERSION == "aura-runtime-worker-v2"
     assert worker.worker_id.startswith("aura-runtime-")
 
+    profile = worker._resource_profile()
+    assert profile["runtime_role"] == "aura-runtime"
+    assert profile["runtime_host_product"] == "quantic-studio"
+    assert profile["runtime_packaging"] == "embedded-compatibility-host"
+
 
 @pytest.mark.asyncio
 async def test_worker_runs_local_language_engine():
