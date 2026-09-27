@@ -44,7 +44,7 @@ export function explicitUserIntent(text) {
 }
 
 export class CuriosityEngine {
-  static VERSION = 'aura-curiosity-engine-v1';
+  static VERSION = 'aura-curiosity-engine-v2-director';
 
   constructor({ kernel, webSubstrate, commandCenter, ai }) {
     this.kernel = kernel;
@@ -132,9 +132,10 @@ export class CuriosityEngine {
     reason = '',
     source = 'curiosity',
     autoResearch = false,
+    dedupeHours = 24,
   } = {}) {
     const normalized = normalizeQuestion(question);
-    if (!normalized || await this.seenRecently(normalized)) return null;
+    if (!normalized || await this.seenRecently(normalized, dedupeHours)) return null;
     const context = {
       target: String(target).slice(0, 40),
       domain: String(domain).slice(0, 80),
@@ -142,6 +143,7 @@ export class CuriosityEngine {
       reason: String(reason || '').slice(0, 1200),
       source: String(source || 'curiosity').slice(0, 80),
       auto_research: Boolean(autoResearch),
+      dedupe_hours: Math.max(1, Math.min(Number(dedupeHours || 24), 168)),
       engine: CuriosityEngine.VERSION,
     };
     await this.kernel.trace(
@@ -206,8 +208,21 @@ export class CuriosityEngine {
     ]);
 
     const candidates = [];
+    const hourSlot = Math.floor(Date.now() / 3600_000);
+    const portfolioAngles = [
+      'expérience utilisateur et frictions réelles',
+      'intégrations entre produits Quantic',
+      'performance, fiabilité et dette technique',
+      'nouveaux usages rendus possibles par les modèles et agents récents',
+      'confidentialité, sécurité et souveraineté utilisateur',
+      'distribution, adoption et différenciation face au marché',
+      'automatisation opérationnelle et réduction du travail humain répétitif',
+      'interopérabilité, standards ouverts et portabilité',
+    ];
+    const portfolioAngle = portfolioAngles[hourSlot % portfolioAngles.length];
 
-    for (const service of services) {
+    for (let serviceIndex = 0; serviceIndex < services.length; serviceIndex += 1) {
+      const service = services[serviceIndex];
       if (!service.enabled) continue;
       const state = String(service.state || 'unknown').toLowerCase();
       const stale = ageMs(service.last_observed_at) > config.curiosityProductStaleSeconds * 1000;
@@ -218,6 +233,7 @@ export class CuriosityEngine {
           domain: service.id,
           priority: Math.min(0.98, 0.74 + Number(service.criticality || 0.5) * 0.20),
           reason: service.state_detail || 'État produit dégradé.',
+          dedupeHours: 4,
         });
       } else if (stale) {
         candidates.push({
@@ -226,14 +242,17 @@ export class CuriosityEngine {
           domain: service.id,
           priority: 0.68,
           reason: 'Observation produit absente ou ancienne.',
+          dedupeHours: 6,
         });
       } else {
+        const serviceAngle = portfolioAngles[(hourSlot + serviceIndex) % portfolioAngles.length];
         candidates.push({
-          question: `Quelles capacités de ${service.name} AURA pourrait-elle exploiter ou améliorer sans dupliquer une fonction déjà présente ailleurs dans Quantic`,
+          question: `Sur l’angle « ${serviceAngle} », quelle amélioration concrète de ${service.name} créerait le plus de valeur pour l’écosystème Quantic et comment AURA pourrait-elle la tester elle-même`,
           target: 'system',
           domain: service.id,
-          priority: 0.54,
-          reason: 'Recherche d’intégration inter-produit.',
+          priority: 0.58,
+          reason: 'Exploration tournante du portefeuille produit.',
+          dedupeHours: 6,
         });
       }
     }
@@ -247,6 +266,7 @@ export class CuriosityEngine {
         priority: Math.min(0.92, Math.max(0.66, Number(topIntention.priority || 0.5) + 0.08)),
         reason: 'Une intention active doit être confrontée au monde extérieur.',
         autoResearch: true,
+        dedupeHours: 4,
       });
     }
 
@@ -276,12 +296,13 @@ export class CuriosityEngine {
     }
 
     candidates.push({
-      question: 'Quelles évolutions techniques récentes pourraient améliorer AURA, son Web Substrate, son Mesh, son routage de modèles ou sa sécurité sans augmenter sa dépendance à une plateforme centrale',
+      question: `Quelles informations ou évolutions récentes disponibles sur Internet autour de « ${portfolioAngle} » pourraient donner un avantage concret à Quantic Sillage ou révéler un risque que nous n’avons pas encore traité`,
       target: 'web',
-      domain: 'aura-rd',
-      priority: 0.64,
-      reason: 'Veille technique autonome permanente.',
+      domain: 'quantic-sillage-direction',
+      priority: 0.72,
+      reason: 'Veille exécutive autonome et tournante du portefeuille Quantic Sillage.',
       autoResearch: true,
+      dedupeHours: 2,
     });
 
     return candidates.sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
