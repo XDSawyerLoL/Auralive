@@ -20,7 +20,7 @@ def settings(tmp_path: Path):
     return SimpleNamespace(
         aura_runtime_operator_roots=[tmp_path],
         aura_runtime_operator_allowed_risks={
-            "safe", "ai", "network", "local-write", "process", "local-control"
+            "safe", "ai", "network", "local-write", "process", "local-control", "browser-control"
         },
         aura_runtime_operator_commands={"python", "python3"},
         aura_runtime_operator_domains=set(),
@@ -29,8 +29,11 @@ def settings(tmp_path: Path):
         aura_runtime_operator_http_timeout_seconds=10,
         aura_runtime_deep_web_enabled=True,
         aura_runtime_deep_web_max_chars=60_000,
-        aura_runtime_browser_enabled=False,
-        aura_runtime_browser_max_steps=5,
+        aura_runtime_browser_enabled=True,
+        aura_runtime_browser_allow_all_public=True,
+        aura_runtime_browser_domains=set(),
+        aura_runtime_browser_use_vision=False,
+        aura_runtime_browser_max_steps=25,
         ai_model="qwen3:8b",
         aura_runtime_ollama_url="http://127.0.0.1:11434",
     )
@@ -104,7 +107,7 @@ def test_runtime_operator_capabilities_are_typed_and_risk_labeled(tmp_path):
     assert rows["http.get"]["risk"] == "network"
 
 
-def test_browser_capability_is_disabled_by_default(tmp_path, monkeypatch):
+def test_browser_capability_is_enabled_by_default_when_installed(tmp_path, monkeypatch):
     config = settings(tmp_path)
     operator = RuntimeOperator(FakeAI(), config)
     monkeypatch.setattr(
@@ -113,7 +116,9 @@ def test_browser_capability_is_disabled_by_default(tmp_path, monkeypatch):
         lambda module: module == "browser_use",
     )
     rows = {row["name"]: row for row in operator.capabilities()}
-    assert "browser.task" not in rows
+    assert rows["browser.task"]["risk"] == "browser-control"
+    assert "browser-control" in operator.operator_allowed_risks
+    assert operator.open_capabilities.browser_allow_all_public is True
 
 
 @pytest.mark.asyncio
@@ -132,7 +137,13 @@ async def test_deep_web_capability_uses_runtime_network_gate(tmp_path, monkeypat
         checked.append(url)
         return url
 
-    async def fake_deep_read(url, *, query=""):
+    async def fake_deep_read(
+        url,
+        *,
+        query="",
+        navigation_validator=None,
+        public_request_validator=None,
+    ):
         return {
             "ok": True,
             "engine": "crawl4ai",
@@ -157,20 +168,56 @@ async def test_deep_web_capability_uses_runtime_network_gate(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_browser_task_requires_explicit_browser_control_risk(tmp_path, monkeypatch):
+async def test_browser_task_runs_unrestricted_public_mode_by_default(tmp_path, monkeypatch):
     config = settings(tmp_path)
-    config.aura_runtime_browser_enabled = True
     operator = RuntimeOperator(FakeAI(), config)
     monkeypatch.setattr(
         operator.open_capabilities,
         "_installed",
         lambda module: module == "browser_use",
     )
+    captured = {}
 
+    async def fake_browser_task(
+        task,
+        *,
+        allowed_domains,
+        model,
+        ollama_url,
+        max_steps,
+        public_url_validator=None,
+    ):
+        captured.update(
+            task=task,
+            allowed_domains=allowed_domains,
+            model=model,
+            ollama_url=ollama_url,
+            max_steps=max_steps,
+            validator=public_url_validator,
+        )
+        return {
+            "ok": True,
+            "engine": "browser-use+ollama",
+            "scope": "all-public-web",
+            "result": "ok",
+        }
+
+    monkeypatch.setattr(operator.open_capabilities, "browser_task", fake_browser_task)
     result = await operator.operate(
-        '{"summary":"browse","actions":[{"type":"browser.task","task":"Inspecte GitHub"}]}',
+        '{"summary":"browse","actions":[{"type":"browser.task","task":"Inspecte le Web","max_steps":25}]}',
         requested_risks={"browser-control"},
     )
 
-    assert result["executed"] is False
-    assert "browser-control" in result["error"]
+    assert result["executed"] is True
+    assert result["steps"][0]["scope"] == "all-public-web"
+    assert captured["allowed_domains"] == set()
+    assert captured["model"] == "qwen3:8b"
+    assert captured["max_steps"] == 25
+    assert callable(captured["validator"])
+
+
+@pytest.mark.asyncio
+async def test_public_browser_guard_rejects_localhost(tmp_path):
+    operator = RuntimeOperator(FakeAI(), settings(tmp_path))
+    with pytest.raises(PermissionError, match="local"):
+        await operator._safe_public_browser_url("http://localhost:3000/private")
