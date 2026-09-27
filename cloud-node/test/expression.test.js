@@ -44,6 +44,8 @@ test('language model receives an already decided speech plan', async () => {
   const answer = await expression.verbalize(plan);
   assert.equal(answer, 'Je poursuis la validation du noyau.');
   assert.equal(calls.length, 1);
-  assert.match(calls[0].system, /pas son cerveau/i);
+  assert.match(calls[0].system, /voix d’AURA|voix d'AURA/i);
   assert.match(calls[0].prompt, /Tu n’as aucun droit de changer les faits/i);
+  assert.match(calls[0].prompt, /continuité de conversation/i);
+  assert.match(calls[0].prompt, /Directrice opérationnelle de Quantic Sillage/i);
 });
