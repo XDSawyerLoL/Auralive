@@ -164,20 +164,21 @@ export class CloudVoice {
   }
 
   get enabled() {
-    return Boolean(this.apiKey && config.voiceCloudEnabled);
+    return Boolean(this.apiKey && config.voiceCloudEnabled && !config.zeroCostMode);
   }
 
   diagnostic() {
     return {
       version: CloudVoice.VERSION,
       enabled: this.enabled,
-      engine: this.enabled ? 'gemini-cloud-tts' : 'unavailable',
+      engine: this.enabled ? 'gemini-cloud-tts' : (config.zeroCostMode ? 'blocked-zero-cost' : 'unavailable'),
       voice: this.voice,
       model: this.model,
       last_error: this.lastError,
       last_generation_ms: this.lastGenerationMs,
       generated_count: this.generatedCount,
       profile: 'mairaiy',
+      zero_cost_mode: Boolean(config.zeroCostMode),
     };
   }
 
