@@ -58,6 +58,31 @@ def test_fleet_path_policy_blocks_sensitive_build_and_secret_surfaces():
     assert allowed is False
 
 
+def test_fleet_rejects_multiple_edits_to_the_same_file_before_submission():
+    fleet = EvolutionFleet(FakeLab())
+    fleet._read_file = lambda repository, path, branch: ("const value = 1;\n", "blob-sha")
+    result = fleet.validate_candidate(
+        "XDSawyerLoL/QuanticMail",
+        "main",
+        {
+            "edits": [
+                {
+                    "path": "standalone-relay/main.ts",
+                    "before": "const value = 1;",
+                    "after": "const value = 2;",
+                },
+                {
+                    "path": "standalone-relay/main.ts",
+                    "before": "const value = 1;",
+                    "after": "const value = 3;",
+                },
+            ]
+        },
+    )
+    assert result["ok"] is False
+    assert any("plusieurs éditions du même fichier" in issue for issue in result["policy_issues"])
+
+
 def test_fleet_v1_never_declares_cross_product_auto_merge():
     fleet = EvolutionFleet(FakeLab())
     assert fleet.VERSION == "aura-evolution-fleet-v1"
