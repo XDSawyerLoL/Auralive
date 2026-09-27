@@ -11,6 +11,9 @@ Il n'est pas Quantic Studio. Quantic Studio peut l'héberger comme adaptateur de
 - leases de jobs et reprise après expiration;
 - Compute Mesh déterministe;
 - inférence locale via Ollama;
+- constellation de modèles adaptative : routage par spécialité, mémoire persistante des résultats et exploration bornée;
+- Mixture-of-Agents local : plusieurs spécialistes peuvent proposer une réponse puis un modèle critique la synthétise;
+- export au Compute Mesh d'un score de compétence par modèle/rôle, sans exposer les prompts ni le contenu utilisateur;
 - participation au Mesh si l'utilisateur l'active explicitement;
 - Evolution Fleet inter-produits via GitHub, avec allowlist, branches dédiées et PR uniquement;
 - opérateur local natif: inspection, fichiers bornés, process allowlistés et HTTP technique contrôlé.
@@ -20,6 +23,18 @@ Evolution Fleet appartient désormais directement à AURA Runtime et peut foncti
 L'opérateur local appartient désormais à AURA Runtime. Quantic Studio conserve son opérateur métier historique comme adaptateur de compatibilité, mais un Runtime standalone sait agir sans Studio.
 
 Les capacités voix et image restent encore injectées par des adaptateurs d'hôte à ce stade.
+
+## Constellation adaptative
+
+Le Runtime ne considère plus un modèle comme « le cerveau ». AURA choisit un moteur selon la mission, puis apprend de ses résultats.
+
+- `AURA_RUNTIME_MOA_ENABLED=true` active la coopération locale pour les tâches complexes;
+- `AURA_RUNTIME_MOA_MAX_MODELS` borne le nombre de spécialistes;
+- `AURA_RUNTIME_MOA_PARALLEL=false` est le défaut prudent pour éviter de saturer la RAM;
+- `AURA_RUNTIME_MODEL_SCORECARD_FILE` conserve les performances par modèle et par rôle;
+- `AURA_RUNTIME_MODEL_EXPLORATION` autorise un faible taux d'exploration afin qu'un modèle peu essayé puisse encore prouver qu'il est meilleur.
+
+Les échecs, latences et retours qualité font évoluer le score. Les profils statiques restent un a priori, pas une vérité définitive.
 
 ## Démarrage
 
