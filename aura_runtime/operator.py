@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 
 import aiohttp
 
+from .open_capabilities import OpenCapabilities
+
 
 _ACTIONS: dict[str, dict[str, str]] = {
     "system.info": {
@@ -49,6 +51,16 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "title": "Lire une ressource HTTPS publique",
         "category": "network",
         "risk": "network",
+    },
+    "web.deep_read": {
+        "title": "Lire une page Web dynamique avec Crawl4AI",
+        "category": "web",
+        "risk": "network",
+    },
+    "browser.task": {
+        "title": "Piloter un navigateur local borné aux domaines autorisés",
+        "category": "browser",
+        "risk": "browser-control",
     },
 }
 
@@ -87,6 +99,7 @@ class RuntimeOperator:
         self.settings = settings
         self.last_error = ""
         self.last_run_at = ""
+        self.open_capabilities = OpenCapabilities(settings)
 
     @property
     def operator_allowed_risks(self) -> set[str]:
@@ -138,10 +151,24 @@ class RuntimeOperator:
             values = list(raw or [])
         return {str(item).strip().casefold().rstrip(".") for item in values if str(item).strip()}
 
+    def _action_available(self, name: str) -> bool:
+        if name == "web.deep_read":
+            return bool(
+                self.open_capabilities.deep_web_enabled
+                and self.open_capabilities.crawl4ai_available
+            )
+        if name == "browser.task":
+            return bool(
+                self.open_capabilities.browser_enabled
+                and self.open_capabilities.browser_use_available
+            )
+        return True
+
     def capabilities(self) -> list[dict[str, str]]:
         return [
             {"name": name, **definition}
             for name, definition in sorted(_ACTIONS.items())
+            if self._action_available(name)
         ]
 
     def _resolve_path(self, value: str | Path) -> Path:
@@ -175,7 +202,7 @@ class RuntimeOperator:
                 "description": meta["title"],
             }
             for name, meta in _ACTIONS.items()
-            if meta["risk"] in allowed_risks
+            if meta["risk"] in allowed_risks and self._action_available(name)
         ]
         if not catalog:
             return {"summary": "Aucune capacité locale autorisée.", "actions": []}
@@ -183,7 +210,7 @@ class RuntimeOperator:
         prompt = (
             "Tu pilotes AURA Runtime. Transforme la mission en un plan LOCAL minimal. "
             "Retourne UNIQUEMENT JSON: "
-            '{"summary":"...","actions":[{"type":"...","path":"","content":"","command":"","args":[],"cwd":"","url":""}]}. '
+            '{"summary":"...","actions":[{"type":"...","path":"","content":"","command":"","args":[],"cwd":"","url":"","query":"","task":"","max_steps":4}]}. '
             f"Maximum {max_steps} actions. Utilise uniquement le catalogue fourni. "
             "N’invente jamais de shell, élévation de privilèges, secret, credential ou commande non listée. "
             "Préfère inspecter avant de modifier. Les tests/commandes de validation viennent après une écriture.\n\n"
@@ -237,6 +264,8 @@ class RuntimeOperator:
         definition = _ACTIONS.get(kind)
         if not definition:
             raise ValueError(f"Capacité opérateur inconnue: {kind}")
+        if not self._action_available(kind):
+            raise RuntimeError(f"Capacité opérateur non disponible sur ce Runtime: {kind}")
         risk = definition["risk"]
         if risk not in allowed_risks:
             raise PermissionError(f"Risque {risk} non autorisé pour {kind}")
@@ -395,6 +424,40 @@ class RuntimeOperator:
                         "content_type": content_type[:200],
                         "text": raw.decode("utf-8", errors="replace"),
                     }, None
+
+        if kind == "web.deep_read":
+            url = await self._safe_public_url(str(action.get("url") or ""))
+            result = await self.open_capabilities.deep_read(
+                url,
+                query=str(action.get("query") or ""),
+            )
+            return {"type": kind, **result}, None
+
+        if kind == "browser.task":
+            result = await self.open_capabilities.browser_task(
+                str(action.get("task") or ""),
+                allowed_domains=self.allowed_domains,
+                model=str(getattr(self.settings, "ai_model", "") or ""),
+                ollama_url=str(
+                    getattr(
+                        self.settings,
+                        "aura_runtime_ollama_url",
+                        getattr(self.settings, "ai_base_url", ""),
+                    )
+                    or ""
+                ),
+                max_steps=max(
+                    1,
+                    min(
+                        int(
+                            action.get("max_steps")
+                            or getattr(self.settings, "aura_runtime_browser_max_steps", 5)
+                        ),
+                        8,
+                    ),
+                ),
+            )
+            return {"type": kind, **result}, None
 
         raise ValueError(f"Capacité non implémentée: {kind}")
 
