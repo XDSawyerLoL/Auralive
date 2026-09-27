@@ -41,3 +41,11 @@ test('bridge exposes AURA Runtime host metadata without assuming Studio', () => 
   assert.match(bridgeSource, /runtime_role:/);
   assert.match(bridgeSource, /runtime_packaging:/);
 });
+
+test('bridge claims are filtered by worker-supported job kinds', () => {
+  assert.match(serverSource, /job_kinds/);
+  assert.match(serverSource, /bridge\.claim\(workerId, jobKinds\)/);
+  assert.match(bridgeSource, /async claim\(workerId, jobKinds = \[\]\)/);
+  assert.match(bridgeSource, /SELECT id,kind,target_worker_id,required_capabilities/);
+  assert.match(bridgeSource, /allowedJobKinds\.has\(candidateKind\)/);
+});
