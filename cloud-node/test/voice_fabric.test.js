@@ -15,6 +15,7 @@ test('VoiceStudio provider sends OpenAI-compatible WAV request with Mairaiy prof
   const script = `
     process.env.AURA_ZERO_COST_MODE='true';
     process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT='false';
     process.env.AURA_VOICE_FABRIC_BASE_URL='https://voice.example.test';
     process.env.AURA_VOICE_FABRIC_API_KEY='secret-test-key';
     process.env.AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED='true';
@@ -100,6 +101,7 @@ test('arbitrary remote Voice Fabric still requires key and zero-cost confirmatio
   const script = `
     process.env.AURA_ZERO_COST_MODE='true';
     process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT='false';
     process.env.AURA_VOICE_FABRIC_BASE_URL='https://untrusted-voice.example.test';
     delete process.env.AURA_VOICE_FABRIC_API_KEY;
     delete process.env.AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED;
@@ -172,4 +174,32 @@ test('trusted Mairaiy endpoint emits no Authorization header when no key is conf
   assert.equal(payload.seen.body.voice,'mairaiy');
   assert.equal(payload.out.ok,true);
   assert.equal(payload.out.cost,0);
+});
+
+
+test('stale Hostinger voice override cannot displace verified Quantic Mairaiy by default', () => {
+  const script = `
+    process.env.AURA_ZERO_COST_MODE='true';
+    process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_BASE_URL='https://stale-voice.example.test';
+    delete process.env.AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT;
+    delete process.env.AURA_VOICE_FABRIC_API_KEY;
+    const { VoiceStudioProvider }=await import('./src/voice_fabric.js');
+    const p=new VoiceStudioProvider();
+    console.log(JSON.stringify({
+      enabled:p.enabled,
+      endpoint:p.endpoint.service_root,
+      trusted:p.diagnostic({publicView:true}).zero_cost_trusted_endpoint,
+    }));
+  `;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',script],{
+    cwd:new URL('..',import.meta.url).pathname,
+    encoding:'utf8',
+    env:{...process.env},
+  });
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(payload.enabled,true);
+  assert.equal(payload.endpoint,'https://mediumorchid-badger-314305.hostingersite.com/voice');
+  assert.equal(payload.trusted,true);
 });
