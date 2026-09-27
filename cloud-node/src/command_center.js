@@ -1416,8 +1416,12 @@ export class CommandCenter {
         });
       }
 
-      const executed = initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued);
-      const status = result?.queued ? 'waiting' : 'completed';
+      const returnedStatus = String(result?.status || '').toLowerCase();
+      const waiting = Boolean(result?.queued) || returnedStatus.startsWith('waiting');
+      const failed = returnedStatus === 'error' || returnedStatus.endsWith('-rejected');
+      const executed = !waiting && !failed
+        && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
+      const status = waiting ? 'waiting' : (failed ? 'failed' : 'completed');
       await this.updateInitiative(id, {
         status,
         execution_mode: executionMode,
