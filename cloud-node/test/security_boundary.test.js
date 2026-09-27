@@ -30,3 +30,15 @@ test('public chat and private-session login have bounded request rates', () => {
   assert.match(configSource, /AURA_PUBLIC_CHAT_RATE_LIMIT_MAX/);
   assert.match(configSource, /AURA_AUTH_RATE_LIMIT_MAX/);
 });
+
+test('public dashboard uses a redacted state while private cognitive APIs stay locked', () => {
+  assert.match(serverSource, /\/api\/kernel\/public/);
+  assert.match(serverSource, /kernel\.soul\(\{ privateView: false \}\)/);
+  assert.match(serverSource, /organismState\(\{ publicView: true \}\)/);
+});
+
+test('rate-limit buckets are pruned and hard bounded', () => {
+  assert.match(serverSource, /pruneRateBuckets/);
+  assert.match(serverSource, /RATE_BUCKET_LIMIT = 4096/);
+  assert.match(serverSource, /rateBuckets\.delete/);
+});
