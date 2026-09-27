@@ -761,10 +761,15 @@ export class CognitiveKernel {
     const pre = this.organism.beforeInteraction(
       this.organism.migrate(this.soulCache || {}),
       content,
-      { author: String(author).slice(0,120) },
+      {
+        author: String(author).slice(0,120),
+        privateRelationship: privateView,
+      },
     );
     this.soulCache.organism = pre.state;
-    this.soulCache.dominant_thought = `Relier cet échange à ma direction de Quantic Sillage : ${content.slice(0,320)}`;
+    this.soulCache.dominant_thought = privateView
+      ? `Relier cet échange à ma direction de Quantic Sillage : ${content.slice(0,320)}`
+      : 'Maintenir une interaction publique utile sans incorporer son contenu dans ma mémoire fondatrice.';
     this.syncLegacyFromOrganism();
     await this.recordOrganismEvent('interaction-pre', pre.reason || 'interaction', {
       author: String(author).slice(0,120),
@@ -777,14 +782,37 @@ export class CognitiveKernel {
     await this.saveSoul();
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
-    await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
+    await this.observeEvent(
+      'aura.cloud.chat',
+      privateView
+        ? { author, text: content.slice(0, 1000), private: true }
+        : {
+            session_id: conversationSession,
+            text_length: content.length,
+            valence: pre.valence,
+            tags: pre.tags || [],
+            private: false,
+          },
+      privateView ? 'cloud-private' : 'cloud-public',
+    );
 
-    const [soul, intentions, lessons, reflections, work, recentMessages] = await Promise.all([
-      this.soul({ privateView: true }),
-      this.intentions(6),
-      this.lessons(6),
-      this.reflections(4),
-      this.workItems(5),
+    const privateSoul = privateView
+      ? await this.soul({ privateView: true })
+      : null;
+    const publicSoul = privateView
+      ? null
+      : {
+          ...(await this.soul({ privateView: false })),
+          organism: this.organism.publicState(
+            this.organism.migrate(this.soulCache || {}),
+          ),
+        };
+
+    const [intentions, lessons, reflections, work, recentMessages] = await Promise.all([
+      privateView ? this.intentions(6) : Promise.resolve([]),
+      privateView ? this.lessons(6) : Promise.resolve([]),
+      privateView ? this.reflections(4) : Promise.resolve([]),
+      privateView ? this.workItems(5) : Promise.resolve([]),
       query(
         privateView
           ? `SELECT author,role,content,created_at FROM aura_cloud_messages
@@ -799,7 +827,7 @@ export class CognitiveKernel {
 
     let plan = this.cognition.planReply({
       text: content,
-      soul,
+      soul: privateView ? privateSoul : publicSoul,
       intentions,
       lessons,
       reflections,
