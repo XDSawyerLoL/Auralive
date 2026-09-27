@@ -141,7 +141,7 @@ async def test_worker_renews_before_minimum_supported_lease_expires(monkeypatch)
         intervals.append(float(value))
         raise asyncio.CancelledError
 
-    monkeypatch.setattr("app.services.aura_cloud_worker.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("aura_runtime.worker.asyncio.sleep", fake_sleep)
 
     with pytest.raises(asyncio.CancelledError):
         await worker._lease_renewer(
