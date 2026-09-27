@@ -63,3 +63,13 @@ test('public relational chat is isolated by a signed browser conversation sessio
     /kernel\.chat\(text,\s*String\(request\.body\?\.author[^\n]+,\s*true\)/,
   );
 });
+
+test('public chat cannot read private cognitive collections or inject raw text into global stimuli', () => {
+  assert.match(kernelSource, /privateView \? this\.intentions\(6\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.lessons\(6\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.reflections\(4\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.workItems\(5\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /text_length: content\.length/);
+  assert.match(kernelSource, /privateView \? 'cloud-private' : 'cloud-public'/);
+  assert.match(kernelSource, /privateRelationship: privateView/);
+});
