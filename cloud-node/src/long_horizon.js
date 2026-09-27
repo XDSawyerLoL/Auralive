@@ -477,6 +477,22 @@ export class LongHorizonMissionEngine {
     const status = success ? 'completed' : 'failed';
     const stamp = now();
     await query(
+      `UPDATE aura_mission_steps
+       SET status=?,completed_at=?,updated_at=?
+       WHERE mission_id=? AND status IN ('pending','queued','waiting')`,
+      [success ? 'superseded' : 'cancelled', stamp, stamp, mission.id],
+    );
+    await query(
+      `UPDATE aura_initiatives
+       SET status='cancelled',error='mission terminated before execution',updated_at=?
+       WHERE status IN ('queued','waiting')
+         AND id IN (
+           SELECT initiative_id FROM aura_mission_steps
+           WHERE mission_id=? AND initiative_id<>''
+         )`,
+      [stamp, mission.id],
+    );
+    await query(
       `UPDATE aura_missions
        SET status=?,progress=?,last_error=?,completed_at=?,updated_at=?
        WHERE id=?`,
