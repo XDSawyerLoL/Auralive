@@ -142,4 +142,4 @@ AURA_OPENROUTER_API_KEY=...
 AURA_OPENROUTER_FREE_MODELS=openrouter/free
 ```
 
-Le ledger MySQL `aura_free_provider_usage` conserve le budget quotidien et `aura_free_model_scorecards` mémorise les succès, échecs et latences par modèle/rôle. Les clés ne sont jamais stockées dans ces tables.
+Le catalogue OpenRouter `/api/v1/models` est relu périodiquement. AURA ne cible directement qu'un modèle `:free` dont les prix courants `prompt` et `completion` valent exactement zéro ; sinon elle retombe sur `openrouter/free`. Le ledger MySQL `aura_free_provider_usage` conserve le budget quotidien et `aura_free_model_scorecards` mémorise les succès, échecs et latences par modèle/rôle. Les clés ne sont jamais stockées dans ces tables.
