@@ -1439,6 +1439,9 @@ export class CommandCenter {
       }
 
       const returnedStatus = String(result?.status || '').toLowerCase();
+      if (initiative.kind === 'evolution' && returnedStatus === 'waiting-local-worker') {
+        executionMode = 'waiting-local-worker';
+      }
       const waiting = Boolean(result?.queued)
         || ['queued', 'leased'].includes(returnedStatus)
         || returnedStatus.startsWith('waiting');
