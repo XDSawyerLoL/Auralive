@@ -40,6 +40,12 @@ class LocalWhisperSTT:
         self.compute_type = str(os.getenv("VOICE_LOCAL_STT_COMPUTE_TYPE", "int8") or "int8").strip()
         self.cpu_threads = _int_env("VOICE_LOCAL_STT_CPU_THREADS", 4, 1, 32)
         self.num_workers = _int_env("VOICE_LOCAL_STT_WORKERS", 1, 1, 4)
+        self.ready_timeout_seconds = _int_env(
+            "VOICE_LOCAL_STT_READY_TIMEOUT_SECONDS",
+            6,
+            1,
+            60,
+        )
         self.download_root = Path(
             os.getenv(
                 "VOICE_LOCAL_STT_DIR",
@@ -48,6 +54,7 @@ class LocalWhisperSTT:
         ).expanduser()
         self._model: Any | None = None
         self._load_lock = asyncio.Lock()
+        self._ready_task: asyncio.Task[bool] | None = None
         self._transcribe_lock = asyncio.Lock()
         self.last_error = ""
         self.last_latency_ms = 0
@@ -91,8 +98,30 @@ class LocalWhisperSTT:
             self.last_error = ""
             return True
 
+    async def _ready_with_timeout(self) -> bool:
+        if self.ready:
+            return True
+        if self._ready_task is None or self._ready_task.done():
+            self._ready_task = asyncio.create_task(
+                self.ensure_ready(),
+                name="aura-faster-whisper-warmup",
+            )
+        try:
+            return bool(
+                await asyncio.wait_for(
+                    asyncio.shield(self._ready_task),
+                    timeout=self.ready_timeout_seconds,
+                )
+            )
+        except TimeoutError:
+            self.last_error = (
+                "faster-whisper est encore en cours de chargement; "
+                "le fallback vocal peut prendre le relais"
+            )
+            return False
+
     async def transcribe(self, audio: bytes) -> str:
-        if not await self.ensure_ready():
+        if not await self._ready_with_timeout():
             raise RuntimeError(self.last_error or "faster-whisper indisponible")
 
         assert self._model is not None
@@ -149,6 +178,8 @@ class LocalWhisperSTT:
             "model": self.model_name,
             "device": self.device,
             "compute_type": self.compute_type,
+            "ready_timeout_seconds": self.ready_timeout_seconds,
+            "warming": bool(self._ready_task and not self._ready_task.done()),
             "download_root": str(self.download_root),
             "transcription_count": self.transcription_count,
             "last_latency_ms": self.last_latency_ms,
