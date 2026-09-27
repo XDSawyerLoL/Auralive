@@ -258,7 +258,7 @@ export class ExecutionBridge {
     return { ok: true, worker_id: worker, server_time: timestamp };
   }
 
-  async claim(workerId) {
+  async claim(workerId, jobKinds = []) {
     if (!this.enabled) return null;
     const worker = String(workerId || '').trim().slice(0, 160);
     if (!worker) throw new Error('worker_id requis');
@@ -269,11 +269,12 @@ export class ExecutionBridge {
     );
     const computeConsent = Boolean(Number(workerRow?.compute_consent || 0));
     const meshCapabilities = new Set(stringList(parseJson(workerRow?.mesh_capabilities, [])));
+    const allowedJobKinds = new Set(stringList(jobKinds).map((item) => item.toLowerCase()));
     const leaseUntil = nowMs() + settings.leaseSeconds * 1000;
 
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const candidates = await query(
-        `SELECT id,target_worker_id,required_capabilities FROM aura_execution_jobs
+        `SELECT id,kind,target_worker_id,required_capabilities FROM aura_execution_jobs
          WHERE status='queued' OR (status='leased' AND lease_until<?)
          ORDER BY created_at ASC LIMIT 32`,
         [nowMs()],
@@ -284,6 +285,8 @@ export class ExecutionBridge {
       for (const candidate of candidates) {
         const target = String(candidate.target_worker_id || '');
         if (target && target !== worker) continue;
+        const candidateKind = String(candidate.kind || '').trim().toLowerCase();
+        if (allowedJobKinds.size && !allowedJobKinds.has(candidateKind)) continue;
         const required = stringList(parseJson(candidate.required_capabilities, []));
         if (required.length) {
           if (!computeConsent) continue;
