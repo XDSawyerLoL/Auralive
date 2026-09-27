@@ -210,7 +210,16 @@ test('Director low-risk promotion merges only green safe AURA pull requests', as
           title: 'AURA safe improvement',
           html_url: 'https://github.com/XDSawyerLoL/Auralive/pull/42',
           draft: false,
-          head: { ref: 'aura/change-safe-test', sha: 'abc123' },
+          user: { login: 'XDSawyerLoL' },
+          head: {
+            ref: 'aura/change-safe-test',
+            sha: 'abc123',
+            user: { login: 'XDSawyerLoL' },
+            repo: {
+              full_name: 'XDSawyerLoL/Auralive',
+              owner: { login: 'XDSawyerLoL' },
+            },
+          },
           base: { ref: 'main' },
         }],
       };
@@ -255,4 +264,48 @@ test('Director auto-merge excludes sensitive semantic paths and dangerous patch 
   assert.match(commandSource, /sensitivePatch/);
   assert.match(commandSource, /child_process/);
   assert.match(commandSource, /DROP\\s\+TABLE/);
+});
+
+test('Director auto-merge rejects fork provenance even with an AURA-looking branch name', async () => {
+  const center = new CommandCenter({ async trace() {}, async observeEvent() {} }, {}, {});
+  Object.defineProperty(center, 'githubToken', { value: 'test-token', configurable: true });
+  let merged = false;
+  center.github = async (path, options = {}) => {
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls?state=open&per_page=30') {
+      return {
+        data: [{
+          number: 77,
+          title: 'Spoofed AURA branch',
+          draft: false,
+          user: { login: 'attacker' },
+          head: {
+            ref: 'aura/change-spoof',
+            sha: 'bad123',
+            user: { login: 'attacker' },
+            repo: {
+              full_name: 'attacker/Auralive',
+              owner: { login: 'attacker' },
+            },
+          },
+          base: { ref: 'main' },
+        }],
+      };
+    }
+    if (path.includes('/pulls/77/merge') && options.method === 'PUT') {
+      merged = true;
+      return { data: { merged: true } };
+    }
+    if (path.includes('/pulls?state=open&per_page=30')) return { data: [] };
+    return { data: [] };
+  };
+  const result = await center.promoteDirectorPullRequests();
+  assert.equal(result.length, 0);
+  assert.equal(merged, false);
+});
+
+test('Director auto-merge requires same-repository trusted provenance', () => {
+  assert.match(configSource, /AURA_DIRECTOR_TRUSTED_GITHUB_ACTORS/);
+  assert.match(commandSource, /headRepository === repo\.toLowerCase\(\)/);
+  assert.match(commandSource, /trustedActors\.has\(pullActor\)/);
+  assert.match(commandSource, /trustedProvenance/);
 });
