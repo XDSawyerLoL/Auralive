@@ -53,3 +53,44 @@ async def test_standalone_runtime_can_execute_compute_without_studio(monkeypatch
     assert profile['runtime_role'] == 'aura-runtime'
     assert profile['runtime_host_product'] == ''
     assert profile['runtime_packaging'] == 'standalone-service'
+    assert worker._job_kinds() == ['compute', 'inference']
+
+
+@pytest.mark.asyncio
+async def test_runtime_claim_declares_only_supported_job_kinds(monkeypatch, tmp_path):
+    monkeypatch.setenv('AURA_CLOUD_BASE_URL', 'https://aura.example')
+    monkeypatch.setenv('AURA_CLOUD_TOKEN', 'test-token')
+    monkeypatch.setenv('AURA_RUNTIME_IDENTITY_FILE', str(tmp_path / 'node-id'))
+    settings = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(settings)
+    worker = AuraRuntimeWorker(host, settings, runtime_packaging='standalone-service')
+    calls = []
+
+    async def fake_post(path, payload):
+        calls.append((path, payload))
+        return {'job': None}
+
+    monkeypatch.setattr(worker, '_post', fake_post)
+    await worker._claim()
+    assert calls == [
+        (
+            '/api/bridge/claim',
+            {
+                'worker_id': worker.worker_id,
+                'job_kinds': ['compute', 'inference'],
+            },
+        )
+    ]
+
+
+def test_runtime_check_mode_does_not_require_cloud_or_studio(monkeypatch):
+    monkeypatch.delenv('AURA_CLOUD_BASE_URL', raising=False)
+    monkeypatch.delenv('AURA_CLOUD_TOKEN', raising=False)
+    from aura_runtime.standalone import check_payload
+    payload = check_payload()
+    assert payload['ok'] is True
+    assert payload['component'] == 'aura-runtime'
+    assert payload['studio_required'] is False
+    assert payload['cloud_configured'] is False
+    assert 'compute' in payload['job_kinds']
+    assert 'inference' in payload['job_kinds']
