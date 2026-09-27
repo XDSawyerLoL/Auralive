@@ -21,6 +21,7 @@ def test_runtime_core_has_no_direct_app_or_studio_imports():
     assert 'from app.' not in source
     assert 'import app.' not in source
     assert 'EvolutionFleet' not in source
+    assert '"runtime_host_product": "quantic-studio"' not in source
 
 
 def test_standalone_runtime_settings_are_environment_driven(monkeypatch, tmp_path):
