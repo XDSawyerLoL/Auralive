@@ -1746,10 +1746,22 @@ export class CommandCenter {
       for (const pull of pulls) {
         const headRef = String(pull?.head?.ref || '');
         const baseRef = String(pull?.base?.ref || '');
+        const headRepository = String(pull?.head?.repo?.full_name || '').toLowerCase();
+        const pullActor = String(pull?.user?.login || '').toLowerCase();
+        const headActor = String(
+          pull?.head?.user?.login
+          || pull?.head?.repo?.owner?.login
+          || '',
+        ).toLowerCase();
+        const trustedActors = config.directorTrustedGithubActors;
+        const trustedProvenance = headRepository === repo.toLowerCase()
+          && Boolean(pullActor)
+          && trustedActors.has(pullActor)
+          && (!headActor || trustedActors.has(headActor));
         const auraBranch = headRef.startsWith('aura/change-')
           || headRef.startsWith('aura-evolution/')
           || headRef.startsWith('aura-evolution-fleet/');
-        if (!auraBranch || pull?.draft || baseRef !== 'main') continue;
+        if (!auraBranch || !trustedProvenance || pull?.draft || baseRef !== 'main') continue;
 
         const number = Number(pull?.number || 0);
         const headSha = String(pull?.head?.sha || '');
