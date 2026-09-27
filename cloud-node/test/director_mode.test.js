@@ -38,3 +38,11 @@ test('AURA Director combines proactive curiosity, open-web research and low-risk
   assert.match(commandSource, /check-runs/);
   assert.match(commandSource, /CHANGES_REQUESTED/);
 });
+
+test('active work initiatives are semantically deduplicated and old duplicates are superseded', () => {
+  assert.match(commandSource, /initiativeSemanticKey/);
+  assert.match(commandSource, /dedupeActiveInitiatives/);
+  assert.match(commandSource, /semantic duplicate cleaned by Director Mode/);
+  assert.match(commandSource, /semantic_duplicate: true/);
+  assert.match(kernelSource, /seenWork/);
+});
