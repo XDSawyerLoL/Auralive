@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import config from './config.js';
+import { config } from './config.js';
 
 const ACTION_KINDS = new Set(['retry', 'research', 'evolution', 'operator', 'wait', 'human']);
 const RISK_LEVELS = new Set(['safe', 'review', 'high']);
