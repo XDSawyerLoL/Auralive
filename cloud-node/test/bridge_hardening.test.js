@@ -49,3 +49,10 @@ test('bridge leases jobs only to runtime workers that advertise the job kind', (
   assert.match(bridgeSource, /!jobKinds\.has\(kind\)/);
   assert.match(bridgeSource, /job_kinds:/);
 });
+
+
+test('bridge can terminalize queued or leased jobs', () => {
+  assert.match(bridgeSource, /async cancelJob\(id, reason/);
+  assert.match(bridgeSource, /status='cancelled'/);
+  assert.match(bridgeSource, /status IN \('queued','leased'\)/);
+});
