@@ -270,14 +270,18 @@ export class AuraOrganism {
 
     const relationship = { ...(state.relationship || {}) };
     relationship.interaction_count = Number(relationship.interaction_count || 0) + 1;
-    relationship.last_author = clean(meta.author || relationship.last_author || '').slice(0,120);
-    relationship.last_topic = clean(text).slice(0,220);
+    if (meta.privateRelationship === true) {
+      relationship.last_author = clean(meta.author || relationship.last_author || '').slice(0,120);
+      relationship.last_topic = clean(text).slice(0,220);
+    }
     relationship.last_exchange_at = state.last_interaction_at;
     relationship.familiarity = clamp(Number(relationship.familiarity || 0) + 0.004);
     relationship.shared_momentum = clamp(Number(relationship.shared_momentum || 0) + (q.includes('quantic') || q.includes('aura') || q.includes('projet') ? 0.006 : 0.002));
     relationship.social_curiosity = clamp(Number(relationship.social_curiosity || state.curiosite_sociale || 0.6) + 0.002);
     if (['je veux','j’aimerais',"j'aimerais",'objectif','projet','on va','ensemble'].some((x)=>q.includes(x))) {
-      relationship.last_open_thread = clean(text).slice(0,500);
+      if (meta.privateRelationship === true) {
+        relationship.last_open_thread = clean(text).slice(0,500);
+      }
       relationship.reciprocity = clamp(Number(relationship.reciprocity || 0) + 0.006);
     }
     if (valence === 'positive') relationship.trust = clamp(Number(relationship.trust || 0) + 0.004);
