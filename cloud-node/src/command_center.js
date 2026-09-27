@@ -2265,7 +2265,24 @@ export class CommandCenter {
   }
 
   async controlMission(id, action) {
-    return this.longHorizon.control(id, action);
+    const missionId = String(id || '');
+    const command = String(action || '').toLowerCase();
+    if (command === 'cancel' && this.bridge?.cancelJob) {
+      const rows = await query(
+        `SELECT i.id,i.result
+         FROM aura_mission_steps ms
+         JOIN aura_initiatives i ON i.id=ms.initiative_id
+         WHERE ms.mission_id=? AND i.status IN ('queued','running','waiting')`,
+        [missionId],
+      ).catch(() => []);
+      for (const row of rows) {
+        const stored = parseJson(row.result, {});
+        const jobId = String(stored?.job_id || stored?.result?.job_id || '').trim();
+        if (!jobId) continue;
+        await this.bridge.cancelJob(jobId, `mission ${missionId} cancelled`).catch(() => {});
+      }
+    }
+    return this.longHorizon.control(missionId, command);
   }
 
   async retryInitiative(id) {
