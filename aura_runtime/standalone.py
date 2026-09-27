@@ -148,7 +148,7 @@ def runtime_settings_from_env() -> SimpleNamespace:
         aura_runtime_operator_allowed_risks=set(
             _list(
                 'AURA_RUNTIME_OPERATOR_ALLOWED_RISKS',
-                'safe,ai,network,local-write,process,local-control',
+                'safe,ai,network,local-write,process,local-control,browser-control',
             )
         ),
         aura_runtime_operator_commands=set(
@@ -180,10 +180,16 @@ def runtime_settings_from_env() -> SimpleNamespace:
             2_000,
             min(200_000, _int('AURA_RUNTIME_DEEP_WEB_MAX_CHARS', 60_000)),
         ),
-        aura_runtime_browser_enabled=_bool('AURA_RUNTIME_BROWSER_ENABLED', False),
+        aura_runtime_browser_enabled=_bool('AURA_RUNTIME_BROWSER_ENABLED', True),
+        aura_runtime_browser_allow_all_public=_bool(
+            'AURA_RUNTIME_BROWSER_ALLOW_ALL_PUBLIC',
+            True,
+        ),
+        aura_runtime_browser_domains=set(_list('AURA_RUNTIME_BROWSER_DOMAINS', '')),
+        aura_runtime_browser_use_vision=_bool('AURA_RUNTIME_BROWSER_USE_VISION', False),
         aura_runtime_browser_max_steps=max(
             1,
-            min(8, _int('AURA_RUNTIME_BROWSER_MAX_STEPS', 5)),
+            min(50, _int('AURA_RUNTIME_BROWSER_MAX_STEPS', 25)),
         ),
     )
 
