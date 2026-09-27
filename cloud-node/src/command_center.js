@@ -5,6 +5,21 @@ import { clamp } from './policy.js';
 
 const now = () => new Date().toISOString();
 
+function initiativeSemanticKey(domain, kind, title, objective = '') {
+  const normalize = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr-FR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [
+    normalize(domain),
+    normalize(kind),
+    normalize(title || objective).slice(0, 500),
+  ].join('|');
+}
+
 const DEFAULT_SERVICES = [
   {
     id: 'aura',
@@ -244,6 +259,45 @@ export class CommandCenter {
     this.lastError = '';
   }
 
+  async dedupeActiveInitiatives() {
+    const rows = await query(
+      `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+       ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 300`,
+    );
+    const keepers = new Map();
+    const duplicates = [];
+    for (const row of rows) {
+      const key = initiativeSemanticKey(row.domain, row.kind, row.title, row.objective);
+      if (!key) continue;
+      if (!keepers.has(key)) {
+        keepers.set(key, row);
+        continue;
+      }
+      duplicates.push(row);
+    }
+    const stamp = now();
+    for (const row of duplicates) {
+      await query(
+        `UPDATE aura_initiatives
+         SET status='superseded',error='semantic duplicate cleaned by Director Mode',updated_at=?
+         WHERE id=? AND status IN ('queued','running','waiting')`,
+        [stamp, row.id],
+      );
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+        [
+          row.id,
+          'initiative-superseded',
+          JSON.stringify({ reason: 'semantic-duplicate', director_mode: true }).slice(0, 30000),
+          stamp,
+        ],
+      );
+    }
+    return { active: keepers.size, superseded: duplicates.length };
+  }
+
   async init() {
     const stamp = now();
     for (const service of DEFAULT_SERVICES) {
@@ -269,6 +323,7 @@ export class CommandCenter {
         ],
       );
     }
+    await this.dedupeActiveInitiatives();
   }
 
   async start() {
@@ -1290,6 +1345,26 @@ export class CommandCenter {
   async persistInitiative(candidate) {
     const existing = await this.existingInitiative(candidate);
     if (existing) return { created: false, initiative: existing };
+
+    const activePeers = await query(
+      `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+       FROM aura_initiatives
+       WHERE domain=? AND kind=? AND status IN ('queued','running','waiting')
+       ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 40`,
+      [candidate.domain, candidate.kind],
+    );
+    const semanticKey = initiativeSemanticKey(
+      candidate.domain,
+      candidate.kind,
+      candidate.title,
+      candidate.objective,
+    );
+    const semanticExisting = activePeers.find((row) =>
+      initiativeSemanticKey(row.domain, row.kind, row.title, row.objective) === semanticKey
+    );
+    if (semanticExisting) {
+      return { created: false, initiative: semanticExisting, semantic_duplicate: true };
+    }
 
     const id = randomUUID();
     const stamp = now();
