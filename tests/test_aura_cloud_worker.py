@@ -86,7 +86,7 @@ def settings():
 
 def test_embedded_worker_identifies_as_aura_runtime_compatibility_host():
     worker = AuraCloudWorker(FakeAura(), settings())
-    assert worker.VERSION == "aura-runtime-worker-v2"
+    assert worker.VERSION == "aura-runtime-worker-v3"
     assert worker.worker_id.startswith("aura-runtime-")
 
     profile = worker._resource_profile()
@@ -118,7 +118,7 @@ async def test_cloud_job_cannot_expand_local_operator_policy():
         ["safe", "network", "process", "moderation"],
     )
     assert result["requested_risks"] == ["network", "safe"]
-    assert result["source"] == "aura-cloud-worker"
+    assert result["source"] == "aura-runtime-worker"
 
 
 @pytest.mark.asyncio
@@ -141,7 +141,7 @@ async def test_worker_renews_before_minimum_supported_lease_expires(monkeypatch)
         intervals.append(float(value))
         raise asyncio.CancelledError
 
-    monkeypatch.setattr("app.services.aura_cloud_worker.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("aura_runtime.worker.asyncio.sleep", fake_sleep)
 
     with pytest.raises(asyncio.CancelledError):
         await worker._lease_renewer(

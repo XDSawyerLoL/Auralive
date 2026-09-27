@@ -1,0 +1,141 @@
+from __future__ import annotations
+
+import asyncio
+import os
+import signal
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import aiohttp
+
+from .worker import AuraRuntimeWorker
+
+
+def _bool(name: str, default: bool = False) -> bool:
+    raw = str(os.getenv(name, '1' if default else '0')).strip().casefold()
+    return raw in {'1', 'true', 'yes', 'on'}
+
+
+def _int(name: str, default: int) -> int:
+    try:
+        return int(str(os.getenv(name, default)).strip())
+    except Exception:
+        return default
+
+
+def runtime_settings_from_env() -> SimpleNamespace:
+    return SimpleNamespace(
+        aura_cloud_worker_enabled=True,
+        aura_cloud_base_url=str(os.getenv('AURA_CLOUD_BASE_URL', '')).strip(),
+        aura_cloud_token=str(os.getenv('AURA_CLOUD_TOKEN', '')).strip(),
+        aura_cloud_worker_poll_seconds=max(0.5, float(os.getenv('AURA_RUNTIME_POLL_SECONDS', '1.5'))),
+        aura_cloud_worker_heartbeat_seconds=max(5, _int('AURA_RUNTIME_HEARTBEAT_SECONDS', 15)),
+        aura_cloud_worker_timeout_seconds=max(15, _int('AURA_RUNTIME_TIMEOUT_SECONDS', 95)),
+        aura_compute_mesh_consent=_bool('AURA_COMPUTE_MESH_CONSENT', False),
+        aura_compute_mesh_identity_file=Path(
+            os.getenv('AURA_RUNTIME_IDENTITY_FILE', str(Path.home() / '.aura-runtime' / 'node-id'))
+        ),
+        ai_model=str(os.getenv('AURA_RUNTIME_MODEL', 'qwen3:8b')).strip(),
+        ai_constellation_moa_enabled=_bool('AURA_RUNTIME_MOA_ENABLED', False),
+        image_default_width=1024,
+        image_default_height=1024,
+        image_default_steps=8,
+        aura_runtime_ollama_url=str(os.getenv('AURA_RUNTIME_OLLAMA_URL', 'http://127.0.0.1:11434')).rstrip('/'),
+    )
+
+
+class StandaloneOllamaAI:
+    def __init__(self, settings: Any):
+        self.settings = settings
+        self.active_model = str(settings.ai_model or '').strip()
+        self.enabled = bool(self.active_model)
+        self.constellation = SimpleNamespace(
+            installed=[{'name': self.active_model}] if self.active_model else []
+        )
+
+    def diagnostic(self) -> dict[str, Any]:
+        return {
+            'mode': 'ollama-standalone',
+            'runtime_model': self.active_model,
+            'endpoint': self.settings.aura_runtime_ollama_url,
+            'enabled': self.enabled,
+            'runtime_role': 'aura-runtime',
+        }
+
+    async def generate(
+        self,
+        prompt: str,
+        system_instruction: str = '',
+        max_tokens: int = 700,
+        *,
+        system_is_complete: bool = False,
+        task_role: str = 'auto',
+        preferred_model: str = '',
+    ) -> str:
+        if not self.enabled:
+            raise RuntimeError('Aucun modèle local configuré pour AURA Runtime')
+        model = str(preferred_model or self.active_model).strip()
+        messages: list[dict[str, str]] = []
+        system = str(system_instruction or '').strip()
+        if system:
+            messages.append({'role': 'system', 'content': system})
+        messages.append({'role': 'user', 'content': str(prompt or '')})
+        timeout = aiohttp.ClientTimeout(total=max(30, int(self.settings.aura_cloud_worker_timeout_seconds)))
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                f"{self.settings.aura_runtime_ollama_url}/api/chat",
+                json={
+                    'model': model,
+                    'messages': messages,
+                    'stream': False,
+                    'options': {'num_predict': max(64, min(int(max_tokens or 700), 8000))},
+                },
+            ) as response:
+                body = await response.json(content_type=None)
+                if response.status >= 400:
+                    raise RuntimeError(f"Ollama HTTP {response.status}: {str(body)[:500]}")
+                answer = str((body.get('message') or {}).get('content') or '').strip()
+                if not answer:
+                    raise RuntimeError('Ollama n’a renvoyé aucune réponse')
+                return answer
+
+
+class StandaloneRuntimeHost:
+    def __init__(self, settings: Any):
+        self.ai = StandaloneOllamaAI(settings)
+        self.cognitive = None
+        self.avatar_audio = None
+        self.image = None
+        self.evolution = None
+
+
+async def run_forever() -> None:
+    settings = runtime_settings_from_env()
+    if not settings.aura_cloud_base_url or not settings.aura_cloud_token:
+        raise RuntimeError('AURA_CLOUD_BASE_URL et AURA_CLOUD_TOKEN sont requis')
+
+    host = StandaloneRuntimeHost(settings)
+    worker = AuraRuntimeWorker(
+        host,
+        settings,
+        host_product='',
+        runtime_packaging='standalone-service',
+    )
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except (NotImplementedError, RuntimeError):
+            pass
+
+    await worker.start()
+    try:
+        await stop.wait()
+    finally:
+        await worker.close()
+
+
+def main() -> None:
+    asyncio.run(run_forever())

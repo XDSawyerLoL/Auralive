@@ -219,7 +219,11 @@ apprentissage
 
 ### Phase B — extraction AURA Runtime
 
-Extraire le worker actuellement sous `app/services/aura_cloud_worker.py` vers un package/service AURA Runtime autonome. Quantic Studio consomme ensuite ce Runtime au lieu de le posséder.
+**En cours d’implémentation / socle extrait.**
+
+Le cœur du worker vit désormais dans le package indépendant `aura_runtime/`. Quantic Studio conserve uniquement un adaptateur de compatibilité sous `app/services/aura_cloud_worker.py`.
+
+Le Runtime peut aussi être lancé sans Studio via `python -m aura_runtime`. Le mode standalone fournit transport Cloud, heartbeat, leases, Compute Mesh et inférence Ollama locale. Les capacités voix, image, opérateur et Evolution restent injectées par des adaptateurs d’hôte jusqu’à leur extraction complète.
 
 ### Phase C — SDK produit
 

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "app/**"
+      - "aura_runtime/**"
       - "engine/quantic-live/**"
       - "config/**"
       - "scripts/build-windows.ps1"
@@ -21,6 +22,7 @@ on:
       - main
     paths:
       - "app/**"
+      - "aura_runtime/**"
       - "engine/quantic-live/**"
       - "config/**"
       - "scripts/build-windows.ps1"
@@ -64,7 +66,7 @@ jobs:
 
       - name: Compile Python sources
         shell: pwsh
-        run: python -m compileall -q app
+        run: python -m compileall -q app aura_runtime
 
       - name: Build QuanticStudio.exe
         shell: pwsh
@@ -110,6 +112,7 @@ jobs:
           if (-not (Test-Path "dist\QuanticStudio\ffmpeg\ffmpeg.exe")) {
             throw "Le FFmpeg Aura embarque est absent du package."
           }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\aura_runtime\worker.py")) { throw "AURA Runtime source absent du package Studio." }
           if (-not (Test-Path "dist\QuanticStudio\aura-source\app\cognitive\evolution.py")) {
             throw "L'arbre source AURA Evolution est absent du package."
           }
