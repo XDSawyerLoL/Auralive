@@ -16,7 +16,8 @@ function initiativeSemanticKey(domain, kind, title, objective = '') {
   return [
     normalize(domain),
     normalize(kind),
-    normalize(title || objective).slice(0, 500),
+    normalize(title).slice(0, 240),
+    normalize(objective).slice(0, 500),
   ].join('|');
 }
 
@@ -264,7 +265,9 @@ export class CommandCenter {
       `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
        FROM aura_initiatives
        WHERE status IN ('queued','running','waiting')
-       ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 300`,
+       ORDER BY
+         CASE status WHEN 'running' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END,
+         priority DESC,confidence DESC,updated_at DESC LIMIT 300`,
     );
     const keepers = new Map();
     const duplicates = [];
@@ -282,7 +285,7 @@ export class CommandCenter {
       await query(
         `UPDATE aura_initiatives
          SET status='superseded',error='semantic duplicate cleaned by Director Mode',updated_at=?
-         WHERE id=? AND status IN ('queued','running','waiting')`,
+         WHERE id=? AND status IN ('queued','waiting')`,
         [stamp, row.id],
       );
       await query(
