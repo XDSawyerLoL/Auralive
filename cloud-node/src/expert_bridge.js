@@ -363,6 +363,7 @@ export class ExpertBridge {
       model: this.externalAvailable ? config.expertBridgeModel : this.lastModel,
       calls_last_hour: this.calls.length,
       max_calls_per_hour: config.expertBridgeMaxCallsPerHour,
+      max_rounds_per_incident: config.expertBridgeMaxRoundsPerIncident,
       cooldown_seconds: config.expertBridgeCooldownSeconds,
       last_consult_at: this.lastConsultAt,
       last_error: this.lastError ? 'unavailable' : '',
