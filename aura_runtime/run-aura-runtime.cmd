@@ -19,14 +19,20 @@ if not exist ".env" (
   exit /b 1
 )
 
-python -c "import aiohttp" >nul 2>nul
+python -c "import aiohttp, browser_use, crawl4ai" >nul 2>nul
 if errorlevel 1 (
-  echo [AURA] Installation de la dependance locale aiohttp...
+  echo [AURA] Installation des capacites Runtime, Browser Use et Crawl4AI...
   python -m pip install -r requirements.txt
   if errorlevel 1 (
     echo [AURA] Installation Python impossible.
     pause
     exit /b 1
+  )
+  echo [AURA] Installation de Chromium pour Browser Use...
+  python -m browser_use install
+  if errorlevel 1 (
+    echo [AURA] Chromium n'a pas pu etre installe automatiquement.
+    echo [AURA] Le Runtime peut demarrer mais browser.task restera indisponible.
   )
 )
 
