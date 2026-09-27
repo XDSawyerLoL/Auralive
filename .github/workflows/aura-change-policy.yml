@@ -1,0 +1,41 @@
+name: AURA Change Policy
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  protect-sensitive-surfaces:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject sensitive AURA-authored change surfaces
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          case "$HEAD_REF" in
+            aura/change-*|aura-evolution-fleet/*|aura/*)
+              ;;
+            *)
+              echo "Non-AURA branch; policy check informational only."
+              exit 0
+              ;;
+          esac
+
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          echo "$changed"
+
+          forbidden='(^\.github/|^scripts/|^installer/|^deploy/|(^|/)\.env($|\.)|(^|/)(secrets?|credentials?|tokens?)(\.|/|$)|\.(pem|p12|pfx|key|keystore|jks|ps1|sh|bat|cmd)$|(^|/)(package(-lock)?\.json|pnpm-lock\.yaml|yarn\.lock|requirements(-desktop)?\.txt)$)'
+          if echo "$changed" | grep -Eiq "$forbidden"; then
+            echo "::error::AURA PR modifies a protected build/security/dependency surface."
+            exit 1
+          fi
