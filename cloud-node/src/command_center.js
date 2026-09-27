@@ -1523,24 +1523,42 @@ export class CommandCenter {
 
       if (job.status === 'completed') {
         const payload = job.result || {};
+        const payloadStatus = String(payload?.status || '').toLowerCase();
+        const evolutionRejected = row.kind === 'evolution'
+          && (
+            payload?.ok === false
+            || payloadStatus === 'error'
+            || payloadStatus.endsWith('-rejected')
+          );
+        const finalStatus = evolutionRejected ? 'failed' : 'completed';
+        const finalError = evolutionRejected
+          ? String(payload?.error || payload?.reason || payloadStatus || 'evolution rejected').slice(0, 5000)
+          : '';
         await query(
           `UPDATE aura_initiatives
-           SET status='completed',execution_mode='quantic-studio-operator',
-               result=?,error='',updated_at=?
+           SET status=?,execution_mode=?,
+               result=?,error=?,updated_at=?
            WHERE id=?`,
-          [JSON.stringify(payload).slice(0, 100000), now(), row.id],
+          [
+            finalStatus,
+            row.kind === 'evolution' ? 'evolution-fleet' : 'quantic-studio-operator',
+            JSON.stringify(payload).slice(0, 100000),
+            finalError,
+            now(),
+            row.id,
+          ],
         );
         await this.kernel.recordOutcome({
           automation_id: `command-center:${row.domain}`,
           event_type: `aura.initiative.${row.kind}`,
-          ok: payload?.ok !== false,
-          signature: payload?.ok === false
-            ? String(payload?.error || 'worker-result-failed')
+          ok: !evolutionRejected && payload?.ok !== false,
+          signature: evolutionRejected || payload?.ok === false
+            ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed')
             : 'success',
           report: { initiative_id: row.id, job_id: jobId, result: payload },
           created_at: now(),
         });
-        reconciled.push({ id: row.id, status: 'completed', job_id: jobId });
+        reconciled.push({ id: row.id, status: finalStatus, job_id: jobId });
       } else if (job.status === 'error') {
         const message = String(job.error || 'worker execution failed').slice(0, 5000);
         await query(
