@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 9;
+export const LATEST_SCHEMA_VERSION = 10;
 
 export function getDb() {
   if (pool) return pool;
@@ -477,6 +477,26 @@ async function applyMigrations(db) {
     );
     current = 9;
   }
+
+  if (current < 10) {
+    await ensureColumn(
+      db,
+      'aura_cloud_messages',
+      'session_id',
+      "session_id VARCHAR(96) NOT NULL DEFAULT '' AFTER role",
+    );
+    await ensureIndex(
+      db,
+      'aura_cloud_messages',
+      'idx_aura_cloud_messages_session',
+      'idx_aura_cloud_messages_session(session_id,id)',
+    );
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(10,?,?)',
+      ['conversation-session-isolation', new Date().toISOString()],
+    );
+    current = 10;
+  }
 }
 
 export async function initSchema() {
@@ -568,8 +588,10 @@ export async function initSchema() {
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       author VARCHAR(120) NOT NULL,
       role ENUM('user','assistant') NOT NULL,
+      session_id VARCHAR(96) NOT NULL DEFAULT '',
       content TEXT NOT NULL,
-      created_at VARCHAR(40) NOT NULL
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_cloud_messages_session(session_id,id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS aura_organism_events (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
