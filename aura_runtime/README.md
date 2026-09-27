@@ -17,8 +17,8 @@ Il n'est pas Quantic Studio. Quantic Studio peut l'héberger comme adaptateur de
 - participation au Mesh si l'utilisateur l'active explicitement;
 - Evolution Fleet inter-produits via GitHub, avec allowlist, branches dédiées et PR uniquement;
 - opérateur local natif: inspection, fichiers bornés, process allowlistés et HTTP technique contrôlé;
-- lecture Web profonde optionnelle via Crawl4AI pour pages JavaScript et extraction Markdown;
-- agent navigateur optionnel via Browser Use + Ollama, désactivé par défaut et borné aux domaines autorisés.
+- lecture Web profonde via Crawl4AI pour pages JavaScript et extraction Markdown;
+- agent navigateur Browser Use + Ollama actif par défaut sur tout le Web public.
 
 Evolution Fleet appartient désormais directement à AURA Runtime et peut fonctionner sans Studio. L'évolution native du dépôt AURA reste gérée par le noyau Cloud.
 
@@ -47,13 +47,7 @@ Les échecs, latences et retours qualité font évoluer le score. Les profils st
 pip install -r aura_runtime/requirements.txt
 ```
 
-Pour activer les capacités Web open source avancées :
-
-```bash
-pip install -r aura_runtime/requirements-open-capabilities.txt
-```
-
-Crawl4AI peut nécessiter l'installation initiale de son navigateur local (`crawl4ai-setup`). Aucune API payante n'est requise pour ces deux adaptateurs.
+Browser Use et Crawl4AI font désormais partie des dépendances standard du Runtime. Sous Windows, le launcher installe aussi Chromium lors du premier bootstrap si nécessaire. Aucune API payante n'est requise : Browser Use utilise l'Ollama local configuré par AURA.
 
 3. Copier `.env.example` en `.env` à la racine du package puis renseigner au minimum `AURA_CLOUD_BASE_URL` et `AURA_CLOUD_TOKEN`. Le Runtime charge automatiquement ce fichier sans écraser les vraies variables d'environnement.
 4. Sous Windows, lancer `aura_runtime\\run-aura-runtime.cmd` : le launcher crée `.env` s'il manque et installe `aiohttp` si nécessaire. Sinon lancer:
@@ -109,14 +103,15 @@ AURA_RUNTIME_DEEP_WEB_MAX_CHARS=60000
 
 ### Browser Use
 
-`browser.task` est volontairement plus strict :
+`browser.task` est actif par défaut avec Ollama local :
 
-- `AURA_RUNTIME_BROWSER_ENABLED=true` est requis;
-- `browser-control` doit être explicitement ajouté à `AURA_RUNTIME_OPERATOR_ALLOWED_RISKS`;
-- `AURA_RUNTIME_OPERATOR_DOMAINS` doit être non vide;
-- le navigateur reçoit cette allowlist directement;
-- le modèle utilisé est l'Ollama local du Runtime;
-- la vision est désactivée par défaut;
-- le nombre d'étapes est borné à 8.
+- `AURA_RUNTIME_BROWSER_ENABLED=true`;
+- `browser-control` fait partie de la politique locale standard;
+- `AURA_RUNTIME_BROWSER_ALLOW_ALL_PUBLIC=true` ouvre tout le Web HTTP/HTTPS public;
+- aucune allowlist de domaines n'est nécessaire dans ce mode;
+- localhost, les IP directes et les réseaux privés/non globaux restent interdits;
+- les secrets AURA ne sont pas injectés dans le navigateur;
+- la vision reste optionnelle via `AURA_RUNTIME_BROWSER_USE_VISION`;
+- une mission navigateur peut utiliser jusqu'à 50 étapes, avec 25 par défaut.
 
-Ce mécanisme évite qu'un modèle ou une mission Cloud puisse élargir seul les domaines ou privilèges du navigateur.
+Pour revenir à une allowlist, mettre `AURA_RUNTIME_BROWSER_ALLOW_ALL_PUBLIC=false` puis renseigner `AURA_RUNTIME_BROWSER_DOMAINS`.
