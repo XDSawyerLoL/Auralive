@@ -86,3 +86,26 @@ def test_standalone_host_has_runtime_owned_evolution_lab(tmp_path):
     host = StandaloneRuntimeHost(cfg)
     assert isinstance(host.evolution, RuntimeFleetLab)
     assert host.evolution.aura is host
+
+def test_runtime_advertises_evolution_only_when_github_is_configured(tmp_path):
+    cfg = settings(tmp_path)
+    host = StandaloneRuntimeHost(cfg)
+    from aura_runtime.worker import AuraRuntimeWorker
+    from aura_runtime.evolution_fleet import EvolutionFleet
+
+    without_token = AuraRuntimeWorker(
+        host,
+        cfg,
+        fleet_factory=EvolutionFleet,
+        runtime_packaging='standalone-service',
+    )
+    assert 'evolution' not in without_token._job_kinds()
+
+    cfg.evolution_github_token = 'test-token'
+    with_token = AuraRuntimeWorker(
+        host,
+        cfg,
+        fleet_factory=EvolutionFleet,
+        runtime_packaging='standalone-service',
+    )
+    assert 'evolution' in with_token._job_kinds()
