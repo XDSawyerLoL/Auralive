@@ -223,7 +223,11 @@ apprentissage
 
 Le cœur du worker vit désormais dans le package indépendant `aura_runtime/`. Quantic Studio conserve uniquement un adaptateur de compatibilité sous `app/services/aura_cloud_worker.py`.
 
-Le Runtime peut aussi être lancé sans Studio via `python -m aura_runtime`. Le mode standalone fournit transport Cloud, heartbeat, leases, Compute Mesh et inférence Ollama locale. Les capacités voix, image, opérateur et Evolution restent injectées par des adaptateurs d’hôte jusqu’à leur extraction complète.
+Le Runtime peut aussi être lancé sans Studio via `python -m aura_runtime`. Le mode standalone fournit transport Cloud, heartbeat, leases, Compute Mesh, inférence Ollama locale, Evolution Fleet inter-produits et opérateur local typé.
+
+Evolution Fleet et l’opérateur local appartiennent désormais à AURA Runtime. Quantic Studio peut encore fournir ses propres capacités métier via son adaptateur, mais il n’est plus requis pour ces fonctions.
+
+Les capacités voix et image restent les deux extractions locales principales à terminer.
 
 ### Phase C — SDK produit
 
