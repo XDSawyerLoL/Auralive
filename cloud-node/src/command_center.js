@@ -2107,6 +2107,22 @@ export class CommandCenter {
     return promotions;
   }
 
+  async resumeQueuedMissionInitiative() {
+    const row = await one(
+      `SELECT i.*
+       FROM aura_initiatives i
+       JOIN aura_mission_steps ms ON ms.initiative_id=i.id
+       JOIN aura_missions m ON m.id=ms.mission_id
+       WHERE i.status='queued'
+         AND ms.status='queued'
+         AND m.status IN ('running','waiting')
+       ORDER BY m.priority DESC,ms.position ASC,i.updated_at ASC
+       LIMIT 1`,
+    );
+    if (!row) return null;
+    return this.executeInitiative(row);
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -2117,6 +2133,20 @@ export class CommandCenter {
     this.running = true;
     try {
       const reconciled = await this.reconcileWaiting();
+      const resumedMissionInitiative = await this.resumeQueuedMissionInitiative().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return null;
+      });
+      if (resumedMissionInitiative) {
+        this.lastCycleAt = now();
+        return {
+          ok: true,
+          trigger,
+          mode: 'long-horizon-resume',
+          reconciled,
+          initiative: resumedMissionInitiative,
+        };
+      }
       const promotions = await this.promoteDirectorPullRequests().catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);
         return [];
