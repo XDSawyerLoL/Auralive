@@ -8,7 +8,7 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 - Fastify 5
 - MySQL via `mysql2`
 - aucune dépendance Python côté serveur
-- Quantic Studio local reste Python/Rust
+- AURA Runtime local utilise actuellement Python/Rust; son packaging est encore transitoirement partagé avec le dépôt Studio
 
 ## Fonctions
 
@@ -20,7 +20,7 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 - fournisseur Gemini natif ou endpoint OpenAI-compatible distant
 - diagnostic IA sûr via `GET /api/ai/runtime`
 - pont HORIZON avec préservation stricte du statut épistémique
-- ingestion des événements et résultats Quantic Studio
+- ingestion des événements et résultats AURA Runtime et des produits Quantic
 - apprentissage des échecs répétés
 - propositions d’amélioration
 - AURA Evolution phase 1 : recherche GitHub/npm + diagnostic, sans auto-submit ni auto-merge
@@ -28,7 +28,7 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 
 ## Autorité
 
-Le cloud est volontairement **plan-only** pour les actions. Il ne pilote pas directement le PC. Quantic Studio / Automation Studio reste l’autorité d’exécution.
+Le cloud décide et orchestre; les effets machine sont exécutés par **AURA Runtime**, avec des capacités typées et bornées. Quantic Studio n'est pas l'autorité générale d'exécution : il ne possède que les capacités de streaming/live qu'il expose à AURA.
 
 ## Déploiement Hostinger
 
@@ -82,9 +82,9 @@ Privés avec `Authorization: Bearer <AURA_CLOUD_TOKEN>` :
 Canary :
 - `POST /api/evolution/canary/:cycleId` utilise `AURA_EVOLUTION_CANARY_TOKEN`, jamais le token cloud.
 
-## Liaison Quantic Studio -> AURA Cloud
+## Liaison AURA Runtime / produits -> AURA Cloud
 
-Quantic Studio peut publier un événement :
+Un produit comme Quantic Studio peut publier un événement métier :
 
 ```json
 POST /api/cloud/events
