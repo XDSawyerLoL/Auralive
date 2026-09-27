@@ -46,3 +46,9 @@ test('active work initiatives are semantically deduplicated and old duplicates a
   assert.match(commandSource, /semantic_duplicate: true/);
   assert.match(kernelSource, /seenWork/);
 });
+
+test('relational continuity does not mix public browser sessions', () => {
+  assert.match(kernelSource, /conversationSession/);
+  assert.match(kernelSource, /WHERE session_id=\?/);
+  assert.match(kernelSource, /private-founder/);
+});
