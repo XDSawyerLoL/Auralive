@@ -52,6 +52,7 @@ test('zero-cost mode blocks unconfirmed external Voice Fabric', () => {
   const script = `
     process.env.AURA_ZERO_COST_MODE='true';
     process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT='false';
     process.env.AURA_VOICE_FABRIC_BASE_URL='https://voice.example.test';
     process.env.AURA_VOICE_FABRIC_API_KEY='secret';
     process.env.AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED='false';
