@@ -48,6 +48,9 @@ def test_fleet_path_policy_blocks_sensitive_build_and_secret_surfaces():
         "app/auth/session.ts",
         "scripts/sign-windows.ps1",
         "deploy/release.js",
+        "app/package.json",
+        "src/package-lock.json",
+        "app/pyproject.toml",
         ".env",
         "README.md",
     ):
