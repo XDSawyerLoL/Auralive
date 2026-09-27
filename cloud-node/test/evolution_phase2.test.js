@@ -18,6 +18,11 @@ test('AURA Cloud Phase 3 delegates evolution to Quantic Studio when the worker i
   assert.match(serverSource, /evolution\.dispatchCycle\(/);
 });
 
+test('Fleet worker respects the configured auto-submit switch', () => {
+  const workerSource = fs.readFileSync(new URL('../../app/services/aura_cloud_worker.py', import.meta.url), 'utf8');
+  assert.match(workerSource, /submit=bool\(evolution\.auto_submit\)/);
+});
+
 test('AURA Cloud routes targeted repositories through Evolution Fleet only when Studio is online', () => {
   assert.match(evolutionSource, /delegated-evolution-fleet/);
   assert.match(evolutionSource, /Evolution Fleet exige Quantic Studio en ligne/);
