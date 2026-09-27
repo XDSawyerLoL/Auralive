@@ -37,6 +37,20 @@ function stringList(value, limit = 64) {
   return [...new Set(rows.map((item) => String(item || '').trim()).filter(Boolean))].slice(0, limit);
 }
 
+function workerMayCreateCost(worker = {}) {
+  const resources = worker.resources && typeof worker.resources === 'object' ? worker.resources : {};
+  if (resources.zero_cost === false || resources.billing_required === true || resources.paid === true) return true;
+  const declaredCost = Number(resources.cost_microunits ?? resources.estimated_cost_microunits ?? 0);
+  if (Number.isFinite(declaredCost) && declaredCost > 0) return true;
+  const models = stringList([
+    ...(Array.isArray(resources.models) ? resources.models : []),
+    worker.model,
+  ], 32).join(' ');
+  // Ollama ':cloud' models delegate to a remote provider and are never acceptable
+  // under the hard zero-cost invariant unless that mode is explicitly disabled.
+  return /:cloud(?:\b|$)/i.test(models);
+}
+
 export function scoreMeshWorker(worker = {}) {
   const resources = worker.resources && typeof worker.resources === 'object'
     ? worker.resources
@@ -97,6 +111,7 @@ const settings = Object.freeze({
   imageTimeoutMs: intEnv('AURA_BRIDGE_IMAGE_TIMEOUT_MS', 300_000, 10_000, 600_000),
   operatorMaxSteps: intEnv('AURA_BRIDGE_OPERATOR_MAX_STEPS', 6, 1, 8),
   preferLocalAi: boolEnv('AURA_LOCAL_AI_PREFERRED', true),
+  zeroCostMode: boolEnv('AURA_ZERO_COST_MODE', true),
   meshMaxQuorum: intEnv('AURA_MESH_MAX_QUORUM', 3, 1, 5),
   meshTimeoutMs: intEnv('AURA_MESH_TIMEOUT_MS', 120_000, 5_000, 600_000),
   meshMoaMaxAgents: intEnv('AURA_MESH_MOA_MAX_AGENTS', 3, 2, 4),
@@ -157,6 +172,7 @@ export class ExecutionBridge {
       if (onlineOnly && nowMs() - worker.last_seen_ms > settings.workerOnlineMs) return false;
       if (computeOnly && !worker.compute_consent) return false;
       if (required && !worker.mesh_capabilities.includes(required)) return false;
+      if (settings.zeroCostMode && workerMayCreateCost(worker)) return false;
       return true;
     }).sort((a, b) => b.mesh_score - a.mesh_score || b.reputation - a.reputation);
   }
@@ -380,6 +396,9 @@ export class ExecutionBridge {
       if (!job) throw new Error('job disparu');
       if (job.status === 'completed') return job.result;
       if (job.status === 'error') throw new Error(job.error || 'worker execution failed');
+      if (['cancelled', 'canceled'].includes(String(job.status || '').toLowerCase())) {
+        throw new Error(job.error || 'worker execution cancelled');
+      }
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
     throw new Error('AURA bridge timeout');
@@ -747,6 +766,7 @@ export class ExecutionBridge {
       enabled: this.enabled,
       mode: this.enabled ? 'cloud-to-local-execution' : 'disabled',
       local_ai_preferred: settings.preferLocalAi,
+      zero_cost_mode: settings.zeroCostMode,
       worker_online: online,
       worker: worker ? {
         worker_id: worker.worker_id,
