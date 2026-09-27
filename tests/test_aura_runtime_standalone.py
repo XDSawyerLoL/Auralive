@@ -22,6 +22,10 @@ def test_runtime_core_has_no_direct_app_or_studio_imports():
     assert 'import app.' not in source
     assert 'EvolutionFleet' not in source
     assert '"runtime_host_product": "quantic-studio"' not in source
+    standalone = Path('aura_runtime/standalone.py').read_text(encoding='utf-8')
+    constellation = Path('aura_runtime/model_constellation.py').read_text(encoding='utf-8')
+    assert 'from app.' not in standalone
+    assert 'from app.' not in constellation
 
 
 def test_standalone_runtime_settings_are_environment_driven(monkeypatch, tmp_path):
@@ -37,6 +41,9 @@ def test_standalone_runtime_settings_are_environment_driven(monkeypatch, tmp_pat
     assert settings.ai_model == 'qwen3:8b'
     assert settings.aura_compute_mesh_consent is True
     assert settings.aura_compute_mesh_identity_file == tmp_path / 'node-id'
+    assert settings.ai_constellation_moa_enabled is True
+    assert settings.ai_constellation_max_models == 3
+    assert settings.ai_constellation_moa_parallel is False
 
 
 @pytest.mark.asyncio
@@ -59,3 +66,35 @@ async def test_standalone_runtime_can_execute_compute_without_studio(monkeypatch
     assert 'tts' not in profile['job_kinds']
     assert 'image' not in profile['job_kinds']
     assert 'evolution' not in profile['job_kinds']
+
+
+def test_standalone_runtime_advertises_learned_model_competence(monkeypatch, tmp_path):
+    monkeypatch.setenv('AURA_CLOUD_BASE_URL', 'https://aura.example')
+    monkeypatch.setenv('AURA_CLOUD_TOKEN', 'test-token')
+    monkeypatch.setenv('AURA_RUNTIME_DATA_DIR', str(tmp_path))
+    settings = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(settings)
+    host.ai.constellation.installed = host.ai.constellation._decode_installed([
+        {'name': 'qwen3:8b', 'size': 5_000_000_000},
+        {'name': 'deepseek-r1:8b', 'size': 5_000_000_000},
+    ])
+    for _ in range(4):
+        host.ai.constellation.record_outcome(
+            'deepseek-r1:8b',
+            'reasoning',
+            success=True,
+            latency_ms=1200,
+            quality=0.9,
+            source='unit-test',
+        )
+
+    worker = AuraRuntimeWorker(host, settings, runtime_packaging='standalone-service')
+    profile = worker._resource_profile()
+    assert profile['zero_cost'] is True
+    assert set(profile['models']) == {'qwen3:8b', 'deepseek-r1:8b'}
+    deepseek = next(
+        row for row in profile['model_scorecard']
+        if row['name'] == 'deepseek-r1:8b'
+    )
+    assert deepseek['roles']['reasoning']['samples'] == 4
+    assert deepseek['roles']['reasoning']['score'] > 0.99
