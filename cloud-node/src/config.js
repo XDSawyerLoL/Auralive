@@ -154,9 +154,9 @@ export const config = Object.freeze({
   // AURA Voice Fabric: provider-neutral Mairaiy identity.
   // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
   voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', true),
-  voiceFabricBaseUrl: String(process.env.AURA_VOICE_FABRIC_BASE_URL || '').replace(/\/$/, ''),
+  voiceFabricBaseUrl: String(process.env.AURA_VOICE_FABRIC_BASE_URL || 'https://mediumorchid-badger-314305.hostingersite.com/voice').replace(/\/$/, ''),
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
-  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'omnivoice',
+  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'kokoro',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
   voiceFabricProfileName: process.env.AURA_MAIRAIY_VOICE_PROFILE_NAME || 'Mairaiy',
   voiceFabricRequireProfile: bool('AURA_MAIRAIY_REQUIRE_PROFILE', true),
@@ -169,6 +169,7 @@ export const config = Object.freeze({
   voiceFabricChunkChars: int('AURA_VOICE_FABRIC_CHUNK_CHARS', 3200, 800, 3900),
   voiceFabricMaxAudioBytes: int('AURA_VOICE_FABRIC_MAX_AUDIO_BYTES', 20 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
   voiceFabricZeroCostConfirmed: bool('AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED', false),
+  voiceFabricTrustedZeroCostOrigins: csv('AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS', 'https://mediumorchid-badger-314305.hostingersite.com/voice'),
   voiceFabricStrictIdentity: bool('AURA_VOICE_FABRIC_STRICT_IDENTITY', true),
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),

@@ -13,7 +13,7 @@ Garantie financière :
 - AURA_ZERO_COST_MODE=true est la valeur par défaut et doit rester activée
 - aucun fallback Gemini/OpenAI distant potentiellement facturable
 - Expert Bridge externe bloqué même si une ancienne clé existe dans Hostinger
-- TTS Gemini Cloud bloqué ; voix via AURA Runtime/local worker uniquement
+- TTS Gemini Cloud bloqué ; voix Mairaiy via Providence/Kokoro ff_siwis, route publique bornée et sans facturation API
 - nœuds Runtime déclarés payants, coût > 0 ou modèles Ollama :cloud exclus du Mesh
 - sans worker local/gratuit disponible, AURA reste en mode natif/offline plutôt que de dépenser
 
@@ -44,3 +44,18 @@ DB_NAME=...
 DB_CONNECT_TIMEOUT_MS=5000
 AURA_CLOUD_TOKEN=...
 AURA_EVOLUTION_CANARY_TOKEN=...
+
+
+Voix Mairaiy en ligne :
+AURA_VOICE_FABRIC_ENABLED=true
+AURA_VOICE_FABRIC_BASE_URL=https://mediumorchid-badger-314305.hostingersite.com/voice
+AURA_VOICE_FABRIC_API_KEY=
+AURA_VOICE_FABRIC_MODEL=kokoro
+AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS=https://mediumorchid-badger-314305.hostingersite.com/voice
+AURA_MAIRAIY_VOICE_PROFILE_NAME=Mairaiy
+AURA_MAIRAIY_REQUIRE_PROFILE=true
+AURA_VOICE_FABRIC_STRICT_IDENTITY=true
+
+Le domaine/path ci-dessus est le seul endpoint distant autorisé sans clé et sans
+confirmation manuelle de facturation. Toute autre URL distante reste bloquée
+sans bearer et, en mode zéro coût, sans confirmation explicite.

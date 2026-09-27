@@ -1,7 +1,7 @@
 import { config } from './config.js';
 
 const MAX_INPUT_CHARS = 3900;
-const DEFAULT_MODEL = 'omnivoice';
+const DEFAULT_MODEL = 'kokoro';
 const DEFAULT_PROFILE_NAME = 'Mairaiy';
 
 function clean(value, limit = 16000) {
@@ -20,6 +20,27 @@ function redact(value) {
 function isLoopbackHost(hostname) {
   const host = String(hostname || '').toLowerCase();
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
+function normalizedServiceRoot(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    url.search = '';
+    url.hash = '';
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    return url.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+export function isTrustedZeroCostVoiceEndpoint(endpoint) {
+  const root = normalizedServiceRoot(endpoint?.service_root || endpoint);
+  if (!root) return false;
+  const trusted = Array.isArray(config.voiceFabricTrustedZeroCostOrigins)
+    ? config.voiceFabricTrustedZeroCostOrigins
+    : [];
+  return trusted.some((value) => normalizedServiceRoot(value) === root);
 }
 
 export function normalizeVoiceStudioEndpoint(value) {
@@ -177,11 +198,19 @@ export class VoiceStudioProvider {
     return normalizeVoiceStudioEndpoint(config.voiceFabricBaseUrl);
   }
 
+  get zeroCostTrusted() {
+    return isTrustedZeroCostVoiceEndpoint(this.endpoint);
+  }
+
   get enabled() {
     const endpoint = this.endpoint;
     if (!config.voiceFabricEnabled || !endpoint.trusted) return false;
-    if (endpoint.remote && !config.voiceFabricApiKey) return false;
-    if (config.zeroCostMode && !config.voiceFabricZeroCostConfirmed) return false;
+    // The exact Quantic Mairaiy endpoint is a bounded, public, self-hosted route
+    // and therefore does not need a bearer key. Every other remote endpoint does.
+    if (endpoint.remote && !config.voiceFabricApiKey && !this.zeroCostTrusted) return false;
+    // In zero-cost mode an operator confirmation remains mandatory for arbitrary
+    // providers. The exact allowlisted Quantic endpoint is intrinsically non-billable.
+    if (config.zeroCostMode && !config.voiceFabricZeroCostConfirmed && !this.zeroCostTrusted) return false;
     return true;
   }
 
@@ -399,6 +428,7 @@ export class VoiceStudioProvider {
       require_profile: Boolean(config.voiceFabricRequireProfile),
       zero_cost_mode: Boolean(config.zeroCostMode),
       zero_cost_confirmed: Boolean(config.voiceFabricZeroCostConfirmed),
+      zero_cost_trusted_endpoint: Boolean(this.zeroCostTrusted),
       strict_identity: Boolean(config.voiceFabricStrictIdentity),
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
