@@ -45,8 +45,8 @@ Les échecs, latences et retours qualité font évoluer le score. Les profils st
 pip install -r aura_runtime/requirements.txt
 ```
 
-3. Configurer les variables de `aura_runtime/.env.example` dans l'environnement.
-4. Lancer:
+3. Copier `.env.example` en `.env` à la racine du package puis renseigner au minimum `AURA_CLOUD_BASE_URL` et `AURA_CLOUD_TOKEN`. Le Runtime charge automatiquement ce fichier sans écraser les vraies variables d'environnement.
+4. Sous Windows, lancer `aura_runtime\\run-aura-runtime.cmd` : le launcher crée `.env` s'il manque et installe `aiohttp` si nécessaire. Sinon lancer:
 
 ```bash
 python -m aura_runtime

@@ -17,6 +17,52 @@ from .operator import RuntimeOperator
 from .worker import AuraRuntimeWorker
 
 
+def _load_env_file() -> None:
+    """Charge un .env local sans dépendance supplémentaire.
+
+    Priorité aux vraies variables d'environnement: le fichier ne les écrase jamais.
+    Le launcher Windows se place à la racine du package, donc ./.env est le chemin
+    normal; les deux chemins suivants couvrent les lancements depuis un autre cwd.
+    """
+    candidates = [
+        Path.cwd() / '.env',
+        Path(__file__).resolve().parent.parent / '.env',
+        Path(__file__).resolve().parent / '.env',
+    ]
+    seen: set[Path] = set()
+    for path in candidates:
+        try:
+            path = path.resolve()
+        except Exception:
+            continue
+        if path in seen or not path.is_file():
+            continue
+        seen.add(path)
+        try:
+            for raw in path.read_text(encoding='utf-8-sig').splitlines():
+                line = raw.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                if not key or key in os.environ:
+                    continue
+                if (
+                    len(value) >= 2
+                    and value[0] == value[-1]
+                    and value[0] in {'"', "'"}
+                ):
+                    value = value[1:-1]
+                os.environ[key] = value
+            return
+        except Exception:
+            continue
+
+
+_load_env_file()
+
+
 def _bool(name: str, default: bool = False) -> bool:
     raw = str(os.getenv(name, '1' if default else '0')).strip().casefold()
     return raw in {'1', 'true', 'yes', 'on'}
