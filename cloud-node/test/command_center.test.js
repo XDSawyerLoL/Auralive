@@ -41,7 +41,7 @@ test('command center creates deterministic native initiative fingerprints', () =
     objective: 'Tester la politique.',
     requested_risks: ['safe', 'network', 'process'],
   });
-  assert.deepEqual(bounded.requested_risks, ['safe']);
+  assert.deepEqual(bounded.requested_risks, ['safe', 'network', 'process']);
 });
 
 test('autonomous initiatives are native decisions with outcome learning', () => {
@@ -55,14 +55,12 @@ test('autonomous initiatives are native decisions with outcome learning', () => 
   assert.match(commandSource, /confidence >= config\.commandCenterMinConfidence/);
 });
 
-test('command center starts automatically but inside an explicit risk envelope', () => {
+test('command center starts in proactive Director mode with a non-destructive operational envelope', () => {
   assert.match(configSource, /AURA_COMMAND_CENTER_ENABLED/);
   assert.match(configSource, /AURA_COMMAND_CENTER_AUTO_EXECUTE/);
-  assert.match(configSource, /safe,ai,local-control,local-write/);
-  assert.doesNotMatch(
-    configSource,
-    /AURA_COMMAND_CENTER_ALLOWED_RISKS'[\s\S]{0,160}safe,ai,network,local-write,process/,
-  );
+  assert.match(configSource, /AURA_DIRECTOR_MODE_ENABLED/);
+  assert.match(configSource, /safe,ai,network,process,local-control,local-write/);
+  assert.doesNotMatch(configSource, /AURA_COMMAND_CENTER_ALLOWED_RISKS'[\s\S]{0,180}secret/);
 });
 
 test('Quantic Sillage product registry and private control API are wired', () => {
@@ -181,4 +179,12 @@ test('reconciliation records rejected or no-safe-patch Fleet worker results as f
   assert.match(commandSource, /payloadStatus === 'no-safe-patch'/);
   assert.match(commandSource, /const finalStatus = evolutionRejected \? 'failed' : 'completed'/);
   assert.match(commandSource, /ok: !evolutionRejected/);
+});
+
+test('Director mode creates rotating portfolio Evolution initiatives', () => {
+  assert.match(commandSource, /config\.directorModeEnabled/);
+  assert.match(commandSource, /Direction · faire progresser/);
+  assert.match(commandSource, /director_mode: true/);
+  assert.match(commandSource, /Director Mode réalise une revue tournante du portefeuille/);
+  assert.match(commandSource, /director-autonomous-operations/);
 });
