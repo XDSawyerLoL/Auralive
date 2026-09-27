@@ -62,7 +62,19 @@ test('registry seeding uses command-center products and modification policy', as
 
   const seeded = await seedQuanticProducts(fake);
   assert.equal(seeded.length, CORE_QUANTIC_PRODUCTS.length);
-  assert.equal(calls.every((item) => item.kind === 'quantic-product'), true);
+  const auraCall = calls.find((item) => item.id === 'aura');
+  const studioCall = calls.find((item) => item.id === 'quantic-studio');
+  assert.equal(auraCall.kind, 'platform-core');
+  assert.equal(auraCall.metadata.role, 'platform-core');
+  assert.equal(auraCall.metadata.parent, null);
+  assert.equal(studioCall.kind, 'quantic-product');
+  assert.equal(studioCall.metadata.role, 'product');
+  assert.equal(studioCall.metadata.parent, 'aura');
+  assert.equal(studioCall.metadata.specialization, 'live-streaming');
+  assert.equal(
+    calls.filter((item) => item.id !== 'aura').every((item) => item.kind === 'quantic-product'),
+    true,
+  );
   assert.equal(calls.every((item) => item.metadata.writable_by_aura === true), true);
   assert.equal(
     calls.every((item) => item.metadata.modification_policy === 'branch-test-canary-promote'),
@@ -76,4 +88,16 @@ test('Director curiosity rotates portfolio angles and uses shorter dedupe window
   assert.match(curiositySource, /dedupeHours = 24/);
   assert.match(curiositySource, /Veille exécutive autonome/);
   assert.match(curiositySource, /dedupeHours: 2/);
+});
+
+test('canonical hierarchy makes AURA the parent platform and Studio only the streaming product', () => {
+  const aura = CORE_QUANTIC_PRODUCTS.find((item) => item.id === 'aura');
+  const studio = CORE_QUANTIC_PRODUCTS.find((item) => item.id === 'quantic-studio');
+  assert.equal(aura.role, 'platform-core');
+  assert.equal(aura.parent, null);
+  assert.equal(studio.role, 'product');
+  assert.equal(studio.parent, 'aura');
+  assert.equal(studio.specialization, 'live-streaming');
+  assert.equal(studio.capabilities.includes('streaming'), true);
+  assert.equal(studio.capabilities.includes('local-ai'), false);
 });
