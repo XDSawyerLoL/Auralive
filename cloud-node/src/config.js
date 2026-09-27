@@ -118,6 +118,11 @@ export const config = Object.freeze({
   backupRetentionCount: int('AURA_BACKUP_RETENTION_COUNT', 28, 3, 365),
   metricsRollupSeconds: int('AURA_METRICS_ROLLUP_SECONDS', 300, 60, 86400),
 
+  // Financial safety invariant. When enabled, AURA may use native cognition,
+  // local/runtime workers and explicitly zero-cost fabric capabilities, but not
+  // remote model APIs that can create usage charges.
+  zeroCostMode: bool('AURA_ZERO_COST_MODE', true),
+
   aiMode: AI_MODE,
   aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
   aiModel: process.env.AI_MODEL || AI_DEFAULT_MODEL,
@@ -126,7 +131,7 @@ export const config = Object.freeze({
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
 
-  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', true),
+  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', false),
   voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
   voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
   voiceModel: process.env.TTS_MODEL || 'gemini-3.1-flash-tts-preview',

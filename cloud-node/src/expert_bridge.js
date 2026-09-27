@@ -163,6 +163,7 @@ export class ExpertBridge {
   get externalAvailable() {
     return Boolean(
       config.expertBridgeEnabled
+      && !config.zeroCostMode
       && config.expertBridgeApiKey
       && config.expertBridgeBaseUrl
       && config.expertBridgeModel
@@ -357,6 +358,7 @@ export class ExpertBridge {
       available: this.externalAvailable || this.internalAvailable,
       external_available: this.externalAvailable,
       internal_fallback: this.internalAvailable,
+      zero_cost_mode: Boolean(config.zeroCostMode),
       provider: this.lastProvider || (
         this.externalAvailable ? 'openai-responses' : (this.internalAvailable ? 'internal-ai-fallback' : 'none')
       ),

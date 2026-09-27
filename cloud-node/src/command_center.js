@@ -88,6 +88,19 @@ const DEFAULT_SERVICES = [
 ];
 
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'waiting']);
+
+function safeOperationalError(value, limit = 5000) {
+  return String(value?.message || value || '')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:sk-|AIza)[A-Za-z0-9_-]{12,}\b/g, '[REDACTED]')
+    .replace(/\bgh[opsu]_[A-Za-z0-9_]{16,}\b/g, '[REDACTED]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{16,}\b/g, '[REDACTED]')
+    .replace(/([?&](?:key|token|api_key|access_token)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, Math.max(64, Number(limit || 5000)));
+}
+
 const BAD_SERVICE_STATES = new Set(['degraded', 'offline', 'error', 'unhealthy']);
 const BAD_WORKFLOW_CONCLUSIONS = new Set([
   'failure',
@@ -1585,7 +1598,8 @@ export class CommandCenter {
       const waiting = Boolean(result?.queued)
         || ['queued', 'leased'].includes(returnedStatus)
         || returnedStatus.startsWith('waiting');
-      const failed = returnedStatus === 'error' || returnedStatus.endsWith('-rejected');
+      const failed = ['error', 'cancelled', 'canceled'].includes(returnedStatus)
+        || returnedStatus.endsWith('-rejected');
       const executed = !waiting && !failed
         && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
       const status = waiting ? 'waiting' : (failed ? 'failed' : 'completed');
@@ -1611,7 +1625,7 @@ export class CommandCenter {
       }
       return { id, status, execution_mode: executionMode, result };
     } catch (error) {
-      const message = String(error?.message || error).slice(0, 5000);
+      const message = safeOperationalError(error, 5000);
       await this.updateInitiative(id, {
         status: 'failed',
         execution_mode: initiative.kind,
@@ -1703,8 +1717,8 @@ export class CommandCenter {
           created_at: now(),
         });
         reconciled.push({ id: row.id, status: finalStatus, job_id: jobId });
-      } else if (job.status === 'error') {
-        const message = String(job.error || 'worker execution failed').slice(0, 5000);
+      } else if (['error', 'cancelled', 'canceled'].includes(String(job.status || '').toLowerCase())) {
+        const message = safeOperationalError(job.error || `worker execution ${job.status}`, 5000);
         await query(
           `UPDATE aura_initiatives
            SET status='failed',error=?,updated_at=?

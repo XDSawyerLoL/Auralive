@@ -4,12 +4,14 @@ import assert from 'node:assert/strict';
 test('Gemini mode uses native generateContent API and exposes diagnostics', async () => {
   const originalFetch = globalThis.fetch;
   const previous = {
+    AURA_ZERO_COST_MODE: process.env.AURA_ZERO_COST_MODE,
     AI_MODE: process.env.AI_MODE,
     AI_BASE_URL: process.env.AI_BASE_URL,
     AI_MODEL: process.env.AI_MODEL,
     AI_API_KEY: process.env.AI_API_KEY,
   };
 
+  process.env.AURA_ZERO_COST_MODE = 'false';
   process.env.AI_MODE = 'gemini';
   process.env.AI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
   process.env.AI_MODEL = 'gemini-test-model';

@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 test('Mairaiy Cloud TTS produces browser-playable WAV without Quantic Studio', () => {
   const script = `
+    process.env.AURA_ZERO_COST_MODE='false';
     process.env.TTS_API_KEY='unit-test-key';
     process.env.MAIRAIY_CLOUD_VOICE_ENABLED='true';
     process.env.TTS_MODEL='unit-test-model';
