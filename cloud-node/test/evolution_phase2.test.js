@@ -6,8 +6,10 @@ const evolutionSource = fs.readFileSync(new URL('../src/evolution.js', import.me
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const bridgeSource = fs.readFileSync(new URL('../src/bridge.js', import.meta.url), 'utf8');
-const workerUrl = new URL('../../app/services/aura_cloud_worker.py', import.meta.url);
-const workerSource = fs.existsSync(workerUrl) ? fs.readFileSync(workerUrl, 'utf8') : '';
+const runtimeWorkerUrl = new URL('../../aura_runtime/worker.py', import.meta.url);
+const runtimeWorkerSource = fs.existsSync(runtimeWorkerUrl) ? fs.readFileSync(runtimeWorkerUrl, 'utf8') : '';
+const studioAdapterUrl = new URL('../../app/services/aura_cloud_worker.py', import.meta.url);
+const studioAdapterSource = fs.existsSync(studioAdapterUrl) ? fs.readFileSync(studioAdapterUrl, 'utf8') : '';
 
 test('AURA Cloud Phase 3 delegates evolution to AURA Runtime when the worker is online', () => {
   assert.match(evolutionSource, /aura-evolution-node-phase3-v1/);
@@ -21,8 +23,10 @@ test('AURA Cloud Phase 3 delegates evolution to AURA Runtime when the worker is 
   assert.match(serverSource, /evolution\.dispatchCycle\(/);
 });
 
-test('Fleet worker respects the configured auto-submit switch', { skip: !workerSource }, () => {
-  assert.match(workerSource, /submit=bool\(evolution\.auto_submit\)/);
+test('Fleet worker respects the configured auto-submit switch after Runtime extraction', { skip: !runtimeWorkerSource }, () => {
+  assert.match(runtimeWorkerSource, /submit=bool\(evolution\.auto_submit\)/);
+  assert.match(runtimeWorkerSource, /self\.fleet_factory/);
+  assert.match(studioAdapterSource, /fleet_factory=EvolutionFleet/);
 });
 
 test('AURA Cloud routes targeted repositories through Evolution Fleet only when AURA Runtime is online', () => {
