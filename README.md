@@ -6,6 +6,8 @@ Quantic Studio est le **logiciel de streaming vivant** de Quantic Sillage. Il n'
 
 Architecture canonique : [ARCHITECTURE-QUANTIC-SILLAGE.md](ARCHITECTURE-QUANTIC-SILLAGE.md).
 
+AURA Runtime est désormais extrait dans le package top-level `aura_runtime/` et dispose d'un build Windows autonome `AuraRuntime.exe`. Quantic Studio conserve uniquement un adaptateur de compatibilité vers ce Runtime.
+
 Quantic Studio est aussi le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
 La version 2.7.4 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
