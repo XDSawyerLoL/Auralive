@@ -30,11 +30,18 @@ const DEFAULT_SERVICES = [
     criticality: 1,
   },
   {
+    id: 'aura-runtime',
+    name: 'AURA Runtime',
+    kind: 'execution',
+    objective: 'Fournir au noyau AURA un plan d’exécution local indépendant de tout produit utilisateur.',
+    criticality: 0.99,
+  },
+  {
     id: 'quantic-studio',
     name: 'Quantic Studio',
-    kind: 'execution',
-    objective: 'Fournir à AURA ses capacités locales, ses modèles, ses outils et son bras opérateur.',
-    criticality: 0.95,
+    kind: 'streaming',
+    objective: 'Assurer le streaming vivant : diffusion, scènes, overlays, avatar, chat, modération et automatisations de live.',
+    criticality: 0.82,
   },
   {
     id: 'horizon',
@@ -902,7 +909,7 @@ export class CommandCenter {
       { command_center: CommandCenter.VERSION },
     );
     await this.setServiceState(
-      'quantic-studio',
+      'aura-runtime',
       bridgeStatus.worker_online ? 'online' : 'standby',
       bridgeStatus.worker_online
         ? 'Worker local connecté et disponible pour les actions autorisées.'
@@ -1450,7 +1457,7 @@ export class CommandCenter {
       await this.updateInitiative(id, {
         status: 'waiting',
         execution_mode: 'waiting-local-worker',
-        result: { reason: 'Quantic Studio worker offline' },
+        result: { reason: 'AURA Runtime worker offline' },
       });
       return { id, status: 'waiting', reason: 'worker offline' };
     }
@@ -1464,7 +1471,7 @@ export class CommandCenter {
         status: 'waiting',
         execution_mode: 'waiting-local-worker',
         result: {
-          reason: 'Quantic Studio worker offline',
+          reason: 'AURA Runtime worker offline',
           repository: targetRepository,
         },
       });
@@ -1558,7 +1565,7 @@ export class CommandCenter {
           { repository, base_branch: baseBranch },
         );
       } else if (initiative.kind === 'operator') {
-        executionMode = 'quantic-studio-operator';
+        executionMode = 'aura-runtime-operator';
         result = await this.kernel.operate(
           initiative.objective,
           initiative.requested_risks,
@@ -1679,7 +1686,7 @@ export class CommandCenter {
            WHERE id=?`,
           [
             finalStatus,
-            row.kind === 'evolution' ? 'evolution-fleet' : 'quantic-studio-operator',
+            row.kind === 'evolution' ? 'evolution-fleet' : 'aura-runtime-operator',
             JSON.stringify(payload).slice(0, 100000),
             finalError,
             now(),
