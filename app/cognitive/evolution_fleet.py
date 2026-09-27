@@ -31,6 +31,11 @@ _PROTECTED_PARTS = {
     "vault", "keystore", "keychain", "private-key", "private_key", ".env",
     "sign", "installer", "deploy", "release", "workflow",
 }
+_PROTECTED_BASENAMES = {
+    "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock",
+    "requirements.txt", "requirements-desktop.txt", "pyproject.toml", "poetry.lock",
+    "cargo.toml", "cargo.lock", "go.mod", "go.sum",
+}
 _MAX_FILE_BYTES = 180_000
 _MAX_CONTEXT_FILES = 10
 
@@ -48,6 +53,9 @@ def _safe_text_path(path: str) -> bool:
     if not rel or ".." in rel.split("/"):
         return False
     low = rel.casefold()
+    basename = low.rsplit("/", 1)[-1]
+    if basename in _PROTECTED_BASENAMES:
+        return False
     if any(part in low for part in _PROTECTED_PARTS):
         return False
     suffix = "." + rel.rsplit(".", 1)[-1].casefold() if "." in rel.rsplit("/", 1)[-1] else ""
