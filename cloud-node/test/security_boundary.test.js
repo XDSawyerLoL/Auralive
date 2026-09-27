@@ -42,3 +42,9 @@ test('rate-limit buckets are pruned and hard bounded', () => {
   assert.match(serverSource, /RATE_BUCKET_LIMIT = 4096/);
   assert.match(serverSource, /rateBuckets\.delete/);
 });
+
+test('client IP rate limits trust only a bounded reverse-proxy chain', () => {
+  assert.match(configSource, /AURA_TRUST_PROXY_HOPS/);
+  assert.match(serverSource, /trustProxy: config\.trustProxyHops > 0 \? config\.trustProxyHops : false/);
+  assert.doesNotMatch(serverSource, /trustProxy:\s*true/);
+});
