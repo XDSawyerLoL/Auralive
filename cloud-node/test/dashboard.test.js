@@ -219,3 +219,12 @@ test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
 });
+
+
+test('dashboard exposes the verifiable 2.2.1 living build identity', () => {
+  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="living-2.2.1"'), true);
+  assert.equal(DASHBOARD_HTML.includes('AURA 2.2.1 · LONG HORIZON'), true);
+  for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
+    assert.equal(DASHBOARD_HTML.includes(label), true, label);
+  }
+});

@@ -56,7 +56,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .title{font-size:24px;line-height:1.04;font-weight:480;letter-spacing:.01em;white-space:nowrap}
 .subtitle{font-size:12px;color:var(--muted);margin-top:6px}
 .top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
-.pill{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:rgba(16,23,39,.72);padding:9px 12px;border-radius:999px;font-size:11px;color:#cbd4e8;backdrop-filter:blur(16px)}
+.pill{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:rgba(16,23,39,.72);padding:9px 12px;border-radius:999px;font-size:11px;color:#cbd4e8;backdrop-filter:blur(16px)}.build-pill{border-color:rgba(154,108,255,.38);background:linear-gradient(135deg,rgba(105,75,220,.22),rgba(62,185,210,.10));color:#e9e1ff;font-weight:700;letter-spacing:.04em}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 14px currentColor}
 .live-dot.good{background:var(--green)}.live-dot.bad{background:var(--red)}
 .clock{padding:0 16px;border-left:1px solid var(--line);border-right:1px solid var(--line);text-align:right;min-width:106px}
@@ -195,7 +195,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
 }
 </style>
 </head>
-<body>
+<body data-aura-ui="living-2.2.1">
 <div class="shell">
   <header class="topbar">
     <div class="identity">
@@ -206,6 +206,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       </div>
     </div>
     <div class="top-actions">
+      <div class="pill build-pill" id="buildBadge" title="Build Hostinger vérifiable">AURA 2.2.1 · LONG HORIZON</div>
       <div class="pill"><span id="liveDot" class="live-dot"></span><span id="liveText">Connexion…</span></div>
       <div class="pill"><span id="voiceDot" class="live-dot"></span><span id="voiceText">Mairaiy…</span></div>
       <div class="pill"><span id="evolutionDot" class="live-dot"></span><span id="evolutionText">Évolution…</span></div>
