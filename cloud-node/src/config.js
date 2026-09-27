@@ -195,6 +195,19 @@ export const config = Object.freeze({
   commandCenterChangePrMaxFileBytes: int('AURA_COMMAND_CHANGE_PR_MAX_FILE_BYTES', 180000, 1000, 1000000),
   commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 3, 0, 6),
 
+  // Expert Bridge: second avis autonome. L'expert conseille; AURA garde tous les outils.
+  expertBridgeEnabled: bool('AURA_EXPERT_BRIDGE_ENABLED', true),
+  expertBridgeBaseUrl: String(process.env.AURA_EXPERT_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+  expertBridgeApiKey: process.env.AURA_EXPERT_API_KEY || process.env.OPENAI_API_KEY || '',
+  expertBridgeModel: process.env.AURA_EXPERT_MODEL || 'gpt-6-astra',
+  expertBridgeTimeoutMs: int('AURA_EXPERT_TIMEOUT_MS', 60000, 5000, 180000),
+  expertBridgeMaxCallsPerHour: int('AURA_EXPERT_MAX_CALLS_PER_HOUR', 4, 1, 24),
+  expertBridgeMaxRoundsPerIncident: int('AURA_EXPERT_MAX_ROUNDS_PER_INCIDENT', 3, 1, 8),
+  expertBridgeCooldownSeconds: int('AURA_EXPERT_COOLDOWN_SECONDS', 900, 60, 86400),
+  expertBridgeMinConfidence: num('AURA_EXPERT_MIN_CONFIDENCE', 0.68, 0.3, 1),
+  expertBridgeInternalFallback: bool('AURA_EXPERT_INTERNAL_FALLBACK', true),
+  expertBridgeWebSearchEnabled: bool('AURA_EXPERT_WEB_SEARCH_ENABLED', false),
+
   webSubstrateEnabled: bool('AURA_WEB_SUBSTRATE_ENABLED', true),
   webSearchUrl: String(process.env.AURA_WEB_SEARCH_URL || '').trim(),
   webSearchApiKey: process.env.AURA_WEB_SEARCH_API_KEY || '',
