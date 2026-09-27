@@ -77,6 +77,8 @@ export function sourcePrior(url) {
   ) return 0.82;
   if (host.endsWith('wikipedia.org') || host.endsWith('wikidata.org')) return 0.64;
   if (host === 'github.com' || host === 'api.github.com') return 0.70;
+  if (host === 'news.ycombinator.com') return 0.58;
+  if (host === 'hn.algolia.com') return 0.52;
   return 0.55;
 }
 
@@ -123,7 +125,7 @@ export function aggregateEvidence(rows = []) {
 }
 
 export class WebSubstrate {
-  static VERSION = 'aura-web-substrate-v1';
+  static VERSION = 'aura-web-substrate-v2-open-web';
 
   constructor(ai) {
     this.ai = ai;
@@ -291,6 +293,51 @@ export class WebSubstrate {
     })).filter((row) => row.url.startsWith('https://'));
   }
 
+  async searchGithub(queryText, limit) {
+    const url = new URL('https://api.github.com/search/repositories');
+    url.searchParams.set('q', cleanText(queryText, 240));
+    url.searchParams.set('sort', 'updated');
+    url.searchParams.set('order', 'desc');
+    url.searchParams.set('per_page', String(Math.min(limit, 6)));
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'AURA-Web-Substrate/2.0',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      signal: AbortSignal.timeout(config.webRequestTimeoutMs),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return [];
+    return (Array.isArray(body?.items) ? body.items : []).map((row) => ({
+      url: String(row.html_url || ''),
+      title: cleanText(row.full_name || row.name || '', 300),
+      snippet: cleanText(row.description || '', 1200),
+      engine: 'github',
+      published_at: String(row.updated_at || ''),
+    })).filter((row) => row.url.startsWith('https://github.com/'));
+  }
+
+  async searchHackerNews(queryText, limit) {
+    const url = new URL('https://hn.algolia.com/api/v1/search_by_date');
+    url.searchParams.set('query', cleanText(queryText, 300));
+    url.searchParams.set('tags', 'story');
+    url.searchParams.set('hitsPerPage', String(Math.min(limit, 6)));
+    const response = await fetch(url, {
+      headers: { Accept: 'application/json', 'User-Agent': 'AURA-Web-Substrate/2.0' },
+      signal: AbortSignal.timeout(config.webRequestTimeoutMs),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return [];
+    return (Array.isArray(body?.hits) ? body.hits : []).map((row) => ({
+      url: String(row.url || row.story_url || (row.objectID ? 'https://news.ycombinator.com/item?id=' + row.objectID : '')),
+      title: cleanText(row.title || row.story_title || '', 300),
+      snippet: cleanText(row.story_text || row.comment_text || '', 1000),
+      engine: 'hackernews',
+      published_at: String(row.created_at || ''),
+    })).filter((row) => row.url.startsWith('https://'));
+  }
+
   async search(queryText, limit = config.webSearchResults) {
     const q = cleanText(queryText, 800);
     if (!q) return [];
@@ -298,6 +345,8 @@ export class WebSubstrate {
       this.searchSearx(q, limit),
       this.searchWikipedia(q, Math.min(4, limit)),
       this.searchCrossref(q, Math.min(4, limit)),
+      this.searchGithub(q, Math.min(4, limit)),
+      this.searchHackerNews(q, Math.min(4, limit)),
     ]);
     const seen = new Set();
     const rows = [];
@@ -572,7 +621,7 @@ export class WebSubstrate {
       version: WebSubstrate.VERSION,
       enabled: this.enabled,
       search_gateway_configured: Boolean(config.webSearchUrl),
-      default_public_sources: ['wikipedia', 'crossref'],
+      default_public_sources: ['wikipedia', 'crossref', 'github', 'hackernews'],
       max_queries: config.webMaxQueries,
       max_sources: config.webMaxSources,
       last_research_at: this.lastResearchAt,
