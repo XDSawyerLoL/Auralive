@@ -313,3 +313,10 @@ test('Command Center does not default AURA Runtime host back to Quantic Studio',
   assert.match(commandSource, /runtime_packaging:/);
   assert.match(commandSource, /runtime_role:/);
 });
+
+test('AURA GitHub changes are hard-bound to dedicated change branches before PR creation', () => {
+  assert.match(commandSource, /branch\.startsWith\('aura\/change-'\)/);
+  assert.match(commandSource, /branch === baseBranch/);
+  assert.match(commandSource, /invariant de gouvernance violé/);
+  assert.match(commandSource, /aucun push direct sur la branche principale/);
+});
