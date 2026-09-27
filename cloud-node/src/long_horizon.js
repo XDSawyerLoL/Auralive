@@ -75,12 +75,7 @@ export class LongHorizonMissionEngine {
     if (!config.longHorizonEnabled) return;
     // A crash must not leave a mission or step permanently "running".
     const interruptedPlans = await query(
-      `SELECT m.id
-       FROM aura_missions m
-       LEFT JOIN aura_mission_steps s ON s.mission_id=m.id
-       WHERE m.status='planning'
-       GROUP BY m.id
-       HAVING COUNT(s.id)=0`,
+      `SELECT id FROM aura_missions WHERE status='planning' ORDER BY updated_at ASC`,
     ).catch(() => []);
     for (const row of interruptedPlans) {
       await this.planMission(row.id, { reason: 'resume-interrupted-plan' }).catch((error) => {
@@ -199,7 +194,7 @@ export class LongHorizonMissionEngine {
         id,source_intention_id,title,objective,success_criteria,status,priority,confidence,
         plan_version,revision_count,max_revisions,current_step_index,progress,state,last_error,
         started_at,completed_at,created_at,updated_at
-      ) VALUES(?,?,?,?,?,'planning',?,?,1,0,?,0,0,?,'',?,'',?,?)`,
+      ) VALUES(?,?,?,?,?,'planning',?,?,0,0,?,0,0,?,'',?,'',?,?)`,
       [
         id,
         sourceIntentionId,
@@ -234,6 +229,7 @@ export class LongHorizonMissionEngine {
     const mission = await one('SELECT * FROM aura_missions WHERE id=?', [String(id)]);
     if (!mission) throw new Error('Mission inconnue');
 
+    const targetPlanVersion = Number(mission.plan_version || 0) + 1;
     const lessons = await this.kernel.lessons(8).catch(() => []);
     const prompt = [
       'Construis un plan de mission AURA longue durée.',
@@ -313,10 +309,20 @@ export class LongHorizonMissionEngine {
     if (!sanitized.length) throw new Error('Le planificateur n’a produit aucune étape exploitable');
 
     const stamp = now();
+    // Old pending work belongs to a strategy being replaced. Keep it as history,
+    // but never let it count as part of the new plan.
+    await query(
+      `UPDATE aura_mission_steps
+       SET status='superseded',updated_at=?
+       WHERE mission_id=? AND plan_version=? AND status='pending'`,
+      [stamp, mission.id, Number(mission.plan_version || 0)],
+    );
+    // If a previous planning attempt crashed midway, rebuild the same target
+    // plan version from scratch before publishing it as active.
     await query(
       `DELETE FROM aura_mission_steps
-       WHERE mission_id=? AND status='pending'`,
-      [mission.id],
+       WHERE mission_id=? AND plan_version=?`,
+      [mission.id, targetPlanVersion],
     );
     const lastPosition = await one(
       'SELECT COALESCE(MAX(position),-1) AS position FROM aura_mission_steps WHERE mission_id=?',
@@ -326,13 +332,14 @@ export class LongHorizonMissionEngine {
     for (const step of sanitized) {
       await query(
         `INSERT INTO aura_mission_steps(
-          id,mission_id,position,title,objective,kind,requested_risks,status,initiative_id,
+          id,mission_id,position,plan_version,title,objective,kind,requested_risks,status,initiative_id,
           attempts,max_attempts,expected_signal,result,critique,started_at,completed_at,created_at,updated_at
-        ) VALUES(?,?,?,?,?,?,?,'pending','',0,?,?,'{}','{}','','',?,?)`,
+        ) VALUES(?,?,?,?,?,?,?,?,'pending','',0,?,?,'{}','{}','','',?,?)`,
         [
           randomUUID(),
           mission.id,
           position,
+          targetPlanVersion,
           step.title,
           step.objective,
           step.kind,
@@ -348,14 +355,16 @@ export class LongHorizonMissionEngine {
 
     await query(
       `UPDATE aura_missions
-       SET status='running',plan_version=plan_version+1,last_error='',
+       SET status='running',plan_version=?,last_error='',
            state=?,updated_at=?
        WHERE id=?`,
       [
+        targetPlanVersion,
         JSON.stringify({
           last_plan_reason: reason,
           planner: parsed.steps ? 'aura-planner-agent' : 'deterministic-fallback',
           planned_steps: sanitized.length,
+          plan_version: targetPlanVersion,
         }),
         stamp,
         mission.id,
@@ -444,11 +453,15 @@ export class LongHorizonMissionEngine {
   }
 
   async updateProgress(missionId) {
+    const mission = await one('SELECT plan_version FROM aura_missions WHERE id=?', [missionId]);
+    const planVersion = Number(mission?.plan_version || 0);
     const counts = await one(
       `SELECT COUNT(*) AS total,
         SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed
-       FROM aura_mission_steps WHERE mission_id=?`,
-      [missionId],
+       FROM aura_mission_steps
+       WHERE mission_id=? AND plan_version=?
+         AND status NOT IN ('failed','superseded','cancelled')`,
+      [missionId, planVersion],
     );
     const total = Number(counts?.total || 0);
     const completed = Number(counts?.completed || 0);
@@ -597,13 +610,14 @@ export class LongHorizonMissionEngine {
       const newStepId = randomUUID();
       await query(
         `INSERT INTO aura_mission_steps(
-          id,mission_id,position,title,objective,kind,requested_risks,status,initiative_id,
+          id,mission_id,position,plan_version,title,objective,kind,requested_risks,status,initiative_id,
           attempts,max_attempts,expected_signal,result,critique,started_at,completed_at,created_at,updated_at
-        ) VALUES(?,?,?,?,?,?,?,'pending','',?, ?,?,'{}','{}','','',?,?)`,
+        ) VALUES(?,?,?,?,?,?,?,?,'pending','',?, ?,?,'{}','{}','','',?,?)`,
         [
           newStepId,
           mission.id,
           Number(step.position) + 0.01,
+          Number(step.plan_version || mission.plan_version || 1),
           `${step.title} · nouvelle tentative`,
           `${step.objective}\nÉvite de répéter la cause précédente: ${critique.reason}`,
           step.kind,
@@ -633,14 +647,8 @@ export class LongHorizonMissionEngine {
     if (!mission) return { enabled: true, idle: true, reason: 'no mission candidate' };
 
     if (String(mission.status || '') === 'planning') {
-      const stepCount = await one(
-        'SELECT COUNT(*) AS total FROM aura_mission_steps WHERE mission_id=?',
-        [mission.id],
-      );
-      if (Number(stepCount?.total || 0) === 0) {
-        await this.planMission(mission.id, { reason: 'resume-empty-plan' });
-        mission = await one('SELECT * FROM aura_missions WHERE id=?', [mission.id]);
-      }
+      await this.planMission(mission.id, { reason: 'resume-planning-state' });
+      mission = await one('SELECT * FROM aura_missions WHERE id=?', [mission.id]);
     }
 
     const reconciliation = await this.reconcileActiveStep(mission);
