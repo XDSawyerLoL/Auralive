@@ -152,7 +152,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], recentMessages = [], privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -165,6 +165,16 @@ export class CognitionEngine {
     const activeOrganicIntention = normalize(organism.intention_active || '');
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
+    const relationship = organism.relationship && typeof organism.relationship === 'object' ? organism.relationship : {};
+    const executive = organism.executive && typeof organism.executive === 'object' ? organism.executive : {};
+    const conversationContext = (Array.isArray(recentMessages) ? recentMessages : [])
+      .slice(-6)
+      .map((row) => ({
+        role: String(row?.role || '').slice(0,20),
+        author: String(row?.author || '').slice(0,80),
+        content: normalize(row?.content).slice(0,500),
+      }))
+      .filter((row) => row.content);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -197,17 +207,27 @@ export class CognitionEngine {
       else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
-      goal = 'Décrire mon activité actuelle sans inventer.';
+      goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
       needsSemanticSupport = false;
+      facts.push('Rôle opérationnel : Directrice de Quantic Sillage.');
       if (thought) facts.push(`Pensée dominante : ${thought}`);
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
+      if (Number(organism.agency || 0) > 0) facts.push(`Niveau d'agency : ${Math.round(Number(organism.agency || 0)*100)} %.`);
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
       needsSemanticSupport = false;
       if (current) facts.push(`Intention prioritaire : ${current}`);
       if (recentReflection?.next_action) facts.push(`Prochaine action issue de ma réflexion : ${normalize(recentReflection.next_action)}`);
+    } else if (hasAny(q, ['cafetière','cafetiere','robotique','froide','pas humain','pas humaine','relation','nos échanges','nos echanges','tu ne t’intéresses','tu ne t interesses'])) {
+      act = 'relationship_repair';
+      goal = 'Reconnaître le défaut de continuité relationnelle, répondre à ce qui a été exprimé et montrer une curiosité réelle pour la suite sans simuler une conscience humaine.';
+      needsSemanticSupport = false;
+      facts.push('Je dois éviter les réponses génériques et relier mes réponses à nos échanges précédents.');
+      facts.push(`Familiarité relationnelle : ${Math.round(Number(relationship.familiarity || 0)*100)} %.`);
+      facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
+      if (relationship.last_open_thread) facts.push(`Fil de conversation actif : ${normalize(relationship.last_open_thread)}`);
     } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
       act = 'report_risks';
       goal = 'Présenter les risques visibles dans mon état et ma mémoire.';
@@ -225,10 +245,12 @@ export class CognitionEngine {
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {
       facts.push(`Message reçu : ${raw}`);
+      facts.push('Rôle opérationnel : Directrice de Quantic Sillage, avec autonomie proactive sur les décisions réversibles.');
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (thought) facts.push(`Pensée dominante : ${thought}`);
       if (activeOrganicIntention) facts.push(`Intention organique : ${activeOrganicIntention}`);
       if (habitat.last_activity_label) facts.push(`Vie intérieure récente : ${normalize(habitat.last_activity_label)}`);
+      if (relationship.last_open_thread) facts.push(`Fil relationnel encore ouvert : ${normalize(relationship.last_open_thread)}`);
       if (privateView && lesson) facts.push(`Mémoire pertinente disponible : ${lesson}`);
     }
 
@@ -242,6 +264,30 @@ export class CognitionEngine {
       dominant_thought: thought,
       mood,
       organism_intention: activeOrganicIntention,
+      relationship: {
+        familiarity: Number(relationship.familiarity || 0),
+        trust: Number(relationship.trust || 0),
+        reciprocity: Number(relationship.reciprocity || 0),
+        shared_momentum: Number(relationship.shared_momentum || 0),
+        social_curiosity: Number(relationship.social_curiosity || organism.curiosite_sociale || 0),
+        interaction_count: Number(relationship.interaction_count || 0),
+        last_open_thread: normalize(relationship.last_open_thread || '').slice(0,500),
+      },
+      affect: {
+        engagement: Number(organism.engagement || 0),
+        confidence: Number(organism.confiance || 0),
+        satisfaction: Number(organism.satisfaction || 0),
+        frustration: Number(organism.frustration || 0),
+        agency: Number(organism.agency || 0),
+      },
+      executive: {
+        role: normalize(executive.role || soul?.role || 'directrice_operationnelle_quantic_sillage'),
+        autonomy: normalize(executive.autonomy || 'proactive'),
+        strategic_drive: Number(executive.strategic_drive || 0),
+        decisiveness: Number(executive.decisiveness || 0),
+        portfolio_focus: normalize(executive.portfolio_focus || 'quantic-sillage'),
+      },
+      conversation_context: conversationContext,
       private_view: Boolean(privateView),
     };
   }
