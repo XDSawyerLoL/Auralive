@@ -202,6 +202,7 @@ export const config = Object.freeze({
   expertBridgeModel: process.env.AURA_EXPERT_MODEL || 'gpt-6-astra',
   expertBridgeTimeoutMs: int('AURA_EXPERT_TIMEOUT_MS', 60000, 5000, 180000),
   expertBridgeMaxCallsPerHour: int('AURA_EXPERT_MAX_CALLS_PER_HOUR', 4, 1, 24),
+  expertBridgeMaxRoundsPerIncident: int('AURA_EXPERT_MAX_ROUNDS_PER_INCIDENT', 3, 1, 8),
   expertBridgeCooldownSeconds: int('AURA_EXPERT_COOLDOWN_SECONDS', 900, 60, 86400),
   expertBridgeMinConfidence: num('AURA_EXPERT_MIN_CONFIDENCE', 0.68, 0.3, 1),
   expertBridgeInternalFallback: bool('AURA_EXPERT_INTERNAL_FALLBACK', true),
