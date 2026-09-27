@@ -147,6 +147,26 @@ class AuraRuntimeWorker:
                 capabilities.append("moa")
         return capabilities
 
+    def _job_kinds(self) -> list[str]:
+        kinds = {"compute"}
+        ai = getattr(self.host, "ai", None)
+        if bool(getattr(ai, "enabled", False)) and callable(getattr(ai, "generate", None)):
+            kinds.add("inference")
+        cognitive = getattr(self.host, "cognitive", None)
+        if cognitive is not None and callable(getattr(cognitive, "operate", None)):
+            kinds.add("operator")
+        voice = getattr(self.host, "avatar_audio", None)
+        if voice is not None and callable(getattr(voice, "synthesize", None)):
+            kinds.add("tts")
+        image = getattr(self.host, "image", None)
+        if image is not None and callable(getattr(image, "generate", None)):
+            kinds.add("image")
+        evolution = getattr(self.host, "evolution", None)
+        github_token = str(getattr(evolution, "github_token", "") or "").strip()
+        if evolution is not None and self.fleet_factory is not None and github_token:
+            kinds.add("evolution")
+        return sorted(kinds)
+
     def _resource_profile(self) -> dict[str, Any]:
         ai = self._ai_diagnostic()
         model = str(
@@ -171,6 +191,7 @@ class AuraRuntimeWorker:
             "runtime_role": "aura-runtime",
             "runtime_host_product": self.host_product,
             "runtime_packaging": self.runtime_packaging,
+            "job_kinds": self._job_kinds(),
         }
 
     @property
