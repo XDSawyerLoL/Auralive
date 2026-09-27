@@ -199,7 +199,8 @@ export class CuriosityEngine {
       this.kernel.intentions(10),
       query(
         `SELECT author,content,created_at FROM aura_cloud_messages
-         WHERE role='user' ORDER BY id DESC LIMIT 8`,
+         WHERE role='user' AND session_id IN ('private-founder','')
+         ORDER BY id DESC LIMIT 8`,
       ).catch(() => []),
       query(
         `SELECT kind,content,surprise,created_at FROM aura_surprise_memory
