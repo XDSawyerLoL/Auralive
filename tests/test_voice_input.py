@@ -130,3 +130,86 @@ async def test_text_answer_survives_voice_timeout(monkeypatch):
     assert result["rearm_after_ms"] == 1200
     assert service.request_count == 1
     assert service.last_stage == "idle"
+
+
+class FakeLocalSTT:
+    def __init__(self, text="Mairaiy, test local", *, fail=False):
+        self.enabled = True
+        self.text = text
+        self.fail = fail
+        self.calls = 0
+
+    async def transcribe(self, _audio):
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("moteur local indisponible")
+        return self.text
+
+    def diagnostic(self):
+        return {
+            "enabled": self.enabled,
+            "ready": not self.fail,
+            "engine": "faster-whisper",
+            "offline": True,
+            "audio_persisted": False,
+        }
+
+
+@pytest.mark.asyncio
+async def test_voice_input_prefers_local_stt_without_api_key():
+    aura = SimpleNamespace()
+    settings = SimpleNamespace(ai_mode="ollama", ai_api_key="", ai_model="qwen3:8b")
+    service = VoiceInputService(aura, SimpleNamespace(), SimpleNamespace(), settings)
+    service.local_stt = FakeLocalSTT("Mairaiy, tu m'entends ?")
+
+    transcript = await service.transcribe(make_wav(), "audio/wav")
+
+    assert transcript == "Mairaiy, tu m'entends ?"
+    assert service.last_transcription_engine == "faster-whisper"
+    assert service.local_stt.calls == 1
+    assert service.gemini_transcription_configured is False
+
+
+@pytest.mark.asyncio
+async def test_voice_input_uses_gemini_only_as_local_fallback(monkeypatch):
+    aura = SimpleNamespace()
+    settings = SimpleNamespace(ai_mode="gemini", ai_api_key="secret", ai_model="gemini-3.5-flash-lite")
+    service = VoiceInputService(aura, SimpleNamespace(), SimpleNamespace(), settings)
+    service.local_stt = FakeLocalSTT(fail=True)
+
+    async def fake_gemini(_audio, _mime_type):
+        service.last_transcription_engine = "gemini"
+        return "transcription de secours"
+
+    monkeypatch.setattr(service, "_transcribe_gemini", fake_gemini)
+    transcript = await service.transcribe(make_wav(), "audio/wav")
+
+    assert transcript == "transcription de secours"
+    assert service.local_stt.calls == 1
+    assert service.last_transcription_engine == "gemini"
+
+
+@pytest.mark.asyncio
+async def test_voice_input_falls_back_when_local_stt_is_warming(monkeypatch):
+    aura = SimpleNamespace()
+    settings = SimpleNamespace(ai_mode="gemini", ai_api_key="secret", ai_model="gemini-3.5-flash-lite")
+    service = VoiceInputService(aura, SimpleNamespace(), SimpleNamespace(), settings)
+
+    class WarmingLocalSTT:
+        enabled = True
+        async def transcribe(self, _audio):
+            raise RuntimeError("faster-whisper est encore en cours de chargement")
+        def diagnostic(self):
+            return {"enabled": True, "ready": False, "warming": True}
+
+    service.local_stt = WarmingLocalSTT()
+
+    async def fake_gemini(_audio, _mime_type):
+        service.last_transcription_engine = "gemini"
+        return "fallback pendant warmup"
+
+    monkeypatch.setattr(service, "_transcribe_gemini", fake_gemini)
+    transcript = await service.transcribe(make_wav(), "audio/wav")
+
+    assert transcript == "fallback pendant warmup"
+    assert service.last_transcription_engine == "gemini"
