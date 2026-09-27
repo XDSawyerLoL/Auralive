@@ -41,5 +41,36 @@ test('reply plan is built from AURA state before expression', () => {
   assert.equal(plan.act, 'report_current_activity');
   assert.equal(plan.needs_semantic_support, false);
   assert.match(plan.facts.join(' '), /Consolider la mémoire/);
+  assert.match(plan.facts.join(' '), /Directrice de Quantic Sillage/);
   assert.match(engine.deterministicReply(plan), /Pensée dominante|Travail prioritaire|Intention actuelle/);
+});
+
+test('reply plan carries relational and executive continuity', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: "J'ai l'impression que nos échanges sont trop robotiques.",
+    soul: {
+      role: 'directrice_operationnelle_quantic_sillage',
+      organism: {
+        mood: 'engagée',
+        curiosite_sociale: 0.82,
+        relationship: {
+          familiarity: 0.72,
+          trust: 0.70,
+          social_curiosity: 0.82,
+          interaction_count: 24,
+          last_open_thread: 'Construire AURA comme Directrice de Quantic Sillage',
+        },
+        executive: { role: 'directrice_operationnelle', autonomy: 'proactive' },
+      },
+    },
+    recentMessages: [
+      { role: 'user', author: 'Créateur', content: 'On poursuit AURA.' },
+    ],
+    privateView: true,
+  });
+  assert.equal(plan.act, 'relationship_repair');
+  assert.ok(plan.relationship.familiarity > 0.7);
+  assert.equal(plan.executive.role, 'directrice_operationnelle');
+  assert.equal(plan.conversation_context.length, 1);
 });
