@@ -342,3 +342,16 @@ test('long-horizon autonomy is enabled but bounded by existing command policy', 
   assert.match(configSource, /AURA_LONG_HORIZON_STEP_MAX_ATTEMPTS/);
   assert.match(commandSource, /this\.candidate\(missionAdvance\.candidate\)/);
 });
+
+
+test('queued long-horizon initiatives are resumed after a crash', () => {
+  assert.match(commandSource, /async resumeQueuedMissionInitiative\(\)/);
+  assert.match(commandSource, /mode: 'long-horizon-resume'/);
+  assert.match(commandSource, /SELECT i\.\*[\s\S]*aura_mission_steps/);
+});
+
+test('deduplicated mission initiatives are reloaded before execution', () => {
+  assert.match(commandSource, /SELECT \* FROM aura_initiatives WHERE id=\?/);
+  assert.match(commandSource, /initiative\.status === 'queued'/);
+  assert.match(commandSource, /deduplicated: true/);
+});
