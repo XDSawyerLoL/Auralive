@@ -2,6 +2,8 @@
 
 Quantic Studio est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
+**Invariant d'architecture : Quantic Studio est un produit de streaming vivant, pas le cerveau ni le runtime général de Quantic Sillage.** AURA est le système parent de l'écosystème. Les capacités locales générales d'AURA doivent converger vers **AURA Runtime**, un service indépendant. Le fait que certaines briques AURA soient encore empaquetées avec Studio est transitoire et ne définit pas la hiérarchie du système.
+
 La version 2.7.4 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
 
 ## Modules inclus
@@ -168,7 +170,7 @@ Diagnostic local : `GET /api/horizon/status`. Synchronisation manuelle : `POST /
 
 ## Noyau souverain AURA unifié
 
-Le runtime moderne réunit désormais les lignées historiques **AURA Brain**, **Aura Sovereign**, **AURA Cloud**, **Quantic Studio** et **HORIZON** dans un seul noyau persistant.
+Le runtime moderne réunit les lignées historiques **AURA Brain**, **Aura Sovereign** et **AURA Cloud** dans un noyau AURA persistant. Quantic Studio et HORIZON s'y connectent comme produits/capacités spécialisés; ils ne constituent pas le noyau lui-même.
 
 Le noyau ajoute :
 
