@@ -440,13 +440,24 @@ export class ZeroCostFederation {
     const requestedModel = await this.#selectModel(role);
     const started = Date.now();
     try {
-      const result = await this.#openRouter(prompt, system, maxTokens, role, requestedModel);
+      let result;
+      try {
+        result = await this.#openRouter(prompt, system, maxTokens, role, requestedModel);
+      } catch (primaryError) {
+        if (requestedModel === 'openrouter/free' || this.quarantined.has('openrouter')) {
+          throw primaryError;
+        }
+        // Direct free variants can disappear or hit a provider-specific quota.
+        // The official zero-priced router is the bounded resilience fallback.
+        result = await this.#openRouter(prompt, system, maxTokens, role, 'openrouter/free');
+        this.lastError = `direct free model fallback: ${safeText(primaryError)}`;
+      }
       this.lastProvider = result.provider;
       this.lastModel = result.model;
       this.lastRequestedModel = result.requestedModel;
       this.lastRole = role;
-      this.lastLatencyMs = result.latencyMs;
-      this.lastError = '';
+      this.lastLatencyMs = Date.now() - started;
+      if (!this.lastError.startsWith('direct free model fallback:')) this.lastError = '';
       return result;
     } catch (error) {
       this.lastRole = role;
