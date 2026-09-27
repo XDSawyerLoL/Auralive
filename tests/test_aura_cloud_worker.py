@@ -84,6 +84,12 @@ def settings():
     )
 
 
+def test_embedded_worker_identifies_as_aura_runtime_compatibility_host():
+    worker = AuraCloudWorker(FakeAura(), settings())
+    assert worker.VERSION == "aura-runtime-worker-v2"
+    assert worker.worker_id.startswith("aura-runtime-")
+
+
 @pytest.mark.asyncio
 async def test_worker_runs_local_language_engine():
     worker = AuraCloudWorker(FakeAura(), settings())
