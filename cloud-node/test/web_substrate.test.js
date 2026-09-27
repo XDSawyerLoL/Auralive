@@ -72,3 +72,13 @@ test('live chat routes changing external questions through Web evidence first', 
   assert.match(expressionSource, /MÉMOIRE EXTERNE/);
   assert.match(expressionSource, /contested, unverified ou unavailable/);
 });
+
+test('open-web substrate has useful no-key discovery sources beyond encyclopedic lookup', () => {
+  assert.match(webSource, /aura-web-substrate-v2-open-web/);
+  assert.match(webSource, /searchGithub/);
+  assert.match(webSource, /api\.github\.com\/search\/repositories/);
+  assert.match(webSource, /searchHackerNews/);
+  assert.match(webSource, /hn\.algolia\.com/);
+  const substrate = new WebSubstrate({ enabled: false });
+  assert.deepEqual(substrate.status().default_public_sources, ['wikipedia', 'crossref', 'github', 'hackernews']);
+});
