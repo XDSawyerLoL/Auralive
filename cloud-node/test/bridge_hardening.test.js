@@ -41,3 +41,11 @@ test('bridge exposes AURA Runtime host metadata without assuming Studio', () => 
   assert.match(bridgeSource, /runtime_role:/);
   assert.match(bridgeSource, /runtime_packaging:/);
 });
+
+test('bridge leases jobs only to runtime workers that advertise the job kind', () => {
+  assert.match(bridgeSource, /SELECT compute_consent,mesh_capabilities,resources/);
+  assert.match(bridgeSource, /SELECT id,kind,target_worker_id,required_capabilities/);
+  assert.match(bridgeSource, /const jobKinds = new Set/);
+  assert.match(bridgeSource, /!jobKinds\.has\(kind\)/);
+  assert.match(bridgeSource, /job_kinds:/);
+});
