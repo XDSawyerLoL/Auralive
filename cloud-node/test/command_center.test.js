@@ -176,8 +176,9 @@ test('offline Fleet evolution remains waiting instead of recording false success
   assert.match(commandSource, /const status = waiting \? 'waiting'/);
 });
 
-test('reconciliation records rejected Fleet worker results as failed', () => {
+test('reconciliation records rejected or no-safe-patch Fleet worker results as failed', () => {
   assert.match(commandSource, /payloadStatus\.endsWith\('-rejected'\)/);
+  assert.match(commandSource, /payloadStatus === 'no-safe-patch'/);
   assert.match(commandSource, /const finalStatus = evolutionRejected \? 'failed' : 'completed'/);
   assert.match(commandSource, /ok: !evolutionRejected/);
 });
