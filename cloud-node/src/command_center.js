@@ -178,13 +178,19 @@ export function safeGithubChangePath(value) {
   const path = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
   if (!path || path.length > 500 || path.includes('..') || path.includes('\0')) return '';
   const lower = path.toLowerCase();
+  const basename = lower.split('/').pop() || '';
   if (
     lower === '.env'
     || lower.startsWith('.env.')
     || lower.startsWith('.git/')
-    || lower.startsWith('.github/workflows/')
+    || lower.startsWith('.github/')
+    || lower.startsWith('scripts/')
+    || lower.startsWith('installer/')
+    || lower.startsWith('deploy/')
+    || ['dockerfile','docker-compose.yml','docker-compose.yaml','makefile'].includes(lower)
+    || ['package.json','package-lock.json','pnpm-lock.yaml','yarn.lock','requirements.txt','requirements-desktop.txt'].includes(basename)
     || /(^|\/)(secrets?|credentials?|tokens?)(\.|\/|$)/i.test(path)
-    || /\.(pem|p12|pfx|key|keystore|jks)$/i.test(path)
+    || /\.(pem|p12|pfx|key|keystore|jks|ps1|sh|bat|cmd)$/i.test(path)
   ) return '';
   return path;
 }
@@ -783,7 +789,11 @@ export class CommandCenter {
     if (!current) return null;
     const normalizedState = String(state || 'unknown').slice(0, 40);
     const normalizedDetail = String(detail || '').slice(0, 4000);
-    const normalizedMetadata = JSON.stringify(metadata || {}).slice(0, 20000);
+    const mergedMetadata = {
+      ...parseJson(current.metadata, {}),
+      ...(metadata && typeof metadata === 'object' ? metadata : {}),
+    };
+    const normalizedMetadata = JSON.stringify(mergedMetadata).slice(0, 20000);
     const changed = String(current.state || '') !== normalizedState
       || String(current.state_detail || '') !== normalizedDetail
       || String(current.metadata || '{}') !== normalizedMetadata;
@@ -867,6 +877,17 @@ export class CommandCenter {
     const name = String(payload.name || '').trim().slice(0, 160);
     if (!id || !name) throw new Error('id et name sont requis');
     const stamp = now();
+    const current = await one(
+      'SELECT state,state_detail,last_observed_at,metadata FROM aura_command_services WHERE id=?',
+      [id],
+    );
+    const mergedMetadata = {
+      ...parseJson(current?.metadata, {}),
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    const effectiveState = String(payload.state ?? current?.state ?? 'unknown').slice(0, 40);
+    const effectiveDetail = String(payload.state_detail ?? current?.state_detail ?? '').slice(0, 4000);
+    const effectiveObservedAt = String(payload.last_observed_at ?? current?.last_observed_at ?? '');
     await query(
       `INSERT INTO aura_command_services(
         id,name,kind,objective,endpoint,repository,criticality,enabled,state,state_detail,
@@ -880,6 +901,9 @@ export class CommandCenter {
         repository=VALUES(repository),
         criticality=VALUES(criticality),
         enabled=VALUES(enabled),
+        state=VALUES(state),
+        state_detail=VALUES(state_detail),
+        last_observed_at=VALUES(last_observed_at),
         metadata=VALUES(metadata),
         updated_at=VALUES(updated_at)`,
       [
@@ -891,10 +915,10 @@ export class CommandCenter {
         String(payload.repository || '').slice(0, 300),
         clamp(payload.criticality ?? 0.5),
         payload.enabled === false ? 0 : 1,
-        String(payload.state || 'unknown').slice(0, 40),
-        String(payload.state_detail || '').slice(0, 4000),
-        String(payload.last_observed_at || ''),
-        JSON.stringify(payload.metadata || {}).slice(0, 20000),
+        effectiveState,
+        effectiveDetail,
+        effectiveObservedAt,
+        JSON.stringify(mergedMetadata).slice(0, 20000),
         stamp,
         stamp,
       ],
@@ -904,9 +928,15 @@ export class CommandCenter {
 
   async observeService(id, payload = {}) {
     const serviceId = String(id || '').trim().slice(0, 80);
+    const current = await one('SELECT metadata FROM aura_command_services WHERE id=?', [serviceId]);
+    if (!current) throw new Error('service inconnu');
     const state = String(payload.state || 'unknown').trim().toLowerCase().slice(0, 40);
     const detail = String(payload.detail || payload.state_detail || '').slice(0, 4000);
-    const metadata = JSON.stringify(payload.metadata || {}).slice(0, 20000);
+    const mergedMetadata = {
+      ...parseJson(current.metadata, {}),
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    const metadata = JSON.stringify(mergedMetadata).slice(0, 20000);
     const stamp = now();
     const result = await query(
       `UPDATE aura_command_services
@@ -919,7 +949,7 @@ export class CommandCenter {
       'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
       [
         'service-observation',
-        JSON.stringify({ service_id: serviceId, state, detail, metadata: payload.metadata || {} }).slice(0, 30000),
+        JSON.stringify({ service_id: serviceId, state, detail, metadata: mergedMetadata }).slice(0, 30000),
         stamp,
       ],
     );
