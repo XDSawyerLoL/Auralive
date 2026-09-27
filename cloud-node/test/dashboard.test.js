@@ -143,6 +143,12 @@ test('dashboard exposes a dedicated emotional state surface', () => {
     'id="emotion-clarity"',
     'id="emotion-attachment"',
     'id="emotion-curiosity"',
+    'id="emotion-engagement"',
+    'id="emotion-confidence"',
+    'id="emotion-agency"',
+    'id="emotion-satisfaction"',
+    'id="emotion-frustration"',
+    'id="emotion-social"',
     'id="emotion-dream"',
     'id="emotion-silence"',
   ]) {
