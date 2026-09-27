@@ -186,7 +186,7 @@ function requireRateLimit(request, reply, bucket, maxRequests, windowSeconds) {
 const app = Fastify({
   logger: { level: config.logLevel },
   bodyLimit: 1_048_576,
-  trustProxy: true,
+  trustProxy: config.trustProxyHops > 0 ? config.trustProxyHops : false,
 });
 const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
