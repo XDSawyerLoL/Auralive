@@ -14,6 +14,7 @@ from typing import Any
 import aiohttp
 
 from app.services.live_awareness import install_live_awareness
+from app.services.local_whisper_stt import LocalWhisperSTT
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ def _wake_invocation(value: str) -> tuple[bool, str]:
 
 
 class VoiceInputService:
-    """Dialogue local : WAV du navigateur -> transcription Gemini -> réponse vocale."""
+    """Dialogue local : WAV du navigateur -> STT local prioritaire -> réponse vocale."""
 
     def __init__(self, aura: Any, db: Any, cohost: Any, settings: Any):
         self.aura = aura
@@ -119,6 +120,8 @@ class VoiceInputService:
         self.last_voice_error = ""
         self.last_wake_detected = False
         self.last_voice_delivered = False
+        self.last_transcription_engine = ""
+        self.local_stt = LocalWhisperSTT()
 
     @property
     def enabled(self) -> bool:
@@ -142,16 +145,16 @@ class VoiceInputService:
         except ValueError:
             return 20
 
-    async def transcribe(self, audio: bytes, mime_type: str) -> str:
-        if not self.enabled:
-            raise RuntimeError("Le dialogue vocal est désactivé")
-        if self.settings.ai_mode != "gemini" or not self.settings.ai_api_key:
-            raise RuntimeError("Le dialogue vocal nécessite AI_MODE=gemini et AI_API_KEY")
-        normalized_mime = str(mime_type or "audio/wav").split(";", 1)[0].casefold()
-        if normalized_mime not in _ALLOWED_MIME_TYPES:
-            raise ValueError("Le micro doit envoyer un fichier WAV")
-        if not audio.startswith(b"RIFF") or b"WAVE" not in audio[:16]:
-            raise ValueError("Le fichier reçu n'est pas un WAV valide")
+    @property
+    def gemini_transcription_configured(self) -> bool:
+        return bool(
+            getattr(self.settings, "ai_mode", "") == "gemini"
+            and getattr(self.settings, "ai_api_key", "")
+        )
+
+    async def _transcribe_gemini(self, audio: bytes, mime_type: str) -> str:
+        if not self.gemini_transcription_configured:
+            raise RuntimeError("Fallback Gemini de transcription non configuré")
 
         await self.aura.ai.start()
         assert self.aura.ai.session
@@ -174,7 +177,7 @@ class VoiceInputService:
                         },
                         {
                             "inlineData": {
-                                "mimeType": "audio/wav",
+                                "mimeType": mime_type,
                                 "data": base64.b64encode(audio).decode("ascii"),
                             }
                         },
@@ -207,7 +210,39 @@ class VoiceInputService:
         transcript = _clean_transcript(_extract_text(body))
         if not transcript or transcript.casefold() == "silence":
             raise ValueError("Aucune parole intelligible détectée")
+        self.last_transcription_engine = "gemini"
         return transcript
+
+    async def transcribe(self, audio: bytes, mime_type: str) -> str:
+        if not self.enabled:
+            raise RuntimeError("Le dialogue vocal est désactivé")
+        normalized_mime = str(mime_type or "audio/wav").split(";", 1)[0].casefold()
+        if normalized_mime not in _ALLOWED_MIME_TYPES:
+            raise ValueError("Le micro doit envoyer un fichier WAV")
+        if not audio.startswith(b"RIFF") or b"WAVE" not in audio[:16]:
+            raise ValueError("Le fichier reçu n'est pas un WAV valide")
+
+        local_error = ""
+        if self.local_stt.enabled:
+            try:
+                transcript = _clean_transcript(await self.local_stt.transcribe(audio))
+                if transcript:
+                    self.last_transcription_engine = "faster-whisper"
+                    return transcript
+            except Exception as exc:
+                local_error = str(exc or exc.__class__.__name__)[:500]
+                logger.warning("STT local indisponible, fallback éventuel: %s", local_error)
+
+        if self.gemini_transcription_configured:
+            return await self._transcribe_gemini(audio, normalized_mime)
+
+        self.last_transcription_engine = "unavailable"
+        if local_error:
+            raise RuntimeError(f"Transcription locale indisponible: {local_error}")
+        raise RuntimeError(
+            "Aucun moteur de transcription disponible. "
+            "Active VOICE_LOCAL_STT_ENABLED ou configure le fallback Gemini."
+        )
 
     async def talk(
         self,
@@ -383,8 +418,11 @@ class VoiceInputService:
         live_awareness = getattr(self.aura, "live_awareness", None)
         return {
             "enabled": self.enabled,
-            "configured": bool(self.settings.ai_mode == "gemini" and self.settings.ai_api_key),
+            "configured": bool(self.local_stt.enabled or self.gemini_transcription_configured),
             "model": self.model,
+            "transcription_engine": self.last_transcription_engine or ("faster-whisper" if self.local_stt.enabled else "gemini"),
+            "local_stt": self.local_stt.diagnostic(),
+            "gemini_fallback_configured": self.gemini_transcription_configured,
             "max_seconds": self.max_seconds,
             "busy": self.lock.locked(),
             "stage": self.last_stage,
