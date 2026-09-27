@@ -129,6 +129,21 @@ function requireCanary(request, reply) {
 }
 
 const rateBuckets = new Map();
+let rateLimitOperations = 0;
+const RATE_BUCKET_LIMIT = 4096;
+
+function pruneRateBuckets(stamp = Date.now()) {
+  rateLimitOperations += 1;
+  if (rateBuckets.size < 512 && rateLimitOperations % 128 !== 0) return;
+  for (const [id, value] of rateBuckets) {
+    if (!value || stamp >= Number(value.resetAt || 0)) rateBuckets.delete(id);
+  }
+  while (rateBuckets.size > RATE_BUCKET_LIMIT) {
+    const oldest = rateBuckets.keys().next().value;
+    if (oldest == null) break;
+    rateBuckets.delete(oldest);
+  }
+}
 
 function rateLimitKey(request) {
   return String(request.ip || request.socket?.remoteAddress || 'unknown').slice(0, 160);
@@ -136,6 +151,7 @@ function rateLimitKey(request) {
 
 function consumeRateLimit(bucket, key, maxRequests, windowSeconds) {
   const stamp = Date.now();
+  pruneRateBuckets(stamp);
   const windowMs = Math.max(1, Number(windowSeconds || 60)) * 1000;
   const id = `${bucket}:${key}`;
   const current = rateBuckets.get(id);
@@ -722,6 +738,21 @@ app.get('/api/kernel/status', async () => {
   const status = await kernel.status();
   return { ...status, phase: (await kernel.soul()).phase };
 });
+
+app.get('/api/kernel/public', async () => {
+  if (!bootstrap.runtimeReady) {
+    return {
+      ...publicFallbackSoul(false),
+      organism: { ready: false },
+    };
+  }
+  const [soul, organism] = await Promise.all([
+    kernel.soul({ privateView: false }),
+    kernel.organismState({ publicView: true }),
+  ]);
+  return { ...soul, organism };
+});
+
 
 app.get('/api/kernel/soul', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
