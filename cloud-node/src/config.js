@@ -101,6 +101,7 @@ export const config = Object.freeze({
   publicChatRateLimitWindowSeconds: int('AURA_PUBLIC_CHAT_RATE_LIMIT_WINDOW_SECONDS', 60, 10, 3600),
   authRateLimitMax: int('AURA_AUTH_RATE_LIMIT_MAX', 8, 1, 100),
   authRateLimitWindowSeconds: int('AURA_AUTH_RATE_LIMIT_WINDOW_SECONDS', 900, 60, 86400),
+  trustProxyHops: int('AURA_TRUST_PROXY_HOPS', 1, 0, 8),
 
   dbUrl: process.env.DATABASE_URL || process.env.MYSQL_URL || '',
   dbHost: process.env.DB_HOST || process.env.DATABASE_HOST || process.env.MYSQL_HOST || 'localhost',
