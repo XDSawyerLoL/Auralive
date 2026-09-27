@@ -86,7 +86,7 @@ def settings():
 
 def test_embedded_worker_identifies_as_aura_runtime_compatibility_host():
     worker = AuraCloudWorker(FakeAura(), settings())
-    assert worker.VERSION == "aura-runtime-worker-v2"
+    assert worker.VERSION == "aura-runtime-worker-v3"
     assert worker.worker_id.startswith("aura-runtime-")
 
     profile = worker._resource_profile()
