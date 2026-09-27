@@ -1321,6 +1321,28 @@ export class CommandCenter {
       return { id, status: 'waiting', reason: 'worker offline' };
     }
 
+    const targetRepository = String(initiative.action_payload?.repository || '').trim();
+    const crossProductEvolution = initiative.kind === 'evolution'
+      && targetRepository
+      && targetRepository.toLowerCase() !== 'xdsawyerlol/auralive';
+    if (crossProductEvolution && !bridgeOnline) {
+      await this.updateInitiative(id, {
+        status: 'waiting',
+        execution_mode: 'waiting-local-worker',
+        result: {
+          reason: 'Quantic Studio worker offline',
+          repository: targetRepository,
+        },
+      });
+      return {
+        id,
+        status: 'waiting',
+        execution_mode: 'waiting-local-worker',
+        reason: 'worker offline',
+        repository: targetRepository,
+      };
+    }
+
     await query(
       "UPDATE aura_initiatives SET status='running',updated_at=? WHERE id=?",
       [now(), id],
@@ -1417,7 +1439,9 @@ export class CommandCenter {
       }
 
       const returnedStatus = String(result?.status || '').toLowerCase();
-      const waiting = Boolean(result?.queued) || returnedStatus.startsWith('waiting');
+      const waiting = Boolean(result?.queued)
+        || ['queued', 'leased'].includes(returnedStatus)
+        || returnedStatus.startsWith('waiting');
       const failed = returnedStatus === 'error' || returnedStatus.endsWith('-rejected');
       const executed = !waiting && !failed
         && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
