@@ -284,6 +284,26 @@ export class ExecutionBridge {
     };
   }
 
+  async cancelJob(id, reason = 'cancelled by AURA') {
+    const jobId = String(id || '').trim();
+    if (!jobId) throw new Error('job id requis');
+    const row = await one(
+      'SELECT id,status FROM aura_execution_jobs WHERE id=?',
+      [jobId],
+    );
+    if (!row) return null;
+    if (['completed','error','cancelled','canceled'].includes(String(row.status || '').toLowerCase())) {
+      return this.getJob(jobId);
+    }
+    await query(
+      `UPDATE aura_execution_jobs
+       SET status='cancelled',error=?,lease_until=0,updated_at=?
+       WHERE id=? AND status IN ('queued','leased')`,
+      [String(reason || 'cancelled by AURA').slice(0, 4000), nowIso(), jobId],
+    );
+    return this.getJob(jobId);
+  }
+
   async heartbeat(workerId, payload = {}) {
     const worker = String(workerId || '').trim().slice(0, 160);
     if (!worker) throw new Error('worker_id requis');

@@ -313,3 +313,59 @@ test('Command Center does not default AURA Runtime host back to Quantic Studio',
   assert.match(commandSource, /runtime_packaging:/);
   assert.match(commandSource, /runtime_role:/);
 });
+
+
+test('long-horizon missions persist across command-center cycles', () => {
+  assert.match(commandSource, /LongHorizonMissionEngine/);
+  assert.match(commandSource, /this\.longHorizon\.nextCandidate\(\)/);
+  assert.match(commandSource, /this\.longHorizon\.bindInitiative/);
+  assert.match(commandSource, /mode: 'long-horizon-mission'/);
+  assert.match(commandSource, /long_horizon: longHorizon/);
+});
+
+test('private command API exposes mission oversight without replacing autonomy', () => {
+  for (const route of [
+    '/api/command/missions',
+    '/api/command/missions/:id',
+    '/api/command/missions/:id/:action',
+  ]) {
+    assert.equal(serverSource.includes(route), true, route);
+  }
+  assert.match(serverSource, /commandCenter\.createMission/);
+  assert.match(serverSource, /commandCenter\.controlMission/);
+});
+
+test('long-horizon autonomy is enabled but bounded by existing command policy', () => {
+  assert.match(configSource, /AURA_LONG_HORIZON_ENABLED/);
+  assert.match(configSource, /AURA_LONG_HORIZON_AUTO_SEED/);
+  assert.match(configSource, /AURA_LONG_HORIZON_MAX_REVISIONS/);
+  assert.match(configSource, /AURA_LONG_HORIZON_STEP_MAX_ATTEMPTS/);
+  assert.match(commandSource, /this\.candidate\(missionAdvance\.candidate\)/);
+});
+
+
+test('queued long-horizon initiatives are resumed after a crash', () => {
+  assert.match(commandSource, /async resumeQueuedMissionInitiative\(\)/);
+  assert.match(commandSource, /mode: 'long-horizon-resume'/);
+  assert.match(commandSource, /SELECT i\.\*[\s\S]*aura_mission_steps/);
+});
+
+test('deduplicated mission initiatives are reloaded before execution', () => {
+  assert.match(commandSource, /SELECT \* FROM aura_initiatives WHERE id=\?/);
+  assert.match(commandSource, /initiative\.status === 'queued'/);
+  assert.match(commandSource, /deduplicated: true/);
+});
+
+
+test('browser-control remains bounded by the shared policy for long missions', () => {
+  assert.match(configSource, /safe,ai,network,process,local-control,local-write,browser-control/);
+  assert.match(commandSource, /config\.commandCenterAllowedRisks/);
+  assert.match(commandSource, /this\.candidate\(missionAdvance\.candidate\)/);
+});
+
+
+test('mission cancellation propagates to Runtime jobs', () => {
+  assert.match(commandSource, /this\.bridge\.cancelJob/);
+  assert.match(commandSource, /mission_steps ms[\s\S]*aura_initiatives i/);
+  assert.match(commandSource, /i\.status IN \('queued','running','waiting'\)/);
+});

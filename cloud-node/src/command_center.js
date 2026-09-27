@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
+import { LongHorizonMissionEngine } from './long_horizon.js';
 
 const now = () => new Date().toISOString();
 
@@ -242,7 +243,7 @@ export function needsExternalEvidence(value) {
 }
 
 export class CommandCenter {
-  static VERSION = 'aura-command-center-v1';
+  static VERSION = 'aura-command-center-v2-long-horizon';
 
   constructor(
     kernel,
@@ -262,6 +263,7 @@ export class CommandCenter {
     this.dagCompiler = dagCompiler;
     this.graphExecutor = graphExecutor;
     this.expertBridge = expertBridge;
+    this.longHorizon = new LongHorizonMissionEngine(kernel);
     this.started = false;
     this.running = false;
     this.timer = null;
@@ -277,8 +279,7 @@ export class CommandCenter {
 
   async dedupeActiveInitiatives() {
     const rows = await query(
-      `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
-       FROM aura_initiatives
+      `SELECT * FROM aura_initiatives
        WHERE status IN ('queued','running','waiting')
        ORDER BY
          CASE status WHEN 'running' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END,
@@ -342,6 +343,7 @@ export class CommandCenter {
       );
     }
     await this.dedupeActiveInitiatives();
+    await this.longHorizon.init();
   }
 
   async start() {
@@ -1079,7 +1081,7 @@ export class CommandCenter {
 
   async existingInitiative(candidate) {
     const active = await one(
-      `SELECT id,status,updated_at FROM aura_initiatives
+      `SELECT * FROM aura_initiatives
        WHERE fingerprint=? AND status IN ('queued','running','waiting')
        ORDER BY updated_at DESC LIMIT 1`,
       [candidate.fingerprint],
@@ -1087,7 +1089,7 @@ export class CommandCenter {
     if (active) return active;
     const threshold = new Date(Date.now() - config.commandCenterCooldownSeconds * 1000).toISOString();
     return one(
-      `SELECT id,status,updated_at FROM aura_initiatives
+      `SELECT * FROM aura_initiatives
        WHERE fingerprint=? AND updated_at>=?
        ORDER BY updated_at DESC LIMIT 1`,
       [candidate.fingerprint, threshold],
@@ -1650,9 +1652,16 @@ export class CommandCenter {
 
   async reconcileWaiting() {
     const rows = await query(
-      `SELECT * FROM aura_initiatives
-       WHERE status='waiting'
-       ORDER BY priority DESC,updated_at ASC LIMIT 12`,
+      `SELECT i.* FROM aura_initiatives i
+       WHERE i.status='waiting'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM aura_mission_steps ms
+           JOIN aura_missions m ON m.id=ms.mission_id
+           WHERE ms.initiative_id=i.id
+             AND m.status IN ('paused','cancelled','failed','completed')
+         )
+       ORDER BY i.priority DESC,i.updated_at ASC LIMIT 12`,
     );
     const reconciled = [];
     const workerOnline = this.bridge?.enabled
@@ -2098,6 +2107,22 @@ export class CommandCenter {
     return promotions;
   }
 
+  async resumeQueuedMissionInitiative() {
+    const row = await one(
+      `SELECT i.*
+       FROM aura_initiatives i
+       JOIN aura_mission_steps ms ON ms.initiative_id=i.id
+       JOIN aura_missions m ON m.id=ms.mission_id
+       WHERE i.status='queued'
+         AND ms.status='queued'
+         AND m.status IN ('running','waiting')
+       ORDER BY m.priority DESC,ms.position ASC,i.updated_at ASC
+       LIMIT 1`,
+    );
+    if (!row) return null;
+    return this.executeInitiative(row);
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -2108,6 +2133,20 @@ export class CommandCenter {
     this.running = true;
     try {
       const reconciled = await this.reconcileWaiting();
+      const resumedMissionInitiative = await this.resumeQueuedMissionInitiative().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return null;
+      });
+      if (resumedMissionInitiative) {
+        this.lastCycleAt = now();
+        return {
+          ok: true,
+          trigger,
+          mode: 'long-horizon-resume',
+          reconciled,
+          initiative: resumedMissionInitiative,
+        };
+      }
       const promotions = await this.promoteDirectorPullRequests().catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);
         return [];
@@ -2120,6 +2159,41 @@ export class CommandCenter {
           promotions,
           skipped: true,
           reason: 'initiative hourly budget reached',
+        };
+      }
+      const missionAdvance = await this.longHorizon.nextCandidate().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return { enabled: true, error: this.lastError };
+      });
+      if (missionAdvance?.candidate && missionAdvance?.step?.id) {
+        const missionCandidate = this.candidate(missionAdvance.candidate);
+        const persisted = await this.persistInitiative(missionCandidate);
+        const initiative = await one(
+          'SELECT * FROM aura_initiatives WHERE id=?',
+          [String(persisted.initiative?.id || '')],
+        );
+        if (!initiative) throw new Error('initiative de mission introuvable après persistance');
+        await this.longHorizon.bindInitiative(missionAdvance.step.id, initiative.id);
+        const missionResult = initiative.status === 'queued'
+          ? await this.executeInitiative(initiative)
+          : {
+            id: initiative.id,
+            status: initiative.status,
+            execution_mode: initiative.execution_mode || '',
+            result: parseJson(initiative.result, {}),
+            deduplicated: true,
+          };
+        this.lastCycleAt = now();
+        this.lastError = '';
+        return {
+          ok: true,
+          trigger,
+          mode: 'long-horizon-mission',
+          reconciled,
+          promotions,
+          mission: missionAdvance.mission,
+          mission_step: missionAdvance.step,
+          initiative: missionResult,
         };
       }
       const expertCandidates = await this.consultFailedInitiatives(2).catch((error) => {
@@ -2149,6 +2223,7 @@ export class CommandCenter {
           reconciled,
           promotions,
           expert_candidates: expertCandidates.length,
+          long_horizon: missionAdvance,
           skipped: true,
           reason: 'all candidates are cooling down',
           candidates: candidates.length,
@@ -2163,6 +2238,7 @@ export class CommandCenter {
         reconciled,
         promotions,
         expert_candidates: expertCandidates.length,
+        long_horizon: missionAdvance,
         initiative: result,
       };
     } catch (error) {
@@ -2171,6 +2247,42 @@ export class CommandCenter {
     } finally {
       this.running = false;
     }
+  }
+
+  async missions(limit = 20, status = '') {
+    return this.longHorizon.list(limit, status);
+  }
+
+  async mission(id) {
+    return this.longHorizon.get(id);
+  }
+
+  async createMission(input = {}) {
+    return this.longHorizon.createMission({
+      ...input,
+      trigger: String(input.trigger || 'private-api'),
+    });
+  }
+
+  async controlMission(id, action) {
+    const missionId = String(id || '');
+    const command = String(action || '').toLowerCase();
+    if (command === 'cancel' && this.bridge?.cancelJob) {
+      const rows = await query(
+        `SELECT i.id,i.result
+         FROM aura_mission_steps ms
+         JOIN aura_initiatives i ON i.id=ms.initiative_id
+         WHERE ms.mission_id=? AND i.status IN ('queued','running','waiting')`,
+        [missionId],
+      ).catch(() => []);
+      for (const row of rows) {
+        const stored = parseJson(row.result, {});
+        const jobId = String(stored?.job_id || stored?.result?.job_id || '').trim();
+        if (!jobId) continue;
+        await this.bridge.cancelJob(jobId, `mission ${missionId} cancelled`).catch(() => {});
+      }
+    }
+    return this.longHorizon.control(missionId, command);
   }
 
   async retryInitiative(id) {
@@ -2183,7 +2295,7 @@ export class CommandCenter {
   }
 
   async status({ publicView = true } = {}) {
-    const [counts, bridgeStatus, services] = await Promise.all([
+    const [counts, bridgeStatus, services, longHorizon] = await Promise.all([
       one(
         `SELECT COUNT(*) AS total,
           SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
@@ -2195,6 +2307,7 @@ export class CommandCenter {
       ),
       this.bridge?.status?.() || Promise.resolve({ enabled: false, worker_online: false }),
       this.services(),
+      this.longHorizon.status().catch(() => ({ enabled: false, error: 'unavailable' })),
     ]);
     const degraded = services.filter((item) => BAD_SERVICE_STATES.has(String(item.state || '').toLowerCase()));
     const fleet = this.fleetSnapshot || [];
@@ -2218,6 +2331,7 @@ export class CommandCenter {
         ? 'director-autonomous-operations'
         : 'continuous-native-initiative-with-bounded-execution',
       director_mode: config.directorModeEnabled,
+      long_horizon: longHorizon,
       autonomous_low_risk_promotion: config.directorAutoMergeLowRisk,
       creator_role: 'créateur et autorité fondatrice',
       aura_role: 'directrice opérationnelle de Quantic Sillage',

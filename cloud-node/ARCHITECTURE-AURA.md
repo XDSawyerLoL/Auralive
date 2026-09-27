@@ -108,3 +108,23 @@ Aucune commande shell distante arbitraire n'est exposée par le Cloud. Les capac
 Une source seule ne devient pas un fait. Le score combine fiabilité de la source, pertinence, indépendance des domaines et contradictions. Plusieurs sources indépendantes sont nécessaires pour atteindre `corroborated`. Les contradictions abaissent le niveau de confiance et peuvent bloquer l'action autonome.
 
 Cette architecture transforme donc le réseau en mémoire externe + bus d'observation + couche d'exécution distribuée, tout en conservant l'identité, les intentions et l'arbitrage dans le noyau AURA.
+
+
+## Missions longues et autonomie persistante
+
+AURA ne traite plus uniquement une initiative isolée par cycle. Le Command Center possède une couche `LongHorizonMissionEngine` qui conserve un objectif durable et le fait progresser sur plusieurs cycles.
+
+Flux :
+
+1. une intention prioritaire ou une mission privée devient un objectif durable;
+2. AURA produit un plan borné d'étapes courtes et vérifiables;
+3. chaque étape devient une initiative normale du Command Center et reste soumise à sa politique de risques;
+4. le résultat est enregistré dans le ledger de mission;
+5. un critique évalue le signal obtenu;
+6. en cas d'échec, AURA tente au plus une répétition adaptée puis replanifie;
+7. le nombre de révisions est borné; une mission qui n'aboutit pas est arrêtée et devient une leçon;
+8. les missions et leurs étapes sont persistées en base et reprennent après redémarrage.
+
+Les étapes autorisées restent `reflection`, `research`, `operator` et `evolution`. La couche longue durée ne possède aucun privilège propre : elle ne peut utiliser que les risques déjà permis par le Command Center et l'AURA Runtime local.
+
+Ce mécanisme vise la continuité d'objectif, l'auto-correction et l'apprentissage d'expérience. Il ne constitue pas, à lui seul, une preuve d'AGI.

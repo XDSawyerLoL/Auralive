@@ -1390,6 +1390,35 @@ app.get('/api/command/initiatives', async (request, reply) =>
     ? commandCenter.initiatives(request.query?.limit, request.query?.status)
     : undefined);
 
+app.get('/api/command/missions', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? commandCenter.missions(request.query?.limit, request.query?.status)
+    : undefined);
+
+app.get('/api/command/missions/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const mission = await commandCenter.mission(request.params.id);
+  return mission || reply.code(404).send({ error: 'Mission AURA inconnue' });
+});
+
+app.post('/api/command/missions', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.createMission(request.body || {});
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/command/missions/:id/:action', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await commandCenter.controlMission(request.params.id, request.params.action);
+  } catch (error) {
+    return reply.code(409).send({ error: String(error?.message || error) });
+  }
+});
+
 app.get('/api/command/services', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? commandCenter.services()
