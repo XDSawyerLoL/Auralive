@@ -350,15 +350,21 @@ export class WebSubstrate {
     ]);
     const seen = new Set();
     const rows = [];
-    for (const batch of batches) {
-      if (batch.status !== 'fulfilled') continue;
-      for (const row of batch.value) {
-        if (!row.url || seen.has(row.url)) continue;
+    const sources = batches
+      .filter((batch) => batch.status === 'fulfilled')
+      .map((batch) => [...batch.value]);
+    let index = 0;
+    while (rows.length < limit && sources.some((source) => index < source.length)) {
+      for (const source of sources) {
+        const row = source[index];
+        if (!row?.url || seen.has(row.url)) continue;
         seen.add(row.url);
         rows.push(row);
+        if (rows.length >= limit) break;
       }
+      index += 1;
     }
-    return rows.slice(0, limit);
+    return rows;
   }
 
   async propose(question) {
