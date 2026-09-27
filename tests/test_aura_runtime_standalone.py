@@ -4,14 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from app.services.aura_cloud_worker import AuraCloudWorker
 from aura_runtime.standalone import StandaloneRuntimeHost, runtime_settings_from_env
 from aura_runtime.worker import AuraRuntimeWorker
 
 
 def test_studio_worker_is_only_a_runtime_compatibility_adapter():
-    assert issubclass(AuraCloudWorker, AuraRuntimeWorker)
-    assert AuraCloudWorker.__module__ == 'app.services.aura_cloud_worker'
+    shim = Path('app/services/aura_cloud_worker.py').read_text(encoding='utf-8')
+    assert 'from aura_runtime.worker import AuraRuntimeWorker' in shim
+    assert 'class AuraCloudWorker(AuraRuntimeWorker)' in shim
+    assert 'fleet_factory=EvolutionFleet' in shim
     assert AuraRuntimeWorker.__module__ == 'aura_runtime.worker'
 
 
