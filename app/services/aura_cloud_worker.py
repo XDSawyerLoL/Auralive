@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from aura_runtime.evolution_fleet import EvolutionFleet
 from aura_runtime.worker import AuraRuntimeWorker
-from app.cognitive.evolution_fleet import EvolutionFleet
 
 
 class AuraCloudWorker(AuraRuntimeWorker):
