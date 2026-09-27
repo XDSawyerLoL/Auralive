@@ -17,7 +17,7 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 - agents planner/research/dev/security/operator/critic
 - swarm multi-agents
 - `/api/chat`
-- fournisseur Gemini natif ou endpoint OpenAI-compatible distant
+- couche de langage remplaçable ; en mode zéro coût, seuls AURA Runtime/local Mesh et endpoints locaux sont exécutables
 - diagnostic IA sûr via `GET /api/ai/runtime`
 - pont HORIZON avec préservation stricte du statut épistémique
 - ingestion des événements et résultats Quantic Studio
@@ -32,7 +32,7 @@ AURA Cloud est le **control plane**: continuité, mémoire, direction, orchestra
 
 AURA Runtime est l'**execution plane** local: modèles, outils machine, opérateur, voix/image et capacités matérielles. Le Runtime n'expose pas de shell arbitraire au Cloud et reste borné par des capacités typées.
 
-Quantic Studio n'est pas l'autorité d'exécution d'AURA. C'est le produit de streaming vivant de Quantic Sillage. Dans l'implémentation actuelle, Quantic Studio héberge encore le worker AURA Runtime pour compatibilité; cette dépendance doit être extraite progressivement.
+Quantic Studio n'est pas l'autorité d'exécution d'AURA. C'est le produit de streaming vivant de Quantic Sillage. AURA Runtime est désormais une couche autonome. Quantic Studio peut l’utiliser comme produit client, mais n’est plus requis comme autorité ni comme hôte canonique du Runtime.
 
 ## Déploiement Hostinger
 
@@ -44,14 +44,15 @@ Quantic Studio n'est pas l'autorité d'exécution d'AURA. C'est le produit de st
 6. Commande de démarrage : `npm start`
 7. Vérifier `GET /healthz`.
 
-Pour Gemini natif, utiliser au minimum :
+Pour la version de production **zéro coût**, conserver :
 
 ```env
-AI_MODE=gemini
-AI_API_KEY=...
+AURA_ZERO_COST_MODE=true
+AI_MODE=off
+MAIRAIY_CLOUD_VOICE_ENABLED=false
 ```
 
-`AI_BASE_URL` et `AI_MODEL` peuvent être omis : AURA applique alors les valeurs Gemini par défaut. Pour un fournisseur OpenAI-compatible ou Ollama distant, renseigner explicitement `AI_BASE_URL` et `AI_MODEL`.
+Avec ce verrou, les appels IA/TTS/expert externes potentiellement facturables sont bloqués dans le runtime, même si une ancienne clé reste présente dans l’environnement. Les capacités de langage, voix et image doivent venir d’AURA Runtime, du Compute Mesh local ou d’une capability explicitement gratuite. Si aucune capacité gratuite n’est disponible, AURA reste hors ligne pour cette fonction au lieu de basculer vers un service payant.
 
 Hostinger fournit `PORT`; AURA l’utilise automatiquement.
 
