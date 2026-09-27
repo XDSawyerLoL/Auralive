@@ -264,10 +264,16 @@ class EvolutionFleet:
         repo = self.validate_repository(repository)
         accepted: list[dict[str, Any]] = []
         issues: list[str] = []
+        seen_paths: set[str] = set()
         for item in list(proposal.get("edits") or [])[:4]:
             if not isinstance(item, dict):
                 continue
             rel = str(item.get("path") or "").replace("\\", "/").strip()
+            if rel in seen_paths:
+                issues.append(f"{rel}: plusieurs éditions du même fichier sont interdites")
+                continue
+            if rel:
+                seen_paths.add(rel)
             before = str(item.get("before") or "")
             after = str(item.get("after") or "")
             ok, reason = self.path_allowed(repo, rel)
