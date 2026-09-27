@@ -152,8 +152,8 @@ class AuraRuntimeWorker:
         ai = getattr(self.host, "ai", None)
         if bool(getattr(ai, "enabled", False)) and callable(getattr(ai, "generate", None)):
             kinds.add("inference")
-        cognitive = getattr(self.host, "cognitive", None)
-        if cognitive is not None and callable(getattr(cognitive, "operate", None)):
+        operator = getattr(self.host, "operator", None) or getattr(self.host, "cognitive", None)
+        if operator is not None and callable(getattr(operator, "operate", None)):
             kinds.add("operator")
         voice = getattr(self.host, "avatar_audio", None)
         if voice is not None and callable(getattr(voice, "synthesize", None)):
@@ -404,11 +404,29 @@ class AuraRuntimeWorker:
         )
 
     def _capabilities(self) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+
+        operator = getattr(self.host, "operator", None)
+        if operator is not None and callable(getattr(operator, "capabilities", None)):
+            try:
+                for item in list(operator.capabilities() or []):
+                    if not isinstance(item, dict):
+                        continue
+                    result.append(
+                        {
+                            "name": str(item.get("name") or ""),
+                            "title": str(item.get("title") or ""),
+                            "category": str(item.get("category") or ""),
+                            "risk": str(item.get("risk") or "safe"),
+                        }
+                    )
+            except Exception:
+                logger.debug("Catalogue AURA Runtime Operator indisponible", exc_info=True)
+
         cognitive = getattr(self.host, "cognitive", None)
         automation = getattr(cognitive, "automation", None)
         registry = getattr(automation, "registry", None)
         definitions = getattr(registry, "action_definitions", {}) or {}
-        result: list[dict[str, Any]] = []
         for item in definitions.values():
             result.append(
                 {
@@ -418,7 +436,13 @@ class AuraRuntimeWorker:
                     "risk": str(getattr(item, "risk", "safe")),
                 }
             )
-        return sorted(result, key=lambda row: (row["category"], row["name"]))[:500]
+
+        unique: dict[str, dict[str, Any]] = {}
+        for row in result:
+            name = str(row.get("name") or "").strip()
+            if name:
+                unique[name] = row
+        return sorted(unique.values(), key=lambda row: (row["category"], row["name"]))[:500]
 
     def _ai_diagnostic(self) -> dict[str, Any]:
         try:
@@ -567,15 +591,15 @@ class AuraRuntimeWorker:
         payload: dict[str, Any],
         requested_risks: list[str],
     ) -> dict[str, Any]:
-        cognitive = getattr(self.host, "cognitive", None)
-        if cognitive is None:
-            raise RuntimeError("Noyau cognitif local indisponible")
-        configured = set(getattr(cognitive, "operator_allowed_risks", set()))
+        operator = getattr(self.host, "operator", None) or getattr(self.host, "cognitive", None)
+        if operator is None or not callable(getattr(operator, "operate", None)):
+            raise RuntimeError("AURA Runtime Operator indisponible")
+        configured = set(getattr(operator, "operator_allowed_risks", set()))
         requested = {str(item).casefold() for item in requested_risks if str(item).strip()}
         # Une mission Cloud ne peut jamais élargir la politique locale : elle ne
         # peut demander qu'un sous-ensemble de ce qu'AURA Runtime autorise.
         allowed = configured.intersection(requested or configured)
-        return await cognitive.operate(
+        return await operator.operate(
             str(payload.get("task") or ""),
             max_steps=max(1, min(int(payload.get("max_steps") or 6), 8)),
             requested_risks=allowed,
