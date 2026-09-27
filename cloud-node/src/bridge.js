@@ -653,7 +653,7 @@ export class ExecutionBridge {
         ].join('\n').slice(0, 50_000),
         system: 'Tu es le synthétiseur du Mixture-of-Agents distribué d’AURA.',
         max_tokens: maxTokens,
-        task_role: 'moa-synthesizer',
+        task_role: 'critic',
         preferred_model: synthesizerModel,
       },
       ['ai'],
