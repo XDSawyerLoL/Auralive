@@ -534,7 +534,10 @@ app.post('/api/bridge/claim', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
-  return { job: await bridge.claim(workerId) };
+  const jobKinds = Array.isArray(request.body?.job_kinds)
+    ? request.body.job_kinds.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean).slice(0, 32)
+    : [];
+  return { job: await bridge.claim(workerId, jobKinds) };
 });
 
 app.post('/api/bridge/jobs/:id/renew', async (request, reply) => {
