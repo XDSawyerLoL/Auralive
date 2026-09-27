@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { ZeroCostFederation } from './free_federation.js';
 
 function completionUrl() {
   if (config.aiBaseUrl.endsWith('/v1')) return `${config.aiBaseUrl}/chat/completions`;
@@ -70,17 +71,23 @@ export class AiClient {
     this.lastError = '';
     this.lastLatencyMs = 0;
     this.lastBackend = '';
+    this.federation = new ZeroCostFederation();
   }
 
   get provider() {
-    if (this.bridge?.enabled && this.bridge?.preferLocalAi) return 'aura-runtime-local-preferred';
+    if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
+      return this.federation.enabled
+        ? 'aura-runtime-local+zero-cost-federation'
+        : 'aura-runtime-local-preferred';
+    }
+    if (this.federation.enabled) return 'zero-cost-federation';
     if (config.aiMode === 'bridge') return 'aura-runtime-local';
     if (remoteFallbackBlocked()) return 'blocked-zero-cost';
     return config.aiMode === 'gemini' ? 'google-gemini' : 'openai-compatible';
   }
 
   get enabled() {
-    if (this.bridge?.enabled) return true;
+    if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (remoteFallbackBlocked()) return false;
     if (config.aiMode === 'gemini') {
@@ -102,6 +109,7 @@ export class AiClient {
       local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
       zero_cost_mode: Boolean(config.zeroCostMode),
       remote_fallback_blocked: remoteFallbackBlocked(),
+      free_federation: this.federation.snapshot(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
@@ -190,23 +198,39 @@ export class AiClient {
       if (wantsLocal && await this.bridge.workerOnline()) {
         try {
           const answer = await this.bridge.infer(prompt, system, maxTokens, taskRole);
-          this.lastBackend = 'quantic-studio-local';
+          this.lastBackend = 'aura-runtime-local';
           this.lastError = '';
           this.lastLatencyMs = Date.now() - started;
           return answer;
         } catch (error) {
           localError = error;
-          if (config.aiMode === 'bridge') throw error;
         }
       } else if (config.aiMode === 'bridge') {
-        throw new Error('Quantic Studio local hors ligne');
+        localError = new Error('AURA Runtime local hors ligne');
       }
 
-      if (remoteFallbackBlocked()) {
-        this.lastBackend = 'zero-cost-block';
-        this.lastError = localError ? `local unavailable: ${safeError(localError)}` : '';
+      let federationError = null;
+      if (this.federation.enabled) {
+        try {
+          const result = await this.federation.generate(prompt, system, maxTokens, taskRole);
+          if (result?.answer) {
+            this.lastBackend = `zero-cost:${result.provider}:${result.model}`;
+            this.lastError = localError ? `local unavailable: ${safeError(localError)}` : '';
+            this.lastLatencyMs = Date.now() - started;
+            return result.answer;
+          }
+        } catch (error) {
+          federationError = error;
+        }
+      }
+
+      if (remoteFallbackBlocked() || config.aiMode === 'off' || config.aiMode === 'bridge') {
+        this.lastBackend = federationError ? 'zero-cost-federation-unavailable' : 'zero-cost-block';
+        this.lastError = [
+          localError ? `local unavailable: ${safeError(localError)}` : '',
+          federationError ? `free federation unavailable: ${safeError(federationError)}` : '',
+        ].filter(Boolean).join(' | ');
         this.lastLatencyMs = Date.now() - started;
-        if (localError) throw localError;
         return '';
       }
 

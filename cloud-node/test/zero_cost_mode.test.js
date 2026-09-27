@@ -93,5 +93,7 @@ test('Hostinger example enables hard zero-cost mode and cloud TTS is off', () =>
   const env = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
   assert.match(env, /^AURA_ZERO_COST_MODE=true$/m);
   assert.match(env, /^AI_MODE=off$/m);
+  assert.match(env, /^AURA_FREE_FEDERATION_ENABLED=true$/m);
+  assert.match(env, /^AURA_OPENROUTER_FREE_MODELS=openrouter\/free$/m);
   assert.match(env, /^MAIRAIY_CLOUD_VOICE_ENABLED=false$/m);
 });

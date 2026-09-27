@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 10;
+export const LATEST_SCHEMA_VERSION = 11;
 
 export function getDb() {
   if (pool) return pool;
@@ -496,6 +496,38 @@ async function applyMigrations(db) {
       ['conversation-session-isolation', new Date().toISOString()],
     );
     current = 10;
+  }
+
+  if (current < 11) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_free_model_scorecards (
+      provider VARCHAR(80) NOT NULL,
+      model VARCHAR(240) NOT NULL,
+      role VARCHAR(80) NOT NULL,
+      calls BIGINT NOT NULL DEFAULT 0,
+      successes BIGINT NOT NULL DEFAULT 0,
+      failures BIGINT NOT NULL DEFAULT 0,
+      ema_latency_ms DOUBLE NOT NULL DEFAULT 0,
+      ema_quality DOUBLE NULL,
+      last_error TEXT NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      PRIMARY KEY(provider,model,role),
+      INDEX idx_aura_free_model_quality(provider,role,successes,calls,ema_latency_ms)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_free_provider_usage (
+      provider VARCHAR(80) NOT NULL,
+      usage_date VARCHAR(10) NOT NULL,
+      requests BIGINT NOT NULL DEFAULT 0,
+      failures BIGINT NOT NULL DEFAULT 0,
+      last_status VARCHAR(120) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      PRIMARY KEY(provider,usage_date),
+      INDEX idx_aura_free_usage_date(usage_date,provider)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(11,?,?)',
+      ['zero-cost-cloud-federation-ledger', new Date().toISOString()],
+    );
+    current = 11;
   }
 }
 

@@ -131,6 +131,19 @@ export const config = Object.freeze({
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
 
+  // AURA 2.2: remote inference may run in zero-cost mode only through model IDs
+  // whose endpoint is intrinsically free. No paid fallback is ever enabled here.
+  freeFederationEnabled: bool('AURA_FREE_FEDERATION_ENABLED', true),
+  freeFederationTimeoutMs: int('AURA_FREE_FEDERATION_TIMEOUT_MS', 45000, 1000, 180000),
+  freeFederationMaxRequestsPerDay: int('AURA_FREE_FEDERATION_MAX_REQUESTS_PER_DAY', 45, 1, 10000),
+  freeFederationDiscoverModels: bool('AURA_FREE_FEDERATION_DISCOVER_MODELS', true),
+  freeFederationCatalogTtlSeconds: int('AURA_FREE_FEDERATION_CATALOG_TTL_SECONDS', 900, 60, 86400),
+  freeFederationMaxCatalogModels: int('AURA_FREE_FEDERATION_MAX_CATALOG_MODELS', 24, 1, 100),
+  freeFederationExploration: num('AURA_FREE_FEDERATION_EXPLORATION', 0.12, 0.01, 0.5),
+  openRouterApiKey: process.env.AURA_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '',
+  openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
+  openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),
+
   voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', false),
   voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
   voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
