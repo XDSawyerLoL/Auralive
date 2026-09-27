@@ -307,3 +307,9 @@ test('Command Center does not use Quantic Studio as AURA execution authority', (
   assert.doesNotMatch(commandSource, /Quantic Studio worker offline/);
   assert.doesNotMatch(commandSource, /quantic-studio-operator/);
 });
+
+test('Command Center does not default AURA Runtime host back to Quantic Studio', () => {
+  assert.match(commandSource, /compatibility_host: String\(bridgeStatus\?\.worker\?\.host_product \|\| ''\)/);
+  assert.match(commandSource, /runtime_packaging:/);
+  assert.match(commandSource, /runtime_role:/);
+});
