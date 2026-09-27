@@ -20,9 +20,29 @@ function geminiModel() {
 
 function safeError(error) {
   return String(error?.message || error || '')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [REDACTED]')
+    .replace(/\b(?:sk-|AIza)[A-Za-z0-9_-]{12,}\b/g, '[REDACTED]')
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{16,}\b/g, '[REDACTED]')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 700);
+}
+
+function isLocalAiEndpoint(value) {
+  try {
+    const url = new URL(String(value || ''));
+    const host = String(url.hostname || '').toLowerCase();
+    return ['localhost', '127.0.0.1', '::1'].includes(host);
+  } catch {
+    return false;
+  }
+}
+
+function remoteFallbackBlocked() {
+  if (!config.zeroCostMode) return false;
+  if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
+  if (config.aiMode === 'gemini') return true;
+  return !isLocalAiEndpoint(config.aiBaseUrl);
 }
 
 function extractGeminiText(payload) {
@@ -53,14 +73,16 @@ export class AiClient {
   }
 
   get provider() {
-    if (this.bridge?.enabled && this.bridge?.preferLocalAi) return 'quantic-studio-local-preferred';
-    if (config.aiMode === 'bridge') return 'quantic-studio-local';
+    if (this.bridge?.enabled && this.bridge?.preferLocalAi) return 'aura-runtime-local-preferred';
+    if (config.aiMode === 'bridge') return 'aura-runtime-local';
+    if (remoteFallbackBlocked()) return 'blocked-zero-cost';
     return config.aiMode === 'gemini' ? 'google-gemini' : 'openai-compatible';
   }
 
   get enabled() {
     if (this.bridge?.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
+    if (remoteFallbackBlocked()) return false;
     if (config.aiMode === 'gemini') {
       return Boolean(config.aiApiKey && geminiBaseUrl() && geminiModel());
     }
@@ -78,6 +100,8 @@ export class AiClient {
       timeout_ms: config.aiTimeoutMs,
       local_bridge_configured: Boolean(this.bridge?.enabled),
       local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
+      zero_cost_mode: Boolean(config.zeroCostMode),
+      remote_fallback_blocked: remoteFallbackBlocked(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
@@ -176,6 +200,14 @@ export class AiClient {
         }
       } else if (config.aiMode === 'bridge') {
         throw new Error('Quantic Studio local hors ligne');
+      }
+
+      if (remoteFallbackBlocked()) {
+        this.lastBackend = 'zero-cost-block';
+        this.lastError = localError ? `local unavailable: ${safeError(localError)}` : '';
+        this.lastLatencyMs = Date.now() - started;
+        if (localError) throw localError;
+        return '';
       }
 
       let answer = '';
