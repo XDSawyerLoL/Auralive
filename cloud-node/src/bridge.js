@@ -264,16 +264,18 @@ export class ExecutionBridge {
     if (!worker) throw new Error('worker_id requis');
 
     const workerRow = await one(
-      'SELECT compute_consent,mesh_capabilities FROM aura_execution_workers WHERE worker_id=?',
+      'SELECT compute_consent,mesh_capabilities,resources FROM aura_execution_workers WHERE worker_id=?',
       [worker],
     );
     const computeConsent = Boolean(Number(workerRow?.compute_consent || 0));
     const meshCapabilities = new Set(stringList(parseJson(workerRow?.mesh_capabilities, [])));
+    const workerResources = parseJson(workerRow?.resources, {});
+    const jobKinds = new Set(stringList(workerResources?.job_kinds));
     const leaseUntil = nowMs() + settings.leaseSeconds * 1000;
 
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const candidates = await query(
-        `SELECT id,target_worker_id,required_capabilities FROM aura_execution_jobs
+        `SELECT id,kind,target_worker_id,required_capabilities FROM aura_execution_jobs
          WHERE status='queued' OR (status='leased' AND lease_until<?)
          ORDER BY created_at ASC LIMIT 32`,
         [nowMs()],
@@ -284,6 +286,8 @@ export class ExecutionBridge {
       for (const candidate of candidates) {
         const target = String(candidate.target_worker_id || '');
         if (target && target !== worker) continue;
+        const kind = String(candidate.kind || '').trim();
+        if (jobKinds.size && kind && !jobKinds.has(kind)) continue;
         const required = stringList(parseJson(candidate.required_capabilities, []));
         if (required.length) {
           if (!computeConsent) continue;
@@ -753,6 +757,7 @@ export class ExecutionBridge {
         host_product: String(parseJson(worker.resources, {})?.runtime_host_product || ''),
         runtime_role: String(parseJson(worker.resources, {})?.runtime_role || 'aura-runtime'),
         runtime_packaging: String(parseJson(worker.resources, {})?.runtime_packaging || ''),
+        job_kinds: stringList(parseJson(worker.resources, {})?.job_kinds),
         last_seen_at: worker.last_seen_at || '',
       } : null,
       mesh: {

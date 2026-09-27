@@ -9,6 +9,8 @@ from typing import Any
 
 import aiohttp
 
+from .evolution_fleet import EvolutionFleet
+from .evolution_lab import RuntimeFleetLab
 from .worker import AuraRuntimeWorker
 
 
@@ -42,6 +44,21 @@ def runtime_settings_from_env() -> SimpleNamespace:
         image_default_height=1024,
         image_default_steps=8,
         aura_runtime_ollama_url=str(os.getenv('AURA_RUNTIME_OLLAMA_URL', 'http://127.0.0.1:11434')).rstrip('/'),
+        aura_runtime_data_dir=Path(
+            os.getenv('AURA_RUNTIME_DATA_DIR', str(Path.home() / '.aura-runtime'))
+        ),
+        evolution_github_repository=str(
+            os.getenv('AURA_RUNTIME_GITHUB_REPOSITORY', 'XDSawyerLoL/Auralive')
+        ).strip(),
+        evolution_github_allowed_repositories=str(
+            os.getenv(
+                'AURA_RUNTIME_GITHUB_ALLOWED_REPOSITORIES',
+                'XDSawyerLoL/Auralive,XDSawyerLoL/QuanticSillage,XDSawyerLoL/QuanticMail,'
+                'XDSawyerLoL/QUANTIC-OS,XDSawyerLoL/Quantic-Browser,XDSawyerLoL/Human-Agency-Engine',
+            )
+        ).strip(),
+        evolution_github_token=str(os.getenv('AURA_RUNTIME_GITHUB_TOKEN', '')).strip(),
+        evolution_auto_submit=_bool('AURA_RUNTIME_EVOLUTION_AUTO_SUBMIT', True),
     )
 
 
@@ -107,7 +124,7 @@ class StandaloneRuntimeHost:
         self.cognitive = None
         self.avatar_audio = None
         self.image = None
-        self.evolution = None
+        self.evolution = RuntimeFleetLab(self, settings)
 
 
 async def run_forever() -> None:
@@ -119,6 +136,7 @@ async def run_forever() -> None:
     worker = AuraRuntimeWorker(
         host,
         settings,
+        fleet_factory=EvolutionFleet,
         host_product='',
         runtime_packaging='standalone-service',
     )

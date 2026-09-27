@@ -11,9 +11,12 @@ Il n'est pas Quantic Studio. Quantic Studio peut l'héberger comme adaptateur de
 - leases de jobs et reprise après expiration;
 - Compute Mesh déterministe;
 - inférence locale via Ollama;
-- participation au Mesh si l'utilisateur l'active explicitement.
+- participation au Mesh si l'utilisateur l'active explicitement;
+- Evolution Fleet inter-produits via GitHub, avec allowlist, branches dédiées et PR uniquement.
 
-Les capacités voix, image, opérateur et Evolution sont injectées par des adaptateurs d'hôte. L'adaptateur Quantic Studio les fournit aujourd'hui sans remettre Studio au centre de l'architecture.
+Evolution Fleet appartient désormais directement à AURA Runtime et peut fonctionner sans Studio. L'évolution native du dépôt AURA reste gérée par le noyau Cloud.
+
+Les capacités voix, image et opérateur restent injectées par des adaptateurs d'hôte à ce stade. L'adaptateur Quantic Studio les fournit aujourd'hui sans remettre Studio au centre de l'architecture.
 
 ## Démarrage
 
@@ -36,3 +39,14 @@ Le Runtime n'écoute aucun port entrant. Il initie des connexions HTTPS sortante
 ## Invariant
 
 AURA Runtime doit pouvoir vivre sans Quantic Studio. Quantic Studio doit pouvoir utiliser AURA Runtime sans posséder l'identité ou la politique centrale d'AURA.
+
+## Evolution Fleet standalone
+
+Pour permettre au Runtime de maintenir les produits enfants Quantic:
+
+- définir `AURA_RUNTIME_GITHUB_TOKEN` avec les droits GitHub strictement nécessaires;
+- conserver `AURA_RUNTIME_GITHUB_ALLOWED_REPOSITORIES` sur les seuls dépôts Quantic autorisés;
+- `AURA_RUNTIME_EVOLUTION_AUTO_SUBMIT=true` autorise uniquement la création branche + commit + PR;
+- Fleet ne fusionne jamais lui-même une PR inter-produit.
+
+Les cycles et diagnostics Fleet sont persistés localement dans `evolution.sqlite3`.
