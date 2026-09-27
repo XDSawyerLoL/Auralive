@@ -279,8 +279,7 @@ export class CommandCenter {
 
   async dedupeActiveInitiatives() {
     const rows = await query(
-      `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
-       FROM aura_initiatives
+      `SELECT * FROM aura_initiatives
        WHERE status IN ('queued','running','waiting')
        ORDER BY
          CASE status WHEN 'running' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END,
@@ -1082,7 +1081,7 @@ export class CommandCenter {
 
   async existingInitiative(candidate) {
     const active = await one(
-      `SELECT id,status,updated_at FROM aura_initiatives
+      `SELECT * FROM aura_initiatives
        WHERE fingerprint=? AND status IN ('queued','running','waiting')
        ORDER BY updated_at DESC LIMIT 1`,
       [candidate.fingerprint],
@@ -1090,7 +1089,7 @@ export class CommandCenter {
     if (active) return active;
     const threshold = new Date(Date.now() - config.commandCenterCooldownSeconds * 1000).toISOString();
     return one(
-      `SELECT id,status,updated_at FROM aura_initiatives
+      `SELECT * FROM aura_initiatives
        WHERE fingerprint=? AND updated_at>=?
        ORDER BY updated_at DESC LIMIT 1`,
       [candidate.fingerprint, threshold],
@@ -1653,9 +1652,16 @@ export class CommandCenter {
 
   async reconcileWaiting() {
     const rows = await query(
-      `SELECT * FROM aura_initiatives
-       WHERE status='waiting'
-       ORDER BY priority DESC,updated_at ASC LIMIT 12`,
+      `SELECT i.* FROM aura_initiatives i
+       WHERE i.status='waiting'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM aura_mission_steps ms
+           JOIN aura_missions m ON m.id=ms.mission_id
+           WHERE ms.initiative_id=i.id
+             AND m.status IN ('paused','cancelled','failed','completed')
+         )
+       ORDER BY i.priority DESC,i.updated_at ASC LIMIT 12`,
     );
     const reconciled = [];
     const workerOnline = this.bridge?.enabled
@@ -2132,9 +2138,21 @@ export class CommandCenter {
       if (missionAdvance?.candidate && missionAdvance?.step?.id) {
         const missionCandidate = this.candidate(missionAdvance.candidate);
         const persisted = await this.persistInitiative(missionCandidate);
-        const initiative = persisted.initiative;
+        const initiative = await one(
+          'SELECT * FROM aura_initiatives WHERE id=?',
+          [String(persisted.initiative?.id || '')],
+        );
+        if (!initiative) throw new Error('initiative de mission introuvable après persistance');
         await this.longHorizon.bindInitiative(missionAdvance.step.id, initiative.id);
-        const missionResult = await this.executeInitiative(initiative);
+        const missionResult = initiative.status === 'queued'
+          ? await this.executeInitiative(initiative)
+          : {
+            id: initiative.id,
+            status: initiative.status,
+            execution_mode: initiative.execution_mode || '',
+            result: parseJson(initiative.result, {}),
+            deduplicated: true,
+          };
         this.lastCycleAt = now();
         this.lastError = '';
         return {
