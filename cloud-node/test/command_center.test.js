@@ -167,3 +167,8 @@ test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
   assert.match(commandSource, /fleet_mode: !isAura/);
   assert.match(commandSource, /executionMode = repository[\s\S]*'evolution-fleet'/);
 });
+
+test('offline Fleet evolution remains waiting instead of recording false success', () => {
+  assert.match(commandSource, /returnedStatus\.startsWith\('waiting'\)/);
+  assert.match(commandSource, /const status = waiting \? 'waiting'/);
+});
