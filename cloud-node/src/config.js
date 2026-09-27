@@ -154,7 +154,12 @@ export const config = Object.freeze({
   // AURA Voice Fabric: provider-neutral Mairaiy identity.
   // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
   voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', true),
-  voiceFabricBaseUrl: String(process.env.AURA_VOICE_FABRIC_BASE_URL || 'https://mediumorchid-badger-314305.hostingersite.com/voice').replace(/\/$/, ''),
+  voiceFabricPinQuanticEndpoint: bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true),
+  voiceFabricBaseUrl: String(
+    bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true)
+      ? 'https://mediumorchid-badger-314305.hostingersite.com/voice'
+      : (process.env.AURA_VOICE_FABRIC_BASE_URL || 'https://mediumorchid-badger-314305.hostingersite.com/voice')
+  ).replace(/\/$/, ''),
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
   voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'kokoro',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
