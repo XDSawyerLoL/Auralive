@@ -27,6 +27,12 @@ def settings(tmp_path: Path):
         aura_runtime_operator_max_file_bytes=200_000,
         aura_runtime_operator_process_timeout_seconds=10,
         aura_runtime_operator_http_timeout_seconds=10,
+        aura_runtime_deep_web_enabled=True,
+        aura_runtime_deep_web_max_chars=60_000,
+        aura_runtime_browser_enabled=False,
+        aura_runtime_browser_max_steps=5,
+        ai_model="qwen3:8b",
+        aura_runtime_ollama_url="http://127.0.0.1:11434",
     )
 
 
@@ -96,3 +102,75 @@ def test_runtime_operator_capabilities_are_typed_and_risk_labeled(tmp_path):
     assert rows["fs.write"]["risk"] == "local-write"
     assert rows["process.run"]["risk"] == "process"
     assert rows["http.get"]["risk"] == "network"
+
+
+def test_browser_capability_is_disabled_by_default(tmp_path, monkeypatch):
+    config = settings(tmp_path)
+    operator = RuntimeOperator(FakeAI(), config)
+    monkeypatch.setattr(
+        operator.open_capabilities,
+        "_installed",
+        lambda module: module == "browser_use",
+    )
+    rows = {row["name"]: row for row in operator.capabilities()}
+    assert "browser.task" not in rows
+
+
+@pytest.mark.asyncio
+async def test_deep_web_capability_uses_runtime_network_gate(tmp_path, monkeypatch):
+    config = settings(tmp_path)
+    operator = RuntimeOperator(FakeAI(), config)
+    monkeypatch.setattr(
+        operator.open_capabilities,
+        "_installed",
+        lambda module: module == "crawl4ai",
+    )
+
+    checked = []
+
+    async def fake_safe_url(url):
+        checked.append(url)
+        return url
+
+    async def fake_deep_read(url, *, query=""):
+        return {
+            "ok": True,
+            "engine": "crawl4ai",
+            "url": url,
+            "query": query,
+            "content": "page dynamique",
+            "chars": 15,
+            "read_only": True,
+        }
+
+    monkeypatch.setattr(operator, "_safe_public_url", fake_safe_url)
+    monkeypatch.setattr(operator.open_capabilities, "deep_read", fake_deep_read)
+    result = await operator.operate(
+        '{"summary":"read","actions":[{"type":"web.deep_read","url":"https://example.com","query":"test"}]}',
+        requested_risks={"network"},
+    )
+
+    assert result["executed"] is True
+    assert result["steps"][0]["engine"] == "crawl4ai"
+    assert result["steps"][0]["read_only"] is True
+    assert checked == ["https://example.com"]
+
+
+@pytest.mark.asyncio
+async def test_browser_task_requires_explicit_browser_control_risk(tmp_path, monkeypatch):
+    config = settings(tmp_path)
+    config.aura_runtime_browser_enabled = True
+    operator = RuntimeOperator(FakeAI(), config)
+    monkeypatch.setattr(
+        operator.open_capabilities,
+        "_installed",
+        lambda module: module == "browser_use",
+    )
+
+    result = await operator.operate(
+        '{"summary":"browse","actions":[{"type":"browser.task","task":"Inspecte GitHub"}]}',
+        requested_risks={"browser-control"},
+    )
+
+    assert result["executed"] is False
+    assert "browser-control" in result["error"]
