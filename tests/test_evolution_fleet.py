@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.cognitive.evolution_fleet import EvolutionFleet
+from aura_runtime.evolution_fleet import EvolutionFleet
 
 
 class FakeLab:
