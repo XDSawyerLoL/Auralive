@@ -1010,9 +1010,16 @@ export class CognitiveKernel {
       });
     }
 
+    const seenWork = new Set();
     return items
       .filter((item) => item.title)
       .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))
+      .filter((item) => {
+        const key = intentionKey(item.title);
+        if (!key || seenWork.has(key)) return false;
+        seenWork.add(key);
+        return true;
+      })
       .slice(0, max);
   }
 
