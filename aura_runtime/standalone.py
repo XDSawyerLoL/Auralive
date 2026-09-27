@@ -68,6 +68,7 @@ def runtime_settings_from_env() -> SimpleNamespace:
         ai_fast_model='',
         ai_constellation_moa_enabled=_bool('AURA_RUNTIME_MOA_ENABLED', True),
         ai_constellation_max_models=max(2, min(4, _int('AURA_RUNTIME_MOA_MAX_MODELS', 3))),
+        ai_constellation_moa_parallel=_bool('AURA_RUNTIME_MOA_PARALLEL', False),
         ai_constellation_exploration=max(
             0.0, min(0.2, _float('AURA_RUNTIME_MODEL_EXPLORATION', 0.08))
         ),
@@ -292,7 +293,12 @@ class StandaloneOllamaAI:
                 )
                 return exc
 
-        raw = await asyncio.gather(*(proposal(model) for model in models))
+        if bool(self.settings.ai_constellation_moa_parallel):
+            raw = list(await asyncio.gather(*(proposal(model) for model in models)))
+        else:
+            raw = []
+            for model in models:
+                raw.append(await proposal(model))
         proposals = [
             item for item in raw
             if isinstance(item, tuple) and len(item) == 2 and str(item[1]).strip()
