@@ -362,3 +362,10 @@ test('browser-control remains bounded by the shared policy for long missions', (
   assert.match(commandSource, /config\.commandCenterAllowedRisks/);
   assert.match(commandSource, /this\.candidate\(missionAdvance\.candidate\)/);
 });
+
+
+test('mission cancellation propagates to Runtime jobs', () => {
+  assert.match(commandSource, /this\.bridge\.cancelJob/);
+  assert.match(commandSource, /mission_steps ms[\s\S]*aura_initiatives i/);
+  assert.match(commandSource, /i\.status IN \('queued','running','waiting'\)/);
+});
