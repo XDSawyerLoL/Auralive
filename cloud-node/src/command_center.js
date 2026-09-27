@@ -705,6 +705,9 @@ export class CommandCenter {
       if (!baseSha) throw new Error('SHA de branche de base introuvable');
 
       const branch = githubBranchName(initiative.fingerprint);
+      if (!branch.startsWith('aura/change-') || branch === baseBranch) {
+        throw new Error('invariant de gouvernance violé: AURA doit modifier une branche dédiée avant toute PR');
+      }
       try {
         await this.github(
           `/repos/${repository}/git/ref/heads/${encodeGithubPath(branch)}`,
@@ -753,8 +756,8 @@ export class CommandCenter {
           String(payload.body || initiative.objective || '').slice(0, 12000),
           '',
           'Modification proposée automatiquement par AURA.',
-          'Politique: branche dédiée uniquement; aucun push direct sur la branche principale; aucun auto-merge.',
-          'La promotion reste conditionnée aux validations CI/canary du dépôt.',
+          'Politique: branche dédiée uniquement; aucun push direct sur la branche principale.',
+          'La promotion éventuelle passe uniquement par le mécanisme Director low-risk après validations CI/revue.',
         ].join('\n');
         const created = await this.github(
           `/repos/${repository}/pulls`,
