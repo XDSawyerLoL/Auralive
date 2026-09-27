@@ -30,11 +30,11 @@ const DEFAULT_SERVICES = [
     criticality: 1,
   },
   {
-    id: 'quantic-studio',
-    name: 'Quantic Studio',
-    kind: 'execution',
-    objective: 'Fournir à AURA ses capacités locales, ses modèles, ses outils et son bras opérateur.',
-    criticality: 0.95,
+    id: 'aura-runtime',
+    name: 'AURA Runtime',
+    kind: 'execution-plane',
+    objective: 'Fournir à AURA les capacités locales universelles : modèles, outils machine, opérateur, voix/image, sandbox et calcul local.',
+    criticality: 0.98,
   },
   {
     id: 'horizon',
@@ -902,14 +902,16 @@ export class CommandCenter {
       { command_center: CommandCenter.VERSION },
     );
     await this.setServiceState(
-      'quantic-studio',
+      'aura-runtime',
       bridgeStatus.worker_online ? 'online' : 'standby',
       bridgeStatus.worker_online
-        ? 'Worker local connecté et disponible pour les actions autorisées.'
-        : 'Worker local absent; AURA Cloud poursuit ses décisions et met en attente les actions locales.',
+        ? 'AURA Runtime worker connecté et disponible pour les actions locales autorisées.'
+        : 'AURA Runtime worker absent; AURA Cloud poursuit ses décisions et met en attente les actions locales.',
       {
         worker_online: Boolean(bridgeStatus.worker_online),
         worker_version: String(bridgeStatus?.worker?.version || ''),
+        execution_plane: 'aura-runtime',
+        compatibility_host: String(bridgeStatus?.worker?.host_product || 'quantic-studio'),
       },
     );
     const horizonStatus = this.kernel?.horizon?.status?.() || {};
@@ -1310,13 +1312,13 @@ export class CommandCenter {
     }
     if (!bridgeStatus?.worker_online) {
       candidates.push(this.candidate({
-        domain: 'quantic-studio',
+        domain: 'aura-runtime',
         kind: 'reflection',
-        title: 'Maintenir l’autonomie malgré le bras local hors ligne',
+        title: 'Maintenir l’autonomie malgré AURA Runtime hors ligne',
         objective:
-          'Évaluer ce qu’AURA peut continuer à faire côté Cloud sans Quantic Studio, '
-          + 'identifier les missions bloquées et préparer leur reprise dès le retour du worker local.',
-        rationale: 'Le worker Quantic Studio n’est pas actuellement en ligne.',
+          'Évaluer ce qu’AURA peut continuer à faire côté Cloud sans AURA Runtime, '
+          + 'identifier les missions locales bloquées et préparer leur reprise dès le retour du worker.',
+        rationale: 'AURA Runtime n’est pas actuellement en ligne. Quantic Studio n’est pas requis pour la continuité du noyau.',
         priority: 0.64,
         confidence: 0.98,
         requested_risks: [],
@@ -1558,7 +1560,7 @@ export class CommandCenter {
           { repository, base_branch: baseBranch },
         );
       } else if (initiative.kind === 'operator') {
-        executionMode = 'quantic-studio-operator';
+        executionMode = 'aura-runtime-operator';
         result = await this.kernel.operate(
           initiative.objective,
           initiative.requested_risks,
@@ -1679,7 +1681,7 @@ export class CommandCenter {
            WHERE id=?`,
           [
             finalStatus,
-            row.kind === 'evolution' ? 'evolution-fleet' : 'quantic-studio-operator',
+            row.kind === 'evolution' ? 'evolution-fleet' : 'aura-runtime-operator',
             JSON.stringify(payload).slice(0, 100000),
             finalError,
             now(),
