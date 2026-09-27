@@ -980,6 +980,9 @@ export class CognitiveKernel {
         kind: 'initiative',
         title: String(row.title || row.objective || '').slice(0, 180),
         detail: `Initiative ${String(row.domain || 'AURA')} · ${String(row.status || 'queued')}`,
+        semantic_key: intentionKey(
+          `${row.domain || 'aura'}|${row.kind || 'initiative'}|${row.title || ''}|${row.objective || ''}`,
+        ),
         priority: clamp(
           Math.max(
             Number(row.priority || 0.5),
@@ -1032,11 +1035,14 @@ export class CognitiveKernel {
       .filter((item) => item.title)
       .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))
       .filter((item) => {
-        const key = intentionKey(item.title);
+        const key = item.semantic_key || intentionKey(
+          `${item.kind || ''}|${item.title || ''}|${item.detail || ''}`,
+        );
         if (!key || seenWork.has(key)) return false;
         seenWork.add(key);
         return true;
       })
+      .map(({ semantic_key: _semanticKey, ...item }) => item)
       .slice(0, max);
   }
 
