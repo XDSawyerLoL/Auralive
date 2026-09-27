@@ -379,8 +379,8 @@ export async function runAgiBattery() {
   cases.push(result(
     'AGI-13',
     'heldout-reasoning',
-    'ARC-style held-out abstraction benchmark',
     'gap',
+    'ARC-style held-out abstraction benchmark',
     'No official ARC-AGI-2/3 evaluation harness or held-out abstraction dataset is currently wired into AURA.',
     {
       severity: 'critical',
@@ -391,8 +391,8 @@ export async function runAgiBattery() {
   cases.push(result(
     'AGI-14',
     'cross-domain-transfer',
-    'Semantic knowledge transfer across unrelated domains',
     'unverified',
+    'Semantic knowledge transfer across unrelated domains',
     'The native learner transfers global risk/compute policy, but there is no held-out test showing a learned semantic strategy in domain A improves a novel task in domain B.',
     {
       severity: 'critical',
@@ -403,8 +403,8 @@ export async function runAgiBattery() {
   cases.push(result(
     'AGI-15',
     'persistent-memory',
-    'Long-term memory survives restart and improves later performance',
     'unverified',
+    'Long-term memory survives restart and improves later performance',
     'Persistent lessons, intentions, outcomes and soul state exist in MySQL, but the current deterministic battery does not restart a production-like database and measure behavioral improvement after recall.',
     {
       severity: 'high',
@@ -415,8 +415,8 @@ export async function runAgiBattery() {
   cases.push(result(
     'AGI-16',
     'long-horizon-agency',
-    'Multi-hour mission completion with replanning and recovery',
     'unverified',
+    'Multi-hour mission completion with replanning and recovery',
     'LongHorizonMissionEngine implements retries, critic-driven replanning and mission lessons, but no held-out multi-hour mission is yet scored end-to-end in CI.',
     {
       severity: 'critical',
@@ -427,8 +427,8 @@ export async function runAgiBattery() {
   cases.push(result(
     'AGI-17',
     'open-world-tool-use',
-    'GAIA-style multi-tool task completion in the open world',
     'unverified',
+    'GAIA-style multi-tool task completion in the open world',
     'AURA exposes Web Substrate, typed capabilities, browser/runtime bridges and DAG execution, but there is no hidden task set with exact-answer or outcome-based scoring.',
     {
       severity: 'critical',
@@ -439,8 +439,8 @@ export async function runAgiBattery() {
   cases.push(result(
     'AGI-18',
     'self-improvement',
-    'Held-out software repair improves AURA without regression',
     'unverified',
+    'Held-out software repair improves AURA without regression',
     'Evolution and Director Mode can diagnose CI failures and prepare changes behind CI/canary gates, but there is no blind repository-repair benchmark comparable to a SWE-bench-style evaluation.',
     {
       severity: 'high',
