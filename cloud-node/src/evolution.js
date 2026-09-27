@@ -44,16 +44,33 @@ export class EvolutionLab {
     this.started = false;
   }
 
-  async dispatchCycle(objective, trigger = 'manual') {
+  async dispatchCycle(objective, trigger = 'manual', options = {}) {
+    const repository = String(options.repository || '').trim();
+    const baseBranch = String(options.baseBranch || options.base_branch || 'main').trim() || 'main';
     if (this.bridge?.enabled && await this.bridge.workerOnline()) {
-      const delegated = await this.bridge.evolve(objective);
+      const delegated = await this.bridge.evolve(objective, {
+        repository,
+        baseBranch,
+      });
       this.lastCycleAt = now();
       this.lastError = '';
       return {
-        status: 'delegated-local-evolution',
+        status: repository ? 'delegated-evolution-fleet' : 'delegated-local-evolution',
         trigger,
         delegated_to_local: true,
+        repository,
+        base_branch: baseBranch,
         ...delegated,
+      };
+    }
+    if (repository && repository !== config.evolutionRepository) {
+      return {
+        status: 'waiting-local-worker',
+        trigger,
+        repository,
+        base_branch: baseBranch,
+        delegated_to_local: false,
+        reason: 'Evolution Fleet exige Quantic Studio en ligne pour le sas de modification multi-dépôt.',
       };
     }
     return this.runCycle(objective, trigger);

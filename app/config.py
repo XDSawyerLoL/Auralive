@@ -183,6 +183,19 @@ class Settings:
         "AURA_EVOLUTION_GITHUB_REPOSITORY", "XDSawyerLoL/Auralive"
     )
     evolution_github_base_branch: str = os.getenv("AURA_EVOLUTION_GITHUB_BASE_BRANCH", "main")
+    evolution_github_allowed_repositories: str = os.getenv(
+        "AURA_EVOLUTION_GITHUB_ALLOWED_REPOSITORIES",
+        ",".join(
+            [
+                "XDSawyerLoL/Auralive",
+                "XDSawyerLoL/QuanticSillage",
+                "XDSawyerLoL/QuanticMail",
+                "XDSawyerLoL/QUANTIC-OS",
+                "XDSawyerLoL/Quantic-Browser",
+                "XDSawyerLoL/Human-Agency-Engine",
+            ]
+        ),
+    )
     evolution_allowed_domains: str = os.getenv(
         "AURA_EVOLUTION_ALLOWED_DOMAINS", "api.github.com,pypi.org"
     )

@@ -5,17 +5,35 @@ import fs from 'node:fs';
 const evolutionSource = fs.readFileSync(new URL('../src/evolution.js', import.meta.url), 'utf8');
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+const bridgeSource = fs.readFileSync(new URL('../src/bridge.js', import.meta.url), 'utf8');
+const workerUrl = new URL('../../app/services/aura_cloud_worker.py', import.meta.url);
+const workerSource = fs.existsSync(workerUrl) ? fs.readFileSync(workerUrl, 'utf8') : '';
 
 test('AURA Cloud Phase 3 delegates evolution to Quantic Studio when the worker is online', () => {
   assert.match(evolutionSource, /aura-evolution-node-phase3-v1/);
   assert.match(evolutionSource, /await this\.bridge\.workerOnline\(\)/);
-  assert.match(evolutionSource, /this\.bridge\.evolve\(objective\)/);
+  assert.match(evolutionSource, /this\.bridge\.evolve\(objective, \{/);
   assert.match(evolutionSource, /phase3-hybrid-autonomous-evolution/);
   assert.match(evolutionSource, /phase3-cloud-persistent-adaptation/);
   assert.match(evolutionSource, /persistent-runtime-learning/);
   assert.match(evolutionSource, /aura_improvement_proposals/);
   assert.match(serverSource, /new EvolutionLab\(ai, kernel, bridge\)/);
   assert.match(serverSource, /evolution\.dispatchCycle\(/);
+});
+
+test('Fleet worker respects the configured auto-submit switch', { skip: !workerSource }, () => {
+  assert.match(workerSource, /submit=bool\(evolution\.auto_submit\)/);
+});
+
+test('AURA Cloud routes targeted repositories through Evolution Fleet only when Studio is online', () => {
+  assert.match(evolutionSource, /delegated-evolution-fleet/);
+  assert.match(evolutionSource, /Evolution Fleet exige Quantic Studio en ligne/);
+  assert.match(serverSource, /repository:\s*String\(request\.body\?\.repository/);
+});
+
+test('Evolution bridge exposes the queued worker job id for Command Center reconciliation', () => {
+  assert.match(bridgeSource, /job_id:\s*job\.id/);
+  assert.match(bridgeSource, /repository,/);
 });
 
 test('automatic canary is required without a manual token gate', () => {

@@ -178,13 +178,19 @@ export function safeGithubChangePath(value) {
   const path = String(value || '').replace(/\\/g, '/').replace(/^\/+/, '').trim();
   if (!path || path.length > 500 || path.includes('..') || path.includes('\0')) return '';
   const lower = path.toLowerCase();
+  const basename = lower.split('/').pop() || '';
   if (
     lower === '.env'
     || lower.startsWith('.env.')
     || lower.startsWith('.git/')
-    || lower.startsWith('.github/workflows/')
+    || lower.startsWith('.github/')
+    || lower.startsWith('scripts/')
+    || lower.startsWith('installer/')
+    || lower.startsWith('deploy/')
+    || ['dockerfile','docker-compose.yml','docker-compose.yaml','makefile'].includes(lower)
+    || ['package.json','package-lock.json','pnpm-lock.yaml','yarn.lock','requirements.txt','requirements-desktop.txt'].includes(basename)
     || /(^|\/)(secrets?|credentials?|tokens?)(\.|\/|$)/i.test(path)
-    || /\.(pem|p12|pfx|key|keystore|jks)$/i.test(path)
+    || /\.(pem|p12|pfx|key|keystore|jks|ps1|sh|bat|cmd)$/i.test(path)
   ) return '';
   return path;
 }
@@ -514,21 +520,32 @@ export class CommandCenter {
           }));
         }
 
-        if (
-          String(repo.repository).toLowerCase() === 'xdsawyerlol/auralive'
-          && run.failure_streak >= 2
-        ) {
+        if (run.failure_streak >= 2) {
+          const isAura = repoKey === 'xdsawyerlol/auralive';
           candidates.push(this.candidate({
-            domain: 'aura',
+            domain: REPO_SERVICE_MAP.get(repoKey) || 'quantic-sillage',
             kind: 'evolution',
-            title: 'Auto-réparer AURA après échecs CI répétés',
-            objective:
-              `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur son propre dépôt. Diagnostiquer la cause, produire le correctif minimal, valider par sandbox + CI + canary avant toute promotion.`,
-            rationale: 'Le centre de commande déclenche Evolution sur une preuve opérationnelle répétée.',
-            priority: 0.99,
+            action_payload: {
+              repository: repo.repository,
+              base_branch: repo.default_branch || 'main',
+              workflow: run.name,
+              head_sha: run.head_sha,
+              failure_streak: run.failure_streak,
+              fleet_mode: !isAura,
+            },
+            title: isAura
+              ? 'Auto-réparer AURA après échecs CI répétés'
+              : `Préparer une correction Evolution Fleet pour ${productName}`,
+            objective: isAura
+              ? `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur son propre dépôt. Diagnostiquer la cause, produire le correctif minimal, valider par sandbox + CI + canary avant toute promotion.`
+              : `AURA détecte ${run.failure_streak} échecs consécutifs du workflow ${run.name} sur ${repo.repository}. Lire le code du produit, diagnostiquer la cause et préparer une correction minimale via branche dédiée et pull request. Ne jamais fusionner automatiquement ce dépôt en mode Fleet v1.`,
+            rationale: isAura
+              ? 'Le centre de commande déclenche Evolution sur une preuve opérationnelle répétée.'
+              : 'Evolution Fleet est déclenché par un signal CI répété et reste soumis à la CI/revue du dépôt cible.',
+            priority: isAura ? 0.99 : Math.min(0.97, 0.80 + criticality * 0.15),
             confidence: 0.94,
             requested_risks: [],
-            signature: `self-repair:${run.name}:${run.head_sha}`,
+            signature: `${isAura ? 'self-repair' : 'fleet-repair'}:${repo.repository}:${run.name}:${run.head_sha}`,
           }));
         }
       }
@@ -783,7 +800,11 @@ export class CommandCenter {
     if (!current) return null;
     const normalizedState = String(state || 'unknown').slice(0, 40);
     const normalizedDetail = String(detail || '').slice(0, 4000);
-    const normalizedMetadata = JSON.stringify(metadata || {}).slice(0, 20000);
+    const mergedMetadata = {
+      ...parseJson(current.metadata, {}),
+      ...(metadata && typeof metadata === 'object' ? metadata : {}),
+    };
+    const normalizedMetadata = JSON.stringify(mergedMetadata).slice(0, 20000);
     const changed = String(current.state || '') !== normalizedState
       || String(current.state_detail || '') !== normalizedDetail
       || String(current.metadata || '{}') !== normalizedMetadata;
@@ -867,6 +888,17 @@ export class CommandCenter {
     const name = String(payload.name || '').trim().slice(0, 160);
     if (!id || !name) throw new Error('id et name sont requis');
     const stamp = now();
+    const current = await one(
+      'SELECT state,state_detail,last_observed_at,metadata FROM aura_command_services WHERE id=?',
+      [id],
+    );
+    const mergedMetadata = {
+      ...parseJson(current?.metadata, {}),
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    const effectiveState = String(payload.state ?? current?.state ?? 'unknown').slice(0, 40);
+    const effectiveDetail = String(payload.state_detail ?? current?.state_detail ?? '').slice(0, 4000);
+    const effectiveObservedAt = String(payload.last_observed_at ?? current?.last_observed_at ?? '');
     await query(
       `INSERT INTO aura_command_services(
         id,name,kind,objective,endpoint,repository,criticality,enabled,state,state_detail,
@@ -880,6 +912,9 @@ export class CommandCenter {
         repository=VALUES(repository),
         criticality=VALUES(criticality),
         enabled=VALUES(enabled),
+        state=VALUES(state),
+        state_detail=VALUES(state_detail),
+        last_observed_at=VALUES(last_observed_at),
         metadata=VALUES(metadata),
         updated_at=VALUES(updated_at)`,
       [
@@ -891,10 +926,10 @@ export class CommandCenter {
         String(payload.repository || '').slice(0, 300),
         clamp(payload.criticality ?? 0.5),
         payload.enabled === false ? 0 : 1,
-        String(payload.state || 'unknown').slice(0, 40),
-        String(payload.state_detail || '').slice(0, 4000),
-        String(payload.last_observed_at || ''),
-        JSON.stringify(payload.metadata || {}).slice(0, 20000),
+        effectiveState,
+        effectiveDetail,
+        effectiveObservedAt,
+        JSON.stringify(mergedMetadata).slice(0, 20000),
         stamp,
         stamp,
       ],
@@ -904,9 +939,15 @@ export class CommandCenter {
 
   async observeService(id, payload = {}) {
     const serviceId = String(id || '').trim().slice(0, 80);
+    const current = await one('SELECT metadata FROM aura_command_services WHERE id=?', [serviceId]);
+    if (!current) throw new Error('service inconnu');
     const state = String(payload.state || 'unknown').trim().toLowerCase().slice(0, 40);
     const detail = String(payload.detail || payload.state_detail || '').slice(0, 4000);
-    const metadata = JSON.stringify(payload.metadata || {}).slice(0, 20000);
+    const mergedMetadata = {
+      ...parseJson(current.metadata, {}),
+      ...(payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}),
+    };
+    const metadata = JSON.stringify(mergedMetadata).slice(0, 20000);
     const stamp = now();
     const result = await query(
       `UPDATE aura_command_services
@@ -919,7 +960,7 @@ export class CommandCenter {
       'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
       [
         'service-observation',
-        JSON.stringify({ service_id: serviceId, state, detail, metadata: payload.metadata || {} }).slice(0, 30000),
+        JSON.stringify({ service_id: serviceId, state, detail, metadata: mergedMetadata }).slice(0, 30000),
         stamp,
       ],
     );
@@ -1280,6 +1321,28 @@ export class CommandCenter {
       return { id, status: 'waiting', reason: 'worker offline' };
     }
 
+    const targetRepository = String(initiative.action_payload?.repository || '').trim();
+    const crossProductEvolution = initiative.kind === 'evolution'
+      && targetRepository
+      && targetRepository.toLowerCase() !== 'xdsawyerlol/auralive';
+    if (crossProductEvolution && !bridgeOnline) {
+      await this.updateInitiative(id, {
+        status: 'waiting',
+        execution_mode: 'waiting-local-worker',
+        result: {
+          reason: 'Quantic Studio worker offline',
+          repository: targetRepository,
+        },
+      });
+      return {
+        id,
+        status: 'waiting',
+        execution_mode: 'waiting-local-worker',
+        reason: 'worker offline',
+        repository: targetRepository,
+      };
+    }
+
     await query(
       "UPDATE aura_initiatives SET status='running',updated_at=? WHERE id=?",
       [now(), id],
@@ -1350,10 +1413,15 @@ export class CommandCenter {
           );
         }
       } else if (initiative.kind === 'evolution') {
-        executionMode = bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud';
+        const repository = String(initiative.action_payload?.repository || '').trim();
+        const baseBranch = String(initiative.action_payload?.base_branch || 'main').trim() || 'main';
+        executionMode = repository && repository.toLowerCase() !== 'xdsawyerlol/auralive'
+          ? 'evolution-fleet'
+          : (bridgeOnline ? 'evolution-hybrid' : 'evolution-cloud');
         result = await this.evolution.dispatchCycle(
           initiative.objective,
           'command-center',
+          { repository, base_branch: baseBranch },
         );
       } else if (initiative.kind === 'operator') {
         executionMode = 'quantic-studio-operator';
@@ -1370,8 +1438,17 @@ export class CommandCenter {
         });
       }
 
-      const executed = initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued);
-      const status = result?.queued ? 'waiting' : 'completed';
+      const returnedStatus = String(result?.status || '').toLowerCase();
+      if (initiative.kind === 'evolution' && returnedStatus === 'waiting-local-worker') {
+        executionMode = 'waiting-local-worker';
+      }
+      const waiting = Boolean(result?.queued)
+        || ['queued', 'leased'].includes(returnedStatus)
+        || returnedStatus.startsWith('waiting');
+      const failed = returnedStatus === 'error' || returnedStatus.endsWith('-rejected');
+      const executed = !waiting && !failed
+        && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
+      const status = waiting ? 'waiting' : (failed ? 'failed' : 'completed');
       await this.updateInitiative(id, {
         status,
         execution_mode: executionMode,
@@ -1449,24 +1526,43 @@ export class CommandCenter {
 
       if (job.status === 'completed') {
         const payload = job.result || {};
+        const payloadStatus = String(payload?.status || '').toLowerCase();
+        const evolutionRejected = row.kind === 'evolution'
+          && (
+            payload?.ok === false
+            || payloadStatus === 'error'
+            || payloadStatus === 'no-safe-patch'
+            || payloadStatus.endsWith('-rejected')
+          );
+        const finalStatus = evolutionRejected ? 'failed' : 'completed';
+        const finalError = evolutionRejected
+          ? String(payload?.error || payload?.reason || payloadStatus || 'evolution rejected').slice(0, 5000)
+          : '';
         await query(
           `UPDATE aura_initiatives
-           SET status='completed',execution_mode='quantic-studio-operator',
-               result=?,error='',updated_at=?
+           SET status=?,execution_mode=?,
+               result=?,error=?,updated_at=?
            WHERE id=?`,
-          [JSON.stringify(payload).slice(0, 100000), now(), row.id],
+          [
+            finalStatus,
+            row.kind === 'evolution' ? 'evolution-fleet' : 'quantic-studio-operator',
+            JSON.stringify(payload).slice(0, 100000),
+            finalError,
+            now(),
+            row.id,
+          ],
         );
         await this.kernel.recordOutcome({
           automation_id: `command-center:${row.domain}`,
           event_type: `aura.initiative.${row.kind}`,
-          ok: payload?.ok !== false,
-          signature: payload?.ok === false
-            ? String(payload?.error || 'worker-result-failed')
+          ok: !evolutionRejected && payload?.ok !== false,
+          signature: evolutionRejected || payload?.ok === false
+            ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed')
             : 'success',
           report: { initiative_id: row.id, job_id: jobId, result: payload },
           created_at: now(),
         });
-        reconciled.push({ id: row.id, status: 'completed', job_id: jobId });
+        reconciled.push({ id: row.id, status: finalStatus, job_id: jobId });
       } else if (job.status === 'error') {
         const message = String(job.error || 'worker execution failed').slice(0, 5000);
         await query(

@@ -128,10 +128,65 @@ function requireCanary(request, reply) {
   return true;
 }
 
+const rateBuckets = new Map();
+let rateLimitOperations = 0;
+const RATE_BUCKET_LIMIT = 4096;
+
+function pruneRateBuckets(stamp = Date.now()) {
+  rateLimitOperations += 1;
+  if (rateBuckets.size < 512 && rateLimitOperations % 128 !== 0) return;
+  for (const [id, value] of rateBuckets) {
+    if (!value || stamp >= Number(value.resetAt || 0)) rateBuckets.delete(id);
+  }
+  while (rateBuckets.size > RATE_BUCKET_LIMIT) {
+    const oldest = rateBuckets.keys().next().value;
+    if (oldest == null) break;
+    rateBuckets.delete(oldest);
+  }
+}
+
+function rateLimitKey(request) {
+  return String(request.ip || request.socket?.remoteAddress || 'unknown').slice(0, 160);
+}
+
+function consumeRateLimit(bucket, key, maxRequests, windowSeconds) {
+  const stamp = Date.now();
+  pruneRateBuckets(stamp);
+  const windowMs = Math.max(1, Number(windowSeconds || 60)) * 1000;
+  const id = `${bucket}:${key}`;
+  const current = rateBuckets.get(id);
+  if (!current || stamp >= current.resetAt) {
+    const next = { count: 1, resetAt: stamp + windowMs };
+    rateBuckets.set(id, next);
+    return { allowed: true, remaining: Math.max(0, maxRequests - 1), retryAfter: 0 };
+  }
+  current.count += 1;
+  if (current.count > maxRequests) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfter: Math.max(1, Math.ceil((current.resetAt - stamp) / 1000)),
+    };
+  }
+  return { allowed: true, remaining: Math.max(0, maxRequests - current.count), retryAfter: 0 };
+}
+
+function requireRateLimit(request, reply, bucket, maxRequests, windowSeconds) {
+  const result = consumeRateLimit(bucket, rateLimitKey(request), maxRequests, windowSeconds);
+  reply.header('X-RateLimit-Limit', String(maxRequests));
+  reply.header('X-RateLimit-Remaining', String(result.remaining));
+  if (!result.allowed) {
+    reply.header('Retry-After', String(result.retryAfter));
+    reply.code(429).send({ error: 'Trop de requêtes', retry_after_seconds: result.retryAfter });
+    return false;
+  }
+  return true;
+}
+
 const app = Fastify({
   logger: { level: config.logLevel },
   bodyLimit: 1_048_576,
-  trustProxy: true,
+  trustProxy: config.trustProxyHops > 0 ? config.trustProxyHops : false,
 });
 const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
@@ -301,7 +356,7 @@ const GLIDE_WINDOWS_DOWNLOAD = String(
 
 const GLIDE_ANDROID_DOWNLOAD = String(
   process.env.AURA_GLIDE_ANDROID_URL
-  || 'https://raw.githubusercontent.com/XDSawyerLoL/Auralive/main/downloads/Quantic-Glide-Android-1.3.0-beta.apk'
+  || 'https://github.com/XDSawyerLoL/Auralive/releases/download/quantic-glide-v1.3.0/Quantic-Glide-Android-1.3.0-beta.apk'
 ).trim();
 
 app.get('/downloads/glide/windows', async (_request, reply) => {
@@ -336,6 +391,13 @@ app.get('/api/auth/session', async (request) => ({
 }));
 
 app.post('/api/auth/session', async (request, reply) => {
+  if (!requireRateLimit(
+    request,
+    reply,
+    'auth-session',
+    config.authRateLimitMax,
+    config.authRateLimitWindowSeconds,
+  )) return;
   const supplied = String(request.body?.token || bearer(request) || '').trim();
   if (!tokenEquals(supplied, config.cloudToken)) {
     return reply.code(401).send({
@@ -677,12 +739,29 @@ app.get('/api/kernel/status', async () => {
   return { ...status, phase: (await kernel.soul()).phase };
 });
 
-app.get('/api/kernel/soul', async () => {
+app.get('/api/kernel/public', async () => {
+  if (!bootstrap.runtimeReady) {
+    return {
+      ...publicFallbackSoul(false),
+      organism: { ready: false },
+    };
+  }
+  const [soul, organism] = await Promise.all([
+    kernel.soul({ privateView: false }),
+    kernel.organismState({ publicView: true }),
+  ]);
+  return { ...soul, organism };
+});
+
+
+app.get('/api/kernel/soul', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return publicFallbackSoul(true);
   return kernel.soul({ privateView: true });
 });
 
-app.get('/api/kernel/organism', async () => {
+app.get('/api/kernel/organism', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return { ready: false };
   return kernel.organismState({ publicView: false });
 });
@@ -702,10 +781,14 @@ app.get('/api/kernel/reflections', async (request, reply) =>
     : undefined);
 
 app.get('/api/kernel/lessons', async (request, reply) =>
-  requireRuntime(reply) ? kernel.lessons(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.lessons(request.query?.limit)
+    : undefined);
 
 app.get('/api/kernel/intentions', async (request, reply) =>
-  requireRuntime(reply) ? kernel.intentions(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.intentions(request.query?.limit)
+    : undefined);
 
 app.post('/api/kernel/intentions', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
@@ -747,13 +830,19 @@ app.get('/api/kernel/improvements', async (request, reply) =>
     : undefined);
 
 app.get('/api/kernel/activity', async (request, reply) =>
-  requireRuntime(reply) ? kernel.activity(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.activity(request.query?.limit)
+    : undefined);
 
 app.get('/api/kernel/work', async (request, reply) =>
-  requireRuntime(reply) ? kernel.workItems(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.workItems(request.query?.limit)
+    : undefined);
 
-app.get('/api/kernel/attention', async (_request, reply) =>
-  requireRuntime(reply) ? kernel.attentionMap() : undefined);
+app.get('/api/kernel/attention', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.attentionMap()
+    : undefined);
 
 app.post('/api/kernel/agents/run', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
@@ -783,6 +872,16 @@ app.post('/api/kernel/operator', async (request, reply) => {
 
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
+  if (
+    !isPrivate(request)
+    && !requireRateLimit(
+      request,
+      reply,
+      'public-chat',
+      config.publicChatRateLimitMax,
+      config.publicChatRateLimitWindowSeconds,
+    )
+  ) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
   const response = await kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
@@ -1236,7 +1335,14 @@ app.post('/api/evolution/run', async (request, reply) => {
   const objective = String(
     request.body?.objective || 'Chercher une optimisation faible risque du noyau AURA Cloud Node.',
   );
-  return evolution.dispatchCycle(objective, String(request.body?.trigger || 'private-api'));
+  return evolution.dispatchCycle(
+    objective,
+    String(request.body?.trigger || 'private-api'),
+    {
+      repository: String(request.body?.repository || '').trim(),
+      base_branch: String(request.body?.base_branch || 'main').trim() || 'main',
+    },
+  );
 });
 
 app.get('/api/evolution/canary/:cycleId', async (request, reply) =>

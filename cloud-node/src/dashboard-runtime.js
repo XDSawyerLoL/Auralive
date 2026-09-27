@@ -499,7 +499,12 @@ async function refresh(){
         ? 'Le serveur est en ligne mais le noyau redémarre automatiquement : '+startup
         : 'L’interface est en ligne, mais le noyau attend encore MySQL. Reconnexion automatique en cours.';
     }
-    const coreState=await Promise.all([api('/api/kernel/status'),api('/api/kernel/soul')]);
+    const auth=await api('/api/auth/session');
+    const privateView=Boolean(auth&&auth.authenticated);
+    const coreState=await Promise.all([
+      api('/api/kernel/status'),
+      api(privateView?'/api/kernel/soul':'/api/kernel/public')
+    ]);
     const ks=coreState[0];
     const soul=coreState[1];
     try{
@@ -553,7 +558,7 @@ async function refresh(){
     $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
     $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
     lastSoul=Object.assign({},soul);
-    if(boot.runtime_ready){
+    if(boot.runtime_ready&&privateView){
       const results=await Promise.all([
         api('/api/kernel/intentions?limit=5'),
         api('/api/kernel/lessons?limit=5'),
@@ -562,6 +567,13 @@ async function refresh(){
         api('/api/kernel/attention')
       ]);
       renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderCommandCenter(commandStatus,results[3],results[4]);renderCuriosity(curiosityStatus);
+    }else if(boot.runtime_ready){
+      $('intentList').innerHTML='<div class="empty">Détails privés · authentification AURA requise.</div>';
+      $('memoryList').innerHTML='<div class="empty">Mémoire privée · authentification AURA requise.</div>';
+      $('activityList').innerHTML='<div class="empty">Journal privé · authentification AURA requise.</div>';
+      $('workList').innerHTML='<div class="empty">Travail détaillé privé.</div>';
+      renderCommandCenter(commandStatus,[],null);
+      renderCuriosity(curiosityStatus);
     }else{
       $('intentList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('memoryList').innerHTML='<div class="empty">Noyau en démarrage.</div>';

@@ -27,7 +27,7 @@ jobs:
           mkdir -p "$ROOT"
           cp -R cloud-node/src "$ROOT/src"
           cp -R cloud-node/test "$ROOT/test"
-          cp cloud-node/server.js cloud-node/package.json cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md cloud-node/HOSTINGER-QUICKSTART.txt "$ROOT/"
+          cp cloud-node/server.js cloud-node/package.json cloud-node/package-lock.json cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md cloud-node/HOSTINGER-QUICKSTART.txt "$ROOT/"
           PACKAGE_VERSION="$(node -p "require('./cloud-node/package.json').version")"
           cat > "$ROOT/DEPLOYMENT.json" <<EOF
           {
@@ -58,6 +58,14 @@ jobs:
           test -f "$ROOT/test/voice_bridge.test.js"
           test -f "$ROOT/test/command_center.test.js"
           test -f "$ROOT/test/web_substrate.test.js"
+          test -f "$ROOT/package-lock.json"
+          test -f "$ROOT/.env.example"
+
+          cd "$ROOT"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run check
+          npm test
+          rm -rf node_modules
 
       - name: Upload Hostinger-ready project root
         uses: actions/upload-artifact@v4
@@ -66,3 +74,4 @@ jobs:
           path: ${{ runner.temp }}/aura-cloud-node-hostinger/
           retention-days: 14
           if-no-files-found: error
+          include-hidden-files: true

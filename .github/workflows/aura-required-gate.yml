@@ -31,7 +31,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Syntax and policy checks
         run: |
-          npm run check
+          npm run check:repo
           npm test
       - name: Dashboard browser-script regression gate
         run: node --test test/dashboard.test.js

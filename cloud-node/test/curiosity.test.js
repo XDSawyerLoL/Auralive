@@ -24,7 +24,7 @@ test('canonical Quantic registry covers the whole ecosystem surface', () => {
   for (const id of [
     'aura',
     'quantic-studio',
-    'glide',
+    'quantic-glide',
     'quantic-os',
     'quantic-mail',
     'zoon',

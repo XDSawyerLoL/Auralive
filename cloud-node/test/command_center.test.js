@@ -147,6 +147,9 @@ test('AURA cross-product changes are branch-only, allowlisted and PR-gated', () 
   assert.equal(safeGithubChangePath('src/main.js'), 'src/main.js');
   assert.equal(safeGithubChangePath('.env'), '');
   assert.equal(safeGithubChangePath('.github/workflows/release.yml'), '');
+  assert.equal(safeGithubChangePath('scripts/sign-windows.ps1'), '');
+  assert.equal(safeGithubChangePath('installer/setup.nsi'), '');
+  assert.equal(safeGithubChangePath('package.json'), '');
   assert.equal(safeGithubChangePath('certs/signing.pfx'), '');
   assert.equal(safeGithubChangePath('../escape.js'), '');
   assert.match(configSource, /AURA_COMMAND_AUTO_CREATE_CHANGE_PR/);
@@ -157,4 +160,25 @@ test('AURA cross-product changes are branch-only, allowlisted and PR-gated', () 
   assert.match(commandSource, /refs\/heads\/.*branch/);
   assert.doesNotMatch(commandSource, /github\.propose_file_change[\s\S]{0,6000}\/git\/refs\/heads\/main/);
   assert.match(serverSource, /\/api\/command\/change-proposals/);
+});
+
+test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
+  assert.match(commandSource, /fleet-repair/);
+  assert.match(commandSource, /fleet_mode: !isAura/);
+  assert.match(commandSource, /executionMode = repository[\s\S]*'evolution-fleet'/);
+});
+
+test('offline Fleet evolution remains waiting instead of recording false success', () => {
+  assert.match(commandSource, /crossProductEvolution && !bridgeOnline/);
+  assert.match(commandSource, /execution_mode: 'waiting-local-worker'/);
+  assert.match(commandSource, /returnedStatus\.startsWith\('waiting'\)/);
+  assert.match(commandSource, /\['queued', 'leased'\]\.includes\(returnedStatus\)/);
+  assert.match(commandSource, /const status = waiting \? 'waiting'/);
+});
+
+test('reconciliation records rejected or no-safe-patch Fleet worker results as failed', () => {
+  assert.match(commandSource, /payloadStatus\.endsWith\('-rejected'\)/);
+  assert.match(commandSource, /payloadStatus === 'no-safe-patch'/);
+  assert.match(commandSource, /const finalStatus = evolutionRejected \? 'failed' : 'completed'/);
+  assert.match(commandSource, /ok: !evolutionRejected/);
 });
