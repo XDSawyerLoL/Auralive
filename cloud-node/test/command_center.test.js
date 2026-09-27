@@ -188,3 +188,71 @@ test('Director mode creates rotating portfolio Evolution initiatives', () => {
   assert.match(commandSource, /Director Mode réalise une revue tournante du portefeuille/);
   assert.match(commandSource, /director-autonomous-operations/);
 });
+
+test('Director low-risk promotion merges only green safe AURA pull requests', async () => {
+  const events = [];
+  const center = new CommandCenter(
+    {
+      async trace(...args) { events.push(['trace', ...args]); },
+      async observeEvent(...args) { events.push(['event', ...args]); },
+    },
+    {},
+    {},
+  );
+  Object.defineProperty(center, 'githubToken', { value: 'test-token', configurable: true });
+  const calls = [];
+  center.github = async (path, options = {}) => {
+    calls.push({ path, options });
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls?state=open&per_page=30') {
+      return {
+        data: [{
+          number: 42,
+          title: 'AURA safe improvement',
+          html_url: 'https://github.com/XDSawyerLoL/Auralive/pull/42',
+          draft: false,
+          head: { ref: 'aura/change-safe-test', sha: 'abc123' },
+          base: { ref: 'main' },
+        }],
+      };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/files?per_page=100') {
+      return {
+        data: [{
+          filename: 'src/ui.js',
+          status: 'modified',
+          changes: 12,
+          patch: '@@ -1 +1 @@\n-old\n+new',
+        }],
+      };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/reviews?per_page=100') {
+      return { data: [] };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/check-runs?per_page=100') {
+      return { data: { check_runs: [{ status: 'completed', conclusion: 'success' }] } };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/status') {
+      return { data: { statuses: [] } };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/merge' && options.method === 'PUT') {
+      return { data: { merged: true, sha: 'merged123' } };
+    }
+    if (path.includes('/pulls?state=open&per_page=30')) return { data: [] };
+    throw new Error('unexpected mock path: ' + path);
+  };
+
+  const promoted = await center.promoteDirectorPullRequests();
+  assert.equal(promoted.length, 1);
+  assert.equal(promoted[0].pull_request_number, 42);
+  assert.equal(promoted[0].policy, 'director-low-risk-green-checks-only');
+  assert.ok(calls.some((item) => item.path.endsWith('/pulls/42/merge')));
+  assert.ok(events.some((item) => item[0] === 'trace'));
+});
+
+test('Director auto-merge excludes sensitive semantic paths and dangerous patch primitives', () => {
+  assert.match(commandSource, /sensitivePath/);
+  assert.match(commandSource, /auth\|oauth\|security\|policy/);
+  assert.match(commandSource, /sensitivePatch/);
+  assert.match(commandSource, /child_process/);
+  assert.match(commandSource, /DROP\\s\+TABLE/);
+});
