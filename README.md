@@ -1,6 +1,12 @@
 # Quantic Studio 2.7.4 — Native Broadcast Suite
 
-Quantic Studio est le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
+Quantic Studio est le **logiciel de streaming vivant** de Quantic Sillage. Il n'est pas AURA et n'est pas le corps central d'AURA.
+
+**AURA est l'intelligence mère et la couche de direction de tout l'écosystème Quantic Sillage.** Le worker AURA actuellement embarqué dans le package Studio est un hôte de compatibilité du futur **AURA Runtime** indépendant.
+
+Architecture canonique : [ARCHITECTURE-QUANTIC-SILLAGE.md](ARCHITECTURE-QUANTIC-SILLAGE.md).
+
+Quantic Studio est aussi le studio de streaming local de la chaîne **SANSAHD**. Le compte qui écrit dans le chat est **mairaiy** ; le personnage reste Aura/Mairaiy selon l’identité définie dans `config/aura_identity.json`.
 
 La version 2.7.4 réunit Twitch, IA locale, diffusion vidéo native, audio, scènes, replay, multistream, économie communautaire, musique, jeux, modération et automatisations dans une seule application Windows. **OBS n’est plus requis** : il reste uniquement disponible comme mode de compatibilité.
 
@@ -166,11 +172,13 @@ HORIZON_EXTERNAL_ID=aura-local
 
 Diagnostic local : `GET /api/horizon/status`. Synchronisation manuelle : `POST /api/horizon/sync`.
 
-## Noyau souverain AURA unifié
+## Intégration AURA dans Quantic Studio
 
-Le runtime moderne réunit désormais les lignées historiques **AURA Brain**, **Aura Sovereign**, **AURA Cloud**, **Quantic Studio** et **HORIZON** dans un seul noyau persistant.
+AURA conserve son identité, sa mémoire et sa direction dans son propre noyau. Quantic Studio consomme ces capacités comme produit de streaming et héberge encore temporairement un worker local AURA pour la compatibilité.
 
-Le noyau ajoute :
+Les anciennes lignées AURA Brain / Aura Sovereign / AURA Cloud sont consolidées dans AURA. **Quantic Studio et HORIZON restent des produits ou services spécialisés raccordés à AURA; ils ne font pas partie de son identité centrale.**
+
+Le noyau AURA apporte au Studio :
 
 - **Soul persistant** : identité runtime, phase, cycles, énergie, curiosité, pression, continuité, introspection, ouverture, réactivité et intention courante ;
 - **boucle ambient** : AURA observe les événements utiles et ne déclenche une réflexion que lorsqu'un nouveau stimulus ou une routine le justifie ;
@@ -183,7 +191,7 @@ Le noyau ajoute :
 - **perception live** réactivée via `live_awareness` et intégrée au cycle de vie du cohost ;
 - contexte combiné **Soul + leçons + HORIZON** injecté dans les réponses IA.
 
-Le noyau est volontairement autonome sans être incontrôlable : une réflexion propose une action, puis Automation Studio reste l'autorité d'exécution avec ses permissions, risques, simulations et rollbacks. Les hypothèses HORIZON conservent leurs garde-fous jusqu'à l'action finale.
+AURA est autonome dans son enveloppe de capacités. Les actions locales passent par **AURA Runtime** avec permissions, risques, simulations, audit et rollback. Automation Studio est une interface/couche métier de Quantic Studio, pas l'autorité globale d'AURA. Les hypothèses HORIZON conservent leurs garde-fous jusqu'à l'action finale.
 
 Pour un déploiement serveur, protège les commandes privées :
 

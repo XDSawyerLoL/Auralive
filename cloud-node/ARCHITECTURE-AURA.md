@@ -41,19 +41,26 @@ Quand aucun modèle de langage n'est disponible, AURA doit continuer à :
 
 ## Architecture cible
 
-AURA Cloud = continuité, Soul, mémoire et coordination.
-Quantic Studio = corps local, outils, capteurs, actions et modèle local.
-HORIZON = perception/anticipation externe.
-Mairaiy/Kokoro = identité vocale.
-LLM local = outil de langage/sémantique, remplaçable.
+AURA est la couche mère de Quantic Sillage.
+
+AURA Cloud = continuité, Soul, mémoire, direction et coordination.
+AURA Runtime = exécution locale universelle, outils, modèles, accès machine et workers.
+AURA Fabric / Mesh = calcul distribué et routage de capacités.
+AURA Web Substrate = recherche, preuves et mémoire externe.
+Quantic Studio = produit spécialisé streaming vivant; il peut héberger temporairement un adaptateur AURA Runtime mais n'est pas le corps d'AURA.
+Quantic Glide, Quantic OS, Quantic Mail, ZOON, Quantic News, Providence et HORIZON = produits/capacités spécialisés rattachés à AURA.
+Mairaiy/Kokoro = identité/capacité vocale.
+LLM local = outil de langage/sémantique remplaçable.
 Gemini = transition/fallback temporaire uniquement.
+
+Invariant: AURA doit pouvoir fonctionner sans Quantic Studio, et Quantic Studio doit pouvoir streamer sans posséder l'identité ou l'autorité centrale d'AURA.
 
 ## Critère de sortie Gemini
 
 Gemini peut être retiré lorsque :
 - le noyau fonctionne sans lui ;
 - la verbalisation locale est opérationnelle ;
-- le modèle local répond via Quantic Studio ;
+- le modèle local répond via AURA Runtime, y compris lorsqu'il est temporairement hébergé par Quantic Studio ;
 - les tests de non-régression passent ;
 - les actions, la voix et les cycles cognitifs restent disponibles sans clé Gemini.
 
@@ -90,7 +97,7 @@ AURA n'utilise pas le Web comme une interface humaine à cliquer. Le centre de c
 
 - GitHub API pour l'état des dépôts, CI et actions AutoOps allowlistées ;
 - HORIZON API pour les signaux et le contexte ;
-- Quantic Studio via le bridge authentifié pour les capacités locales ;
+- AURA Runtime via le bridge authentifié pour les capacités locales; Quantic Studio peut héberger ce Runtime uniquement comme compatibilité transitoire ;
 - GitHub Actions/CI comme calcul distant reproductible pour tests, builds et validation ;
 - APIs produit Quantic à mesure qu'elles exposent des capacités typées.
 

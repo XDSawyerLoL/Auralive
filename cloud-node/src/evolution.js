@@ -70,7 +70,7 @@ export class EvolutionLab {
         repository,
         base_branch: baseBranch,
         delegated_to_local: false,
-        reason: 'Evolution Fleet exige Quantic Studio en ligne pour le sas de modification multi-dépôt.',
+        reason: 'Evolution Fleet exige AURA Runtime en ligne pour le sas local de modification multi-dépôt.',
       };
     }
     return this.runCycle(objective, trigger);
@@ -307,7 +307,7 @@ export class EvolutionLab {
       gates: [
         'research provenance',
         'external content treated as untrusted data',
-        'local source sandbox when Quantic Studio is online',
+        'local source sandbox when AURA Runtime is online',
         'candidate compile/tests before submission',
         'GitHub full-stack required gate before promotion',
         'automatic CI+sandbox canary',

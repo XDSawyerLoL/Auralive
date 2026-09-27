@@ -63,19 +63,10 @@ test('command center starts in proactive Director mode with a non-destructive op
   assert.doesNotMatch(configSource, /AURA_COMMAND_CENTER_ALLOWED_RISKS'[\s\S]{0,180}secret/);
 });
 
-test('Quantic Sillage product registry and private control API are wired', () => {
-  for (const product of [
-    'Quantic Studio',
-    'HORIZON',
-    'Quantic News',
-    'ZOON',
-    'Quantic Mail',
-    'Quantic Glide',
-    'Providence',
-    'Quantic OS',
-  ]) {
-    assert.equal(commandSource.includes(product), true, product);
-  }
+test('AURA Runtime execution plane and private control API are wired', () => {
+  assert.match(commandSource, /id: 'aura-runtime'/);
+  assert.match(commandSource, /name: 'AURA Runtime'/);
+  assert.doesNotMatch(commandSource, /objective: 'Fournir à AURA ses capacités locales/);
   for (const route of [
     '/api/command/status',
     '/api/command/initiatives',
@@ -308,4 +299,11 @@ test('Director auto-merge requires same-repository trusted provenance', () => {
   assert.match(commandSource, /headRepository === repo\.toLowerCase\(\)/);
   assert.match(commandSource, /trustedActors\.has\(pullActor\)/);
   assert.match(commandSource, /trustedProvenance/);
+});
+
+test('Command Center does not use Quantic Studio as AURA execution authority', () => {
+  assert.match(commandSource, /AURA Runtime worker offline/);
+  assert.match(commandSource, /executionMode = 'aura-runtime-operator'/);
+  assert.doesNotMatch(commandSource, /Quantic Studio worker offline/);
+  assert.doesNotMatch(commandSource, /quantic-studio-operator/);
 });

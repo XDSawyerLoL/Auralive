@@ -9,7 +9,7 @@ const bridgeSource = fs.readFileSync(new URL('../src/bridge.js', import.meta.url
 const workerUrl = new URL('../../app/services/aura_cloud_worker.py', import.meta.url);
 const workerSource = fs.existsSync(workerUrl) ? fs.readFileSync(workerUrl, 'utf8') : '';
 
-test('AURA Cloud Phase 3 delegates evolution to Quantic Studio when the worker is online', () => {
+test('AURA Cloud Phase 3 delegates evolution to AURA Runtime when the worker is online', () => {
   assert.match(evolutionSource, /aura-evolution-node-phase3-v1/);
   assert.match(evolutionSource, /await this\.bridge\.workerOnline\(\)/);
   assert.match(evolutionSource, /this\.bridge\.evolve\(objective, \{/);
@@ -25,9 +25,9 @@ test('Fleet worker respects the configured auto-submit switch', { skip: !workerS
   assert.match(workerSource, /submit=bool\(evolution\.auto_submit\)/);
 });
 
-test('AURA Cloud routes targeted repositories through Evolution Fleet only when Studio is online', () => {
+test('AURA Cloud routes targeted repositories through Evolution Fleet only when AURA Runtime is online', () => {
   assert.match(evolutionSource, /delegated-evolution-fleet/);
-  assert.match(evolutionSource, /Evolution Fleet exige Quantic Studio en ligne/);
+  assert.match(evolutionSource, /Evolution Fleet exige AURA Runtime en ligne/);
   assert.match(serverSource, /repository:\s*String\(request\.body\?\.repository/);
 });
 
