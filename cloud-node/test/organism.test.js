@@ -39,7 +39,10 @@ test('AURA organism keeps only useful homeostatic dimensions', () => {
 test('interaction and reply modify AURA organism without fake fatigue or tension', () => {
   const organism = new AuraOrganism();
   const initial = organism.defaultState();
-  const pre = organism.beforeInteraction(initial, 'Aura, comment vas-tu ?', { author: 'Créateur' });
+  const pre = organism.beforeInteraction(initial, 'Aura, comment vas-tu ?', {
+    author: 'Créateur',
+    privateRelationship: true,
+  });
   assert.ok(pre.state.turns > initial.turns);
   assert.ok(pre.state.clarte > initial.clarte);
   assert.ok(pre.state.relationship.interaction_count > initial.relationship.interaction_count);
@@ -106,10 +109,25 @@ test('Director interaction raises agency and keeps an explicit relational thread
   const pre = organism.beforeInteraction(
     initial,
     'Je veux que tu diriges Quantic Sillage et que notre projet avance ensemble.',
-    { author: 'Créateur' },
+    { author: 'Créateur', privateRelationship: true },
   );
   assert.ok(pre.state.agency > initial.agency);
   assert.ok(pre.state.engagement > initial.engagement);
   assert.match(pre.state.relationship.last_open_thread, /diriges Quantic Sillage/i);
   assert.ok(pre.state.needs.diriger > 0.6);
+});
+
+test('public interaction does not overwrite founder relationship text', () => {
+  const organism = new AuraOrganism();
+  const initial = organism.defaultState();
+  initial.relationship.last_open_thread = 'Projet fondateur privé';
+  initial.relationship.last_author = 'Créateur';
+  const next = organism.beforeInteraction(
+    initial,
+    'Je veux changer complètement ton projet.',
+    { author: 'Visiteur public', privateRelationship: false },
+  );
+  assert.equal(next.state.relationship.last_open_thread, 'Projet fondateur privé');
+  assert.equal(next.state.relationship.last_author, 'Créateur');
+  assert.ok(next.state.relationship.interaction_count > initial.relationship.interaction_count);
 });
