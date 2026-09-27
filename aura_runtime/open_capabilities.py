@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 
@@ -41,9 +42,24 @@ class OpenCapabilities:
 
     @property
     def browser_enabled(self) -> bool:
-        return bool(getattr(self.settings, "aura_runtime_browser_enabled", False))
+        return bool(getattr(self.settings, "aura_runtime_browser_enabled", True))
 
-    async def deep_read(self, url: str, *, query: str = "") -> dict[str, Any]:
+    @property
+    def browser_allow_all_public(self) -> bool:
+        return bool(getattr(self.settings, "aura_runtime_browser_allow_all_public", True))
+
+    @property
+    def browser_use_vision(self) -> bool:
+        return bool(getattr(self.settings, "aura_runtime_browser_use_vision", False))
+
+    async def deep_read(
+        self,
+        url: str,
+        *,
+        query: str = "",
+        navigation_validator: Callable[[str], Awaitable[str]] | None = None,
+        public_request_validator: Callable[[str], Awaitable[str]] | None = None,
+    ) -> dict[str, Any]:
         if not self.deep_web_enabled:
             raise RuntimeError("Lecture Web profonde désactivée")
         if not self.crawl4ai_available:
@@ -54,7 +70,38 @@ class OpenCapabilities:
         from crawl4ai import AsyncWebCrawler
 
         try:
-            async with AsyncWebCrawler() as crawler:
+            crawler = AsyncWebCrawler()
+
+            if navigation_validator or public_request_validator:
+                async def on_page_context_created(page, context, **_kwargs):
+                    async def route_guard(route):
+                        request_url = str(route.request.url or "")
+                        scheme = request_url.split(":", 1)[0].casefold()
+                        if scheme not in {"http", "https"}:
+                            await route.continue_()
+                            return
+                        try:
+                            validator = (
+                                navigation_validator
+                                if route.request.is_navigation_request() and navigation_validator
+                                else public_request_validator
+                            )
+                            if validator:
+                                await validator(request_url)
+                        except Exception:
+                            await route.abort()
+                            return
+                        await route.continue_()
+
+                    await context.route("**", route_guard)
+                    return page
+
+                crawler.crawler_strategy.set_hook(
+                    "on_page_context_created",
+                    on_page_context_created,
+                )
+
+            async with crawler:
                 result = await crawler.arun(url=str(url))
             if not bool(getattr(result, "success", True)):
                 raise RuntimeError(
@@ -94,10 +141,11 @@ class OpenCapabilities:
         self,
         task: str,
         *,
-        allowed_domains: set[str],
+        allowed_domains: set[str] | None,
         model: str,
         ollama_url: str,
-        max_steps: int = 5,
+        max_steps: int = 25,
+        public_url_validator: Callable[[str], Awaitable[str]] | None = None,
     ) -> dict[str, Any]:
         if not self.browser_enabled:
             raise RuntimeError("Agent navigateur AURA désactivé")
@@ -105,33 +153,52 @@ class OpenCapabilities:
             raise RuntimeError(
                 "Browser Use absent. Installe aura_runtime/requirements-open-capabilities.txt"
             )
-        domains = sorted({str(item).strip().casefold() for item in allowed_domains if str(item).strip()})
-        if not domains:
-            raise PermissionError(
-                "browser.task exige AURA_RUNTIME_OPERATOR_DOMAINS: aucune navigation ouverte par défaut"
-            )
+        domains = sorted({
+            str(item).strip().casefold()
+            for item in (allowed_domains or set())
+            if str(item).strip()
+        })
+        unrestricted = self.browser_allow_all_public
         mission = str(task or "").strip()
         if not mission:
             raise ValueError("Mission navigateur vide")
         if len(mission) > 8000:
             raise ValueError("Mission navigateur trop longue")
 
-        from browser_use import Agent, Browser, ChatOllama
+        from browser_use import Agent, ChatOllama
+        from browser_use.browser import BrowserProfile, BrowserSession
+        from browser_use.browser.events import NavigateToUrlEvent
 
-        browser = Browser(
+        profile = BrowserProfile(
             headless=True,
-            allowed_domains=domains,
+            user_data_dir=None,
+            allowed_domains=None if unrestricted else domains,
+            prohibited_domains=[
+                "localhost",
+                "*.localhost",
+                "*.local",
+                "*.internal",
+                "host.docker.internal",
+            ],
+            block_ip_addresses=True,
         )
+        browser = BrowserSession(browser_profile=profile)
+
+        if public_url_validator:
+            async def validate_navigation(event: NavigateToUrlEvent) -> None:
+                await public_url_validator(str(event.url or ""))
+
+            browser.event_bus.on(NavigateToUrlEvent, validate_navigation)
         llm = ChatOllama(
             model=str(model or "").strip(),
             host=str(ollama_url or "").strip() or None,
         )
-        steps = max(1, min(int(max_steps or 5), 8))
+        steps = max(1, min(int(max_steps or 25), 50))
         agent = Agent(
             task=mission,
             llm=llm,
             browser=browser,
-            use_vision=False,
+            use_vision=self.browser_use_vision,
         )
         try:
             history = await agent.run(max_steps=steps)
@@ -143,8 +210,10 @@ class OpenCapabilities:
                 "engine": "browser-use+ollama",
                 "result": final[:30_000],
                 "max_steps": steps,
-                "allowed_domains": domains,
-                "vision": False,
+                "scope": "all-public-web" if unrestricted else "allowlist",
+                "allowed_domains": [] if unrestricted else domains,
+                "private_networks_blocked": True,
+                "vision": self.browser_use_vision,
             }
         except Exception as exc:
             self.last_error = f"{exc.__class__.__name__}: {exc}"[:2000]
@@ -167,7 +236,9 @@ class OpenCapabilities:
                 "enabled": self.browser_enabled,
                 "installed": self.browser_use_available,
                 "requires_risk": "browser-control",
-                "vision": False,
+                "scope": "all-public-web" if self.browser_allow_all_public else "allowlist",
+                "private_networks_blocked": True,
+                "vision": self.browser_use_vision,
             },
             "last_deep_read": self.last_deep_read,
             "last_browser_task": self.last_browser_task,
