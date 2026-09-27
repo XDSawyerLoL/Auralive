@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 11;
+export const LATEST_SCHEMA_VERSION = 12;
 
 export function getDb() {
   if (pool) return pool;
@@ -528,6 +528,60 @@ async function applyMigrations(db) {
       ['zero-cost-cloud-federation-ledger', new Date().toISOString()],
     );
     current = 11;
+  }
+
+
+  if (current < 12) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_missions (
+      id CHAR(36) PRIMARY KEY,
+      source_intention_id CHAR(36) NOT NULL DEFAULT '',
+      title VARCHAR(240) NOT NULL,
+      objective LONGTEXT NOT NULL,
+      success_criteria LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'planning',
+      priority DOUBLE NOT NULL DEFAULT 0.7,
+      confidence DOUBLE NOT NULL DEFAULT 0.7,
+      plan_version INT NOT NULL DEFAULT 1,
+      revision_count INT NOT NULL DEFAULT 0,
+      max_revisions INT NOT NULL DEFAULT 4,
+      current_step_index INT NOT NULL DEFAULT 0,
+      progress DOUBLE NOT NULL DEFAULT 0,
+      state LONGTEXT NOT NULL,
+      last_error TEXT NOT NULL,
+      started_at VARCHAR(40) NOT NULL DEFAULT '',
+      completed_at VARCHAR(40) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_missions_status(status,priority,updated_at),
+      INDEX idx_aura_missions_intention(source_intention_id,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mission_steps (
+      id CHAR(36) PRIMARY KEY,
+      mission_id CHAR(36) NOT NULL,
+      position DOUBLE NOT NULL DEFAULT 0,
+      title VARCHAR(240) NOT NULL,
+      objective LONGTEXT NOT NULL,
+      kind VARCHAR(40) NOT NULL DEFAULT 'reflection',
+      requested_risks LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'pending',
+      initiative_id CHAR(36) NOT NULL DEFAULT '',
+      attempts INT NOT NULL DEFAULT 0,
+      max_attempts INT NOT NULL DEFAULT 2,
+      expected_signal TEXT NOT NULL,
+      result LONGTEXT NOT NULL,
+      critique LONGTEXT NOT NULL,
+      started_at VARCHAR(40) NOT NULL DEFAULT '',
+      completed_at VARCHAR(40) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mission_steps_mission(mission_id,status,position),
+      INDEX idx_aura_mission_steps_initiative(initiative_id,status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(12,?,?)',
+      ['long-horizon-persistent-missions', new Date().toISOString()],
+    );
+    current = 12;
   }
 }
 
