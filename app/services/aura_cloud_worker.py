@@ -656,7 +656,7 @@ class AuraCloudWorker:
                 repository=repository,
                 base_branch=base_branch,
                 trigger=trigger,
-                submit=True,
+                submit=bool(evolution.auto_submit),
             )
 
         return await evolution.run_cycle(
