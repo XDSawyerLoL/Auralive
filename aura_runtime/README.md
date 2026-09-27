@@ -16,7 +16,9 @@ Il n'est pas Quantic Studio. Quantic Studio peut l'héberger comme adaptateur de
 - export au Compute Mesh d'un score de compétence par modèle/rôle, sans exposer les prompts ni le contenu utilisateur;
 - participation au Mesh si l'utilisateur l'active explicitement;
 - Evolution Fleet inter-produits via GitHub, avec allowlist, branches dédiées et PR uniquement;
-- opérateur local natif: inspection, fichiers bornés, process allowlistés et HTTP technique contrôlé.
+- opérateur local natif: inspection, fichiers bornés, process allowlistés et HTTP technique contrôlé;
+- lecture Web profonde optionnelle via Crawl4AI pour pages JavaScript et extraction Markdown;
+- agent navigateur optionnel via Browser Use + Ollama, désactivé par défaut et borné aux domaines autorisés.
 
 Evolution Fleet appartient désormais directement à AURA Runtime et peut fonctionner sans Studio. L'évolution native du dépôt AURA reste gérée par le noyau Cloud.
 
@@ -44,6 +46,14 @@ Les échecs, latences et retours qualité font évoluer le score. Les profils st
 ```bash
 pip install -r aura_runtime/requirements.txt
 ```
+
+Pour activer les capacités Web open source avancées :
+
+```bash
+pip install -r aura_runtime/requirements-open-capabilities.txt
+```
+
+Crawl4AI peut nécessiter l'installation initiale de son navigateur local (`crawl4ai-setup`). Aucune API payante n'est requise pour ces deux adaptateurs.
 
 3. Copier `.env.example` en `.env` à la racine du package puis renseigner au minimum `AURA_CLOUD_BASE_URL` et `AURA_CLOUD_TOKEN`. Le Runtime charge automatiquement ce fichier sans écraser les vraies variables d'environnement.
 4. Sous Windows, lancer `aura_runtime\\run-aura-runtime.cmd` : le launcher crée `.env` s'il manque et installe `aiohttp` si nécessaire. Sinon lancer:
@@ -80,3 +90,33 @@ Le Runtime Operator n'expose jamais un shell arbitraire.
 - l'environnement enfant exclut les tokens, clés API et credentials AURA;
 - `http.get` exige HTTPS, refuse les IP privées/non globales et respecte `AURA_RUNTIME_OPERATOR_DOMAINS`;
 - la mission Cloud ne peut jamais élargir `AURA_RUNTIME_OPERATOR_ALLOWED_RISKS`.
+
+
+## Open Web Capabilities
+
+AURA garde la décision, la politique et la validation. Les projets externes restent des adaptateurs d'outils.
+
+### Crawl4AI
+
+`web.deep_read` est une lecture seule. L'URL passe d'abord par les contrôles réseau du Runtime (HTTPS, DNS public, allowlist éventuelle), puis Crawl4AI rend la page dynamique et renvoie du Markdown nettoyé.
+
+Variables :
+
+```env
+AURA_RUNTIME_DEEP_WEB_ENABLED=true
+AURA_RUNTIME_DEEP_WEB_MAX_CHARS=60000
+```
+
+### Browser Use
+
+`browser.task` est volontairement plus strict :
+
+- `AURA_RUNTIME_BROWSER_ENABLED=true` est requis;
+- `browser-control` doit être explicitement ajouté à `AURA_RUNTIME_OPERATOR_ALLOWED_RISKS`;
+- `AURA_RUNTIME_OPERATOR_DOMAINS` doit être non vide;
+- le navigateur reçoit cette allowlist directement;
+- le modèle utilisé est l'Ollama local du Runtime;
+- la vision est désactivée par défaut;
+- le nombre d'étapes est borné à 8.
+
+Ce mécanisme évite qu'un modèle ou une mission Cloud puisse élargir seul les domaines ou privilèges du navigateur.
