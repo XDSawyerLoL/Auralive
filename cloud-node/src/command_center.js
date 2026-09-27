@@ -1725,7 +1725,7 @@ export class CommandCenter {
     return reconciled;
   }
 
-  expertRemediationCandidate(row, advice) {
+  expertRemediationCandidate(row, advice, threadId = '') {
     if (!advice?.ok || advice.human_required) return null;
     if (Number(advice.confidence || 0) < config.expertBridgeMinConfidence) return null;
 
@@ -1754,16 +1754,29 @@ export class CommandCenter {
       'Vérifier le résultat et conserver un rollback si une modification est appliquée.',
     ].filter(Boolean).join(' ');
 
+    const expertThreadId = String(threadId || originalPayload.expert_thread_id || row.id || '');
+    const expertRepository = String(
+      originalPayload.repository || originalPayload.expert_repository || ''
+    ).trim();
     let actionType = '';
-    let actionPayload = {};
+    let actionPayload = {
+      expert_thread_id: expertThreadId,
+      expert_repository: expertRepository,
+    };
     if (action === 'retry') {
       actionType = String(row.action_type || '');
-      actionPayload = originalPayload;
+      actionPayload = {
+        ...originalPayload,
+        expert_thread_id: expertThreadId,
+        expert_repository: expertRepository,
+      };
     } else if (action === 'evolution') {
       actionPayload = {
-        repository: String(originalPayload.repository || '').trim(),
+        repository: expertRepository,
         base_branch: String(originalPayload.base_branch || 'main').trim() || 'main',
         expert_origin: String(row.id || ''),
+        expert_thread_id: expertThreadId,
+        expert_repository: expertRepository,
       };
     }
 
@@ -1808,6 +1821,39 @@ export class CommandCenter {
 
     const candidates = [];
     for (const row of rows) {
+      const originalPayload = parseJson(row.action_payload, {});
+      const threadId = String(originalPayload.expert_thread_id || row.id || '');
+      const historyRows = await query(
+        `SELECT payload,created_at
+         FROM aura_command_events
+         WHERE initiative_id=? AND kind='expert-thread'
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        [threadId, config.expertBridgeMaxRoundsPerIncident],
+      );
+      if (historyRows.length >= config.expertBridgeMaxRoundsPerIncident) {
+        await query(
+          'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+          [
+            row.id,
+            'expert-consultation',
+            JSON.stringify({
+              ok: false,
+              skipped: true,
+              reason: 'incident-round-limit',
+              thread_id: threadId,
+              rounds: historyRows.length,
+            }).slice(0, 30000),
+            now(),
+          ],
+        );
+        continue;
+      }
+      const dialogueHistory = [...historyRows]
+        .reverse()
+        .map((item) => parseJson(item.payload, {}))
+        .filter((item) => item && typeof item === 'object');
+
       const context = {
         incident_type: 'aura-initiative-failure',
         initiative: {
@@ -1824,6 +1870,11 @@ export class CommandCenter {
           action_type: row.action_type,
           action_payload: parseJson(row.action_payload, {}),
           requested_risks: parseJson(row.requested_risks, []),
+        },
+        expert_dialogue: {
+          thread_id: threadId,
+          round: dialogueHistory.length + 1,
+          previous_turns: dialogueHistory,
         },
         governance: {
           operational_role: 'AURA dirige les opérations quotidiennes',
@@ -1844,12 +1895,29 @@ export class CommandCenter {
         [
           row.id,
           'expert-consultation',
-          JSON.stringify(advice).slice(0, 30000),
+          JSON.stringify({ ...advice, thread_id: threadId }).slice(0, 30000),
+          now(),
+        ],
+      );
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+        [
+          threadId,
+          'expert-thread',
+          JSON.stringify({
+            round: dialogueHistory.length + 1,
+            incident_id: row.id,
+            title: row.title,
+            execution_mode: row.execution_mode,
+            error: row.error,
+            result: parseJson(row.result, {}),
+            advice,
+          }).slice(0, 30000),
           now(),
         ],
       );
 
-      const candidate = this.expertRemediationCandidate(row, advice);
+      const candidate = this.expertRemediationCandidate(row, advice, threadId);
       if (!candidate) continue;
       candidates.push(candidate);
       await query(
