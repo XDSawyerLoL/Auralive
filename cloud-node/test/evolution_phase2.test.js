@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const evolutionSource = fs.readFileSync(new URL('../src/evolution.js', import.meta.url), 'utf8');
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+const bridgeSource = fs.readFileSync(new URL('../src/bridge.js', import.meta.url), 'utf8');
 const workerUrl = new URL('../../app/services/aura_cloud_worker.py', import.meta.url);
 const workerSource = fs.existsSync(workerUrl) ? fs.readFileSync(workerUrl, 'utf8') : '';
 
@@ -28,6 +29,11 @@ test('AURA Cloud routes targeted repositories through Evolution Fleet only when 
   assert.match(evolutionSource, /delegated-evolution-fleet/);
   assert.match(evolutionSource, /Evolution Fleet exige Quantic Studio en ligne/);
   assert.match(serverSource, /repository:\s*String\(request\.body\?\.repository/);
+});
+
+test('Evolution bridge exposes the queued worker job id for Command Center reconciliation', () => {
+  assert.match(bridgeSource, /job_id:\s*job\.id/);
+  assert.match(bridgeSource, /repository,/);
 });
 
 test('automatic canary is required without a manual token gate', () => {
