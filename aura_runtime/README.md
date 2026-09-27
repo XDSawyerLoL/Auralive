@@ -12,11 +12,14 @@ Il n'est pas Quantic Studio. Quantic Studio peut l'héberger comme adaptateur de
 - Compute Mesh déterministe;
 - inférence locale via Ollama;
 - participation au Mesh si l'utilisateur l'active explicitement;
-- Evolution Fleet inter-produits via GitHub, avec allowlist, branches dédiées et PR uniquement.
+- Evolution Fleet inter-produits via GitHub, avec allowlist, branches dédiées et PR uniquement;
+- opérateur local natif: inspection, fichiers bornés, process allowlistés et HTTP technique contrôlé.
 
 Evolution Fleet appartient désormais directement à AURA Runtime et peut fonctionner sans Studio. L'évolution native du dépôt AURA reste gérée par le noyau Cloud.
 
-Les capacités voix, image et opérateur restent injectées par des adaptateurs d'hôte à ce stade. L'adaptateur Quantic Studio les fournit aujourd'hui sans remettre Studio au centre de l'architecture.
+L'opérateur local appartient désormais à AURA Runtime. Quantic Studio conserve son opérateur métier historique comme adaptateur de compatibilité, mais un Runtime standalone sait agir sans Studio.
+
+Les capacités voix et image restent encore injectées par des adaptateurs d'hôte à ce stade.
 
 ## Démarrage
 
@@ -50,3 +53,15 @@ Pour permettre au Runtime de maintenir les produits enfants Quantic:
 - Fleet ne fusionne jamais lui-même une PR inter-produit.
 
 Les cycles et diagnostics Fleet sont persistés localement dans `evolution.sqlite3`.
+
+## Runtime Operator
+
+Le Runtime Operator n'expose jamais un shell arbitraire.
+
+- les chemins doivent rester sous `AURA_RUNTIME_OPERATOR_ROOTS`;
+- les écritures sont atomiques et conservées en mémoire pour rollback pendant la transaction;
+- si une étape échoue, les écritures/mkdir précédents sont restaurés lorsque possible;
+- `process.run` utilise un appel direct sans shell et seulement `AURA_RUNTIME_OPERATOR_COMMANDS`;
+- l'environnement enfant exclut les tokens, clés API et credentials AURA;
+- `http.get` exige HTTPS, refuse les IP privées/non globales et respecte `AURA_RUNTIME_OPERATOR_DOMAINS`;
+- la mission Cloud ne peut jamais élargir `AURA_RUNTIME_OPERATOR_ALLOWED_RISKS`.
