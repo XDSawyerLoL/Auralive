@@ -161,3 +161,9 @@ test('AURA cross-product changes are branch-only, allowlisted and PR-gated', () 
   assert.doesNotMatch(commandSource, /github\.propose_file_change[\s\S]{0,6000}\/git\/refs\/heads\/main/);
   assert.match(serverSource, /\/api\/command\/change-proposals/);
 });
+
+test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
+  assert.match(commandSource, /fleet-repair/);
+  assert.match(commandSource, /fleet_mode: !isAura/);
+  assert.match(commandSource, /executionMode = repository[\s\S]*'evolution-fleet'/);
+});
