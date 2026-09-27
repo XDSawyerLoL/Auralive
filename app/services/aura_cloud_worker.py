@@ -161,6 +161,9 @@ class AuraCloudWorker:
             "models": self._available_models() or ([model] if model else []),
             "platform": platform.system(),
             "architecture": platform.machine(),
+            "runtime_role": "aura-runtime",
+            "runtime_host_product": "quantic-studio",
+            "runtime_packaging": "embedded-compatibility-host",
         }
 
     @property
