@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -6,6 +7,8 @@ import {
   explicitUserIntent,
 } from '../src/curiosity.js';
 import { CORE_QUANTIC_PRODUCTS, seedQuanticProducts } from '../src/products.js';
+
+const curiositySource = fs.readFileSync(new URL('../src/curiosity.js', import.meta.url), 'utf8');
 
 test('curiosity normalizes questions and detects fresh-web needs', () => {
   assert.equal(normalizeQuestion('  Pourquoi AURA ne voit pas Glide  '), 'Pourquoi AURA ne voit pas Glide?');
@@ -65,4 +68,12 @@ test('registry seeding uses command-center products and modification policy', as
     calls.every((item) => item.metadata.modification_policy === 'branch-test-canary-promote'),
     true,
   );
+});
+
+test('Director curiosity rotates portfolio angles and uses shorter dedupe windows', () => {
+  assert.match(curiositySource, /aura-curiosity-engine-v2-director/);
+  assert.match(curiositySource, /portfolioAngles/);
+  assert.match(curiositySource, /dedupeHours = 24/);
+  assert.match(curiositySource, /Veille exécutive autonome/);
+  assert.match(curiositySource, /dedupeHours: 2/);
 });
