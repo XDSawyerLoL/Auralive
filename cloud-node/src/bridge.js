@@ -162,7 +162,7 @@ export class ExecutionBridge {
   }
 
   async enqueue(kind, payload = {}, requestedRisks = [], options = {}) {
-    if (!this.enabled) throw new Error('Pont AURA Cloud ↔ Quantic Studio non configuré');
+    if (!this.enabled) throw new Error('Pont AURA Cloud ↔ AURA Runtime non configuré');
     const id = randomUUID();
     const timestamp = nowIso();
     const targetWorkerId = String(options.targetWorkerId || '').trim().slice(0, 160);
@@ -618,7 +618,7 @@ export class ExecutionBridge {
     };
   }
   async infer(prompt, system, maxTokens = 700, taskRole = 'auto') {
-    if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    if (!await this.workerOnline()) throw new Error('AURA Runtime local hors ligne');
     const job = await this.enqueue(
       'inference',
       {
@@ -636,7 +636,7 @@ export class ExecutionBridge {
   }
 
   async operate(task, requestedRisks = []) {
-    if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    if (!await this.workerOnline()) throw new Error('AURA Runtime local hors ligne');
     const job = await this.enqueue(
       'operator',
       {
@@ -656,7 +656,7 @@ export class ExecutionBridge {
           queued: true,
           job_id: job.id,
           status: latest.status,
-          reason: 'Quantic Studio poursuit la mission localement.',
+          reason: 'AURA Runtime poursuit la mission localement.',
         };
       }
       throw error;
@@ -664,7 +664,7 @@ export class ExecutionBridge {
   }
 
   async synthesize(text, options = {}) {
-    if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    if (!await this.workerOnline()) throw new Error('AURA Runtime local hors ligne');
     const job = await this.enqueue(
       'tts',
       {
@@ -680,7 +680,7 @@ export class ExecutionBridge {
   }
 
   async generateImage(options = {}) {
-    if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    if (!await this.workerOnline()) throw new Error('AURA Runtime local hors ligne');
     const prompt = String(options.prompt || '').trim();
     if (!prompt) throw new Error('Prompt image vide');
     const job = await this.enqueue(
@@ -700,7 +700,7 @@ export class ExecutionBridge {
   }
 
   async evolve(objective, options = {}) {
-    if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    if (!await this.workerOnline()) throw new Error('AURA Runtime local hors ligne');
     const repository = String(options.repository || '').trim().slice(0, 300);
     const baseBranch = String(options.baseBranch || options.base_branch || 'main').trim().slice(0, 160) || 'main';
     const job = await this.enqueue(

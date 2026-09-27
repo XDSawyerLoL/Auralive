@@ -26,6 +26,7 @@ test('canonical Quantic registry covers the whole ecosystem surface', () => {
   const ids = new Set(CORE_QUANTIC_PRODUCTS.map((item) => item.id));
   for (const id of [
     'aura',
+    'aura-runtime',
     'quantic-studio',
     'quantic-glide',
     'quantic-os',
@@ -76,4 +77,17 @@ test('Director curiosity rotates portfolio angles and uses shorter dedupe window
   assert.match(curiositySource, /dedupeHours = 24/);
   assert.match(curiositySource, /Veille exécutive autonome/);
   assert.match(curiositySource, /dedupeHours: 2/);
+});
+
+test('canonical registry separates AURA parent, AURA Runtime and streaming Studio', () => {
+  const byId = new Map(CORE_QUANTIC_PRODUCTS.map((item) => [item.id, item]));
+  assert.equal(byId.get('aura')?.architecture_role, 'parent-control-plane');
+  assert.equal(byId.get('aura-runtime')?.architecture_role, 'local-execution-plane');
+  assert.equal(byId.get('quantic-studio')?.architecture_role, 'product-child');
+  assert.deepEqual(
+    byId.get('quantic-studio')?.capabilities.includes('local-ai'),
+    false,
+  );
+  assert.equal(byId.get('quantic-studio')?.capabilities.includes('streaming'), true);
+  assert.equal(byId.get('aura-runtime')?.capabilities.includes('local-ai'), true);
 });

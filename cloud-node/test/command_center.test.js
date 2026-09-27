@@ -309,3 +309,11 @@ test('Director auto-merge requires same-repository trusted provenance', () => {
   assert.match(commandSource, /trustedActors\.has\(pullActor\)/);
   assert.match(commandSource, /trustedProvenance/);
 });
+
+test('local bridge health belongs to AURA Runtime rather than Quantic Studio', () => {
+  assert.match(commandSource, /id: 'aura-runtime'/);
+  assert.match(commandSource, /Fournir au noyau AURA un plan d’exécution local indépendant/);
+  assert.match(commandSource, /'aura-runtime',[\s\S]{0,220}bridgeStatus\.worker_online/);
+  assert.doesNotMatch(commandSource, /'quantic-studio',[\s\S]{0,220}bridgeStatus\.worker_online/);
+  assert.match(commandSource, /AURA Runtime worker offline/);
+});

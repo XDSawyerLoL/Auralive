@@ -601,7 +601,7 @@ app.post('/api/voice/speak', async (request, reply) => {
       try {
         return await bridge.synthesize(text, request.body || {});
       } catch (error) {
-        errors.push(`studio: ${String(error?.message || error)}`);
+        errors.push(`runtime: ${String(error?.message || error)}`);
       }
     }
   }
@@ -610,7 +610,8 @@ app.post('/api/voice/speak', async (request, reply) => {
     error: errors.join(' | ') || 'Voix Mairaiy indisponible',
     code: 'AURA_VOICE_UNAVAILABLE',
     cloud_ready: cloudVoice.enabled,
-    studio_ready: localOnline,
+    runtime_ready: localOnline,
+    studio_ready: localOnline, // compatibilité transitoire
   });
 });
 
@@ -655,12 +656,13 @@ app.get('/api/capabilities', async (request) => {
     voice: {
       ready: Boolean(cloudVoice.enabled || (bridgeStatus?.worker_online && bridgeStatus?.worker?.voice)),
       profile: 'mairaiy',
-      mode: cloudVoice.enabled ? 'cloud-primary' : (bridgeStatus?.worker_online ? 'studio-local' : 'offline'),
+      mode: cloudVoice.enabled ? 'cloud-primary' : (bridgeStatus?.worker_online ? 'aura-runtime-local' : 'offline'),
       engine: cloudVoice.enabled
         ? 'gemini-cloud-tts'
         : (privateView ? String(bridgeStatus?.worker?.voice || '') : ''),
       cloud_ready: Boolean(cloudVoice.enabled),
-      studio_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
+      runtime_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
+      studio_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice), // compatibilité transitoire
       cloud: privateView ? cloudVoice.diagnostic() : undefined,
     },
     image: {
@@ -672,7 +674,7 @@ app.get('/api/capabilities', async (request) => {
     },
     hands: {
       ready: Boolean(bridgeStatus?.worker_online),
-      mode: bridgeStatus?.worker_online ? 'quantic-studio-real' : 'offline',
+      mode: bridgeStatus?.worker_online ? 'aura-runtime-real' : 'offline',
       capabilities: privateView ? workerCapabilities : [],
     },
     horizon: { ready: Boolean(horizon.status().enabled) },
@@ -697,7 +699,7 @@ app.get('/api/capabilities', async (request) => {
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
-  organism: 'homeostasie_v7_streamlined',
+  organism: 'homeostasie_v8_director',
   cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
   language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
   cognition_independent_from_language_model: true,
@@ -709,7 +711,11 @@ app.get('/api/kernel/architecture', async () => ({
   distributed_compute: 'typed DAG -> Capability Fabric -> parallel Node/Rust swarm -> edge/API/local capabilities',
   capability_router: 'trust + observed reliability + latency + cost + task tags',
   network_action_model: 'typed authenticated capabilities; no arbitrary remote shell; remote edge side effects disabled',
-  execution_arm: 'Quantic Studio authenticated bridge for bounded side effects; edge fabric for read/compute',
+  parent_system: 'AURA is the parent control plane and operational director of Quantic Sillage',
+  local_execution_plane: 'AURA Runtime authenticated bridge for bounded local side effects and compute',
+  product_model: 'Quantic products are child services exposing typed capabilities/events; no product owns AURA cognition or memory',
+  quantic_studio_role: 'living streaming product only; broadcast/scenes/overlays/avatar/chat/moderation/live automation',
+  execution_arm: 'AURA Runtime authenticated bridge for bounded side effects; edge fabric for read/compute',
   autonomous_risk_envelope: [...config.commandCenterAllowedRisks],
   provider: ai.provider,
   provider_enabled: ai.enabled,

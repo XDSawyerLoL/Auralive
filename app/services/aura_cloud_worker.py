@@ -21,9 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 class AuraCloudWorker:
-    """Corps local d'AURA.
+    """Worker local d'AURA Runtime.
 
-    Quantic Studio initie uniquement des connexions HTTPS sortantes vers AURA
+    Cette classe est encore empaquetée dans le dépôt Quantic Studio pendant la
+    transition, mais son rôle architectural est indépendant du produit streaming.
+    AURA Runtime initie uniquement des connexions HTTPS sortantes vers AURA
     Cloud. Le cloud peut ainsi déléguer langage local, voix, automatisations et
     évolution sans exposer le PC sur Internet.
     """
@@ -298,7 +300,7 @@ class AuraCloudWorker:
                     "detail": str(detail or "")[:500],
                     "metadata": {
                         **(metadata or {}),
-                        "via": "quantic-studio-local-aura",
+                        "via": "aura-runtime",
                         "content_forwarded": False,
                     },
                 },
@@ -537,7 +539,7 @@ class AuraCloudWorker:
         configured = set(getattr(cognitive, "operator_allowed_risks", set()))
         requested = {str(item).casefold() for item in requested_risks if str(item).strip()}
         # Une mission cloud ne peut jamais élargir la politique locale : elle ne
-        # peut que demander un sous-ensemble de ce que Quantic Studio autorise.
+        # peut que demander un sous-ensemble de ce qu'AURA Runtime autorise.
         allowed = configured.intersection(requested or configured)
         return await cognitive.operate(
             str(payload.get("task") or ""),
