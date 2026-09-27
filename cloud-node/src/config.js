@@ -205,7 +205,7 @@ export const config = Object.freeze({
   commandCenterMinConfidence: num('AURA_COMMAND_CENTER_MIN_CONFIDENCE', 0.58, 0.1, 1),
   commandCenterAllowedRisks: new Set(csv(
     'AURA_COMMAND_CENTER_ALLOWED_RISKS',
-    'safe,ai,network,process,local-control,local-write',
+    'safe,ai,network,process,local-control,local-write,browser-control',
   )),
   longHorizonEnabled: bool('AURA_LONG_HORIZON_ENABLED', true),
   longHorizonAutoSeed: bool('AURA_LONG_HORIZON_AUTO_SEED', true),
