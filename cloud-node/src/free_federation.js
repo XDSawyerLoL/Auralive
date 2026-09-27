@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { one, query } from './db.js';
+import { databaseConfigured, one, query } from './db.js';
 
 const COMPLEX_ROLES = new Set(['reasoning', 'code', 'research', 'critic', 'security', 'evolution', 'math']);
 const SAFE_OPENROUTER_MODEL = /^(?:openrouter\/free|[a-z0-9._-]+\/[a-z0-9._:-]+:free)$/i;
@@ -39,6 +39,7 @@ export class ZeroCostFederation {
     this.lastProvider = '';
     this.lastModel = '';
     this.lastRequestedModel = '';
+    this.lastRole = '';
     this.quarantined = new Set();
     this.memoryUsage = new Map();
   }
@@ -62,6 +63,7 @@ export class ZeroCostFederation {
   async #usage(provider) {
     const date = todayUtc();
     try {
+      if (!databaseConfigured()) throw new Error('ledger-disabled');
       const row = await one(
         'SELECT requests,failures FROM aura_free_provider_usage WHERE provider=? AND usage_date=?',
         [provider, date],
@@ -96,6 +98,7 @@ export class ZeroCostFederation {
     const current = this.memoryUsage.get(key) || { requests: 0, failures: 0 };
     this.memoryUsage.set(key, { ...current, requests: current.requests + 1 });
     try {
+      if (!databaseConfigured()) throw new Error('ledger-disabled');
       await query(
         `INSERT INTO aura_free_provider_usage(provider,usage_date,requests,failures,last_status,updated_at)
          VALUES(?,?,1,0,'reserved',?)
@@ -113,6 +116,7 @@ export class ZeroCostFederation {
     const current = this.memoryUsage.get(key) || { requests: 0, failures: 0 };
     if (!ok) this.memoryUsage.set(key, { ...current, failures: current.failures + 1 });
     try {
+      if (!databaseConfigured()) throw new Error('ledger-disabled');
       await query(
         `INSERT INTO aura_free_provider_usage(provider,usage_date,requests,failures,last_status,updated_at)
          VALUES(?,?,0,?,?,?)
@@ -135,6 +139,7 @@ export class ZeroCostFederation {
     const safeRole = roleName(role);
     const q = quality == null ? null : clamp01(quality);
     try {
+      if (!databaseConfigured()) throw new Error('ledger-disabled');
       await query(
         `INSERT INTO aura_free_model_scorecards(
            provider,model,role,calls,successes,failures,ema_latency_ms,ema_quality,last_error,updated_at
@@ -256,6 +261,7 @@ export class ZeroCostFederation {
     // Learned technical reliability can choose among explicitly-free variants.
     // openrouter/free remains the safe catch-all when no useful history exists.
     try {
+      if (!databaseConfigured()) throw new Error('ledger-disabled');
       const placeholders = models.map(() => '?').join(',');
       const rows = await query(
         `SELECT model,calls,successes,failures,ema_latency_ms,ema_quality
@@ -286,6 +292,7 @@ export class ZeroCostFederation {
       this.lastProvider = result.provider;
       this.lastModel = result.model;
       this.lastRequestedModel = result.requestedModel;
+      this.lastRole = role;
       this.lastLatencyMs = result.latencyMs;
       this.lastError = '';
       return result;
@@ -296,8 +303,9 @@ export class ZeroCostFederation {
     }
   }
 
-  async diagnostic() {
-    const usage = await this.#usage('openrouter');
+  snapshot() {
+    const date = todayUtc();
+    const usage = this.memoryUsage.get(`openrouter:${date}`) || { requests: 0, failures: 0 };
     const safeModels = this.#safeOpenRouterModels();
     return {
       enabled: this.enabled,
@@ -307,9 +315,10 @@ export class ZeroCostFederation {
       configured_models: safeModels,
       rejected_models: config.openRouterFreeModels.filter((item) => !isGuaranteedFreeOpenRouterModel(item)),
       max_requests_per_day: config.freeFederationMaxRequestsPerDay,
-      requests_today: usage.requests,
-      failures_today: usage.failures,
-      complex_role: COMPLEX_ROLES.has(roleName(this.lastModel)),
+      process_requests_today: Number(usage.requests || 0),
+      process_failures_today: Number(usage.failures || 0),
+      last_role: this.lastRole,
+      last_role_is_complex: COMPLEX_ROLES.has(this.lastRole),
       last_provider: this.lastProvider,
       last_model: this.lastModel,
       last_requested_model: this.lastRequestedModel,
