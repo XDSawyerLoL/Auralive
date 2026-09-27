@@ -1122,6 +1122,61 @@ export class CommandCenter {
       }));
     }
 
+    if (config.directorModeEnabled) {
+      const uniqueRepositories = [];
+      const seenRepositories = new Set();
+      for (const service of services) {
+        const repository = String(service.repository || '').trim();
+        if (!service.enabled || !repository) continue;
+        if (BAD_SERVICE_STATES.has(String(service.state || '').toLowerCase())) continue;
+        const key = repository.toLowerCase();
+        if (seenRepositories.has(key)) continue;
+        seenRepositories.add(key);
+        uniqueRepositories.push(service);
+      }
+
+      if (uniqueRepositories.length) {
+        const slotMs = Math.max(1, config.directorPortfolioIntervalHours) * 3600_000;
+        const directorSlot = Math.floor(Date.now() / slotMs);
+        const directorAngles = [
+          'expérience utilisateur',
+          'intégration avec les autres produits Quantic',
+          'fiabilité et dette technique',
+          'automatisation opérationnelle',
+          'confidentialité et souveraineté',
+          'distribution et adoption',
+          'usage intelligent du Web et des modèles',
+          'réduction des frictions pour l’utilisateur',
+        ];
+        const focusService = uniqueRepositories[directorSlot % uniqueRepositories.length];
+        const angle = directorAngles[directorSlot % directorAngles.length];
+        candidates.push(this.candidate({
+          domain: focusService.id,
+          kind: 'evolution',
+          action_payload: {
+            repository: focusService.repository,
+            base_branch: 'main',
+            director_mode: true,
+            portfolio_angle: angle,
+            product_id: focusService.id,
+          },
+          title: `Direction · faire progresser ${focusService.name}`,
+          objective:
+            `En tant que Directrice opérationnelle de Quantic Sillage, auditer ${focusService.name} sur l’angle « ${angle} ». `
+            + `Dépôt cible: ${focusService.repository}. Objectif produit: ${focusService.objective || 'améliorer le produit'}. `
+            + 'Choisir au maximum une amélioration à fort levier, mesurable et réversible. '
+            + 'Inspecter les faits et le code avant de modifier quoi que ce soit. '
+            + 'Si aucune amélioration sûre et suffisamment étayée n’est trouvée, conclure no-safe-patch plutôt que produire du changement artificiel.',
+          rationale:
+            'Director Mode réalise une revue tournante du portefeuille afin qu’AURA ne dépende pas uniquement des pannes ou des demandes humaines pour prendre des initiatives.',
+          priority: 0.73,
+          confidence: 0.80,
+          requested_risks: [],
+          signature: `director:${focusService.repository}:${directorSlot}:${angle}`,
+        }));
+      }
+    }
+
     const topIntention = intentions.find((row) => Number(row.priority || 0) >= 0.55);
     if (topIntention) {
       const domain = String(parseJson(topIntention.context, {})?.domain || 'aura').slice(0, 80);
@@ -1687,7 +1742,12 @@ export class CommandCenter {
       started: this.started,
       running: this.running,
       auto_execute: config.commandCenterAutoExecute,
-      autonomy_mode: 'continuous-native-initiative-with-bounded-execution',
+      autonomy_mode: config.directorModeEnabled
+        ? 'director-autonomous-operations'
+        : 'continuous-native-initiative-with-bounded-execution',
+      director_mode: config.directorModeEnabled,
+      creator_role: 'créateur et autorité fondatrice',
+      aura_role: 'directrice opérationnelle de Quantic Sillage',
       web_substrate: this.webSubstrate?.status?.() || { enabled: false },
       tick_seconds: config.commandCenterTickSeconds,
       max_initiatives_per_hour: config.commandCenterMaxInitiativesPerHour,
