@@ -559,6 +559,7 @@ async function applyMigrations(db) {
       id CHAR(36) PRIMARY KEY,
       mission_id CHAR(36) NOT NULL,
       position DOUBLE NOT NULL DEFAULT 0,
+      plan_version INT NOT NULL DEFAULT 1,
       title VARCHAR(240) NOT NULL,
       objective LONGTEXT NOT NULL,
       kind VARCHAR(40) NOT NULL DEFAULT 'reflection',
@@ -574,7 +575,7 @@ async function applyMigrations(db) {
       completed_at VARCHAR(40) NOT NULL DEFAULT '',
       created_at VARCHAR(40) NOT NULL,
       updated_at VARCHAR(40) NOT NULL,
-      INDEX idx_aura_mission_steps_mission(mission_id,status,position),
+      INDEX idx_aura_mission_steps_mission(mission_id,plan_version,status,position),
       INDEX idx_aura_mission_steps_initiative(initiative_id,status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.query(
