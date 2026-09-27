@@ -1531,6 +1531,7 @@ export class CommandCenter {
           && (
             payload?.ok === false
             || payloadStatus === 'error'
+            || payloadStatus === 'no-safe-patch'
             || payloadStatus.endsWith('-rejected')
           );
         const finalStatus = evolutionRejected ? 'failed' : 'completed';
