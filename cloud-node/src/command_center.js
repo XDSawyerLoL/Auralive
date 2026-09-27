@@ -239,6 +239,7 @@ export class CommandCenter {
     this.lastActionAt = '';
     this.lastFleetPollAt = '';
     this.lastFleetPollMs = 0;
+    this.lastDirectorPromotionMs = 0;
     this.fleetSnapshot = [];
     this.lastError = '';
   }
@@ -1640,6 +1641,140 @@ export class CommandCenter {
     return reconciled;
   }
 
+  async promoteDirectorPullRequests() {
+    if (
+      !config.directorModeEnabled
+      || !config.directorAutoMergeLowRisk
+      || !this.githubToken
+    ) return [];
+
+    const stamp = Date.now();
+    if (
+      this.lastDirectorPromotionMs
+      && stamp - this.lastDirectorPromotionMs < config.directorPromotionPollSeconds * 1000
+    ) return [];
+    this.lastDirectorPromotionMs = stamp;
+
+    const promotions = [];
+    for (const repository of config.commandCenterGithubRepos) {
+      const repo = String(repository || '').trim();
+      if (!repo.includes('/')) continue;
+
+      const pullsResponse = await this.github(
+        `/repos/${repo}/pulls?state=open&per_page=30`,
+      ).catch(() => ({ data: [] }));
+      const pulls = Array.isArray(pullsResponse.data) ? pullsResponse.data : [];
+
+      for (const pull of pulls) {
+        const headRef = String(pull?.head?.ref || '');
+        const baseRef = String(pull?.base?.ref || '');
+        const auraBranch = headRef.startsWith('aura/change-')
+          || headRef.startsWith('aura-evolution/')
+          || headRef.startsWith('aura-evolution-fleet/');
+        if (!auraBranch || pull?.draft || baseRef !== 'main') continue;
+
+        const number = Number(pull?.number || 0);
+        const headSha = String(pull?.head?.sha || '');
+        if (!number || !headSha) continue;
+
+        const filesResponse = await this.github(
+          `/repos/${repo}/pulls/${number}/files?per_page=100`,
+        ).catch(() => ({ data: [] }));
+        const files = Array.isArray(filesResponse.data) ? filesResponse.data : [];
+        if (!files.length || files.length > config.directorMergeMaxFiles) continue;
+
+        const safeFiles = files.every((file) => {
+          const path = String(file?.filename || '');
+          const status = String(file?.status || '');
+          const safe = safeGithubChangePath(path);
+          const changes = Number(file?.changes || 0);
+          return Boolean(safe)
+            && safe === path
+            && ['added', 'modified'].includes(status)
+            && changes <= config.directorMergeMaxChanges;
+        });
+        const totalChanges = files.reduce((sum, file) => sum + Number(file?.changes || 0), 0);
+        if (!safeFiles || totalChanges > config.directorMergeMaxChanges) continue;
+
+        const reviewsResponse = await this.github(
+          `/repos/${repo}/pulls/${number}/reviews?per_page=100`,
+        ).catch(() => ({ data: [] }));
+        const reviews = Array.isArray(reviewsResponse.data) ? reviewsResponse.data : [];
+        const latestReviewByUser = new Map();
+        for (const review of reviews) {
+          const login = String(review?.user?.login || '');
+          if (!login) continue;
+          latestReviewByUser.set(login, String(review?.state || '').toUpperCase());
+        }
+        if ([...latestReviewByUser.values()].includes('CHANGES_REQUESTED')) continue;
+
+        const checksResponse = await this.github(
+          `/repos/${repo}/commits/${headSha}/check-runs?per_page=100`,
+        ).catch(() => ({ data: { check_runs: [] } }));
+        const checks = Array.isArray(checksResponse.data?.check_runs)
+          ? checksResponse.data.check_runs
+          : [];
+        if (!checks.length) continue;
+        const checksGreen = checks.every((check) =>
+          String(check?.status || '') === 'completed'
+          && ['success', 'neutral', 'skipped'].includes(String(check?.conclusion || ''))
+        );
+        if (!checksGreen) continue;
+
+        const statusResponse = await this.github(
+          `/repos/${repo}/commits/${headSha}/status`,
+        ).catch(() => ({ data: { statuses: [] } }));
+        const statuses = Array.isArray(statusResponse.data?.statuses)
+          ? statusResponse.data.statuses
+          : [];
+        if (statuses.some((status) =>
+          ['failure', 'error', 'pending'].includes(String(status?.state || '').toLowerCase())
+        )) continue;
+
+        const merged = await this.github(
+          `/repos/${repo}/pulls/${number}/merge`,
+          {
+            method: 'PUT',
+            body: {
+              merge_method: 'squash',
+              commit_title: `AURA Director: ${String(pull?.title || 'low-risk improvement').slice(0,180)}`,
+              commit_message:
+                'Promotion autonome faible risque après validation des fichiers, des revues et des checks GitHub.',
+            },
+          },
+        ).catch(() => ({ data: { merged: false } }));
+
+        if (!merged.data?.merged) continue;
+        const promotion = {
+          repository: repo,
+          pull_request_number: number,
+          pull_request_url: String(pull?.html_url || ''),
+          head_sha: headSha,
+          changed_files: files.map((file) => String(file.filename || '')),
+          total_changes: totalChanges,
+          merged_sha: String(merged.data?.sha || ''),
+          policy: 'director-low-risk-green-checks-only',
+          merged_at: now(),
+        };
+        promotions.push(promotion);
+        await this.kernel.trace(
+          'director-promotion',
+          `Promotion autonome · ${repo}#${number}`,
+          'PR AURA faible risque fusionnée après checks verts.',
+          promotion,
+        ).catch(() => {});
+        await this.kernel.observeEvent(
+          'aura.director.merge.success',
+          promotion,
+          'command-center',
+        ).catch(() => {});
+        break;
+      }
+      if (promotions.length >= 1) break;
+    }
+    return promotions;
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -1650,11 +1785,16 @@ export class CommandCenter {
     this.running = true;
     try {
       const reconciled = await this.reconcileWaiting();
+      const promotions = await this.promoteDirectorPullRequests().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return [];
+      });
       if (await this.countRecentInitiatives() >= config.commandCenterMaxInitiativesPerHour) {
         this.lastCycleAt = now();
         return {
           ok: true,
           reconciled,
+          promotions,
           skipped: true,
           reason: 'initiative hourly budget reached',
         };
@@ -1679,6 +1819,7 @@ export class CommandCenter {
         return {
           ok: true,
           reconciled,
+          promotions,
           skipped: true,
           reason: 'all candidates are cooling down',
           candidates: candidates.length,
@@ -1691,6 +1832,7 @@ export class CommandCenter {
         trigger,
         candidate_count: candidates.length,
         reconciled,
+        promotions,
         initiative: result,
       };
     } catch (error) {
@@ -1746,6 +1888,7 @@ export class CommandCenter {
         ? 'director-autonomous-operations'
         : 'continuous-native-initiative-with-bounded-execution',
       director_mode: config.directorModeEnabled,
+      autonomous_low_risk_promotion: config.directorAutoMergeLowRisk,
       creator_role: 'créateur et autorité fondatrice',
       aura_role: 'directrice opérationnelle de Quantic Sillage',
       web_substrate: this.webSubstrate?.status?.() || { enabled: false },
