@@ -17,7 +17,7 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 - agents planner/research/dev/security/operator/critic
 - swarm multi-agents
 - `/api/chat`
-- couche de langage remplaçable ; en mode zéro coût, seuls AURA Runtime/local Mesh et endpoints locaux sont exécutables
+- couche de langage remplaçable ; en mode zéro coût, AURA Runtime/local Mesh et la fédération distante explicitement gratuite sont exécutables
 - diagnostic IA sûr via `GET /api/ai/runtime`
 - pont HORIZON avec préservation stricte du statut épistémique
 - ingestion des événements et résultats Quantic Studio
@@ -52,7 +52,7 @@ AI_MODE=off
 MAIRAIY_CLOUD_VOICE_ENABLED=false
 ```
 
-Avec ce verrou, les appels IA/TTS/expert externes potentiellement facturables sont bloqués dans le runtime, même si une ancienne clé reste présente dans l’environnement. Les capacités de langage, voix et image doivent venir d’AURA Runtime, du Compute Mesh local ou d’une capability explicitement gratuite. Si aucune capacité gratuite n’est disponible, AURA reste hors ligne pour cette fonction au lieu de basculer vers un service payant.
+Avec ce verrou, les appels IA/TTS/expert externes potentiellement facturables sont bloqués dans le runtime, même si une ancienne clé reste présente dans l’environnement. Les capacités de langage peuvent venir d’AURA Runtime, du Compute Mesh ou d’AURA Free Federation. Cette dernière n'accepte par défaut que `openrouter/free` ou des identifiants OpenRouter terminant par `:free`; tout identifiant potentiellement payant est rejeté avant l'appel. Si l'API renvoie un coût non nul, le fournisseur est immédiatement mis en quarantaine. Si aucune capacité gratuite n’est disponible, AURA continue avec son noyau natif au lieu de basculer vers un service payant.
 
 Hostinger fournit `PORT`; AURA l’utilise automatiquement.
 
@@ -126,3 +126,20 @@ Le worker local utilisé pour les tâches machine doit être considéré comme *
 - recherche Evolution limitée aux domaines HTTPS allowlistés ;
 - contenu web traité comme données non fiables ;
 - aucun auto-submit/auto-merge en phase 1.
+
+
+## AURA 2.2 — Zero-Cost Cloud Federation
+
+Le PC n'est pas une dépendance. AURA Cloud peut utiliser une capacité de langage distante lorsque le fournisseur et le modèle sont intrinsèquement gratuits.
+
+Configuration minimale :
+
+```env
+AURA_ZERO_COST_MODE=true
+AI_MODE=off
+AURA_FREE_FEDERATION_ENABLED=true
+AURA_OPENROUTER_API_KEY=...
+AURA_OPENROUTER_FREE_MODELS=openrouter/free
+```
+
+Le ledger MySQL `aura_free_provider_usage` conserve le budget quotidien et `aura_free_model_scorecards` mémorise les succès, échecs et latences par modèle/rôle. Les clés ne sont jamais stockées dans ces tables.
