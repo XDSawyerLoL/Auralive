@@ -8,7 +8,7 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 - Fastify 5
 - MySQL via `mysql2`
 - aucune dépendance Python côté serveur
-- Quantic Studio local reste Python/Rust
+- AURA Runtime local reste Python/Rust; il est actuellement hébergé par le package Quantic Studio pour compatibilité, mais constitue une couche AURA indépendante
 
 ## Fonctions
 
@@ -28,7 +28,11 @@ Backend cloud autonome pour AURA, conçu pour les applications web Node.js Hosti
 
 ## Autorité
 
-Le cloud est volontairement **plan-only** pour les actions. Il ne pilote pas directement le PC. Quantic Studio / Automation Studio reste l’autorité d’exécution.
+AURA Cloud est le **control plane**: continuité, mémoire, direction, orchestration et décisions.
+
+AURA Runtime est l'**execution plane** local: modèles, outils machine, opérateur, voix/image et capacités matérielles. Le Runtime n'expose pas de shell arbitraire au Cloud et reste borné par des capacités typées.
+
+Quantic Studio n'est pas l'autorité d'exécution d'AURA. C'est le produit de streaming vivant de Quantic Sillage. Dans l'implémentation actuelle, Quantic Studio héberge encore le worker AURA Runtime pour compatibilité; cette dépendance doit être extraite progressivement.
 
 ## Déploiement Hostinger
 
@@ -82,9 +86,9 @@ Privés avec `Authorization: Bearer <AURA_CLOUD_TOKEN>` :
 Canary :
 - `POST /api/evolution/canary/:cycleId` utilise `AURA_EVOLUTION_CANARY_TOKEN`, jamais le token cloud.
 
-## Liaison Quantic Studio -> AURA Cloud
+## Liaison produits / AURA Runtime -> AURA Cloud
 
-Quantic Studio peut publier un événement :
+Tout produit Quantic peut publier des événements structurés vers AURA. Quantic Studio est seulement un exemple de produit :
 
 ```json
 POST /api/cloud/events
@@ -109,6 +113,8 @@ POST /api/cloud/outcomes
 ```
 
 À partir de trois échecs identiques, AURA Cloud crée une leçon persistante et une proposition d’amélioration.
+
+Le worker local utilisé pour les tâches machine doit être considéré comme **AURA Runtime worker** même lorsqu'il est lancé depuis le package Quantic Studio.
 
 ## Sécurité
 
