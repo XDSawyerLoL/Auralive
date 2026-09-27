@@ -148,3 +148,50 @@ async def test_choose_many_returns_distinct_ranked_specialists(monkeypatch):
     assert len(routes) == 3
     assert len({item["name"] for item in routes}) == 3
     assert router.last_ensemble["count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_learned_outcomes_change_routing_between_equivalent_models(monkeypatch):
+    router = ModelConstellation(settings())
+    router.scorecard.exploration = 0
+    router.installed = router._decode_installed([
+        {"name": "qwen3:8b", "size": 5_000_000_000},
+        {"name": "qwen3:14b", "size": 9_000_000_000},
+    ])
+
+    async def no_refresh(*, force=False):
+        return router.installed
+
+    monkeypatch.setattr(router, "refresh", no_refresh)
+    for _ in range(8):
+        router.record_outcome(
+            "qwen3:8b", "code", success=False, latency_ms=15000, quality=0.2
+        )
+        router.record_outcome(
+            "qwen3:14b", "code", success=True, latency_ms=1800, quality=0.9
+        )
+
+    route = await router.choose("code")
+    assert route["name"] == "qwen3:14b"
+    assert route["reason"] == "adaptive-learned-role-router"
+    assert route["learned"]["calls"] == 8
+
+
+def test_mesh_scorecard_contains_skill_metrics_without_user_content():
+    router = ModelConstellation(settings())
+    router.installed = router._decode_installed([
+        {"name": "deepseek-r1:8b", "size": 5_000_000_000},
+    ])
+    router.record_outcome(
+        "deepseek-r1:8b",
+        "reasoning",
+        success=True,
+        latency_ms=1100,
+        quality=0.9,
+        source="unit-test",
+    )
+
+    payload = router.model_scorecard()
+    assert payload[0]["name"] == "deepseek-r1:8b"
+    assert payload[0]["roles"]["reasoning"]["samples"] == 1
+    assert "prompt" not in str(payload).casefold()

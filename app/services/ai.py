@@ -322,6 +322,13 @@ class AuraAI:
                     model=primary,
                     timeout_seconds=self.settings.ai_request_timeout_seconds,
                 )
+                self.constellation.record_outcome(
+                    primary,
+                    role,
+                    success=bool(str(first or "").strip()),
+                    latency_ms=self.last_latency_ms,
+                    source="direct",
+                )
                 if self._should_multi_review(role, max_tokens):
                     reviewed = await self._multi_model_review(
                         messages,
@@ -333,6 +340,13 @@ class AuraAI:
                     return reviewed or first
                 return first
             except asyncio.TimeoutError:
+                self.constellation.record_outcome(
+                    primary,
+                    role,
+                    success=False,
+                    latency_ms=self.settings.ai_request_timeout_seconds * 1000,
+                    source="timeout",
+                )
                 fallback = ""
                 if self.settings.ai_constellation_enabled:
                     route = await self.constellation.choose(
@@ -351,15 +365,42 @@ class AuraAI:
                 )
                 self.runtime_model = fallback
                 self.last_model = fallback
-                return await self._ollama(
-                    messages,
-                    min(max_tokens, 160),
-                    model=fallback,
-                    timeout_seconds=max(
-                        12, min(45, self.settings.ai_request_timeout_seconds)
-                    ),
-                    context_window=min(self.settings.ai_context_window, 4096),
+                try:
+                    fallback_answer = await self._ollama(
+                        messages,
+                        min(max_tokens, 160),
+                        model=fallback,
+                        timeout_seconds=max(
+                            12, min(45, self.settings.ai_request_timeout_seconds)
+                        ),
+                        context_window=min(self.settings.ai_context_window, 4096),
+                    )
+                    self.constellation.record_outcome(
+                        fallback,
+                        role,
+                        success=bool(str(fallback_answer or "").strip()),
+                        latency_ms=self.last_latency_ms,
+                        source="timeout-fallback",
+                    )
+                    return fallback_answer
+                except Exception:
+                    self.constellation.record_outcome(
+                        fallback,
+                        role,
+                        success=False,
+                        latency_ms=self.last_latency_ms,
+                        source="fallback-error",
+                    )
+                    raise
+            except Exception:
+                self.constellation.record_outcome(
+                    primary,
+                    role,
+                    success=False,
+                    latency_ms=self.last_latency_ms,
+                    source="direct-error",
                 )
+                raise
         self.last_model = self.settings.ai_fast_model or self.settings.ai_model
         return await self._openai_compatible(messages, max_tokens)
 
@@ -398,14 +439,32 @@ class AuraAI:
             return ""
 
         async def proposal(model: str) -> tuple[str, str]:
-            answer = await self._ollama(
-                messages,
-                min(max_tokens, 420),
-                model=model,
-                timeout_seconds=max(15, self.settings.ai_request_timeout_seconds),
-                context_window=min(max(self.settings.ai_context_window, 4096), 8192),
-            )
-            return model, answer
+            model_started = monotonic()
+            try:
+                answer = await self._ollama(
+                    messages,
+                    min(max_tokens, 420),
+                    model=model,
+                    timeout_seconds=max(15, self.settings.ai_request_timeout_seconds),
+                    context_window=min(max(self.settings.ai_context_window, 4096), 8192),
+                )
+                self.constellation.record_outcome(
+                    model,
+                    role,
+                    success=bool(str(answer or "").strip()),
+                    latency_ms=round((monotonic() - model_started) * 1000),
+                    source="moa-specialist",
+                )
+                return model, answer
+            except Exception:
+                self.constellation.record_outcome(
+                    model,
+                    role,
+                    success=False,
+                    latency_ms=round((monotonic() - model_started) * 1000),
+                    source="moa-specialist-error",
+                )
+                raise
 
         raw_results: list[Any]
         if bool(getattr(self.settings, "ai_constellation_moa_parallel", True)):
@@ -478,6 +537,7 @@ class AuraAI:
                 ),
             },
         ]
+        synthesis_started = monotonic()
         try:
             final = await self._ollama(
                 synthesis_messages,
@@ -486,7 +546,21 @@ class AuraAI:
                 timeout_seconds=max(20, self.settings.ai_request_timeout_seconds),
                 context_window=min(max(self.settings.ai_context_window, 6144), 12288),
             )
+            self.constellation.record_outcome(
+                synthesizer,
+                "critic",
+                success=bool(str(final or "").strip()),
+                latency_ms=round((monotonic() - synthesis_started) * 1000),
+                source="moa-synthesizer",
+            )
         except Exception as exc:  # noqa: BLE001
+            self.constellation.record_outcome(
+                synthesizer,
+                "critic",
+                success=False,
+                latency_ms=round((monotonic() - synthesis_started) * 1000),
+                source="moa-synthesizer-error",
+            )
             logger.info("Synthèse MoA indisponible, meilleur spécialiste conservé: %s", exc)
             synthesizer = proposals[0][0]
             final = proposals[0][1]
@@ -549,6 +623,7 @@ class AuraAI:
                 ),
             },
         ]
+        review_started = monotonic()
         try:
             checked = await self._ollama(
                 review_messages,
@@ -557,8 +632,22 @@ class AuraAI:
                 timeout_seconds=max(20, self.settings.ai_request_timeout_seconds),
                 context_window=min(max(self.settings.ai_context_window, 4096), 8192),
             )
+            self.constellation.record_outcome(
+                critic,
+                "critic",
+                success=bool(str(checked or "").strip()),
+                latency_ms=round((monotonic() - review_started) * 1000),
+                source="multi-review",
+            )
             return checked or first_answer
         except Exception as exc:  # noqa: BLE001
+            self.constellation.record_outcome(
+                critic,
+                "critic",
+                success=False,
+                latency_ms=round((monotonic() - review_started) * 1000),
+                source="multi-review-error",
+            )
             logger.info("Révision multi-modèle non bloquante impossible: %s", exc)
             return first_answer
 

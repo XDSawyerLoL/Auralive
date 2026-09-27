@@ -74,28 +74,73 @@ export function meshResultFingerprint(kind, result = {}) {
   return createHash('sha256').update(JSON.stringify(canonical ?? null)).digest('hex');
 }
 
-export function selectMoaAgents(workers = [], maxAgents = 3) {
+function declaredModelRoleScore(worker = {}, model = '', role = 'general') {
+  const rows = Array.isArray(worker?.resources?.model_scorecard)
+    ? worker.resources.model_scorecard
+    : [];
+  const match = rows.find((item) =>
+    String(item?.name || '').trim().toLowerCase() === String(model || '').trim().toLowerCase());
+  const roles = match?.roles && typeof match.roles === 'object' ? match.roles : {};
+  const metric = roles[String(role || 'general').toLowerCase()] || roles.general || {};
+  const score = Number(metric?.score);
+  return Number.isFinite(score) ? score : 0.5;
+}
+
+export function selectMoaAgents(workers = [], maxAgents = 3, role = 'reasoning') {
   const limit = Math.max(2, Math.min(Number(maxAgents || 3), 4));
-  const selected = [];
-  const usedWorkers = new Set();
-  const usedModels = new Set();
+  const normalizedRole = String(role || 'reasoning').trim().toLowerCase();
+  const candidates = [];
   for (const worker of workers) {
     const workerId = String(worker?.worker_id || '').trim();
-    if (!workerId || usedWorkers.has(workerId)) continue;
+    if (!workerId) continue;
     const models = stringList([
       ...(Array.isArray(worker?.resources?.models) ? worker.resources.models : []),
       worker?.model,
     ], 16);
-    const preferred = models.find((model) => !usedModels.has(model.toLowerCase())) || models[0] || '';
-    if (!preferred) continue;
-    selected.push({
+    if (!models.length) continue;
+    const rankedModels = models.map((model) => ({
+      model,
+      competence: declaredModelRoleScore(worker, model, normalizedRole),
+    })).sort((a, b) => b.competence - a.competence);
+    const best = rankedModels[0];
+    candidates.push({
       worker_id: workerId,
-      model: preferred,
+      model: best.model,
       reputation: clamp01(worker.reputation, 0.5),
       mesh_score: Number(worker.mesh_score || 0),
+      competence_score: Number(best.competence.toFixed(4)),
+      alternates: rankedModels.slice(1),
     });
-    usedWorkers.add(workerId);
-    usedModels.add(preferred.toLowerCase());
+  }
+  candidates.sort((a, b) =>
+    b.competence_score - a.competence_score
+    || b.mesh_score - a.mesh_score
+    || b.reputation - a.reputation);
+
+  const selected = [];
+  const usedWorkers = new Set();
+  const usedModels = new Set();
+  for (const candidate of candidates) {
+    if (usedWorkers.has(candidate.worker_id)) continue;
+    let model = candidate.model;
+    let competence = candidate.competence_score;
+    if (usedModels.has(model.toLowerCase())) {
+      const alternate = candidate.alternates.find((item) => !usedModels.has(item.model.toLowerCase()));
+      if (alternate && alternate.competence >= candidate.competence_score - 0.12) {
+        model = alternate.model;
+        competence = Number(alternate.competence.toFixed(4));
+      }
+    }
+    selected.push({
+      worker_id: candidate.worker_id,
+      model,
+      reputation: candidate.reputation,
+      mesh_score: candidate.mesh_score,
+      competence_score: competence,
+      role: normalizedRole,
+    });
+    usedWorkers.add(candidate.worker_id);
+    usedModels.add(model.toLowerCase());
     if (selected.length >= limit) break;
   }
   return selected;
@@ -511,7 +556,8 @@ export class ExecutionBridge {
       computeOnly: true,
       capability: 'inference',
     });
-    const agents = selectMoaAgents(workers, maxAgents);
+    const taskRole = String(payload.task_role || payload.role || 'reasoning').trim().toLowerCase().slice(0, 80) || 'reasoning';
+    const agents = selectMoaAgents(workers, maxAgents, taskRole);
     if (agents.length < 2) {
       throw new Error('MoA distribué exige au moins deux nœuds d’inférence avec modèle annoncé');
     }
@@ -530,7 +576,7 @@ export class ExecutionBridge {
           'Tu es un spécialiste indépendant dans un Mixture-of-Agents AURA. Produis ta meilleure réponse technique/factuelle sans commenter le processus.',
         ].filter(Boolean).join('\n'),
         max_tokens: maxTokens,
-        task_role: 'moa-specialist',
+        task_role: taskRole,
         preferred_model: agent.model,
       },
       ['ai'],
@@ -553,6 +599,7 @@ export class ExecutionBridge {
           worker_id: agent.worker_id,
           model: agent.model,
           reputation: agent.reputation,
+          competence_score: agent.competence_score,
           answer: String(item.value.answer).trim(),
         });
       } else {
@@ -583,12 +630,13 @@ export class ExecutionBridge {
     }
 
     const usedWorkers = new Set(candidates.map((item) => item.worker_id));
-    const synthesizerWorker = workers.find((item) => !usedWorkers.has(item.worker_id)) || workers[0];
-    const synthModels = stringList([
-      ...(Array.isArray(synthesizerWorker?.resources?.models) ? synthesizerWorker.resources.models : []),
-      synthesizerWorker?.model,
-    ], 16);
-    const synthesizerModel = synthModels[0] || '';
+    const synthesisAgents = selectMoaAgents(workers, Math.min(4, workers.length || 2), 'critic');
+    const synthesizerAgent = synthesisAgents.find((item) => !usedWorkers.has(item.worker_id))
+      || synthesisAgents[0]
+      || agents[0];
+    const synthesizerWorker = workers.find((item) => item.worker_id === synthesizerAgent.worker_id)
+      || workers[0];
+    const synthesizerModel = String(synthesizerAgent.model || '').trim();
     const candidateText = candidates.map((item, index) =>
       'PROPOSITION ' + (index + 1) + '\n' + item.answer.slice(0, 9000)).join('\n\n');
     const synthJob = await this.enqueue(
@@ -605,7 +653,7 @@ export class ExecutionBridge {
         ].join('\n').slice(0, 50_000),
         system: 'Tu es le synthétiseur du Mixture-of-Agents distribué d’AURA.',
         max_tokens: maxTokens,
-        task_role: 'moa-synthesizer',
+        task_role: 'critic',
         preferred_model: synthesizerModel,
       },
       ['ai'],
@@ -628,6 +676,8 @@ export class ExecutionBridge {
         completed_agents: candidates.length,
         synthesizer_worker_id: synthesizerWorker.worker_id,
         synthesizer_model: synthesizerModel,
+        synthesizer_competence_score: synthesizerAgent.competence_score,
+        task_role: taskRole,
       },
       mesh: {
         candidates: candidates.map(({ answer: _answer, ...meta }) => meta),

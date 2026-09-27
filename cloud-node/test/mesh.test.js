@@ -71,3 +71,49 @@ test('distributed MoA selects distinct workers and prefers model diversity', () 
   assert.equal(new Set(agents.map((item) => item.worker_id)).size, 3);
   assert.equal(new Set(agents.map((item) => item.model)).size, 3);
 });
+
+
+test('distributed MoA prefers learned competence for the requested role', () => {
+  const agents = selectMoaAgents([
+    {
+      worker_id: 'worker-a',
+      model: 'qwen3:8b',
+      resources: {
+        models: ['qwen3:8b', 'deepseek-r1:8b'],
+        model_scorecard: [
+          {
+            name: 'qwen3:8b',
+            roles: { code: { score: 0.72, samples: 20 } },
+          },
+          {
+            name: 'deepseek-r1:8b',
+            roles: { code: { score: 1.08, samples: 20 } },
+          },
+        ],
+      },
+      reputation: 0.85,
+      mesh_score: 0.88,
+    },
+    {
+      worker_id: 'worker-b',
+      model: 'hermes3:8b',
+      resources: {
+        models: ['hermes3:8b'],
+        model_scorecard: [
+          {
+            name: 'hermes3:8b',
+            roles: { code: { score: 0.94, samples: 20 } },
+          },
+        ],
+      },
+      reputation: 0.9,
+      mesh_score: 0.9,
+    },
+  ], 2, 'code');
+
+  assert.equal(agents.length, 2);
+  assert.equal(agents[0].worker_id, 'worker-a');
+  assert.equal(agents[0].model, 'deepseek-r1:8b');
+  assert.equal(agents[0].role, 'code');
+  assert.ok(agents[0].competence_score > agents[1].competence_score);
+});
