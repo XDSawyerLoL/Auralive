@@ -53,3 +53,9 @@ async def test_standalone_runtime_can_execute_compute_without_studio(monkeypatch
     assert profile['runtime_role'] == 'aura-runtime'
     assert profile['runtime_host_product'] == ''
     assert profile['runtime_packaging'] == 'standalone-service'
+    assert 'compute' in profile['job_kinds']
+    assert 'inference' in profile['job_kinds']
+    assert 'operator' not in profile['job_kinds']
+    assert 'tts' not in profile['job_kinds']
+    assert 'image' not in profile['job_kinds']
+    assert 'evolution' not in profile['job_kinds']
