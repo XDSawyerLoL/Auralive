@@ -1,0 +1,54 @@
+name: AURA AGI Battery
+
+on:
+  pull_request:
+    paths:
+      - "cloud-node/src/active_inference.js"
+      - "cloud-node/src/native_learning.js"
+      - "cloud-node/src/capability_fabric.js"
+      - "cloud-node/src/task_graph.js"
+      - "cloud-node/src/kernel.js"
+      - "cloud-node/src/long_horizon.js"
+      - "cloud-node/src/command_center.js"
+      - "cloud-node/src/agi_benchmark.js"
+      - "cloud-node/test/agi_benchmark.test.js"
+      - "cloud-node/scripts/run-agi-audit.mjs"
+      - "cloud-node/package.json"
+      - "cloud-node/package-lock.json"
+      - ".github/workflows/agi-battery.yml"
+  push:
+    branches: [main]
+    paths:
+      - "cloud-node/src/**"
+      - "cloud-node/test/agi_benchmark.test.js"
+      - "cloud-node/scripts/run-agi-audit.mjs"
+      - "cloud-node/package.json"
+      - "cloud-node/package-lock.json"
+      - ".github/workflows/agi-battery.yml"
+  workflow_dispatch:
+
+jobs:
+  agi-battery:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud-node/package-lock.json
+      - name: Install exact dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run falsifiable AGI audit
+        run: npm run audit:agi -- --json=agi-audit-report.json
+      - name: Run AGI battery regression tests
+        run: npm run test:agi
+      - name: Upload machine-readable AGI report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-agi-audit
+          path: cloud-node/agi-audit-report.json
+          if-no-files-found: error
