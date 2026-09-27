@@ -628,6 +628,7 @@ export class CognitiveKernel {
     const recentMessages = privateView
       ? await query(
           `SELECT author,role,content,created_at FROM aura_cloud_messages
+           WHERE session_id IN ('private-founder','')
            ORDER BY id DESC LIMIT 8`,
         ).catch(() => [])
       : [];
@@ -737,13 +738,23 @@ export class CognitiveKernel {
     };
   }
 
-  async chat(text, author = 'Utilisateur', privateView = false) {
+  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
+    const conversationSession = privateView
+      ? 'private-founder'
+      : String(sessionId || '').trim().slice(0, 96);
+    if (!conversationSession) throw new Error('Session de conversation manquante');
+
     await query(
-      "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES(?,'user',?,?)",
-      [String(author).slice(0, 120), content.slice(0, 8000), now()],
+      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES(?,'user',?,?,?)",
+      [
+        String(author).slice(0, 120),
+        conversationSession,
+        content.slice(0, 8000),
+        now(),
+      ],
     );
 
     // L'organisme reçoit l'interaction avant toute formulation.
@@ -775,8 +786,14 @@ export class CognitiveKernel {
       this.reflections(4),
       this.workItems(5),
       query(
-        `SELECT author,role,content,created_at FROM aura_cloud_messages
-         ORDER BY id DESC LIMIT 8`,
+        privateView
+          ? `SELECT author,role,content,created_at FROM aura_cloud_messages
+             WHERE session_id IN ('private-founder','')
+             ORDER BY id DESC LIMIT 8`
+          : `SELECT author,role,content,created_at FROM aura_cloud_messages
+             WHERE session_id=?
+             ORDER BY id DESC LIMIT 8`,
+        privateView ? [] : [conversationSession],
       ).catch(() => []),
     ]);
 
@@ -898,8 +915,8 @@ export class CognitiveKernel {
     await this.saveSoul();
 
     await query(
-      "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
-      [String(answer).slice(0, 12000), now()],
+      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
+      [conversationSession, String(answer).slice(0, 12000), now()],
     );
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
