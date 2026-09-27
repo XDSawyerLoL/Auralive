@@ -156,6 +156,10 @@ export const config = Object.freeze({
   directorPromotionPollSeconds: int('AURA_DIRECTOR_PROMOTION_POLL_SECONDS', 300, 60, 3600),
   directorMergeMaxFiles: int('AURA_DIRECTOR_MERGE_MAX_FILES', 4, 1, 8),
   directorMergeMaxChanges: int('AURA_DIRECTOR_MERGE_MAX_CHANGES', 800, 50, 5000),
+  directorTrustedGithubActors: new Set(csv(
+    'AURA_DIRECTOR_TRUSTED_GITHUB_ACTORS',
+    'XDSawyerLoL',
+  ).map((item) => item.toLowerCase())),
   commandCenterTickSeconds: int('AURA_COMMAND_CENTER_TICK_SECONDS', 60, 15, 86400),
   commandCenterWarmupSeconds: int('AURA_COMMAND_CENTER_WARMUP_SECONDS', 20, 10, 300),
   commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 8, 1, 24),
