@@ -21,14 +21,16 @@ logger = logging.getLogger(__name__)
 
 
 class AuraCloudWorker:
-    """Corps local d'AURA.
+    """Worker de compatibilité AURA Runtime.
 
-    Quantic Studio initie uniquement des connexions HTTPS sortantes vers AURA
-    Cloud. Le cloud peut ainsi déléguer langage local, voix, automatisations et
+    AURA Runtime initie uniquement des connexions HTTPS sortantes vers AURA
+    Cloud. Le package Quantic Studio héberge encore ce worker aujourd'hui,
+    mais Studio reste un produit de streaming et n'est pas l'autorité locale
+    d'AURA. Le Cloud peut déléguer langage local, voix, automatisations et
     évolution sans exposer le PC sur Internet.
     """
 
-    VERSION = "aura-quantic-worker-v1.2"
+    VERSION = "aura-runtime-worker-v2"
 
     def __init__(self, aura: Any, settings: Any):
         self.aura = aura
@@ -52,7 +54,7 @@ class AuraCloudWorker:
 
     def _resolve_worker_id(self) -> str:
         if not self.compute_consent:
-            return f"quantic-{socket.gethostname().casefold()}-{uuid4().hex[:8]}"
+            return f"aura-runtime-{socket.gethostname().casefold()}-{uuid4().hex[:8]}"
         path = Path(
             getattr(
                 self.settings,
@@ -298,7 +300,8 @@ class AuraCloudWorker:
                     "detail": str(detail or "")[:500],
                     "metadata": {
                         **(metadata or {}),
-                        "via": "quantic-studio-local-aura",
+                        "via": "aura-runtime-compat-host",
+                        "runtime_host_product": "quantic-studio",
                         "content_forwarded": False,
                     },
                 },
@@ -346,9 +349,10 @@ class AuraCloudWorker:
     ) -> dict[str, Any]:
         """Ask AURA Cloud to orchestrate a distributed Mixture-of-Agents.
 
-        The Cloud token remains inside Quantic Studio; browser clients never
-        receive it. If the cloud mesh is unavailable, callers can fall back to
-        the local constellation without weakening privacy.
+        The Cloud token remains inside AURA Runtime (currently packaged with
+        Quantic Studio for compatibility); browser clients never receive it.
+        If the cloud mesh is unavailable, callers can fall back to the local
+        constellation without weakening privacy.
         """
         if not self.enabled:
             raise RuntimeError("Pont AURA Cloud non configuré")
@@ -536,8 +540,8 @@ class AuraCloudWorker:
             raise RuntimeError("Noyau cognitif local indisponible")
         configured = set(getattr(cognitive, "operator_allowed_risks", set()))
         requested = {str(item).casefold() for item in requested_risks if str(item).strip()}
-        # Une mission cloud ne peut jamais élargir la politique locale : elle ne
-        # peut que demander un sous-ensemble de ce que Quantic Studio autorise.
+        # Une mission Cloud ne peut jamais élargir la politique locale : elle ne
+        # peut demander qu'un sous-ensemble de ce qu'AURA Runtime autorise.
         allowed = configured.intersection(requested or configured)
         return await cognitive.operate(
             str(payload.get("task") or ""),
