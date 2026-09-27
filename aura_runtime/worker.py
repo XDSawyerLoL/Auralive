@@ -181,11 +181,20 @@ class AuraRuntimeWorker:
             or ai.get("gpu")
             or ""
         )
+        constellation = getattr(getattr(self.host, "ai", None), "constellation", None)
+        model_scorecard = []
+        if constellation is not None and callable(getattr(constellation, "model_scorecard", None)):
+            try:
+                model_scorecard = list(constellation.model_scorecard() or [])[:32]
+            except Exception:
+                model_scorecard = []
         return {
             "cpu_threads": int(os.cpu_count() or 1),
             "ram_bytes": self._physical_ram_bytes(),
             "gpu": accelerator,
             "models": self._available_models() or ([model] if model else []),
+            "model_scorecard": model_scorecard,
+            "zero_cost": True,
             "platform": platform.system(),
             "architecture": platform.machine(),
             "runtime_role": "aura-runtime",
