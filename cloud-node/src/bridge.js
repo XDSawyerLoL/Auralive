@@ -699,17 +699,22 @@ export class ExecutionBridge {
     return this.wait(job.id, settings.imageTimeoutMs);
   }
 
-  async evolve(objective) {
+  async evolve(objective, options = {}) {
     if (!await this.workerOnline()) throw new Error('Quantic Studio local hors ligne');
+    const repository = String(options.repository || '').trim().slice(0, 300);
+    const baseBranch = String(options.baseBranch || options.base_branch || 'main').trim().slice(0, 160) || 'main';
     const job = await this.enqueue(
       'evolution',
       {
         objective: String(objective || '').slice(0, 8000),
         trigger: 'aura-cloud',
+        repository,
+        base_branch: baseBranch,
+        fleet_mode: Boolean(repository),
       },
       ['ai', 'local-write', 'network', 'process'],
     );
-    return { ...job, delegated: true };
+    return { ...job, delegated: true, repository, base_branch: baseBranch };
   }
 
   async status() {
