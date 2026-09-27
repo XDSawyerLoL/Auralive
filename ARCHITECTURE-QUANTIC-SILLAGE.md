@@ -219,7 +219,16 @@ apprentissage
 
 ### Phase B — extraction AURA Runtime
 
-Extraire le worker actuellement sous `app/services/aura_cloud_worker.py` vers un package/service AURA Runtime autonome. Quantic Studio consomme ensuite ce Runtime au lieu de le posséder.
+**Implémentée dans le dépôt.**
+
+- l'implémentation worker vit dans `aura_runtime/worker.py`;
+- `app/services/aura_cloud_worker.py` n'est plus qu'un adaptateur Quantic Studio;
+- `python -m aura_runtime` lance le daemon standalone;
+- `AuraRuntime.exe` est construit indépendamment de Quantic Studio;
+- chaque worker annonce ses types de jobs supportés afin d'éviter qu'un runtime minimal capture une mission qu'il ne peut pas exécuter;
+- le package standalone n'importe aucun module `app.*`.
+
+Quantic Studio reste un hôte de compatibilité tant que ses capacités AI/voix/image/opérateur n'ont pas toutes été déplacées dans des plugins Runtime indépendants.
 
 ### Phase C — SDK produit
 
