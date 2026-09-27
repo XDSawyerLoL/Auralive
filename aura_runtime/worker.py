@@ -156,7 +156,12 @@ class AuraRuntimeWorker:
         if operator is not None and callable(getattr(operator, "operate", None)):
             kinds.add("operator")
         voice = getattr(self.host, "avatar_audio", None)
-        if voice is not None and callable(getattr(voice, "synthesize", None)):
+        voice_available = getattr(voice, "available", None)
+        if (
+            voice is not None
+            and callable(getattr(voice, "synthesize", None))
+            and voice_available is not False
+        ):
             kinds.add("tts")
         image = getattr(self.host, "image", None)
         if image is not None and callable(getattr(image, "generate", None)):
