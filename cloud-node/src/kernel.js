@@ -768,12 +768,16 @@ export class CognitiveKernel {
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
 
-    const [soul, intentions, lessons, reflections, work] = await Promise.all([
+    const [soul, intentions, lessons, reflections, work, recentMessages] = await Promise.all([
       this.soul({ privateView: true }),
       this.intentions(6),
       this.lessons(6),
       this.reflections(4),
       this.workItems(5),
+      query(
+        `SELECT author,role,content,created_at FROM aura_cloud_messages
+         ORDER BY id DESC LIMIT 8`,
+      ).catch(() => []),
     ]);
 
     let plan = this.cognition.planReply({
@@ -783,6 +787,7 @@ export class CognitiveKernel {
       lessons,
       reflections,
       work,
+      recentMessages: [...recentMessages].reverse(),
       privateView,
     });
 
