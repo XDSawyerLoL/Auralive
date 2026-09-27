@@ -1688,8 +1688,13 @@ export class CommandCenter {
           const status = String(file?.status || '');
           const safe = safeGithubChangePath(path);
           const changes = Number(file?.changes || 0);
+          const sensitivePath = /(^|\/)(auth|oauth|security|policy|permissions?|config|database|migrations?|billing|payments?|identity|vault)(\/|\.|$)/i.test(path);
+          const patch = String(file?.patch || '');
+          const sensitivePatch = /(process\.env|secrets?|credentials?|private[_-]?key|child_process|\bexec\s*\(|\bspawn\s*\(|subprocess|os\.system|\bDROP\s+TABLE\b|\bTRUNCATE\b)/i.test(patch);
           return Boolean(safe)
             && safe === path
+            && !sensitivePath
+            && !sensitivePatch
             && ['added', 'modified'].includes(status)
             && changes <= config.directorMergeMaxChanges;
         });
