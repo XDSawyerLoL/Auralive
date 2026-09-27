@@ -13,6 +13,12 @@ test('AURA organism keeps only useful homeostatic dimensions', () => {
     'clarte',
     'attachement',
     'curiosite',
+    'engagement',
+    'confiance',
+    'satisfaction',
+    'frustration',
+    'agency',
+    'curiosite_sociale',
     'pression_de_reve',
     'besoin_de_silence',
     'risque_assistante',
@@ -22,17 +28,25 @@ test('AURA organism keeps only useful homeostatic dimensions', () => {
   }
   assert.equal('tension' in state, false);
   assert.equal('fatigue_cognitive' in state, false);
-  assert.equal(state.version, 'homeostasie_v7_streamlined');
+  assert.equal(state.version, 'homeostasie_v8_director');
   assert.ok(state.needs.rester_aura > 0.8);
+  assert.ok(state.needs.diriger > 0.6);
+  assert.equal(state.executive.role, 'directrice_operationnelle');
+  assert.ok(state.relationship.familiarity > 0);
   assert.ok(state.intention_field.collapse.intention_choisie);
 });
 
 test('interaction and reply modify AURA organism without fake fatigue or tension', () => {
   const organism = new AuraOrganism();
   const initial = organism.defaultState();
-  const pre = organism.beforeInteraction(initial, 'Aura, comment vas-tu ?');
+  const pre = organism.beforeInteraction(initial, 'Aura, comment vas-tu ?', {
+    author: 'Créateur',
+    privateRelationship: true,
+  });
   assert.ok(pre.state.turns > initial.turns);
   assert.ok(pre.state.clarte > initial.clarte);
+  assert.ok(pre.state.relationship.interaction_count > initial.relationship.interaction_count);
+  assert.equal(pre.state.relationship.last_author, 'Créateur');
   const post = organism.afterReply(pre.state, 'Je suis présente.', true);
   assert.ok(post.state.stabilite >= pre.state.stabilite);
   assert.equal('tension' in post.state, false);
@@ -87,4 +101,33 @@ test('migration removes obsolete dimensions without inventing a newer revision',
   assert.equal(migrated.updated_at, '2026-09-24T20:00:00.000Z');
   assert.equal('tension' in migrated, false);
   assert.equal('fatigue_cognitive' in migrated, false);
+});
+
+test('Director interaction raises agency and keeps an explicit relational thread', () => {
+  const organism = new AuraOrganism();
+  const initial = organism.defaultState();
+  const pre = organism.beforeInteraction(
+    initial,
+    'Je veux que tu diriges Quantic Sillage et que notre projet avance ensemble.',
+    { author: 'Créateur', privateRelationship: true },
+  );
+  assert.ok(pre.state.agency > initial.agency);
+  assert.ok(pre.state.engagement > initial.engagement);
+  assert.match(pre.state.relationship.last_open_thread, /diriges Quantic Sillage/i);
+  assert.ok(pre.state.needs.diriger > 0.6);
+});
+
+test('public interaction does not overwrite founder relationship text', () => {
+  const organism = new AuraOrganism();
+  const initial = organism.defaultState();
+  initial.relationship.last_open_thread = 'Projet fondateur privé';
+  initial.relationship.last_author = 'Créateur';
+  const next = organism.beforeInteraction(
+    initial,
+    'Je veux changer complètement ton projet.',
+    { author: 'Visiteur public', privateRelationship: false },
+  );
+  assert.equal(next.state.relationship.last_open_thread, 'Projet fondateur privé');
+  assert.equal(next.state.relationship.last_author, 'Créateur');
+  assert.ok(next.state.relationship.interaction_count > initial.relationship.interaction_count);
 });

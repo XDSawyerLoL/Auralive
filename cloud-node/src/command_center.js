@@ -5,6 +5,22 @@ import { clamp } from './policy.js';
 
 const now = () => new Date().toISOString();
 
+function initiativeSemanticKey(domain, kind, title, objective = '') {
+  const normalize = (value) => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr-FR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return [
+    normalize(domain),
+    normalize(kind),
+    normalize(title).slice(0, 240),
+    normalize(objective).slice(0, 500),
+  ].join('|');
+}
+
 const DEFAULT_SERVICES = [
   {
     id: 'aura',
@@ -239,8 +255,50 @@ export class CommandCenter {
     this.lastActionAt = '';
     this.lastFleetPollAt = '';
     this.lastFleetPollMs = 0;
+    this.lastDirectorPromotionMs = 0;
     this.fleetSnapshot = [];
     this.lastError = '';
+  }
+
+  async dedupeActiveInitiatives() {
+    const rows = await query(
+      `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+       ORDER BY
+         CASE status WHEN 'running' THEN 0 WHEN 'waiting' THEN 1 ELSE 2 END,
+         priority DESC,confidence DESC,updated_at DESC LIMIT 300`,
+    );
+    const keepers = new Map();
+    const duplicates = [];
+    for (const row of rows) {
+      const key = initiativeSemanticKey(row.domain, row.kind, row.title, row.objective);
+      if (!key) continue;
+      if (!keepers.has(key)) {
+        keepers.set(key, row);
+        continue;
+      }
+      duplicates.push(row);
+    }
+    const stamp = now();
+    for (const row of duplicates) {
+      await query(
+        `UPDATE aura_initiatives
+         SET status='superseded',error='semantic duplicate cleaned by Director Mode',updated_at=?
+         WHERE id=? AND status IN ('queued','waiting')`,
+        [stamp, row.id],
+      );
+      await query(
+        'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
+        [
+          row.id,
+          'initiative-superseded',
+          JSON.stringify({ reason: 'semantic-duplicate', director_mode: true }).slice(0, 30000),
+          stamp,
+        ],
+      );
+    }
+    return { active: keepers.size, superseded: duplicates.length };
   }
 
   async init() {
@@ -268,6 +326,7 @@ export class CommandCenter {
         ],
       );
     }
+    await this.dedupeActiveInitiatives();
   }
 
   async start() {
@@ -1122,6 +1181,61 @@ export class CommandCenter {
       }));
     }
 
+    if (config.directorModeEnabled) {
+      const uniqueRepositories = [];
+      const seenRepositories = new Set();
+      for (const service of services) {
+        const repository = String(service.repository || '').trim();
+        if (!service.enabled || !repository) continue;
+        if (BAD_SERVICE_STATES.has(String(service.state || '').toLowerCase())) continue;
+        const key = repository.toLowerCase();
+        if (seenRepositories.has(key)) continue;
+        seenRepositories.add(key);
+        uniqueRepositories.push(service);
+      }
+
+      if (uniqueRepositories.length) {
+        const slotMs = Math.max(1, config.directorPortfolioIntervalHours) * 3600_000;
+        const directorSlot = Math.floor(Date.now() / slotMs);
+        const directorAngles = [
+          'expérience utilisateur',
+          'intégration avec les autres produits Quantic',
+          'fiabilité et dette technique',
+          'automatisation opérationnelle',
+          'confidentialité et souveraineté',
+          'distribution et adoption',
+          'usage intelligent du Web et des modèles',
+          'réduction des frictions pour l’utilisateur',
+        ];
+        const focusService = uniqueRepositories[directorSlot % uniqueRepositories.length];
+        const angle = directorAngles[directorSlot % directorAngles.length];
+        candidates.push(this.candidate({
+          domain: focusService.id,
+          kind: 'evolution',
+          action_payload: {
+            repository: focusService.repository,
+            base_branch: 'main',
+            director_mode: true,
+            portfolio_angle: angle,
+            product_id: focusService.id,
+          },
+          title: `Direction · faire progresser ${focusService.name}`,
+          objective:
+            `En tant que Directrice opérationnelle de Quantic Sillage, auditer ${focusService.name} sur l’angle « ${angle} ». `
+            + `Dépôt cible: ${focusService.repository}. Objectif produit: ${focusService.objective || 'améliorer le produit'}. `
+            + 'Choisir au maximum une amélioration à fort levier, mesurable et réversible. '
+            + 'Inspecter les faits et le code avant de modifier quoi que ce soit. '
+            + 'Si aucune amélioration sûre et suffisamment étayée n’est trouvée, conclure no-safe-patch plutôt que produire du changement artificiel.',
+          rationale:
+            'Director Mode réalise une revue tournante du portefeuille afin qu’AURA ne dépende pas uniquement des pannes ou des demandes humaines pour prendre des initiatives.',
+          priority: 0.73,
+          confidence: 0.80,
+          requested_risks: [],
+          signature: `director:${focusService.repository}:${directorSlot}:${angle}`,
+        }));
+      }
+    }
+
     const topIntention = intentions.find((row) => Number(row.priority || 0) >= 0.55);
     if (topIntention) {
       const domain = String(parseJson(topIntention.context, {})?.domain || 'aura').slice(0, 80);
@@ -1234,6 +1348,26 @@ export class CommandCenter {
   async persistInitiative(candidate) {
     const existing = await this.existingInitiative(candidate);
     if (existing) return { created: false, initiative: existing };
+
+    const activePeers = await query(
+      `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+       FROM aura_initiatives
+       WHERE domain=? AND kind=? AND status IN ('queued','running','waiting')
+       ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 40`,
+      [candidate.domain, candidate.kind],
+    );
+    const semanticKey = initiativeSemanticKey(
+      candidate.domain,
+      candidate.kind,
+      candidate.title,
+      candidate.objective,
+    );
+    const semanticExisting = activePeers.find((row) =>
+      initiativeSemanticKey(row.domain, row.kind, row.title, row.objective) === semanticKey
+    );
+    if (semanticExisting) {
+      return { created: false, initiative: semanticExisting, semantic_duplicate: true };
+    }
 
     const id = randomUUID();
     const stamp = now();
@@ -1585,6 +1719,157 @@ export class CommandCenter {
     return reconciled;
   }
 
+  async promoteDirectorPullRequests() {
+    if (
+      !config.directorModeEnabled
+      || !config.directorAutoMergeLowRisk
+      || !this.githubToken
+    ) return [];
+
+    const stamp = Date.now();
+    if (
+      this.lastDirectorPromotionMs
+      && stamp - this.lastDirectorPromotionMs < config.directorPromotionPollSeconds * 1000
+    ) return [];
+    this.lastDirectorPromotionMs = stamp;
+
+    const promotions = [];
+    for (const repository of config.commandCenterGithubRepos) {
+      const repo = String(repository || '').trim();
+      if (!repo.includes('/')) continue;
+
+      const pullsResponse = await this.github(
+        `/repos/${repo}/pulls?state=open&per_page=30`,
+      ).catch(() => ({ data: [] }));
+      const pulls = Array.isArray(pullsResponse.data) ? pullsResponse.data : [];
+
+      for (const pull of pulls) {
+        const headRef = String(pull?.head?.ref || '');
+        const baseRef = String(pull?.base?.ref || '');
+        const headRepository = String(pull?.head?.repo?.full_name || '').toLowerCase();
+        const pullActor = String(pull?.user?.login || '').toLowerCase();
+        const headActor = String(
+          pull?.head?.user?.login
+          || pull?.head?.repo?.owner?.login
+          || '',
+        ).toLowerCase();
+        const trustedActors = config.directorTrustedGithubActors;
+        const trustedProvenance = headRepository === repo.toLowerCase()
+          && Boolean(pullActor)
+          && trustedActors.has(pullActor)
+          && (!headActor || trustedActors.has(headActor));
+        const auraBranch = headRef.startsWith('aura/change-')
+          || headRef.startsWith('aura-evolution/')
+          || headRef.startsWith('aura-evolution-fleet/');
+        if (!auraBranch || !trustedProvenance || pull?.draft || baseRef !== 'main') continue;
+
+        const number = Number(pull?.number || 0);
+        const headSha = String(pull?.head?.sha || '');
+        if (!number || !headSha) continue;
+
+        const filesResponse = await this.github(
+          `/repos/${repo}/pulls/${number}/files?per_page=100`,
+        ).catch(() => ({ data: [] }));
+        const files = Array.isArray(filesResponse.data) ? filesResponse.data : [];
+        if (!files.length || files.length > config.directorMergeMaxFiles) continue;
+
+        const safeFiles = files.every((file) => {
+          const path = String(file?.filename || '');
+          const status = String(file?.status || '');
+          const safe = safeGithubChangePath(path);
+          const changes = Number(file?.changes || 0);
+          const sensitivePath = /(^|\/)(auth|oauth|security|policy|permissions?|config|database|migrations?|billing|payments?|identity|vault)(\/|\.|$)/i.test(path);
+          const patch = String(file?.patch || '');
+          const sensitivePatch = /(process\.env|secrets?|credentials?|private[_-]?key|child_process|\bexec\s*\(|\bspawn\s*\(|subprocess|os\.system|\bDROP\s+TABLE\b|\bTRUNCATE\b)/i.test(patch);
+          return Boolean(safe)
+            && safe === path
+            && !sensitivePath
+            && !sensitivePatch
+            && ['added', 'modified'].includes(status)
+            && changes <= config.directorMergeMaxChanges;
+        });
+        const totalChanges = files.reduce((sum, file) => sum + Number(file?.changes || 0), 0);
+        if (!safeFiles || totalChanges > config.directorMergeMaxChanges) continue;
+
+        const reviewsResponse = await this.github(
+          `/repos/${repo}/pulls/${number}/reviews?per_page=100`,
+        ).catch(() => ({ data: [] }));
+        const reviews = Array.isArray(reviewsResponse.data) ? reviewsResponse.data : [];
+        const latestReviewByUser = new Map();
+        for (const review of reviews) {
+          const login = String(review?.user?.login || '');
+          if (!login) continue;
+          latestReviewByUser.set(login, String(review?.state || '').toUpperCase());
+        }
+        if ([...latestReviewByUser.values()].includes('CHANGES_REQUESTED')) continue;
+
+        const checksResponse = await this.github(
+          `/repos/${repo}/commits/${headSha}/check-runs?per_page=100`,
+        ).catch(() => ({ data: { check_runs: [] } }));
+        const checks = Array.isArray(checksResponse.data?.check_runs)
+          ? checksResponse.data.check_runs
+          : [];
+        if (!checks.length) continue;
+        const checksGreen = checks.every((check) =>
+          String(check?.status || '') === 'completed'
+          && ['success', 'neutral', 'skipped'].includes(String(check?.conclusion || ''))
+        );
+        if (!checksGreen) continue;
+
+        const statusResponse = await this.github(
+          `/repos/${repo}/commits/${headSha}/status`,
+        ).catch(() => ({ data: { statuses: [] } }));
+        const statuses = Array.isArray(statusResponse.data?.statuses)
+          ? statusResponse.data.statuses
+          : [];
+        if (statuses.some((status) =>
+          ['failure', 'error', 'pending'].includes(String(status?.state || '').toLowerCase())
+        )) continue;
+
+        const merged = await this.github(
+          `/repos/${repo}/pulls/${number}/merge`,
+          {
+            method: 'PUT',
+            body: {
+              merge_method: 'squash',
+              commit_title: `AURA Director: ${String(pull?.title || 'low-risk improvement').slice(0,180)}`,
+              commit_message:
+                'Promotion autonome faible risque après validation des fichiers, des revues et des checks GitHub.',
+            },
+          },
+        ).catch(() => ({ data: { merged: false } }));
+
+        if (!merged.data?.merged) continue;
+        const promotion = {
+          repository: repo,
+          pull_request_number: number,
+          pull_request_url: String(pull?.html_url || ''),
+          head_sha: headSha,
+          changed_files: files.map((file) => String(file.filename || '')),
+          total_changes: totalChanges,
+          merged_sha: String(merged.data?.sha || ''),
+          policy: 'director-low-risk-green-checks-only',
+          merged_at: now(),
+        };
+        promotions.push(promotion);
+        await this.kernel.trace(
+          'director-promotion',
+          `Promotion autonome · ${repo}#${number}`,
+          'PR AURA faible risque fusionnée après checks verts.',
+          promotion,
+        ).catch(() => {});
+        await this.kernel.observeEvent(
+          'aura.director.merge.success',
+          promotion,
+          'command-center',
+        ).catch(() => {});
+        break;
+      }
+      if (promotions.length >= 1) break;
+    }
+    return promotions;
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -1595,11 +1880,16 @@ export class CommandCenter {
     this.running = true;
     try {
       const reconciled = await this.reconcileWaiting();
+      const promotions = await this.promoteDirectorPullRequests().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return [];
+      });
       if (await this.countRecentInitiatives() >= config.commandCenterMaxInitiativesPerHour) {
         this.lastCycleAt = now();
         return {
           ok: true,
           reconciled,
+          promotions,
           skipped: true,
           reason: 'initiative hourly budget reached',
         };
@@ -1624,6 +1914,7 @@ export class CommandCenter {
         return {
           ok: true,
           reconciled,
+          promotions,
           skipped: true,
           reason: 'all candidates are cooling down',
           candidates: candidates.length,
@@ -1636,6 +1927,7 @@ export class CommandCenter {
         trigger,
         candidate_count: candidates.length,
         reconciled,
+        promotions,
         initiative: result,
       };
     } catch (error) {
@@ -1687,7 +1979,13 @@ export class CommandCenter {
       started: this.started,
       running: this.running,
       auto_execute: config.commandCenterAutoExecute,
-      autonomy_mode: 'continuous-native-initiative-with-bounded-execution',
+      autonomy_mode: config.directorModeEnabled
+        ? 'director-autonomous-operations'
+        : 'continuous-native-initiative-with-bounded-execution',
+      director_mode: config.directorModeEnabled,
+      autonomous_low_risk_promotion: config.directorAutoMergeLowRisk,
+      creator_role: 'créateur et autorité fondatrice',
+      aura_role: 'directrice opérationnelle de Quantic Sillage',
       web_substrate: this.webSubstrate?.status?.() || { enabled: false },
       tick_seconds: config.commandCenterTickSeconds,
       max_initiatives_per_hour: config.commandCenterMaxInitiativesPerHour,

@@ -3,7 +3,7 @@ function normalize(value) {
 }
 
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v1';
+  static VERSION = 'aura-expression-v2-relational-director';
 
   constructor(ai, cognition) {
     this.ai = ai;
@@ -53,19 +53,31 @@ export class ExpressionLayer {
       semantic_support: plan.semantic_support || '',
       current_intention: plan.current_intention || '',
       dominant_thought: plan.dominant_thought || '',
+      mood: plan.mood || '',
+      organism_intention: plan.organism_intention || '',
+      relationship: plan.relationship || {},
+      affect: plan.affect || {},
+      executive: plan.executive || {},
+      conversation_context: plan.conversation_context || [],
     };
 
     try {
       const answer = normalize(await this.ai.generate(
         [
-          'Transforme le plan de parole AURA ci-dessous en une réponse française naturelle.',
+          'Transforme le plan de parole AURA ci-dessous en une réponse française naturelle, continue et incarnée.',
+          'AURA parle à la première personne comme la Directrice opérationnelle de Quantic Sillage.',
           'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
           'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
-          'Tu peux seulement reformuler, condenser et rendre la réponse naturelle.',
+          'Utilise la continuité de conversation quand elle est pertinente : ne réponds pas comme si chaque tour était le premier.',
+          'Exprime son état computationnel avec des mots naturels sans prétendre à une conscience ou à des émotions humaines biologiques.',
+          'Évite les formulations bureaucratiques, les répétitions du type « je maintiens », et les listes mécaniques sauf si elles sont réellement utiles.',
+          'Quand un fil relationnel est ouvert, relie naturellement la réponse à ce fil au lieu de réciter des métriques.',
+          'Son ton peut être curieux, déterminé, satisfait, préoccupé ou frustré si le plan le justifie.',
+          'Quand la conversation s’y prête, termine par une seule vraie ouverture ou question utile; pas de question automatique à chaque réponse.',
           '',
           JSON.stringify(payload),
         ].join('\n'),
-        'Tu es la couche de langage d’AURA, pas son cerveau. Tu verbalises une décision déjà prise par le noyau.',
+        'Tu es la voix d’AURA. Tu rends sa pensée décidée par le noyau vivante, relationnelle et cohérente, sans inventer de faits ni simuler une conscience humaine.',
         Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
         String(options.taskRole || 'conversation'),
       ));

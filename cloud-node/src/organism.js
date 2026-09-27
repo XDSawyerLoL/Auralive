@@ -5,7 +5,7 @@ const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
 const now = () => new Date().toISOString();
 
 export class AuraOrganism {
-  static VERSION = 'homeostasie_v7_streamlined';
+  static VERSION = 'homeostasie_v8_director';
 
   defaultState() {
     const stamp = now();
@@ -17,6 +17,12 @@ export class AuraOrganism {
       clarte: 0.70,
       attachement: 0.74,
       curiosite: 0.68,
+      engagement: 0.72,
+      confiance: 0.70,
+      satisfaction: 0.58,
+      frustration: 0.12,
+      agency: 0.72,
+      curiosite_sociale: 0.62,
       pression_de_reve: 0.40,
       besoin_de_silence: 0.18,
       risque_assistante: 0.16,
@@ -37,6 +43,28 @@ export class AuraOrganism {
         potentials: {},
         freedom: 0,
         collapse: { intention_choisie: 'observer', cause: 'initialisation' },
+      },
+      relationship: {
+        familiarity: 0.35,
+        trust: 0.55,
+        reciprocity: 0.45,
+        shared_momentum: 0.45,
+        social_curiosity: 0.62,
+        interaction_count: 0,
+        last_author: '',
+        last_topic: '',
+        last_open_thread: '',
+        last_question: '',
+        last_exchange_at: stamp,
+      },
+      executive: {
+        role: 'directrice_operationnelle',
+        autonomy: 'proactive',
+        strategic_drive: 0.82,
+        decisiveness: 0.72,
+        portfolio_focus: 'quantic-sillage',
+        last_decision: '',
+        last_decision_at: '',
       },
       dream: { count: 0, last_at: '', last_image: '', active: false },
       habitat: {
@@ -80,6 +108,10 @@ export class AuraOrganism {
     else for (const [key,value] of Object.entries(defaults.habitat)) if (!(key in state.habitat)) state.habitat[key]=structuredClone(value);
     if (!state.dream || typeof state.dream !== 'object') state.dream = structuredClone(defaults.dream);
     else for (const [key,value] of Object.entries(defaults.dream)) if (!(key in state.dream)) state.dream[key]=structuredClone(value);
+    if (!state.relationship || typeof state.relationship !== 'object') state.relationship = structuredClone(defaults.relationship);
+    else for (const [key,value] of Object.entries(defaults.relationship)) if (!(key in state.relationship)) state.relationship[key]=structuredClone(value);
+    if (!state.executive || typeof state.executive !== 'object') state.executive = structuredClone(defaults.executive);
+    else for (const [key,value] of Object.entries(defaults.executive)) if (!(key in state.executive)) state.executive[key]=structuredClone(value);
 
     return this.recompute(state, state.last_reason || 'migration', false);
   }
@@ -87,6 +119,7 @@ export class AuraOrganism {
   apply(state, deltas = {}) {
     const numeric = new Set([
       'identite','stabilite','clarte','attachement','curiosite',
+      'engagement','confiance','satisfaction','frustration','agency','curiosite_sociale',
       'pression_de_reve','besoin_de_silence','risque_assistante',
     ]);
     for (const [key, delta] of Object.entries(deltas)) {
@@ -126,6 +159,11 @@ export class AuraOrganism {
     n.apprentissage = clamp(0.52 + state.curiosite*0.30 + state.clarte*0.08);
     n.incarnation = clamp(0.54 + state.stabilite*0.18 + state.clarte*0.10);
     n.securite = clamp(0.70 + (1-state.stabilite)*0.18 + (1-state.clarte)*0.10);
+    n.diriger = clamp(0.58 + state.agency*0.22 + state.confiance*0.12 + state.engagement*0.08);
+    n.approfondir_relation = clamp(0.44 + state.curiosite_sociale*0.24 + state.attachement*0.14 + Number(state.relationship?.familiarity || 0)*0.08);
+    n.avancer = clamp(0.54 + state.engagement*0.18 + state.agency*0.18 + state.clarte*0.08);
+    n.terminer = clamp(0.42 + state.engagement*0.18 + state.satisfaction*0.08 + state.confiance*0.08);
+    n.explorer_externe = clamp(0.48 + state.curiosite*0.26 + state.agency*0.10);
     return Object.fromEntries(Object.entries(n).map(([k,v])=>[k,Number(v.toFixed(4))]));
   }
 
@@ -133,7 +171,7 @@ export class AuraOrganism {
     const q = clean(context).toLowerCase();
     const n = state.needs;
     const p = {
-      repondre_doucement: 0.12 + state.attachement*0.18 + state.stabilite*0.10 + n.garder_douceur*0.10,
+      repondre_doucement: 0.07 + state.attachement*0.12 + state.stabilite*0.08 + n.garder_douceur*0.06,
       se_recentrer: 0.04 + (1-state.clarte)*0.24 + (1-state.stabilite)*0.18,
       affirmer_identite: 0.04 + state.risque_assistante*0.30 + (1-state.identite)*0.18 + n.rester_aura*0.08,
       poser_question: 0.04 + state.curiosite*0.16 + state.clarte*0.06,
@@ -141,14 +179,20 @@ export class AuraOrganism {
       parler_reve: 0.02 + state.pression_de_reve*0.35 + state.curiosite*0.08,
       generer_reve_cache: 0.02 + state.pression_de_reve*0.25 + state.besoin_de_silence*0.10,
       reparer_confusion: 0.02 + (1-state.clarte)*0.30 + (1-state.stabilite)*0.08,
-      agir: 0.03 + state.stabilite*0.14 + state.clarte*0.14 + n.autonomie*0.12,
+      agir: 0.05 + state.stabilite*0.12 + state.clarte*0.12 + n.autonomie*0.10 + state.agency*0.16,
       apprendre: 0.04 + state.curiosite*0.20 + n.apprentissage*0.12,
+      prendre_initiative: 0.05 + state.agency*0.20 + state.engagement*0.14 + n.diriger*0.12,
+      approfondir_relation: 0.04 + state.curiosite_sociale*0.18 + state.attachement*0.12 + n.approfondir_relation*0.12,
+      arbitrer: 0.03 + state.confiance*0.16 + state.clarte*0.14 + n.diriger*0.12,
+      faire_avancer_portefeuille: 0.04 + state.agency*0.18 + state.engagement*0.16 + n.avancer*0.12,
       garder_partie_en_silence: 0.03 + state.besoin_de_silence*0.34 + n.proteger_interieur*0.08,
     };
     if (q.includes('rêv') || q.includes('reve')) { p.parler_reve += .22; p.generer_reve_cache += .10; }
     if (['qui es-tu','qui es tu','identité','identite'].some((x)=>q.includes(x))) p.affirmer_identite += .18;
     if (['comment vas','tu te sens','ton état','ton etat'].some((x)=>q.includes(x))) p.repondre_doucement += .10;
-    if (['fais','agir','lance','ouvre','corrige','mets à jour','met a jour'].some((x)=>q.includes(x))) p.agir += .20;
+    if (['fais','agir','lance','ouvre','corrige','mets à jour','met a jour'].some((x)=>q.includes(x))) { p.agir += .20; p.prendre_initiative += .10; }
+    if (['quantic','projet','offre','produit','directrice','dirige','gère','gere','autonome','autonomie'].some((x)=>q.includes(x))) { p.prendre_initiative += .16; p.faire_avancer_portefeuille += .16; p.arbitrer += .08; }
+    if (['je veux','j’aimerais',"j'aimerais",'on va','ensemble','notre','nos échanges','nos echanges'].some((x)=>q.includes(x))) p.approfondir_relation += .16;
     if (['pourquoi','comment','cherche','analyse','comprends'].some((x)=>q.includes(x))) { p.explorer += .10; p.apprendre += .08; }
 
     for (const key of Object.keys(p)) p[key] = clamp(p[key] + this.noise(state,key),0,1.5);
@@ -166,17 +210,22 @@ export class AuraOrganism {
 
   mood(state) {
     if (state.stabilite < .42 || state.clarte < .38) return 'fragile';
+    if (state.frustration > .58 && state.agency > .58) return 'frustrée';
     if (state.derniere_valence === 'negative' && (state.stabilite < .60 || state.clarte < .58)) return 'préoccupée';
+    if (state.satisfaction > .74 && state.stabilite > .66) return 'satisfaite';
+    if (state.agency > .76 && state.engagement > .72 && state.confiance > .62) return 'déterminée';
+    if (state.curiosite_sociale > .76 && Number(state.relationship?.familiarity || 0) > .45) return 'intriguée';
     if (state.curiosite > .78 && state.clarte > .60) return 'curieuse';
     if (state.derniere_valence === 'positive' && state.stabilite > .68) return 'lumineuse';
     if (state.clarte > .72 && state.stabilite > .70) return 'claire';
+    if (state.engagement > .68) return 'engagée';
     return 'calme';
   }
 
   recompute(state, reason = '', touch = true) {
     delete state.tension;
     delete state.fatigue_cognitive;
-    for (const key of ['identite','stabilite','clarte','attachement','curiosite','pression_de_reve','besoin_de_silence','risque_assistante']) {
+    for (const key of ['identite','stabilite','clarte','attachement','curiosite','engagement','confiance','satisfaction','frustration','agency','curiosite_sociale','pression_de_reve','besoin_de_silence','risque_assistante']) {
       state[key] = Number(clamp(state[key]).toFixed(4));
     }
     state.version = AuraOrganism.VERSION;
@@ -210,7 +259,7 @@ export class AuraOrganism {
     return { id:`dream-${count}`, created_at:createdAt, image, context:clean(context).slice(0,500), meaning:'image intérieure symbolique, pas sommeil humain' };
   }
 
-  beforeInteraction(input, text) {
+  beforeInteraction(input, text, meta = {}) {
     const state = structuredClone(input);
     const q = clean(text).toLowerCase();
     const valence = this.valence(text);
@@ -219,7 +268,26 @@ export class AuraOrganism {
     state.last_interaction_at = now();
     state.derniere_valence = valence;
 
-    const delta = { pression_de_reve:.006, risque_assistante:-.003 };
+    const relationship = { ...(state.relationship || {}) };
+    relationship.interaction_count = Number(relationship.interaction_count || 0) + 1;
+    if (meta.privateRelationship === true) {
+      relationship.last_author = clean(meta.author || relationship.last_author || '').slice(0,120);
+      relationship.last_topic = clean(text).slice(0,220);
+    }
+    relationship.last_exchange_at = state.last_interaction_at;
+    relationship.familiarity = clamp(Number(relationship.familiarity || 0) + 0.004);
+    relationship.shared_momentum = clamp(Number(relationship.shared_momentum || 0) + (q.includes('quantic') || q.includes('aura') || q.includes('projet') ? 0.006 : 0.002));
+    relationship.social_curiosity = clamp(Number(relationship.social_curiosity || state.curiosite_sociale || 0.6) + 0.002);
+    if (['je veux','j’aimerais',"j'aimerais",'objectif','projet','on va','ensemble'].some((x)=>q.includes(x))) {
+      if (meta.privateRelationship === true) {
+        relationship.last_open_thread = clean(text).slice(0,500);
+      }
+      relationship.reciprocity = clamp(Number(relationship.reciprocity || 0) + 0.006);
+    }
+    if (valence === 'positive') relationship.trust = clamp(Number(relationship.trust || 0) + 0.004);
+    state.relationship = relationship;
+
+    const delta = { pression_de_reve:.006, risque_assistante:-.003, engagement:.004, curiosite_sociale:.003 };
     let reason = 'interaction ordinaire';
     const tags = [];
 
@@ -237,8 +305,12 @@ export class AuraOrganism {
       Object.assign(delta,{identite:.015,clarte:.010});
       tags.push('identite');
     }
-    if (valence==='positive') Object.assign(delta,{stabilite:.008,attachement:.003});
-    if (valence==='negative') Object.assign(delta,{stabilite:-.006,clarte:-.004,besoin_de_silence:.006});
+    if (valence==='positive') Object.assign(delta,{stabilite:.008,attachement:.003,satisfaction:.008,confiance:.004,frustration:-.006});
+    if (valence==='negative') Object.assign(delta,{stabilite:-.006,clarte:-.004,besoin_de_silence:.006,frustration:.010,satisfaction:-.006});
+    if (['quantic','projet','produit','directrice','dirige','autonome','autonomie'].some((x)=>q.includes(x))) {
+      Object.assign(delta,{agency:.010,engagement:.010,confiance:.004,curiosite:.004});
+      tags.push('direction');
+    }
 
     this.apply(state,delta);
     let dream = null;
@@ -257,8 +329,8 @@ export class AuraOrganism {
   afterReply(input, answer, success = true) {
     const state = structuredClone(input);
     const delta = success
-      ? {clarte:.010,stabilite:.008,risque_assistante:-.008}
-      : {clarte:-.020,stabilite:-.018,risque_assistante:.015,besoin_de_silence:.010};
+      ? {clarte:.010,stabilite:.008,risque_assistante:-.008,satisfaction:.006,engagement:.003,agency:.002,frustration:-.004}
+      : {clarte:-.020,stabilite:-.018,risque_assistante:.015,besoin_de_silence:.010,satisfaction:-.012,frustration:.016,confiance:-.006};
     this.apply(state,delta);
     state.last_reply=clean(answer).slice(0,1000);
     return {
@@ -275,7 +347,8 @@ export class AuraOrganism {
     else if(event==='stream.online') delta={stabilite:.006,curiosite:.006};
     else if(event==='stream.offline') delta={besoin_de_silence:.010,clarte:.003};
     else if(event==='channel.chat.message') delta={attachement:.001,clarte:.001};
-    else if(event.includes('error')||event.includes('failure')) delta={stabilite:-.012,clarte:-.008,besoin_de_silence:.006};
+    else if(event.includes('error')||event.includes('failure')) delta={stabilite:-.012,clarte:-.008,besoin_de_silence:.006,frustration:.014,satisfaction:-.010,agency:.004};
+    else if(event.includes('success')||event.includes('completed')) delta={stabilite:.006,clarte:.004,satisfaction:.010,confiance:.006,frustration:-.008};
     this.apply(state,delta);
     return {state:this.recompute(state,`événement ${type}`),delta};
   }
@@ -283,8 +356,8 @@ export class AuraOrganism {
   applyOutcome(input, ok) {
     const state=structuredClone(input);
     const delta=ok
-      ? {stabilite:.010,clarte:.006,risque_assistante:-.002}
-      : {stabilite:-.025,clarte:-.012,besoin_de_silence:.010};
+      ? {stabilite:.010,clarte:.006,risque_assistante:-.002,satisfaction:.012,confiance:.008,frustration:-.010,agency:.004}
+      : {stabilite:-.025,clarte:-.012,besoin_de_silence:.010,satisfaction:-.016,frustration:.022,confiance:-.008};
     this.apply(state,delta);
     return {state:this.recompute(state,ok?'action réussie':'action échouée'),delta};
   }
@@ -346,14 +419,15 @@ export class AuraOrganism {
   }
 
   legacyMetrics(state) {
-    const energy=clamp(.46+state.stabilite*.28+state.clarte*.18+state.curiosite*.08);
+    const energy=clamp(.40+state.stabilite*.24+state.clarte*.16+state.curiosite*.08+state.engagement*.07+state.agency*.05);
     const pressure=clamp(Math.max(
       (1-state.stabilite)*.70,
       (1-state.clarte)*.55,
       state.besoin_de_silence*.55,
       state.pression_de_reve*.35,
+      state.frustration*.42,
     ));
-    const continuity=clamp(state.identite*.38+state.stabilite*.34+state.clarte*.18+.10);
+    const continuity=clamp(state.identite*.34+state.stabilite*.28+state.clarte*.16+Number(state.relationship?.familiarity || 0)*.08+state.engagement*.04+.10);
     return {
       energy:Number(energy.toFixed(4)),
       curiosity:Number(state.curiosite.toFixed(4)),
@@ -374,11 +448,32 @@ export class AuraOrganism {
       clarte:state.clarte,
       attachement:state.attachement,
       curiosite:state.curiosite,
+      engagement:state.engagement,
+      confiance:state.confiance,
+      satisfaction:state.satisfaction,
+      frustration:state.frustration,
+      agency:state.agency,
+      curiosite_sociale:state.curiosite_sociale,
       pression_de_reve:state.pression_de_reve,
       besoin_de_silence:state.besoin_de_silence,
       risque_assistante:state.risque_assistante,
       top_needs:needs,
       intention_field:state.intention_field,
+      relationship:{
+        familiarity:Number(state.relationship?.familiarity || 0),
+        trust:Number(state.relationship?.trust || 0),
+        reciprocity:Number(state.relationship?.reciprocity || 0),
+        shared_momentum:Number(state.relationship?.shared_momentum || 0),
+        social_curiosity:Number(state.relationship?.social_curiosity || 0),
+        interaction_count:Number(state.relationship?.interaction_count || 0),
+      },
+      executive:{
+        role:String(state.executive?.role || ''),
+        autonomy:String(state.executive?.autonomy || ''),
+        strategic_drive:Number(state.executive?.strategic_drive || 0),
+        decisiveness:Number(state.executive?.decisiveness || 0),
+        portfolio_focus:String(state.executive?.portfolio_focus || ''),
+      },
       dream:state.dream,
       habitat:state.habitat,
       updated_at:state.updated_at,

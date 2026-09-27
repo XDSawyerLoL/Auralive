@@ -41,7 +41,7 @@ test('command center creates deterministic native initiative fingerprints', () =
     objective: 'Tester la politique.',
     requested_risks: ['safe', 'network', 'process'],
   });
-  assert.deepEqual(bounded.requested_risks, ['safe']);
+  assert.deepEqual(bounded.requested_risks, ['safe', 'network', 'process']);
 });
 
 test('autonomous initiatives are native decisions with outcome learning', () => {
@@ -55,14 +55,12 @@ test('autonomous initiatives are native decisions with outcome learning', () => 
   assert.match(commandSource, /confidence >= config\.commandCenterMinConfidence/);
 });
 
-test('command center starts automatically but inside an explicit risk envelope', () => {
+test('command center starts in proactive Director mode with a non-destructive operational envelope', () => {
   assert.match(configSource, /AURA_COMMAND_CENTER_ENABLED/);
   assert.match(configSource, /AURA_COMMAND_CENTER_AUTO_EXECUTE/);
-  assert.match(configSource, /safe,ai,local-control,local-write/);
-  assert.doesNotMatch(
-    configSource,
-    /AURA_COMMAND_CENTER_ALLOWED_RISKS'[\s\S]{0,160}safe,ai,network,local-write,process/,
-  );
+  assert.match(configSource, /AURA_DIRECTOR_MODE_ENABLED/);
+  assert.match(configSource, /safe,ai,network,process,local-control,local-write/);
+  assert.doesNotMatch(configSource, /AURA_COMMAND_CENTER_ALLOWED_RISKS'[\s\S]{0,180}secret/);
 });
 
 test('Quantic Sillage product registry and private control API are wired', () => {
@@ -181,4 +179,133 @@ test('reconciliation records rejected or no-safe-patch Fleet worker results as f
   assert.match(commandSource, /payloadStatus === 'no-safe-patch'/);
   assert.match(commandSource, /const finalStatus = evolutionRejected \? 'failed' : 'completed'/);
   assert.match(commandSource, /ok: !evolutionRejected/);
+});
+
+test('Director mode creates rotating portfolio Evolution initiatives', () => {
+  assert.match(commandSource, /config\.directorModeEnabled/);
+  assert.match(commandSource, /Direction · faire progresser/);
+  assert.match(commandSource, /director_mode: true/);
+  assert.match(commandSource, /Director Mode réalise une revue tournante du portefeuille/);
+  assert.match(commandSource, /director-autonomous-operations/);
+});
+
+test('Director low-risk promotion merges only green safe AURA pull requests', async () => {
+  const events = [];
+  const center = new CommandCenter(
+    {
+      async trace(...args) { events.push(['trace', ...args]); },
+      async observeEvent(...args) { events.push(['event', ...args]); },
+    },
+    {},
+    {},
+  );
+  Object.defineProperty(center, 'githubToken', { value: 'test-token', configurable: true });
+  const calls = [];
+  center.github = async (path, options = {}) => {
+    calls.push({ path, options });
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls?state=open&per_page=30') {
+      return {
+        data: [{
+          number: 42,
+          title: 'AURA safe improvement',
+          html_url: 'https://github.com/XDSawyerLoL/Auralive/pull/42',
+          draft: false,
+          user: { login: 'XDSawyerLoL' },
+          head: {
+            ref: 'aura/change-safe-test',
+            sha: 'abc123',
+            user: { login: 'XDSawyerLoL' },
+            repo: {
+              full_name: 'XDSawyerLoL/Auralive',
+              owner: { login: 'XDSawyerLoL' },
+            },
+          },
+          base: { ref: 'main' },
+        }],
+      };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/files?per_page=100') {
+      return {
+        data: [{
+          filename: 'src/ui.js',
+          status: 'modified',
+          changes: 12,
+          patch: '@@ -1 +1 @@\n-old\n+new',
+        }],
+      };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/reviews?per_page=100') {
+      return { data: [] };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/check-runs?per_page=100') {
+      return { data: { check_runs: [{ status: 'completed', conclusion: 'success' }] } };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/status') {
+      return { data: { statuses: [] } };
+    }
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/merge' && options.method === 'PUT') {
+      return { data: { merged: true, sha: 'merged123' } };
+    }
+    if (path.includes('/pulls?state=open&per_page=30')) return { data: [] };
+    throw new Error('unexpected mock path: ' + path);
+  };
+
+  const promoted = await center.promoteDirectorPullRequests();
+  assert.equal(promoted.length, 1);
+  assert.equal(promoted[0].pull_request_number, 42);
+  assert.equal(promoted[0].policy, 'director-low-risk-green-checks-only');
+  assert.ok(calls.some((item) => item.path.endsWith('/pulls/42/merge')));
+  assert.ok(events.some((item) => item[0] === 'trace'));
+});
+
+test('Director auto-merge excludes sensitive semantic paths and dangerous patch primitives', () => {
+  assert.match(commandSource, /sensitivePath/);
+  assert.match(commandSource, /auth\|oauth\|security\|policy/);
+  assert.match(commandSource, /sensitivePatch/);
+  assert.match(commandSource, /child_process/);
+  assert.match(commandSource, /DROP\\s\+TABLE/);
+});
+
+test('Director auto-merge rejects fork provenance even with an AURA-looking branch name', async () => {
+  const center = new CommandCenter({ async trace() {}, async observeEvent() {} }, {}, {});
+  Object.defineProperty(center, 'githubToken', { value: 'test-token', configurable: true });
+  let merged = false;
+  center.github = async (path, options = {}) => {
+    if (path === '/repos/XDSawyerLoL/Auralive/pulls?state=open&per_page=30') {
+      return {
+        data: [{
+          number: 77,
+          title: 'Spoofed AURA branch',
+          draft: false,
+          user: { login: 'attacker' },
+          head: {
+            ref: 'aura/change-spoof',
+            sha: 'bad123',
+            user: { login: 'attacker' },
+            repo: {
+              full_name: 'attacker/Auralive',
+              owner: { login: 'attacker' },
+            },
+          },
+          base: { ref: 'main' },
+        }],
+      };
+    }
+    if (path.includes('/pulls/77/merge') && options.method === 'PUT') {
+      merged = true;
+      return { data: { merged: true } };
+    }
+    if (path.includes('/pulls?state=open&per_page=30')) return { data: [] };
+    return { data: [] };
+  };
+  const result = await center.promoteDirectorPullRequests();
+  assert.equal(result.length, 0);
+  assert.equal(merged, false);
+});
+
+test('Director auto-merge requires same-repository trusted provenance', () => {
+  assert.match(configSource, /AURA_DIRECTOR_TRUSTED_GITHUB_ACTORS/);
+  assert.match(commandSource, /headRepository === repo\.toLowerCase\(\)/);
+  assert.match(commandSource, /trustedActors\.has\(pullActor\)/);
+  assert.match(commandSource, /trustedProvenance/);
 });

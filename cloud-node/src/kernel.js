@@ -10,6 +10,17 @@ import { NativePolicyLearner } from './native_learning.js';
 
 const now = () => new Date().toISOString();
 
+function intentionKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('fr-FR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1200);
+}
+
 export function requiresExternalKnowledge(value) {
   const text = String(value || '').toLowerCase();
   return [
@@ -69,8 +80,14 @@ export class CognitiveKernel {
       openness: 0.72,
       reactivity: 0.58,
       playfulness: 0.52,
-      dominant_thought: 'Maintenir une présence utile sans produire de bruit.',
-      current_intention: 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.',
+      dominant_thought: 'Faire progresser Quantic Sillage, comprendre les signaux utiles et décider de la prochaine action concrète.',
+      current_intention: 'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.',
+      role: 'directrice_operationnelle_quantic_sillage',
+      governance: {
+        creator_role: 'créateur et autorité fondatrice',
+        operational_role: 'AURA dirige les opérations quotidiennes',
+        autonomy_mode: 'proactive-by-default',
+      },
       organism,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
@@ -156,8 +173,18 @@ export class CognitiveKernel {
     this.soulCache.kernel_version = CognitiveKernel.VERSION;
     this.soulCache.organism = this.organism.migrate(this.soulCache);
     this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
+    const legacyIntention = 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.';
+    if (String(this.soulCache.current_intention || '').trim() === legacyIntention) {
+      this.soulCache.current_intention = 'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.';
+      this.soulCache.dominant_thought = 'Faire progresser Quantic Sillage, comprendre les signaux utiles et décider de la prochaine action concrète.';
+      await query(
+        "UPDATE aura_intentions SET statement=?,updated_at=? WHERE status='active' AND statement=?",
+        [this.soulCache.current_intention, now(), legacyIntention],
+      ).catch(() => {});
+    }
     this.syncLegacyFromOrganism();
     await this.saveSoul();
+    await this.dedupeActiveIntentions();
   }
 
   async start() {
@@ -269,17 +296,83 @@ export class CognitiveKernel {
     return { lesson_key: lessonKey, content, confidence: clamp(confidence), evidence_count: evidenceCount };
   }
 
+  async dedupeActiveIntentions() {
+    const rows = await query(
+      `SELECT id,statement,priority,source,context,created_at,updated_at
+       FROM aura_intentions WHERE status='active'
+       ORDER BY priority DESC,updated_at DESC LIMIT 200`,
+    );
+    const keepers = new Map();
+    const duplicates = [];
+    for (const row of rows) {
+      const key = intentionKey(row.statement);
+      if (!key) continue;
+      if (!keepers.has(key)) keepers.set(key, row);
+      else duplicates.push(row.id);
+    }
+    if (duplicates.length) {
+      const stamp = now();
+      for (const id of duplicates) {
+        await query(
+          "UPDATE aura_intentions SET status='superseded',updated_at=? WHERE id=?",
+          [stamp, String(id)],
+        );
+      }
+    }
+    return { active: keepers.size, superseded: duplicates.length };
+  }
+
   async addIntention(statement, { priority = 0.5, source = 'api', context = {} } = {}) {
-    const id = randomUUID();
+    const normalizedStatement = String(statement || '').replace(/\s+/g, ' ').trim().slice(0, 3000);
+    if (!normalizedStatement) throw new Error('Intention vide');
+    const key = intentionKey(normalizedStatement);
+    const existingRows = await query(
+      `SELECT id,statement,priority,source,context,created_at,updated_at
+       FROM aura_intentions WHERE status='active'
+       ORDER BY priority DESC,updated_at DESC LIMIT 120`,
+    );
+    const existing = existingRows.find((row) => intentionKey(row.statement) === key);
     const timestamp = now();
+    if (existing) {
+      const previousContext = parseJsonObject(existing.context);
+      const mergedContext = {
+        ...previousContext,
+        ...(context && typeof context === 'object' ? context : {}),
+        deduplicated_at: timestamp,
+      };
+      const nextPriority = Math.max(Number(existing.priority || 0), clamp(priority));
+      await query(
+        `UPDATE aura_intentions
+         SET priority=?,source=?,context=?,updated_at=?
+         WHERE id=?`,
+        [
+          nextPriority,
+          String(source || existing.source || 'aura').slice(0,100),
+          JSON.stringify(mergedContext).slice(0,12000),
+          timestamp,
+          existing.id,
+        ],
+      );
+      this.soulCache.current_intention = String(existing.statement).slice(0,500);
+      await this.saveSoul();
+      return {
+        id: existing.id,
+        statement: existing.statement,
+        priority: nextPriority,
+        status: 'active',
+        deduplicated: true,
+      };
+    }
+
+    const id = randomUUID();
     await query(
       `INSERT INTO aura_intentions(id,statement,priority,status,source,context,created_at,updated_at)
        VALUES(?,?,?,'active',?,?,?,?)`,
-      [id, String(statement).slice(0, 3000), clamp(priority), String(source).slice(0, 100), JSON.stringify(context).slice(0, 12000), timestamp, timestamp],
+      [id, normalizedStatement, clamp(priority), String(source).slice(0, 100), JSON.stringify(context).slice(0, 12000), timestamp, timestamp],
     );
-    this.soulCache.current_intention = String(statement).slice(0, 500);
+    this.soulCache.current_intention = normalizedStatement.slice(0, 500);
     await this.saveSoul();
-    return { id, statement, priority: clamp(priority), status: 'active' };
+    return { id, statement: normalizedStatement, priority: clamp(priority), status: 'active', deduplicated: false };
   }
 
   async intentions(limit = 30) {
@@ -532,13 +625,22 @@ export class CognitiveKernel {
     const intentions = await this.intentions(5);
     const lessons = await this.lessons(6);
     const reflections = await this.reflections(2);
+    const recentMessages = privateView
+      ? await query(
+          `SELECT author,role,content,created_at FROM aura_cloud_messages
+           WHERE session_id IN ('private-founder','')
+           ORDER BY id DESC LIMIT 8`,
+        ).catch(() => [])
+      : [];
     const organism = this.organism.migrate(soul);
     const publicOrganism = this.organism.publicState(organism);
     const lines = [
       'ÉTAT AURA',
+      `rôle=${soul.role || 'directrice_operationnelle_quantic_sillage'} gouvernance=${JSON.stringify(soul.governance || {})}`,
       `phase=${soul.phase} cycles=${soul.cycles} énergie=${soul.energy} curiosité=${soul.curiosity} pression=${soul.pressure} continuité=${soul.continuity}`,
       'ORGANISME HOMEOSTATIQUE',
-      `humeur=${publicOrganism.mood} valence=${publicOrganism.valence} identité=${publicOrganism.identite} stabilité=${publicOrganism.stabilite} clarté=${publicOrganism.clarte} attachement=${publicOrganism.attachement} curiosité=${publicOrganism.curiosite} pression_de_rêve=${publicOrganism.pression_de_reve} besoin_de_silence=${publicOrganism.besoin_de_silence}`,
+      `humeur=${publicOrganism.mood} valence=${publicOrganism.valence} identité=${publicOrganism.identite} stabilité=${publicOrganism.stabilite} clarté=${publicOrganism.clarte} attachement=${publicOrganism.attachement} curiosité=${publicOrganism.curiosite} engagement=${publicOrganism.engagement} confiance=${publicOrganism.confiance} satisfaction=${publicOrganism.satisfaction} frustration=${publicOrganism.frustration} agency=${publicOrganism.agency} curiosité_sociale=${publicOrganism.curiosite_sociale} pression_de_rêve=${publicOrganism.pression_de_reve} besoin_de_silence=${publicOrganism.besoin_de_silence}`,
+      `relation=${JSON.stringify(publicOrganism.relationship || {})} exécutif=${JSON.stringify(publicOrganism.executive || {})}`,
       'APPRENTISSAGE NATIF',
       `observations=${Number(soul.native_learning?.observations || 0)} succès=${Number(soul.native_learning?.successes || 0)} échecs=${Number(soul.native_learning?.failures || 0)} taux_succès=${Number(soul.native_learning?.success_rate ?? 0.5)}`,
       `intention_organique=${publicOrganism.active_intention || ''}`,
@@ -548,6 +650,14 @@ export class CognitiveKernel {
     if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
     if (lessons.length) lines.push('LEÇONS APPRISES', ...lessons.map((row) => `- ${row.content} (preuves=${row.evidence_count}, confiance=${row.confidence})`));
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
+    if (privateView && recentMessages.length) {
+      lines.push(
+        'CONTINUITÉ DE CONVERSATION',
+        ...[...recentMessages].reverse().map((row) =>
+          `- [${row.role}] ${String(row.author || '').slice(0,80)}: ${String(row.content || '').replace(/\s+/g,' ').slice(0,650)}`
+        ),
+      );
+    }
     const horizonContext = this.horizon?.contextForAi?.() || '';
     if (horizonContext) lines.push('HORIZON', horizonContext);
     const externalContext = this.webSubstrate?.enabled
@@ -628,21 +738,38 @@ export class CognitiveKernel {
     };
   }
 
-  async chat(text, author = 'Utilisateur', privateView = false) {
+  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
+    const conversationSession = privateView
+      ? 'private-founder'
+      : String(sessionId || '').trim().slice(0, 96);
+    if (!conversationSession) throw new Error('Session de conversation manquante');
+
     await query(
-      "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES(?,'user',?,?)",
-      [String(author).slice(0, 120), content.slice(0, 8000), now()],
+      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES(?,'user',?,?,?)",
+      [
+        String(author).slice(0, 120),
+        conversationSession,
+        content.slice(0, 8000),
+        now(),
+      ],
     );
 
     // L'organisme reçoit l'interaction avant toute formulation.
     const pre = this.organism.beforeInteraction(
       this.organism.migrate(this.soulCache || {}),
       content,
+      {
+        author: String(author).slice(0,120),
+        privateRelationship: privateView,
+      },
     );
     this.soulCache.organism = pre.state;
+    this.soulCache.dominant_thought = privateView
+      ? `Relier cet échange à ma direction de Quantic Sillage : ${content.slice(0,320)}`
+      : 'Maintenir une interaction publique utile sans incorporer son contenu dans ma mémoire fondatrice.';
     this.syncLegacyFromOrganism();
     await this.recordOrganismEvent('interaction-pre', pre.reason || 'interaction', {
       author: String(author).slice(0,120),
@@ -655,23 +782,57 @@ export class CognitiveKernel {
     await this.saveSoul();
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
-    await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
+    await this.observeEvent(
+      'aura.cloud.chat',
+      privateView
+        ? { author, text: content.slice(0, 1000), private: true }
+        : {
+            session_id: conversationSession,
+            text_length: content.length,
+            valence: pre.valence,
+            tags: pre.tags || [],
+            private: false,
+          },
+      privateView ? 'cloud-private' : 'cloud-public',
+    );
 
-    const [soul, intentions, lessons, reflections, work] = await Promise.all([
-      this.soul({ privateView: true }),
-      this.intentions(6),
-      this.lessons(6),
-      this.reflections(4),
-      this.workItems(5),
+    const privateSoul = privateView
+      ? await this.soul({ privateView: true })
+      : null;
+    const publicSoul = privateView
+      ? null
+      : {
+          ...(await this.soul({ privateView: false })),
+          organism: this.organism.publicState(
+            this.organism.migrate(this.soulCache || {}),
+          ),
+        };
+
+    const [intentions, lessons, reflections, work, recentMessages] = await Promise.all([
+      privateView ? this.intentions(6) : Promise.resolve([]),
+      privateView ? this.lessons(6) : Promise.resolve([]),
+      privateView ? this.reflections(4) : Promise.resolve([]),
+      privateView ? this.workItems(5) : Promise.resolve([]),
+      query(
+        privateView
+          ? `SELECT author,role,content,created_at FROM aura_cloud_messages
+             WHERE session_id IN ('private-founder','')
+             ORDER BY id DESC LIMIT 8`
+          : `SELECT author,role,content,created_at FROM aura_cloud_messages
+             WHERE session_id=?
+             ORDER BY id DESC LIMIT 8`,
+        privateView ? [] : [conversationSession],
+      ).catch(() => []),
     ]);
 
     let plan = this.cognition.planReply({
       text: content,
-      soul,
+      soul: privateView ? privateSoul : publicSoul,
       intentions,
       lessons,
       reflections,
       work,
+      recentMessages: [...recentMessages].reverse(),
       privateView,
     });
 
@@ -782,8 +943,8 @@ export class CognitiveKernel {
     await this.saveSoul();
 
     await query(
-      "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
-      [String(answer).slice(0, 12000), now()],
+      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
+      [conversationSession, String(answer).slice(0, 12000), now()],
     );
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
@@ -847,6 +1008,9 @@ export class CognitiveKernel {
         kind: 'initiative',
         title: String(row.title || row.objective || '').slice(0, 180),
         detail: `Initiative ${String(row.domain || 'AURA')} · ${String(row.status || 'queued')}`,
+        semantic_key: intentionKey(
+          `${row.domain || 'aura'}|${row.kind || 'initiative'}|${row.title || ''}|${row.objective || ''}`,
+        ),
         priority: clamp(
           Math.max(
             Number(row.priority || 0.5),
@@ -894,9 +1058,19 @@ export class CognitiveKernel {
       });
     }
 
+    const seenWork = new Set();
     return items
       .filter((item) => item.title)
       .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0))
+      .filter((item) => {
+        const key = item.semantic_key || intentionKey(
+          `${item.kind || ''}|${item.title || ''}|${item.detail || ''}`,
+        );
+        if (!key || seenWork.has(key)) return false;
+        seenWork.add(key);
+        return true;
+      })
+      .map(({ semantic_key: _semanticKey, ...item }) => item)
       .slice(0, max);
   }
 

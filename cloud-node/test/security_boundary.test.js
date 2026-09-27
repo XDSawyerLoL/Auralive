@@ -4,6 +4,7 @@ import fs from 'node:fs';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
+const kernelSource = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
 
 test('private cognitive state endpoints require AURA authentication', () => {
   for (const route of [
@@ -47,4 +48,28 @@ test('client IP rate limits trust only a bounded reverse-proxy chain', () => {
   assert.match(configSource, /AURA_TRUST_PROXY_HOPS/);
   assert.match(serverSource, /trustProxy: config\.trustProxyHops > 0 \? config\.trustProxyHops : false/);
   assert.doesNotMatch(serverSource, /trustProxy:\s*true/);
+});
+
+test('public relational chat is isolated by a signed browser conversation session', () => {
+  assert.match(serverSource, /aura_chat_session/);
+  assert.match(serverSource, /chatSessionSignature/);
+  assert.match(serverSource, /ensureChatSession/);
+  assert.match(serverSource, /const privateView = isPrivate\(request\)/);
+  assert.match(serverSource, /chatSessionId/);
+  assert.match(kernelSource, /session_id=\?/);
+  assert.match(kernelSource, /private-founder/);
+  assert.doesNotMatch(
+    serverSource,
+    /kernel\.chat\(text,\s*String\(request\.body\?\.author[^\n]+,\s*true\)/,
+  );
+});
+
+test('public chat cannot read private cognitive collections or inject raw text into global stimuli', () => {
+  assert.match(kernelSource, /privateView \? this\.intentions\(6\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.lessons\(6\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.reflections\(4\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.workItems\(5\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /text_length: content\.length/);
+  assert.match(kernelSource, /privateView \? 'cloud-private' : 'cloud-public'/);
+  assert.match(kernelSource, /privateRelationship: privateView/);
 });

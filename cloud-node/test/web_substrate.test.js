@@ -72,3 +72,34 @@ test('live chat routes changing external questions through Web evidence first', 
   assert.match(expressionSource, /MÉMOIRE EXTERNE/);
   assert.match(expressionSource, /contested, unverified ou unavailable/);
 });
+
+test('open-web substrate has useful no-key discovery sources beyond encyclopedic lookup', () => {
+  assert.match(webSource, /aura-web-substrate-v2-open-web/);
+  assert.match(webSource, /searchGithub/);
+  assert.match(webSource, /api\.github\.com\/search\/repositories/);
+  assert.match(webSource, /searchHackerNews/);
+  assert.match(webSource, /hn\.algolia\.com/);
+  const substrate = new WebSubstrate({ enabled: false });
+  assert.deepEqual(substrate.status().default_public_sources, ['wikipedia', 'crossref', 'github', 'hackernews']);
+});
+
+test('open-web search interleaves sources instead of starving later providers', async () => {
+  const substrate = new WebSubstrate({ enabled: false });
+  substrate.searchSearx = async () => [];
+  substrate.searchWikipedia = async () => [
+    { url: 'https://fr.wikipedia.org/wiki/A', title: 'A', engine: 'wikipedia' },
+    { url: 'https://fr.wikipedia.org/wiki/B', title: 'B', engine: 'wikipedia' },
+  ];
+  substrate.searchCrossref = async () => [
+    { url: 'https://doi.org/10.1/a', title: 'C', engine: 'crossref' },
+    { url: 'https://doi.org/10.1/b', title: 'D', engine: 'crossref' },
+  ];
+  substrate.searchGithub = async () => [
+    { url: 'https://github.com/example/a', title: 'E', engine: 'github' },
+  ];
+  substrate.searchHackerNews = async () => [
+    { url: 'https://news.ycombinator.com/item?id=1', title: 'F', engine: 'hackernews' },
+  ];
+  const rows = await substrate.search('test', 4);
+  assert.deepEqual(rows.map((row) => row.engine), ['wikipedia', 'crossref', 'github', 'hackernews']);
+});

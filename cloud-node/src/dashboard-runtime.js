@@ -55,7 +55,7 @@ function renderEmotion(o){
   o=o||{};
   const mood=String(o.mood||'calme');
   const reason=String(o.last_reason||(o.habitat&&o.habitat.last_activity_label)||o.active_intention||'présence intérieure');
-  const colors={calme:'#9a6cff',claire:'#6da7ff',curieuse:'#59e0ef',lumineuse:'#ffc96a',fragile:'#d18cff','préoccupée':'#ff758d'};
+  const colors={calme:'#9a6cff',claire:'#6da7ff',curieuse:'#59e0ef',intriguée:'#55d7c8',engagée:'#68b5ff',déterminée:'#8f6bff',satisfaite:'#7ee6a8',frustrée:'#ff9a66',lumineuse:'#ffc96a',fragile:'#d18cff','préoccupée':'#ff758d'};
   $('emotionMood').textContent=mood;
   $('emotionReason').textContent=reason;
   $('emotionOrb').style.boxShadow='0 0 34px '+(colors[mood]||'#9a6cff')+'66';
@@ -64,6 +64,12 @@ function renderEmotion(o){
   emotionValue('clarity',o.clarte);
   emotionValue('attachment',o.attachement);
   emotionValue('curiosity',o.curiosite);
+  emotionValue('engagement',o.engagement);
+  emotionValue('confidence',o.confiance);
+  emotionValue('agency',o.agency);
+  emotionValue('satisfaction',o.satisfaction);
+  emotionValue('frustration',o.frustration);
+  emotionValue('social',o.curiosite_sociale);
   emotionValue('dream',o.pression_de_reve);
   emotionValue('silence',o.besoin_de_silence);
 }

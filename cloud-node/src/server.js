@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
@@ -80,6 +80,51 @@ function validPrivateSession(value) {
   const expiresAt = Number.parseInt(raw.slice(0, dot), 10);
   if (!Number.isFinite(expiresAt) || expiresAt <= Math.floor(Date.now() / 1000)) return false;
   return tokenEquals(raw.slice(dot + 1), sessionSignature(expiresAt));
+}
+
+const chatSessionSecret = config.cloudToken || randomBytes(32).toString('base64url');
+
+function chatSessionSignature(id, expiresAt) {
+  return createHmac('sha256', chatSessionSecret)
+    .update(`${id}:${expiresAt}:aura-chat-session`)
+    .digest('base64url');
+}
+
+function createChatSession(maxAgeSeconds = 365 * 24 * 60 * 60) {
+  const id = randomBytes(18).toString('base64url');
+  const expiresAt = Math.floor(Date.now() / 1000) + maxAgeSeconds;
+  return {
+    id,
+    value: `${id}.${expiresAt}.${chatSessionSignature(id, expiresAt)}`,
+    maxAgeSeconds,
+  };
+}
+
+function parseChatSession(value) {
+  const raw = String(value || '').trim();
+  const parts = raw.split('.');
+  if (parts.length !== 3) return '';
+  const [id, expiresRaw, signature] = parts;
+  const expiresAt = Number.parseInt(expiresRaw, 10);
+  if (
+    !id
+    || id.length > 64
+    || !Number.isFinite(expiresAt)
+    || expiresAt <= Math.floor(Date.now() / 1000)
+  ) return '';
+  return tokenEquals(signature, chatSessionSignature(id, expiresAt)) ? id : '';
+}
+
+function ensureChatSession(request, reply) {
+  if (isPrivate(request)) return 'private-founder';
+  const existing = parseChatSession(cookies(request).aura_chat_session);
+  if (existing) return existing;
+  const created = createChatSession();
+  reply.header(
+    'Set-Cookie',
+    `aura_chat_session=${encodeURIComponent(created.value)}; Path=/; Max-Age=${created.maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`,
+  );
+  return created.id;
 }
 
 function voiceSignature(expiresAt, text) {
@@ -884,7 +929,14 @@ app.post('/api/chat', async (request, reply) => {
   ) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
-  const response = await kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
+  const privateView = isPrivate(request);
+  const chatSessionId = ensureChatSession(request, reply);
+  const response = await kernel.chat(
+    text,
+    String(request.body?.author || 'Utilisateur'),
+    privateView,
+    chatSessionId,
+  );
   const curiosityItem = await curiosity.questionForInteraction(text).catch(() => null);
   const baseAnswer = String(response?.answer || '').trim();
   const curiosityQuestion = String(curiosityItem?.question || '').trim();
