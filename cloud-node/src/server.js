@@ -340,7 +340,7 @@ const GLIDE_WINDOWS_DOWNLOAD = String(
 
 const GLIDE_ANDROID_DOWNLOAD = String(
   process.env.AURA_GLIDE_ANDROID_URL
-  || 'https://raw.githubusercontent.com/XDSawyerLoL/Auralive/main/downloads/Quantic-Glide-Android-1.3.0-beta.apk'
+  || 'https://github.com/XDSawyerLoL/Auralive/releases/download/quantic-glide-v1.3.0/Quantic-Glide-Android-1.3.0-beta.apk'
 ).trim();
 
 app.get('/downloads/glide/windows', async (_request, reply) => {
