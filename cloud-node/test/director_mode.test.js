@@ -52,3 +52,10 @@ test('relational continuity does not mix public browser sessions', () => {
   assert.match(kernelSource, /WHERE session_id=\?/);
   assert.match(kernelSource, /private-founder/);
 });
+
+test('Director dedupe preserves running work and includes objectives in semantic identity', () => {
+  assert.match(commandSource, /CASE status WHEN 'running' THEN 0/);
+  assert.match(commandSource, /status IN \('queued','waiting'\)/);
+  assert.match(commandSource, /normalize\(objective\)\.slice\(0, 500\)/);
+  assert.match(kernelSource, /semantic_key/);
+});
