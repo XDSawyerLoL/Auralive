@@ -4,6 +4,8 @@ import asyncio
 import logging
 import os
 import signal
+import sys
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -75,5 +77,26 @@ async def run() -> None:
         logger.info("AURA Runtime standalone arrêté")
 
 
+def check_payload() -> dict[str, Any]:
+    runtime = AuraRuntimeWorker(
+        EmptyRuntimeHost(),
+        settings_from_env(),
+        host_product="",
+        packaging="standalone-daemon",
+    )
+    return {
+        "ok": True,
+        "component": "aura-runtime",
+        "version": runtime.VERSION,
+        "packaging": "standalone-daemon",
+        "job_kinds": runtime._job_kinds(),
+        "cloud_configured": bool(runtime.base_url and runtime.token),
+        "studio_required": False,
+    }
+
+
 def main() -> None:
+    if "--check" in sys.argv:
+        print(json.dumps(check_payload(), ensure_ascii=False, sort_keys=True))
+        return
     asyncio.run(run())
