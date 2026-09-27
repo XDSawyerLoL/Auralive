@@ -477,7 +477,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 app.get('/api/bootstrap/status', async () => ({
   product: 'AURA Cloud',
   runtime: 'Node.js/Fastify',
-  version: '2.0.0',
+  version: '2.0.1',
   node: process.version,
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
