@@ -34,3 +34,10 @@ test('Hostinger runtime resets the MySQL pool and retries quickly after startup 
   assert.match(serverSource, /15_000/);
   assert.match(serverSource, /reconnexion automatique programmée/);
 });
+
+test('bridge exposes AURA Runtime host metadata without assuming Studio', () => {
+  assert.match(bridgeSource, /SELECT worker_id,capabilities,model,voice,version,resources/);
+  assert.match(bridgeSource, /host_product:/);
+  assert.match(bridgeSource, /runtime_role:/);
+  assert.match(bridgeSource, /runtime_packaging:/);
+});
