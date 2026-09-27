@@ -58,7 +58,7 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "risk": "network",
     },
     "browser.task": {
-        "title": "Piloter un navigateur local borné aux domaines autorisés",
+        "title": "Piloter un navigateur local sur le Web public",
         "category": "browser",
         "risk": "browser-control",
     },
@@ -106,7 +106,7 @@ class RuntimeOperator:
         raw = getattr(
             self.settings,
             "aura_runtime_operator_allowed_risks",
-            {"safe", "ai", "network", "local-write", "process", "local-control"},
+            {"safe", "ai", "network", "local-write", "process", "local-control", "browser-control"},
         )
         if isinstance(raw, str):
             values = raw.split(",")
@@ -227,6 +227,31 @@ class RuntimeOperator:
         )
         plan = _json_object(raw)
         return plan if isinstance(plan.get("actions"), list) else {"summary": "", "actions": []}
+
+    async def _safe_public_browser_url(self, value: str) -> str:
+        """Autorise tout le Web public, mais jamais la machine ou le LAN."""
+        url = str(value or "").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+            raise PermissionError("Navigation limitée au Web HTTP/HTTPS public sans credentials")
+        host = parsed.hostname.casefold().rstrip(".")
+        if host in {"localhost", "host.docker.internal"} or host.endswith((".local", ".internal", ".localhost")):
+            raise PermissionError("Hôte local/interne interdit")
+
+        rows = await asyncio.to_thread(
+            socket.getaddrinfo,
+            host,
+            parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+        if not rows:
+            raise PermissionError("Résolution DNS vide")
+        for row in rows:
+            address = row[4][0]
+            ip = ipaddress.ip_address(address.split("%", 1)[0])
+            if not ip.is_global:
+                raise PermissionError("Destination réseau privée/non globale interdite")
+        return url
 
     async def _safe_public_url(self, value: str) -> str:
         url = str(value or "").strip()
@@ -430,13 +455,17 @@ class RuntimeOperator:
             result = await self.open_capabilities.deep_read(
                 url,
                 query=str(action.get("query") or ""),
+                navigation_validator=self._safe_public_url,
+                public_request_validator=self._safe_public_browser_url,
             )
             return {"type": kind, **result}, None
 
         if kind == "browser.task":
             result = await self.open_capabilities.browser_task(
                 str(action.get("task") or ""),
-                allowed_domains=self.allowed_domains,
+                allowed_domains=set(
+                    getattr(self.settings, "aura_runtime_browser_domains", set()) or set()
+                ),
                 model=str(getattr(self.settings, "ai_model", "") or ""),
                 ollama_url=str(
                     getattr(
@@ -453,9 +482,10 @@ class RuntimeOperator:
                             action.get("max_steps")
                             or getattr(self.settings, "aura_runtime_browser_max_steps", 5)
                         ),
-                        8,
+                        50,
                     ),
                 ),
+                public_url_validator=self._safe_public_browser_url,
             )
             return {"type": kind, **result}, None
 
