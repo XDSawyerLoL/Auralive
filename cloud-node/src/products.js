@@ -7,15 +7,27 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 1,
     capabilities: ['reasoning','memory','curiosity','research','orchestration','evolution','mesh','fabric'],
     aura_bridge: 'native',
+    architecture_role: 'parent-control-plane',
+  },
+  {
+    id: 'aura-runtime',
+    name: 'AURA Runtime',
+    repository: 'XDSawyerLoL/Auralive',
+    objective: 'Plan d’exécution local indépendant des produits : modèles locaux, calcul, voix, image, opérateur, accès machine et workers Fabric.',
+    criticality: 0.99,
+    capabilities: ['local-ai','compute','webgpu','image','voice','operator','local-control','process','fabric-worker'],
+    aura_bridge: 'native',
+    architecture_role: 'local-execution-plane',
   },
   {
     id: 'quantic-studio',
     name: 'Quantic Studio',
     repository: 'XDSawyerLoL/Auralive',
-    objective: 'Bras local AURA : modèles, calcul CPU/GPU, image, voix, opérateur et streaming.',
-    criticality: 0.96,
-    capabilities: ['local-ai','compute','webgpu','image','voice','operator','streaming'],
-    aura_bridge: 'native',
+    objective: 'Logiciel de streaming vivant : diffusion, scènes, multistream, overlays, avatar, chat, modération et automatisations de live.',
+    criticality: 0.82,
+    capabilities: ['streaming','broadcast','scenes','multistream','overlays','avatar','live-chat','moderation','live-analytics'],
+    aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'quantic-glide',
@@ -25,6 +37,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.92,
     capabilities: ['browser','web-context','tabs','research-context','downloads'],
     aura_bridge: 'native',
+    architecture_role: 'product-child',
   },
   {
     id: 'quantic-os',
@@ -34,6 +47,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.94,
     capabilities: ['system','local-control','agents','sandbox','desktop'],
     aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'quantic-mail',
@@ -43,6 +57,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.9,
     capabilities: ['mail','private-messaging','identity','devices','relay'],
     aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'zoon',
@@ -52,6 +67,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.82,
     capabilities: ['social','feed','publishing','media','community'],
     aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'pulse',
@@ -61,6 +77,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.7,
     capabilities: ['social','feed','secure-session'],
     aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'quantic-news',
@@ -70,6 +87,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.78,
     capabilities: ['news','rss','monitoring','publishing','sources'],
     aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'providence',
@@ -79,6 +97,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.88,
     capabilities: ['analysis','signals','risk','scenarios','evidence'],
     aura_bridge: 'required',
+    architecture_role: 'product-child',
   },
   {
     id: 'horizon',
@@ -88,6 +107,7 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     criticality: 0.86,
     capabilities: ['world-signals','weather','impact-chain','forecast-context'],
     aura_bridge: 'native',
+    architecture_role: 'product-child',
   },
 ]);
 
@@ -117,6 +137,8 @@ export async function seedQuanticProducts(commandCenter) {
         ...(existing?.metadata || {}),
         capabilities: product.capabilities,
         aura_bridge: product.aura_bridge,
+        architecture_role: product.architecture_role || 'product-child',
+        parent: product.id === 'aura' ? '' : 'aura',
         writable_by_aura: true,
         modification_policy: 'branch-test-canary-promote',
         ecosystem: 'quantic-sillage',
