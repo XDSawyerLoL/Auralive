@@ -355,3 +355,10 @@ test('deduplicated mission initiatives are reloaded before execution', () => {
   assert.match(commandSource, /initiative\.status === 'queued'/);
   assert.match(commandSource, /deduplicated: true/);
 });
+
+
+test('browser-control remains bounded by the shared policy for long missions', () => {
+  assert.match(configSource, /safe,ai,network,process,local-control,local-write,browser-control/);
+  assert.match(commandSource, /config\.commandCenterAllowedRisks/);
+  assert.match(commandSource, /this\.candidate\(missionAdvance\.candidate\)/);
+});
