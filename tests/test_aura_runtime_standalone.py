@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from aura_runtime.standalone import StandaloneRuntimeHost, runtime_settings_from_env
+from aura_runtime.standalone import StandaloneRuntimeHost, _load_env_file, runtime_settings_from_env
 from aura_runtime.worker import AuraRuntimeWorker
 
 
@@ -98,3 +98,26 @@ def test_standalone_runtime_advertises_learned_model_competence(monkeypatch, tmp
     )
     assert deepseek['roles']['reasoning']['samples'] == 4
     assert deepseek['roles']['reasoning']['score'] > 0.99
+
+
+def test_standalone_loads_root_dotenv_without_overriding_real_environment(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv('AURA_CLOUD_BASE_URL', raising=False)
+    monkeypatch.delenv('AURA_CLOUD_TOKEN', raising=False)
+    (tmp_path / '.env').write_text(
+        'AURA_CLOUD_BASE_URL=https://from-dotenv.example\n'
+        'AURA_CLOUD_TOKEN=dotenv-token\n',
+        encoding='utf-8',
+    )
+    _load_env_file()
+    settings = runtime_settings_from_env()
+    assert settings.aura_cloud_base_url == 'https://from-dotenv.example'
+    assert settings.aura_cloud_token == 'dotenv-token'
+
+    monkeypatch.setenv('AURA_CLOUD_TOKEN', 'real-environment-token')
+    (tmp_path / '.env').write_text(
+        'AURA_CLOUD_TOKEN=must-not-override\n',
+        encoding='utf-8',
+    )
+    _load_env_file()
+    assert runtime_settings_from_env().aura_cloud_token == 'real-environment-token'
