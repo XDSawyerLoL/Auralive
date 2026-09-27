@@ -7,6 +7,7 @@ on:
       - "aura_runtime/**"
       - "tests/test_aura_runtime_standalone.py"
       - "tests/test_aura_runtime_evolution.py"
+      - "tests/test_aura_runtime_operator.py"
       - "tests/test_evolution_fleet.py"
       - ".github/workflows/package-aura-runtime.yml"
   pull_request:
@@ -41,7 +42,7 @@ jobs:
       - name: Compile standalone runtime
         run: python -m compileall -q aura_runtime
       - name: Prove runtime independence
-        run: pytest -q tests/test_aura_runtime_standalone.py tests/test_aura_runtime_evolution.py tests/test_evolution_fleet.py
+        run: pytest -q tests/test_aura_runtime_standalone.py tests/test_aura_runtime_evolution.py tests/test_aura_runtime_operator.py tests/test_evolution_fleet.py
       - name: Import smoke
         run: |
           python - <<'PY'
