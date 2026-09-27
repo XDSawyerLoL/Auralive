@@ -59,3 +59,23 @@ AURA_VOICE_FABRIC_STRICT_IDENTITY=true
 Le domaine/path ci-dessus est le seul endpoint distant autorisé sans clé et sans
 confirmation manuelle de facturation. Toute autre URL distante reste bloquée
 sans bearer et, en mode zéro coût, sans confirmation explicite.
+
+
+AURA Cloud 2.2.1 — vérification après déploiement
+-------------------------------------------------
+1. La page d'accueil doit afficher le badge:
+   AURA 2.2.1 · LONG HORIZON
+
+2. Si ce badge n'apparait pas, Hostinger sert un ancien répertoire ou un ancien processus.
+   Vérifier que le contenu du ZIP est extrait directement dans la racine de l'application Node,
+   avec package.json et server.js à cette racine, puis redémarrer/redeploy l'application.
+
+3. La voix Quantic Mairaiy est verrouillée par défaut sur:
+   https://mediumorchid-badger-314305.hostingersite.com/voice
+
+   AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT=true empêche une ancienne variable
+   AURA_VOICE_FABRIC_BASE_URL de détourner la voix vers un endpoint obsolète.
+
+4. Après démarrage, contrôler:
+   GET /api/bootstrap/status -> version 2.2.1
+   GET /api/voice/status -> primary aura-voice-fabric si Mairaiy est joignable.
