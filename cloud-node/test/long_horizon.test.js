@@ -47,3 +47,23 @@ test('mission completion writes a durable lesson', () => {
   assert.match(source, /source: 'long-horizon-mission'/);
   assert.match(source, /source: 'long-horizon-critic'/);
 });
+
+
+test('current plan version isolates historical failures from completion', () => {
+  assert.match(dbSource, /plan_version INT NOT NULL DEFAULT 1/);
+  assert.match(source, /targetPlanVersion/);
+  assert.match(source, /AND plan_version=\?/);
+  assert.match(source, /status NOT IN \('failed','superseded','cancelled'\)/);
+});
+
+test('planning state is always resumable and partial plans are rebuilt', () => {
+  assert.match(source, /SELECT id FROM aura_missions WHERE status='planning'/);
+  assert.match(source, /DELETE FROM aura_mission_steps[\s\S]*plan_version=\?/);
+  assert.match(source, /resume-planning-state/);
+});
+
+test('cancelling a mission terminalizes dormant linked work', () => {
+  assert.match(source, /mission cancelled before execution/);
+  assert.match(source, /status IN \('queued','waiting'\)/);
+  assert.match(source, /status='cancelled'/);
+});
