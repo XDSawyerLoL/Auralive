@@ -73,7 +73,7 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
       - name: Compile Python
-        run: python -m compileall -q app tests
+        run: python -m compileall -q app aura_runtime tests
       - name: Full Python test suite
         run: pytest -q
 
@@ -147,6 +147,7 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "dist\QuanticStudio\aura-source\app\cognitive\evolution.py")) { throw "Evolution Python source absent." }
+          if (-not (Test-Path "dist\QuanticStudio\aura-source\aura_runtime\worker.py")) { throw "AURA Runtime source absent." }
           if (-not (Test-Path "dist\QuanticStudio\aura-source\cloud-node\src\cognition.js")) { throw "Evolution cloud-node source absent." }
           if (-not (Test-Path "dist\QuanticStudio\aura-source\VERSION.json")) { throw "Version manifest absent." }
       - name: Smoke QuanticStudio.exe
