@@ -22,6 +22,7 @@ import {
 } from './db.js';
 import { DASHBOARD_HTML } from './dashboard.js';
 import { EvolutionLab } from './evolution.js';
+import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
@@ -243,6 +244,7 @@ const webSubstrate = new WebSubstrate(ai);
 const fabric = new CapabilityFabric({ webSubstrate, bridge, peerMesh });
 const dagCompiler = new DagCompiler(ai);
 const graphExecutor = new TaskGraphExecutor(fabric);
+const expertBridge = new ExpertBridge(ai);
 let kernel;
 const horizon = new HorizonBridge(async (type, payload, source) => {
   if (bootstrap.runtimeReady) {
@@ -259,6 +261,7 @@ const commandCenter = new CommandCenter(
   fabric,
   dagCompiler,
   graphExecutor,
+  expertBridge,
 );
 const curiosity = new CuriosityEngine({
   kernel,
@@ -1354,6 +1357,23 @@ app.post('/api/command/services/:id/state', async (request, reply) => {
 app.post('/api/command/run', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   return commandCenter.runCycle(String(request.body?.trigger || 'private-api'));
+});
+
+app.get('/api/command/expert/status', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? expertBridge.status({ publicView: false })
+    : undefined);
+
+app.post('/api/command/expert/consult', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await expertBridge.consult({
+      incident_type: 'manual-private-consultation',
+      context: request.body || {},
+    });
+  } catch (error) {
+    return reply.code(502).send({ error: String(error?.message || error) });
+  }
 });
 
 app.post('/api/command/change-proposals', async (request, reply) => {
