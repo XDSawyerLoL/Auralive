@@ -714,7 +714,13 @@ export class ExecutionBridge {
       },
       ['ai', 'local-write', 'network', 'process'],
     );
-    return { ...job, delegated: true, repository, base_branch: baseBranch };
+    return {
+      ...job,
+      job_id: job.id,
+      delegated: true,
+      repository,
+      base_branch: baseBranch,
+    };
   }
 
   async status() {
