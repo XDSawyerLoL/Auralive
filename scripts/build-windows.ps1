@@ -45,6 +45,7 @@ if (Test-Path "dist\QuanticStudio") { Remove-Item -Recurse -Force "dist\QuanticS
     --collect-submodules "phonemizer" `
     --collect-submodules "uvicorn" `
     --collect-submodules "aiohttp" `
+    --collect-submodules "aura_runtime" `
     --collect-submodules "websockets" `
     --add-data "app/web;app/web" `
     --add-data "config;config" `
@@ -66,6 +67,7 @@ $AuraSource = "dist\QuanticStudio\aura-source"
 if (Test-Path $AuraSource) { Remove-Item -Recurse -Force $AuraSource }
 New-Item -ItemType Directory -Force -Path $AuraSource | Out-Null
 Copy-Item "app" "$AuraSource\app" -Recurse -Force
+Copy-Item "aura_runtime" "$AuraSource\aura_runtime" -Recurse -Force
 Copy-Item "tests" "$AuraSource\tests" -Recurse -Force
 Copy-Item "requirements.txt" "$AuraSource\requirements.txt" -Force
 Copy-Item "cloud-node" "$AuraSource\cloud-node" -Recurse -Force
