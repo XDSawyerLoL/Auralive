@@ -70,7 +70,7 @@ test('AURA zero-cost federation can answer while AI_MODE stays off', () => {
   assert.equal(payload.request.body.model, 'openrouter/free');
   assert.equal(payload.diag.provider, 'zero-cost-federation');
   assert.equal(payload.diag.zero_cost_mode, true);
-  assert.equal(payload.diag.free_federation.financial_guard, 'intrinsically-free-models-only');
+  assert.equal(payload.diag.free_federation.financial_guard, 'live-zero-price-proof+intrinsically-free-router');
   assert.match(payload.diag.last_backend, /^zero-cost:openrouter:/);
   assert.doesNotMatch(JSON.stringify(payload.diag), /test-free-key/);
 });
