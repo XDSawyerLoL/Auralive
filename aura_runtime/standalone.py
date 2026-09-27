@@ -84,7 +84,12 @@ def runtime_settings_from_env() -> SimpleNamespace:
                 'git,python,python3,node,npm,npx,pytest,cargo',
             )
         ),
-        aura_runtime_operator_domains=set(_list('AURA_RUNTIME_OPERATOR_DOMAINS', '')),
+        aura_runtime_operator_domains=set(
+            _list(
+                'AURA_RUNTIME_OPERATOR_DOMAINS',
+                'api.github.com,github.com,pypi.org,registry.npmjs.org',
+            )
+        ),
         aura_runtime_operator_max_file_bytes=max(
             1_000,
             _int('AURA_RUNTIME_OPERATOR_MAX_FILE_BYTES', 200_000),
