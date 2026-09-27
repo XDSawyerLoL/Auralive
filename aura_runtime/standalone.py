@@ -175,6 +175,16 @@ def runtime_settings_from_env() -> SimpleNamespace:
             5,
             _int('AURA_RUNTIME_OPERATOR_HTTP_TIMEOUT_SECONDS', 20),
         ),
+        aura_runtime_deep_web_enabled=_bool('AURA_RUNTIME_DEEP_WEB_ENABLED', True),
+        aura_runtime_deep_web_max_chars=max(
+            2_000,
+            min(200_000, _int('AURA_RUNTIME_DEEP_WEB_MAX_CHARS', 60_000)),
+        ),
+        aura_runtime_browser_enabled=_bool('AURA_RUNTIME_BROWSER_ENABLED', False),
+        aura_runtime_browser_max_steps=max(
+            1,
+            min(8, _int('AURA_RUNTIME_BROWSER_MAX_STEPS', 5)),
+        ),
     )
 
 
