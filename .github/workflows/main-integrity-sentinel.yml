@@ -1,0 +1,62 @@
+name: Main Integrity Sentinel
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  main-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Pull requests are the authorized path to main
+        if: github.event_name == 'pull_request'
+        run: echo "PR path detected."
+
+      - name: Verify every main push is associated with a pull request
+        if: github.event_name == 'push'
+        id: verify
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          count="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/$REPOSITORY/commits/$SHA/pulls" \
+            --jq 'length')"
+          echo "associated_prs=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::Push direct sur main détecté: $SHA n’est associé à aucune pull request."
+            exit 1
+          fi
+
+      - name: Open governance incident for a direct push
+        if: failure() && github.event_name == 'push' && steps.verify.outcome == 'failure'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          short="${SHA:0:12}"
+          title="Main integrity violation · $short"
+          body="Un push direct sur main a été détecté par Main Integrity Sentinel.\n\n- Commit: $SHA\n- Acteur GitHub: $ACTOR\n- Politique attendue: toute modification de main passe par une pull request et les gates CI.\n\nTant que la Branch Protection GitHub native n’est pas activée, ce workflow constitue un contrôle de détection et d’alerte, pas un blocage serveur préalable."
+          existing="$(gh issue list --repo "$REPOSITORY" --state open --search "$SHA in:body" --json number --jq 'length')"
+          if [ "$existing" -eq 0 ]; then
+            gh issue create --repo "$REPOSITORY" --title "$title" --body "$body" --label "security" || \
+              gh issue create --repo "$REPOSITORY" --title "$title" --body "$body"
+          fi
