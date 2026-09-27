@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           case "$HEAD_REF" in
-            aura/change-*|aura-evolution-fleet/*|aura/*)
+            aura/change-*|aura-evolution/*|aura-evolution-fleet/*|aura/*)
               ;;
             *)
               echo "Non-AURA branch; policy check informational only."
