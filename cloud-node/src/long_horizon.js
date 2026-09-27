@@ -758,9 +758,26 @@ export class LongHorizonMissionEngine {
         [now(), mission.id],
       );
     } else if (command === 'cancel') {
+      const stamp = now();
+      await query(
+        `UPDATE aura_initiatives
+         SET status='cancelled',error='mission cancelled before execution',updated_at=?
+         WHERE status IN ('queued','waiting')
+           AND id IN (
+             SELECT initiative_id FROM aura_mission_steps
+             WHERE mission_id=? AND initiative_id<>''
+           )`,
+        [stamp, mission.id],
+      );
+      await query(
+        `UPDATE aura_mission_steps
+         SET status='cancelled',completed_at=?,updated_at=?
+         WHERE mission_id=? AND status IN ('pending','queued','waiting')`,
+        [stamp, stamp, mission.id],
+      );
       await query(
         `UPDATE aura_missions SET status='cancelled',completed_at=?,updated_at=? WHERE id=?`,
-        [now(), now(), mission.id],
+        [stamp, stamp, mission.id],
       );
     } else {
       throw new Error('Action de mission inconnue');
