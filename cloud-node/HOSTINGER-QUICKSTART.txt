@@ -1,4 +1,4 @@
-AURA Cloud Node — Hostinger 1.4
+AURA Cloud Node — Hostinger 2.0.1 — ZERO COST
 
 Réglages :
 - Framework : Other
@@ -8,6 +8,14 @@ Réglages :
 - Installation : npm install --omit=dev
 - Démarrage : npm start
 - Output directory : vide
+
+Garantie financière :
+- AURA_ZERO_COST_MODE=true est la valeur par défaut et doit rester activée
+- aucun fallback Gemini/OpenAI distant potentiellement facturable
+- Expert Bridge externe bloqué même si une ancienne clé existe dans Hostinger
+- TTS Gemini Cloud bloqué ; voix via AURA Runtime/local worker uniquement
+- nœuds Runtime déclarés payants, coût > 0 ou modèles Ollama :cloud exclus du Mesh
+- sans worker local/gratuit disponible, AURA reste en mode natif/offline plutôt que de dépenser
 
 Architecture de démarrage :
 - un seul process Node
@@ -25,6 +33,9 @@ Après déploiement :
 
 Variables fonctionnelles :
 NODE_ENV=production
+AURA_ZERO_COST_MODE=true
+AI_MODE=off
+MAIRAIY_CLOUD_VOICE_ENABLED=false
 DB_HOST=...
 DB_PORT=3306
 DB_USER=...
