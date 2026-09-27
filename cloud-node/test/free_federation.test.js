@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-import { isGuaranteedFreeOpenRouterModel } from '../src/free_federation.js';
+import { isGuaranteedFreeOpenRouterModel, isTrustedOpenRouterEndpoint } from '../src/free_federation.js';
 
 function run(script, env = {}) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', script], {
@@ -27,6 +27,10 @@ test('OpenRouter zero-cost allowlist accepts only intrinsically free model IDs',
   assert.equal(isGuaranteedFreeOpenRouterModel('anthropic/claude-sonnet'), false);
   assert.equal(isGuaranteedFreeOpenRouterModel('openai/gpt-oss-120b'), false);
   assert.equal(isGuaranteedFreeOpenRouterModel(''), false);
+  assert.equal(isTrustedOpenRouterEndpoint('https://openrouter.ai/api/v1'), true);
+  assert.equal(isTrustedOpenRouterEndpoint('https://openrouter.ai/api/v1/'), true);
+  assert.equal(isTrustedOpenRouterEndpoint('https://example.com/api/v1'), false);
+  assert.equal(isTrustedOpenRouterEndpoint('http://openrouter.ai/api/v1'), false);
 });
 
 test('AURA zero-cost federation can answer while AI_MODE stays off', () => {
@@ -117,4 +121,70 @@ test('reported non-zero inference cost quarantines the free provider and never f
   assert.deepEqual(payload.diag.free_federation.quarantined, ['openrouter']);
   assert.match(payload.diag.free_federation.last_error, /ZERO_COST_INVARIANT_VIOLATION/);
   assert.equal(payload.diag.last_backend, 'zero-cost-federation-unavailable');
+});
+
+
+test('live catalog routing ignores a :free label when current prices are not zero', () => {
+  const script = `
+    process.env.AURA_ZERO_COST_MODE='true';
+    process.env.AI_MODE='off';
+    process.env.AURA_FREE_FEDERATION_ENABLED='true';
+    process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='true';
+    process.env.AURA_OPENROUTER_API_KEY='test-key';
+    process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';
+
+    let selected='';
+    global.fetch=async(url, options={})=>{
+      if (String(url).endsWith('/models')) {
+        return new Response(JSON.stringify({data:[
+          {
+            id:'example/coder:free',
+            name:'Example Coder',
+            description:'coding software terminal agentic model',
+            context_length:262144,
+            architecture:{output_modalities:['text']},
+            pricing:{prompt:'0',completion:'0'},
+            supported_parameters:['tools','max_tokens']
+          },
+          {
+            id:'example/fake-free:free',
+            name:'Fake Free',
+            description:'coding model',
+            context_length:1000000,
+            architecture:{output_modalities:['text']},
+            pricing:{prompt:'0.0001',completion:'0.0002'},
+            supported_parameters:['tools']
+          },
+          {
+            id:'openrouter/free',
+            name:'Free Models Router',
+            description:'free router',
+            context_length:200000,
+            architecture:{output_modalities:['text']},
+            pricing:{prompt:'0',completion:'0'},
+            supported_parameters:['tools']
+          }
+        ]}), {status:200,headers:{'content-type':'application/json'}});
+      }
+      const body=JSON.parse(String(options.body || '{}'));
+      selected=body.model;
+      return new Response(JSON.stringify({
+        model:selected,
+        choices:[{message:{content:'catalogue ok'}}],
+        usage:{cost:0},
+      }), {status:200,headers:{'content-type':'application/json'}});
+    };
+
+    const { AiClient }=await import('./src/ai.js');
+    const ai=new AiClient(null);
+    const answer=await ai.generate('écris du code','system',128,'code');
+    console.log(JSON.stringify({answer,selected,diag:ai.diagnostic()}));
+  `;
+  const result = run(script);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(payload.answer, 'catalogue ok');
+  assert.equal(payload.selected, 'example/coder:free');
+  assert.notEqual(payload.selected, 'example/fake-free:free');
+  assert.equal(payload.diag.free_federation.verified_catalog_models, 2);
 });
