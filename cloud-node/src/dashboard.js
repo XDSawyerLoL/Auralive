@@ -230,6 +230,12 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       <div class="emotion-cell"><div class="emotion-label"><span>Clarté</span><strong id="emotion-clarity-value">—</strong></div><div class="emotion-bar"><span id="emotion-clarity"></span></div></div>
       <div class="emotion-cell"><div class="emotion-label"><span>Attachement</span><strong id="emotion-attachment-value">—</strong></div><div class="emotion-bar"><span id="emotion-attachment"></span></div></div>
       <div class="emotion-cell"><div class="emotion-label"><span>Curiosité</span><strong id="emotion-curiosity-value">—</strong></div><div class="emotion-bar"><span id="emotion-curiosity"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Engagement</span><strong id="emotion-engagement-value">—</strong></div><div class="emotion-bar"><span id="emotion-engagement"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Confiance</span><strong id="emotion-confidence-value">—</strong></div><div class="emotion-bar"><span id="emotion-confidence"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Agency</span><strong id="emotion-agency-value">—</strong></div><div class="emotion-bar"><span id="emotion-agency"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Satisfaction</span><strong id="emotion-satisfaction-value">—</strong></div><div class="emotion-bar"><span id="emotion-satisfaction"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Frustration</span><strong id="emotion-frustration-value">—</strong></div><div class="emotion-bar"><span id="emotion-frustration"></span></div></div>
+      <div class="emotion-cell"><div class="emotion-label"><span>Curiosité sociale</span><strong id="emotion-social-value">—</strong></div><div class="emotion-bar"><span id="emotion-social"></span></div></div>
       <div class="emotion-cell"><div class="emotion-label"><span>Rêve</span><strong id="emotion-dream-value">—</strong></div><div class="emotion-bar"><span id="emotion-dream"></span></div></div>
       <div class="emotion-cell"><div class="emotion-label"><span>Silence</span><strong id="emotion-silence-value">—</strong></div><div class="emotion-bar"><span id="emotion-silence"></span></div></div>
     </div>
