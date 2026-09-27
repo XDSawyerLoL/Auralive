@@ -151,6 +151,26 @@ export const config = Object.freeze({
   voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Leda',
   voiceTimeoutMs: int('TTS_TIMEOUT_MS', 35000, 5000, 120000),
 
+  // AURA Voice Fabric: provider-neutral Mairaiy identity.
+  // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
+  voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', true),
+  voiceFabricBaseUrl: String(process.env.AURA_VOICE_FABRIC_BASE_URL || '').replace(/\/$/, ''),
+  voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
+  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'omnivoice',
+  voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
+  voiceFabricProfileName: process.env.AURA_MAIRAIY_VOICE_PROFILE_NAME || 'Mairaiy',
+  voiceFabricRequireProfile: bool('AURA_MAIRAIY_REQUIRE_PROFILE', true),
+  voiceFabricLanguage: process.env.AURA_MAIRAIY_LANGUAGE || 'fr',
+  voiceFabricInstruct: process.env.AURA_MAIRAIY_VOICE_INSTRUCT || '',
+  voiceFabricSpeed: num('AURA_MAIRAIY_VOICE_SPEED', 1, 0.5, 1.5),
+  voiceFabricSeed: int('AURA_MAIRAIY_VOICE_SEED', 2388, 0, 2147483647),
+  voiceFabricTimeoutMs: int('AURA_VOICE_FABRIC_TIMEOUT_MS', 90000, 5000, 300000),
+  voiceFabricDiscoveryTtlSeconds: int('AURA_VOICE_FABRIC_DISCOVERY_TTL_SECONDS', 120, 15, 3600),
+  voiceFabricChunkChars: int('AURA_VOICE_FABRIC_CHUNK_CHARS', 3200, 800, 3900),
+  voiceFabricMaxAudioBytes: int('AURA_VOICE_FABRIC_MAX_AUDIO_BYTES', 20 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
+  voiceFabricZeroCostConfirmed: bool('AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED', false),
+  voiceFabricStrictIdentity: bool('AURA_VOICE_FABRIC_STRICT_IDENTITY', true),
+
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
