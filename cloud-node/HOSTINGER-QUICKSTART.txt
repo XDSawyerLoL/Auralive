@@ -1,4 +1,4 @@
-AURA Cloud Node — Hostinger 2.0.1 — ZERO COST
+AURA Cloud Node — Hostinger 2.1.0 — ZERO COST
 
 Réglages :
 - Framework : Other
