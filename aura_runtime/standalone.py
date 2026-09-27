@@ -11,6 +11,7 @@ import aiohttp
 
 from .evolution_fleet import EvolutionFleet
 from .evolution_lab import RuntimeFleetLab
+from .operator import RuntimeOperator
 from .worker import AuraRuntimeWorker
 
 
@@ -24,6 +25,14 @@ def _int(name: str, default: int) -> int:
         return int(str(os.getenv(name, default)).strip())
     except Exception:
         return default
+
+
+def _list(name: str, default: str = '') -> list[str]:
+    raw = str(os.getenv(name, default) or '').strip()
+    if not raw:
+        return []
+    separator = ';' if ';' in raw else ','
+    return [item.strip() for item in raw.split(separator) if item.strip()]
 
 
 def runtime_settings_from_env() -> SimpleNamespace:
@@ -59,6 +68,35 @@ def runtime_settings_from_env() -> SimpleNamespace:
         ).strip(),
         evolution_github_token=str(os.getenv('AURA_RUNTIME_GITHUB_TOKEN', '')).strip(),
         evolution_auto_submit=_bool('AURA_RUNTIME_EVOLUTION_AUTO_SUBMIT', True),
+        aura_runtime_operator_roots=[
+            Path(item).expanduser()
+            for item in _list('AURA_RUNTIME_OPERATOR_ROOTS', os.getcwd())
+        ],
+        aura_runtime_operator_allowed_risks=set(
+            _list(
+                'AURA_RUNTIME_OPERATOR_ALLOWED_RISKS',
+                'safe,ai,network,local-write,process,local-control',
+            )
+        ),
+        aura_runtime_operator_commands=set(
+            _list(
+                'AURA_RUNTIME_OPERATOR_COMMANDS',
+                'git,python,python3,node,npm,npx,pytest,cargo',
+            )
+        ),
+        aura_runtime_operator_domains=set(_list('AURA_RUNTIME_OPERATOR_DOMAINS', '')),
+        aura_runtime_operator_max_file_bytes=max(
+            1_000,
+            _int('AURA_RUNTIME_OPERATOR_MAX_FILE_BYTES', 200_000),
+        ),
+        aura_runtime_operator_process_timeout_seconds=max(
+            5,
+            _int('AURA_RUNTIME_OPERATOR_PROCESS_TIMEOUT_SECONDS', 90),
+        ),
+        aura_runtime_operator_http_timeout_seconds=max(
+            5,
+            _int('AURA_RUNTIME_OPERATOR_HTTP_TIMEOUT_SECONDS', 20),
+        ),
     )
 
 
@@ -121,6 +159,7 @@ class StandaloneOllamaAI:
 class StandaloneRuntimeHost:
     def __init__(self, settings: Any):
         self.ai = StandaloneOllamaAI(settings)
+        self.operator = RuntimeOperator(self.ai, settings)
         self.cognitive = None
         self.avatar_audio = None
         self.image = None
