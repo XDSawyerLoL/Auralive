@@ -23,7 +23,7 @@ class AuraRuntimeWorker:
 
     Le transport Cloud, les leases, le Compute Mesh et la distribution des jobs
     appartiennent à AURA Runtime. Les capacités concrètes sont fournies par un
-    hôte/adaptateur injecté: Quantic Studio aujourd'hui, ou un runtime autonome.
+    hôte/adaptateur injecté par un produit Quantic ou par un service autonome.
     """
 
     VERSION = "aura-runtime-worker-v3"
@@ -310,8 +310,9 @@ class AuraRuntimeWorker:
                     "detail": str(detail or "")[:500],
                     "metadata": {
                         **(metadata or {}),
-                        "via": "aura-runtime-compat-host",
-                        "runtime_host_product": "quantic-studio",
+                        "via": "aura-runtime",
+                        "runtime_host_product": self.host_product,
+                        "runtime_packaging": self.runtime_packaging,
                         "content_forwarded": False,
                     },
                 },
@@ -359,8 +360,8 @@ class AuraRuntimeWorker:
     ) -> dict[str, Any]:
         """Ask AURA Cloud to orchestrate a distributed Mixture-of-Agents.
 
-        The Cloud token remains inside AURA Runtime (currently packaged with
-        Quantic Studio for compatibility); browser clients never receive it.
+        The Cloud token remains inside AURA Runtime; browser clients never
+        receive it.
         If the cloud mesh is unavailable, callers can fall back to the local
         constellation without weakening privacy.
         """
