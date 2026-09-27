@@ -1452,7 +1452,7 @@ export class CommandCenter {
       await this.updateInitiative(id, {
         status: 'waiting',
         execution_mode: 'waiting-local-worker',
-        result: { reason: 'Quantic Studio worker offline' },
+        result: { reason: 'AURA Runtime worker offline' },
       });
       return { id, status: 'waiting', reason: 'worker offline' };
     }
@@ -1466,7 +1466,7 @@ export class CommandCenter {
         status: 'waiting',
         execution_mode: 'waiting-local-worker',
         result: {
-          reason: 'Quantic Studio worker offline',
+          reason: 'AURA Runtime worker offline',
           repository: targetRepository,
         },
       });
