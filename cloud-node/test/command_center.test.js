@@ -169,6 +169,9 @@ test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
 });
 
 test('offline Fleet evolution remains waiting instead of recording false success', () => {
+  assert.match(commandSource, /crossProductEvolution && !bridgeOnline/);
+  assert.match(commandSource, /execution_mode: 'waiting-local-worker'/);
   assert.match(commandSource, /returnedStatus\.startsWith\('waiting'\)/);
+  assert.match(commandSource, /\['queued', 'leased'\]\.includes\(returnedStatus\)/);
   assert.match(commandSource, /const status = waiting \? 'waiting'/);
 });
