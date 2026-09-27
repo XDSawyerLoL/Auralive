@@ -41,9 +41,10 @@ Quand aucun modèle de langage n'est disponible, AURA doit continuer à :
 
 ## Architecture cible
 
-AURA Cloud = continuité, Soul, mémoire et coordination.
-Quantic Studio = corps local, outils, capteurs, actions et modèle local.
-HORIZON = perception/anticipation externe.
+AURA Core/Cloud = continuité, Soul, mémoire, direction et coordination.
+AURA Runtime = plan d'exécution local indépendant : modèles, calcul, outils, actions et capacités machine.
+Quantic Studio = produit enfant dédié au streaming vivant.
+HORIZON = produit enfant de perception/anticipation externe.
 Mairaiy/Kokoro = identité vocale.
 LLM local = outil de langage/sémantique, remplaçable.
 Gemini = transition/fallback temporaire uniquement.
@@ -53,7 +54,7 @@ Gemini = transition/fallback temporaire uniquement.
 Gemini peut être retiré lorsque :
 - le noyau fonctionne sans lui ;
 - la verbalisation locale est opérationnelle ;
-- le modèle local répond via Quantic Studio ;
+- le modèle local répond via AURA Runtime ;
 - les tests de non-régression passent ;
 - les actions, la voix et les cycles cognitifs restent disponibles sans clé Gemini.
 
@@ -90,7 +91,8 @@ AURA n'utilise pas le Web comme une interface humaine à cliquer. Le centre de c
 
 - GitHub API pour l'état des dépôts, CI et actions AutoOps allowlistées ;
 - HORIZON API pour les signaux et le contexte ;
-- Quantic Studio via le bridge authentifié pour les capacités locales ;
+- AURA Runtime via le bridge authentifié pour les capacités locales ;
+- les produits Quantic via leurs adaptateurs typés pour leurs capacités métier ;
 - GitHub Actions/CI comme calcul distant reproductible pour tests, builds et validation ;
 - APIs produit Quantic à mesure qu'elles exposent des capacités typées.
 
@@ -101,3 +103,12 @@ Aucune commande shell distante arbitraire n'est exposée par le Cloud. Les capac
 Une source seule ne devient pas un fait. Le score combine fiabilité de la source, pertinence, indépendance des domaines et contradictions. Plusieurs sources indépendantes sont nécessaires pour atteindre `corroborated`. Les contradictions abaissent le niveau de confiance et peuvent bloquer l'action autonome.
 
 Cette architecture transforme donc le réseau en mémoire externe + bus d'observation + couche d'exécution distribuée, tout en conservant l'identité, les intentions et l'arbitrage dans le noyau AURA.
+
+
+## Invariant Quantic Sillage
+
+La définition canonique des rôles se trouve dans `ARCHITECTURE-QUANTIC-SILLAGE.md`.
+
+AURA est le système parent. AURA Runtime est son plan d'exécution local. Quantic Studio et les autres
+applications sont des produits enfants spécialisés. Aucun produit ne doit devenir propriétaire de la
+mémoire, des intentions, de l'identité ou de la direction d'AURA.
