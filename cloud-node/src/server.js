@@ -128,6 +128,45 @@ function requireCanary(request, reply) {
   return true;
 }
 
+const rateBuckets = new Map();
+
+function rateLimitKey(request) {
+  return String(request.ip || request.socket?.remoteAddress || 'unknown').slice(0, 160);
+}
+
+function consumeRateLimit(bucket, key, maxRequests, windowSeconds) {
+  const stamp = Date.now();
+  const windowMs = Math.max(1, Number(windowSeconds || 60)) * 1000;
+  const id = `${bucket}:${key}`;
+  const current = rateBuckets.get(id);
+  if (!current || stamp >= current.resetAt) {
+    const next = { count: 1, resetAt: stamp + windowMs };
+    rateBuckets.set(id, next);
+    return { allowed: true, remaining: Math.max(0, maxRequests - 1), retryAfter: 0 };
+  }
+  current.count += 1;
+  if (current.count > maxRequests) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfter: Math.max(1, Math.ceil((current.resetAt - stamp) / 1000)),
+    };
+  }
+  return { allowed: true, remaining: Math.max(0, maxRequests - current.count), retryAfter: 0 };
+}
+
+function requireRateLimit(request, reply, bucket, maxRequests, windowSeconds) {
+  const result = consumeRateLimit(bucket, rateLimitKey(request), maxRequests, windowSeconds);
+  reply.header('X-RateLimit-Limit', String(maxRequests));
+  reply.header('X-RateLimit-Remaining', String(result.remaining));
+  if (!result.allowed) {
+    reply.header('Retry-After', String(result.retryAfter));
+    reply.code(429).send({ error: 'Trop de requêtes', retry_after_seconds: result.retryAfter });
+    return false;
+  }
+  return true;
+}
+
 const app = Fastify({
   logger: { level: config.logLevel },
   bodyLimit: 1_048_576,
@@ -336,6 +375,13 @@ app.get('/api/auth/session', async (request) => ({
 }));
 
 app.post('/api/auth/session', async (request, reply) => {
+  if (!requireRateLimit(
+    request,
+    reply,
+    'auth-session',
+    config.authRateLimitMax,
+    config.authRateLimitWindowSeconds,
+  )) return;
   const supplied = String(request.body?.token || bearer(request) || '').trim();
   if (!tokenEquals(supplied, config.cloudToken)) {
     return reply.code(401).send({
@@ -677,12 +723,14 @@ app.get('/api/kernel/status', async () => {
   return { ...status, phase: (await kernel.soul()).phase };
 });
 
-app.get('/api/kernel/soul', async () => {
+app.get('/api/kernel/soul', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return publicFallbackSoul(true);
   return kernel.soul({ privateView: true });
 });
 
-app.get('/api/kernel/organism', async () => {
+app.get('/api/kernel/organism', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return { ready: false };
   return kernel.organismState({ publicView: false });
 });
@@ -702,10 +750,14 @@ app.get('/api/kernel/reflections', async (request, reply) =>
     : undefined);
 
 app.get('/api/kernel/lessons', async (request, reply) =>
-  requireRuntime(reply) ? kernel.lessons(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.lessons(request.query?.limit)
+    : undefined);
 
 app.get('/api/kernel/intentions', async (request, reply) =>
-  requireRuntime(reply) ? kernel.intentions(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.intentions(request.query?.limit)
+    : undefined);
 
 app.post('/api/kernel/intentions', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
@@ -747,13 +799,19 @@ app.get('/api/kernel/improvements', async (request, reply) =>
     : undefined);
 
 app.get('/api/kernel/activity', async (request, reply) =>
-  requireRuntime(reply) ? kernel.activity(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.activity(request.query?.limit)
+    : undefined);
 
 app.get('/api/kernel/work', async (request, reply) =>
-  requireRuntime(reply) ? kernel.workItems(request.query?.limit) : undefined);
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.workItems(request.query?.limit)
+    : undefined);
 
-app.get('/api/kernel/attention', async (_request, reply) =>
-  requireRuntime(reply) ? kernel.attentionMap() : undefined);
+app.get('/api/kernel/attention', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.attentionMap()
+    : undefined);
 
 app.post('/api/kernel/agents/run', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
@@ -783,6 +841,16 @@ app.post('/api/kernel/operator', async (request, reply) => {
 
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
+  if (
+    !isPrivate(request)
+    && !requireRateLimit(
+      request,
+      reply,
+      'public-chat',
+      config.publicChatRateLimitMax,
+      config.publicChatRateLimitWindowSeconds,
+    )
+  ) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
   const response = await kernel.chat(text, String(request.body?.author || 'Utilisateur'), true);
