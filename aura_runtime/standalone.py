@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -137,5 +139,28 @@ async def run_forever() -> None:
         await worker.close()
 
 
+def check_payload() -> dict[str, Any]:
+    settings = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(settings)
+    worker = AuraRuntimeWorker(
+        host,
+        settings,
+        host_product='',
+        runtime_packaging='standalone-service',
+    )
+    return {
+        'ok': True,
+        'component': 'aura-runtime',
+        'version': worker.VERSION,
+        'packaging': worker.runtime_packaging,
+        'job_kinds': worker._job_kinds(),
+        'cloud_configured': bool(worker.base_url and worker.token),
+        'studio_required': False,
+    }
+
+
 def main() -> None:
+    if '--check' in sys.argv:
+        print(json.dumps(check_payload(), ensure_ascii=False, sort_keys=True))
+        return
     asyncio.run(run_forever())

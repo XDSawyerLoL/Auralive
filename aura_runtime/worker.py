@@ -147,6 +147,25 @@ class AuraRuntimeWorker:
                 capabilities.append("moa")
         return capabilities
 
+    def _job_kinds(self) -> list[str]:
+        kinds = ["compute"]
+        ai = getattr(self.host, "ai", None)
+        if ai is not None and callable(getattr(ai, "generate", None)):
+            kinds.append("inference")
+        cognitive = getattr(self.host, "cognitive", None)
+        if cognitive is not None and callable(getattr(cognitive, "operate", None)):
+            kinds.append("operator")
+        voice = getattr(self.host, "avatar_audio", None)
+        if voice is not None and callable(getattr(voice, "synthesize", None)):
+            kinds.append("tts")
+        image = getattr(self.host, "image", None)
+        if image is not None and callable(getattr(image, "generate", None)):
+            kinds.append("image")
+        evolution = getattr(self.host, "evolution", None)
+        if evolution is not None and callable(getattr(evolution, "run_cycle", None)):
+            kinds.append("evolution")
+        return sorted(set(kinds))
+
     def _resource_profile(self) -> dict[str, Any]:
         ai = self._ai_diagnostic()
         model = str(
@@ -467,7 +486,10 @@ class AuraRuntimeWorker:
     async def _claim(self) -> dict[str, Any] | None:
         payload = await self._post(
             "/api/bridge/claim",
-            {"worker_id": self.worker_id},
+            {
+                "worker_id": self.worker_id,
+                "job_kinds": self._job_kinds(),
+            },
         )
         job = payload.get("job")
         return job if isinstance(job, dict) and job.get("id") else None
@@ -771,6 +793,7 @@ class AuraRuntimeWorker:
             "worker_id": self.worker_id,
             "compute_consent": self.compute_consent,
             "mesh_capabilities": self._mesh_capabilities(),
+            "job_kinds": self._job_kinds(),
             "peer_mesh_enabled": self.compute_consent,
             "resources": self._resource_profile(),
             "cloud_url": self.base_url,

@@ -1,0 +1,64 @@
+name: Build AURA Runtime Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "aura_runtime/**"
+      - "scripts/build-aura-runtime.ps1"
+      - ".github/workflows/build-aura-runtime-windows.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "aura_runtime/**"
+      - "app/services/aura_cloud_worker.py"
+      - "cloud-node/src/bridge.js"
+      - "cloud-node/src/server.js"
+      - "scripts/build-aura-runtime.ps1"
+      - ".github/workflows/build-aura-runtime-windows.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-runtime:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: aura_runtime/requirements.txt
+
+      - name: Compile standalone runtime
+        run: python -m compileall -q aura_runtime
+
+      - name: Build AuraRuntime.exe
+        shell: pwsh
+        run: .\scripts\build-aura-runtime.ps1
+
+      - name: Verify standalone diagnostic
+        shell: pwsh
+        run: |
+          $payload = & "dist\AuraRuntime\AuraRuntime.exe" --check | ConvertFrom-Json
+          if (-not $payload.ok) { throw "AURA Runtime diagnostic failed." }
+          if ($payload.component -ne "aura-runtime") { throw "Unexpected component." }
+          if ($payload.studio_required -ne $false) { throw "AURA Runtime still requires Studio." }
+          if (-not ($payload.job_kinds -contains "compute")) { throw "Compute capability missing." }
+          if (-not ($payload.job_kinds -contains "inference")) { throw "Standalone Ollama inference capability missing." }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aura-runtime-windows
+          path: dist/AuraRuntime/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 30
