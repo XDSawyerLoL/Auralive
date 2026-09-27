@@ -135,7 +135,7 @@ export async function seedQuanticProducts(commandCenter) {
     results.push(await commandCenter.upsertService({
       id: product.id,
       name: product.name,
-      kind: 'quantic-product',
+      kind: product.role === 'platform-core' ? 'platform-core' : 'quantic-product',
       objective: product.objective,
       repository: product.repository,
       criticality: product.criticality,
