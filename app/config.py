@@ -111,6 +111,11 @@ class Settings:
     ai_constellation_moa_enabled: bool = _bool("AI_CONSTELLATION_MOA_ENABLED", True)
     ai_constellation_moa_min_tokens: int = _int("AI_CONSTELLATION_MOA_MIN_TOKENS", 260)
     ai_constellation_moa_parallel: bool = _bool("AI_CONSTELLATION_MOA_PARALLEL", True)
+    ai_constellation_exploration: float = _float("AI_CONSTELLATION_EXPLORATION", 0.08)
+    ai_constellation_scorecard_file: Path = _runtime_path(
+        "AI_CONSTELLATION_SCORECARD_FILE",
+        "data/model-scorecard.json",
+    )
 
     # Génération d'images locale. "auto" essaie A1111 puis ComfyUI.
     image_mode: str = os.getenv("AURA_IMAGE_MODE", "auto").strip().lower()
