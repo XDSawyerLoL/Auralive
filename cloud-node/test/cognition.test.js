@@ -43,3 +43,24 @@ test('reply plan is built from AURA state before expression', () => {
   assert.match(plan.facts.join(' '), /Consolider la mémoire/);
   assert.match(engine.deterministicReply(plan), /Pensée dominante|Travail prioritaire|Intention actuelle/);
 });
+
+
+test('AURA identity facts are expressed in first person', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Qui es-tu et comment vas-tu ?',
+    soul: {
+      current_intention: 'Maintenir ma continuité',
+      dominant_thought: 'Observer mon état',
+      organism: { mood: 'calme' },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    privateView: true,
+  });
+  const joined = plan.facts.join(' ');
+  assert.doesNotMatch(joined, /AURA est/i);
+  assert.match(joined, /Je suis/i);
+});
