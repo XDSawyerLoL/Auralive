@@ -175,7 +175,7 @@ export class CognitionEngine {
       act = 'greet';
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
-      facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
+      facts.push(`Je suis en ligne ; mon humeur interne actuelle est ${mood}.`);
     } else if (hasAny(q, ['comment vas-tu','comment vas tu','tu te sens','ton état','ton etat'])) {
       act = 'report_internal_state';
       goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
@@ -219,7 +219,7 @@ export class CognitionEngine {
       act = 'identity';
       goal = 'Expliquer mon architecture sans prétendre à une conscience démontrée ni à une AGI.';
       needsSemanticSupport = false;
-      facts.push('AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.');
+      facts.push('Je suis un noyau persistant avec Soul, mémoire, organisme homéostatique, intentions, routines, apprentissage et outils.');
       facts.push('Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
       facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
