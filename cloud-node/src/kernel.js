@@ -23,10 +23,20 @@ function intentionKey(value) {
 }
 
 export function requiresExternalKnowledge(value) {
-  const text = String(value || '').toLowerCase();
+  const text = ` ${String(value || '').toLowerCase().replace(/\s+/g, ' ').trim()} `;
+
+  // Casual / relational turns must never launch Web research merely because
+  // they contain words such as "aujourd'hui" or "actuellement".
+  if (
+    /\b(comment\s+(vas|va)[- ]?tu|comment\s+(ça|ca)\s+va|ça\s+va|ca\s+va|tu\s+te\s+sens)\b/.test(text)
+    || /\b(salut|bonjour|bonsoir|coucou|hello)\b/.test(text)
+  ) {
+    return false;
+  }
+
   return [
-    'internet',' web ','aujourd','actuel','actuelle','dernière','derniere','récent','recent',
-    'marché','marche','concurrent','documentation',' api ','version','prix','actualité','actualite',
+    ' internet ',' web ','actualité','actualite','dernière version','derniere version',
+    'récent','recent','marché','marche','concurrent','documentation',' api ','prix',
     'source','vérifie','verifie','cherche','recherche','technolog','benchmark','norme','standard',
     'licence','compatib','sortie','release','mise à jour','mise a jour',
   ].some((token) => text.includes(token));
@@ -917,13 +927,8 @@ export class CognitiveKernel {
           external_epistemic_status: externalResearch?.epistemic_status || 'unverified',
           external_confidence: Number(externalResearch?.confidence || 0),
           external_evidence_count: Number(externalResearch?.evidence_count || 0),
-          facts: [
-            ...(plan.facts || []),
-            'Recherche Web effectuée avant réponse: statut='
-              + String(externalResearch?.epistemic_status || 'unverified')
-              + ', confiance=' + Number(externalResearch?.confidence || 0).toFixed(2)
-              + ', preuves=' + Number(externalResearch?.evidence_count || 0) + '.',
-          ],
+          facts: [...(plan.facts || [])],
+          external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
         await this.trace(
           'web-research',
@@ -943,10 +948,8 @@ export class CognitiveKernel {
           external_epistemic_status: 'unavailable',
           external_confidence: 0,
           external_evidence_count: 0,
-          facts: [
-            ...(plan.facts || []),
-            'La vérification Web nécessaire à cette question est indisponible; ne pas présenter de connaissance externe comme vérifiée.',
-          ],
+          facts: [...(plan.facts || [])],
+          external_research_summary: '',
         };
         await this.trace(
           'web-research-error',
