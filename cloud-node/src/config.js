@@ -291,6 +291,10 @@ export const config = Object.freeze({
   videoFactoryApiKey: process.env.AURA_VIDEO_FACTORY_API_KEY || '',
   videoFactoryTimeoutMs: int('AURA_VIDEO_FACTORY_TIMEOUT_MS', 120000, 5000, 600000),
   videoFactoryZeroCostConfirmed: bool('AURA_VIDEO_FACTORY_ZERO_COST_CONFIRMED', false),
+  videoFactoryAutoPublishDisabledConfirmed: bool(
+    'AURA_VIDEO_FACTORY_AUTO_PUBLISH_DISABLED_CONFIRMED',
+    false,
+  ),
 
   meshP2pEnabled: bool('AURA_MESH_P2P_ENABLED', true),
   meshPeerOnlineMs: int('AURA_MESH_PEER_ONLINE_MS', 45_000, 5_000, 300_000),
