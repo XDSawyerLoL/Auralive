@@ -100,7 +100,8 @@ def test_windows_package_keeps_kokoro_compatibility_but_aoede_identity() -> None
     assert "TTS_VOICE=Aoede" in env_example
     assert "MAIRAIY_LOCKED_VOICE=Aoede" in env_example
     assert "include-hidden-files: true" in workflow
-    assert "Kokoro ff_siwis n'est pas pret" in workflow
+    assert "Aoede verrouillee" in workflow
+    assert "aucun fallback de timbre" in workflow
     assert "api/avatar/test" in workflow
     assert "overlay_required" in workflow
     assert 'Get-Content "VERSION.json"' in workflow
