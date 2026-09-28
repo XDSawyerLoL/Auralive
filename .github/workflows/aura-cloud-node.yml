@@ -44,8 +44,8 @@ jobs:
         shell: bash
         env:
           NODE_ENV: production
-          PORT: "49999"
-          AURA_GATEWAY_PORT: "3987"
+          PORT: "3987"
+          AURA_GATEWAY_PORT: "49999"
           AURA_INTERNAL_PORT: "3988"
         run: |
           set -euo pipefail
