@@ -1,0 +1,80 @@
+name: Package Mairaiy Kokoro Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "config/**"
+      - "requirements.txt"
+      - "deploy/hostinger/**"
+      - ".github/workflows/package-mairaiy-kokoro-hostinger.yml"
+  workflow_dispatch:
+
+jobs:
+  package-mairaiy-kokoro-hostinger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate exact Kokoro bridge source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile app/main.py app/main_v2.py app/main_v3.py app/services/local_kokoro_voice.py app/services/voice_identity_lock.py
+          grep -q '@app.post("/voice/v1/audio/speech")' app/main.py
+          grep -q '"X-Mairaiy-Voice": "ff_siwis"' app/main.py
+          grep -q 'getattr(aura, "local_kokoro_voice", None) or mairaiy_kokoro' app/main.py
+          grep -q 'install_voice_identity_lock(aura)' app/main_v3.py
+          grep -q 'MAIRAIY_KOKORO_VOICE", "ff_siwis"' app/services/local_kokoro_voice.py
+
+      - name: Build Hostinger Python project root
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/mairaiy-kokoro-hostinger"
+          rm -rf "$ROOT"
+          mkdir -p "$ROOT"
+
+          cp -R app "$ROOT/app"
+          cp -R config "$ROOT/config"
+          cp -R deploy "$ROOT/deploy"
+          cp -R tests "$ROOT/tests"
+          cp requirements.txt pytest.ini README.md FONCTIONS.md SECURITY.md LICENSE "$ROOT/"
+
+          cat > "$ROOT/HOSTINGER-MAIRAIY.txt" <<'EOF'
+          Mairaiy exact voice service
+          ---------------------------
+          Runtime: Python 3.12 / FastAPI
+          Start: bash deploy/hostinger/start.sh
+          Engine: Kokoro ONNX
+          Voice: ff_siwis
+          Language: fr-fr
+
+          Exact endpoints:
+          GET  /voice/.well-known/voicestudio-speech
+          GET  /voice/v1/audio/voices
+          POST /voice/v1/audio/speech
+
+          The POST endpoint calls the same aura.local_kokoro_voice instance used by
+          Quantic Studio v3. No Gemini, Piper, Windows or browser TTS fallback is
+          used by this endpoint.
+          EOF
+
+          test -f "$ROOT/app/main_v3.py"
+          test -f "$ROOT/app/services/local_kokoro_voice.py"
+          test -f "$ROOT/deploy/hostinger/start.sh"
+          test -f "$ROOT/requirements.txt"
+
+      - name: Upload Hostinger-ready Mairaiy project
+        uses: actions/upload-artifact@v4
+        with:
+          name: mairaiy-kokoro-hostinger
+          path: ${{ runner.temp }}/mairaiy-kokoro-hostinger/
+          retention-days: 14
+          if-no-files-found: error
+          include-hidden-files: true
