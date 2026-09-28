@@ -148,7 +148,7 @@ export const config = Object.freeze({
   voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
   voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
   voiceModel: process.env.TTS_MODEL || 'gemini-3.1-flash-tts-preview',
-  voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Leda',
+  voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Aoede',
   voiceTimeoutMs: int('TTS_TIMEOUT_MS', 35000, 5000, 120000),
 
   // AURA Voice Fabric: provider-neutral Mairaiy identity.
@@ -157,7 +157,7 @@ export const config = Object.freeze({
   voiceFabricPinQuanticEndpoint: true,
   voiceFabricBaseUrl: 'https://mediumorchid-badger-314305.hostingersite.com/voice',
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
-  voiceFabricModel: 'kokoro',
+  voiceFabricModel: 'gemini-3.1-flash-tts-preview',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
   voiceFabricProfileName: 'Mairaiy',
   voiceFabricRequireProfile: true,
