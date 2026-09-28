@@ -91,5 +91,20 @@ test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
   assert.equal(gateway.application_ready, true);
   assert.equal(gateway.application_state, 'ready');
 
+  const bootstrapResponse = await fetch(base + '/api/bootstrap/status');
+  assert.equal(bootstrapResponse.status, 200);
+  const bootstrap = await bootstrapResponse.json();
+  assert.equal(bootstrap.server_ready, true);
+  assert.equal(
+    (bootstrap.issues || []).some((issue) => issue && issue.code === 'cloud_token_missing'),
+    false,
+    'AURA_CLOUD_TOKEN must not be required for direct dashboard/chat access',
+  );
+
+  const authResponse = await fetch(base + '/api/auth/session');
+  assert.equal(authResponse.status, 200);
+  const auth = await authResponse.json();
+  assert.equal(auth.authenticated, false);
+
   assert.equal(child.exitCode, null, stderr);
 });
