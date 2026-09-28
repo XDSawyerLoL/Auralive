@@ -484,21 +484,13 @@ async function refresh(){
         $('voiceText').textContent='Mairaiy · Studio';
         $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
       }else{
+        $('voiceText').textContent='Mairaiy · attente';
         const cloudReason=String(voice.cloud_reason||'');
         const reasonLabel=cloudReason==='free-tier-unconfirmed'
           ? 'Aoede bloquée par le garde-fou zéro-coût : niveau gratuit Gemini non confirmé.'
           : cloudReason==='missing-api-key'
             ? 'Clé Gemini TTS absente sur AURA Cloud.'
-            : cloudReason==='cloud-disabled'
-              ? 'Voix Cloud désactivée.'
-              : cloudReason==='model-not-free-tier-allowed'
-                ? 'Modèle Aoede non autorisé par le garde-fou zéro-coût.'
-                : String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
-        $('voiceText').textContent=cloudReason==='free-tier-unconfirmed'
-          ? 'Mairaiy · Free Tier non confirmé'
-          : cloudReason==='missing-api-key'
-            ? 'Mairaiy · clé Gemini absente'
-            : 'Mairaiy · indisponible';
+            : String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
         $('voiceText').title=reasonLabel;
       }
     }catch(_){
@@ -656,22 +648,14 @@ async function speakAura(text,ticket){
     $('voiceText').textContent='Mairaiy · en ligne';
   }catch(error){
     document.body.classList.remove('aura-speaking');
-    const serverReason=String(error&&error.data&&error.data.direct_gemini_reason||'');
+    $('voiceText').textContent='Mairaiy · indisponible';
+    $('voiceText').title='Voix Aoede indisponible · aucun autre timbre utilisé';
     const reason=String(error&&error.message||'');
-    const visibleReason=serverReason||reason;
-    $('voiceText').textContent=serverReason==='free-tier-unconfirmed'
-      ? 'Mairaiy · Free Tier non confirmé'
-      : serverReason==='missing-api-key'
-        ? 'Mairaiy · clé Gemini absente'
-        : 'Mairaiy · indisponible';
-    $('voiceText').title=visibleReason||'Voix Aoede indisponible · aucun autre timbre utilisé';
-    $('chatState').textContent=serverReason==='free-tier-unconfirmed'
-      ? 'Réponse texte prête · Aoede bloquée : Free Tier Gemini non confirmé'
-      : serverReason==='missing-api-key'
-        ? 'Réponse texte prête · clé Gemini TTS absente sur le serveur'
-        : (reason.includes('bloque le son')
-          ? reason
-          : 'Réponse texte prête · voix Mairaiy Aoede indisponible · '+(visibleReason||'cause inconnue'));
+    $('chatState').textContent=reason.includes('free-tier-unconfirmed')
+      ? 'Réponse texte prête · Aoede bloquée par le garde-fou zéro-coût'
+      : (reason.includes('bloque le son')
+        ? reason
+        : 'Réponse texte prête · voix Mairaiy Aoede indisponible');
     console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
@@ -685,8 +669,8 @@ async function sendMessage(text){
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
-    await refresh();
-    await speakAura(out.answer||'',out.voice_ticket||'');
+    speakAura(out.answer||'',out.voice_ticket||'');
+    refresh();
   }catch(error){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
   }

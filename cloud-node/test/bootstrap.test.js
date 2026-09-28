@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
-const HOSTINGER_PORT = 34567;
+const HOSTINGER_PORT = 3000;
 const base = `http://127.0.0.1:${HOSTINGER_PORT}`;
 
 async function waitForBase(targetBase, path, matcher, timeoutMs = 15000) {
@@ -30,9 +30,8 @@ function launch(extraEnv = {}) {
       ...process.env,
       NODE_ENV: 'production',
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
-      PORT: String(HOSTINGER_PORT),
+      PORT: '49999',
       AURA_GATEWAY_PORT: '3987',
-      AURA_PORT: '3000',
       DB_HOST: '',
       DB_USER: '',
       DB_PASSWORD: '',
@@ -82,13 +81,13 @@ test('Hostinger lsnode can require the ESM entry because server.js has no top-le
   );
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.gateway_port, requirePort);
-  assert.equal(gateway.framework, 'fastify-via-native-gateway');
+  assert.equal(gateway.framework, 'fastify');
   assert.equal(gateway.application_ready, true);
   assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('production entry honors Hostinger PORT before AURA fallbacks with runtime disabled', async (t) => {
+test('production entry uses one Fastify listener on Hostinger port 3000 with runtime disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -98,21 +97,14 @@ test('production entry honors Hostinger PORT before AURA fallbacks with runtime 
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.ok, true);
   assert.equal(gateway.gateway_ready, true);
-  assert.equal(gateway.gateway_port, HOSTINGER_PORT);
-  assert.deepEqual(gateway.gateway_ports, [3000, HOSTINGER_PORT]);
+  assert.equal(gateway.gateway_port, 3000);
   assert.equal(gateway.runtime_ready, false);
-  assert.equal(gateway.framework, 'fastify-via-native-gateway');
+  assert.equal(gateway.framework, 'fastify');
   assert.equal(gateway.application_ready, true);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const health = JSON.parse(healthText);
   assert.equal(health.ok, true);
-
-  const fixedHostinger = await fetch('http://127.0.0.1:3000/__aura_gateway');
-  assert.equal(fixedHostinger.status, 200);
-  const fixedGateway = await fixedHostinger.json();
-  assert.equal(fixedGateway.gateway_port, 3000);
-  assert.equal(fixedGateway.application_ready, true);
 
   const root = await fetch(base + '/');
   assert.equal(root.status, 200);
@@ -160,14 +152,4 @@ test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
   assert.equal(auth.authenticated, false);
 
   assert.equal(child.exitCode, null, stderr);
-});
-
-
-test('bootstrap source opens Hostinger 3000 plus configured PORT before importing AURA', async () => {
-  const fs = await import('node:fs');
-  const source = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-  assert.match(source, /const hostingerPort = 3000/);
-  assert.match(source, /new Set\(\[hostingerPort, configuredPort\]\)/);
-  assert.ok(source.indexOf('startPublicGateways();') < source.indexOf('void bootAura();'));
-  assert.match(source, /Fastify internal runtime listening/);
 });

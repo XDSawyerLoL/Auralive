@@ -15,8 +15,8 @@ RÉGLAGES HOSTINGER
 - Installation : npm install --omit=dev
 - Démarrage : npm start
 - Output directory : vide
-- Port Hostinger géré : 3000 (contrat documenté par Hostinger)
-- AURA ouvre aussi le PORT configuré/injecté s'il diffère de 3000, via une passerelle native
+- Port public attendu par Hostinger : 3000
+- En production, AURA force 0.0.0.0:3000 même si une variable PORT différente est injectée
 
 ACCÈS DIRECT
 - Le dashboard AURA est public.
@@ -29,16 +29,16 @@ GARANTIE FINANCIÈRE
 - AURA_ZERO_COST_MODE=true doit rester activé.
 - Aucun fallback Gemini/OpenAI distant potentiellement facturable.
 - Expert Bridge externe bloqué en mode zéro coût.
-- TTS Gemini Aoede reste fail-closed en mode zéro coût : activé uniquement si la clé est présente et le Free Tier explicitement confirmé.
-- Aucun fallback Kokoro/Piper/voix générique ne remplace Mairaiy Aoede.
+- TTS Gemini Cloud bloqué.
+- Mairaiy utilise Providence/Kokoro ff_siwis via la route Quantic autorisée à 0 €.
 - Sans capacité gratuite disponible, AURA reste sur son noyau natif plutôt que de dépenser.
 
 ARCHITECTURE DE DÉMARRAGE
 - un seul process Node
-- passerelle native publique ouverte immédiatement sur 0.0.0.0:3000
-- seconde passerelle native sur PORT si PORT diffère de 3000
-- Fastify tourne uniquement en interne et les passerelles lui transmettent le trafic
-- même si Fastify échoue, / et /healthz restent accessibles avec le diagnostic réel
+- un seul listener Fastify public
+- bind 0.0.0.0
+- port 3000 forcé en production
+- passerelle native de récupération sur 3000 si le bootstrap Fastify échoue
 - MySQL démarre sans empêcher l'interface de répondre
 - timeout connexion MySQL : 5 s par défaut
 
@@ -75,7 +75,7 @@ VÉRIFICATION APRÈS DÉPLOIEMENT
 
 2. GET /__aura_gateway doit retourner :
    "gateway_ready": true
-   "gateway_port": 3000 (ou le PORT secondaire utilisé pour cette requête)
+   "gateway_port": 3000
 
 3. GET /api/bootstrap/status doit retourner :
    "product": "AURA Cloud"
