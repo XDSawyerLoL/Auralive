@@ -1,0 +1,222 @@
+import { NEURAL_FIELD_PALETTE_SCRIPT } from './neural-field-palette.js';
+import { NEURAL_FIELD_LAYOUT_SCRIPT } from './neural-field-layout.js';
+import { NEURAL_FIELD_INTERACTION_SCRIPT } from './neural-field-interaction.js';
+
+export const NEURAL_FIELD_SCRIPT = String.raw`
+${NEURAL_FIELD_PALETTE_SCRIPT}
+${NEURAL_FIELD_LAYOUT_SCRIPT}
+const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
+
+(function(){
+  const state={
+    canvas:null,
+    ctx:null,
+    field:null,
+    hovered:'',
+    stars:[],
+    dust:[],
+    pulses:[],
+    raf:0,
+    last:0,
+    width:900,
+    height:650,
+    dpr:1,
+    reduced:false,
+    focus:null
+  };
+
+  function hash01(value){ return neuralHash(value); }
+  function color(cluster,status){
+    if(String(status||'').match(/error|offline|degraded|unhealthy/)) return AURA_NEURAL_PALETTE.danger;
+    return AURA_NEURAL_PALETTE[cluster]||AURA_NEURAL_PALETTE.fabric;
+  }
+  function rgba(hex,a){
+    const raw=String(hex||'#ffffff').replace('#','');
+    const v=parseInt(raw.length===3?raw.split('').map(c=>c+c).join(''):raw,16);
+    return 'rgba('+((v>>16)&255)+','+((v>>8)&255)+','+(v&255)+','+a+')';
+  }
+  function seedSpace(){
+    state.stars=Array.from({length:state.reduced?55:170},(_,i)=>({
+      x:hash01('sx'+i),y:hash01('sy'+i),r:.35+hash01('sr'+i)*1.35,
+      a:.10+hash01('sa'+i)*.55,phase:hash01('sp'+i)*Math.PI*2
+    }));
+    state.dust=Array.from({length:state.reduced?18:64},(_,i)=>({
+      x:hash01('dx'+i),y:hash01('dy'+i),r:10+hash01('dr'+i)*42,
+      a:.008+hash01('da'+i)*.026,phase:hash01('dp'+i)*Math.PI*2
+    }));
+  }
+  function resize(){
+    if(!state.canvas)return;
+    const rect=state.canvas.getBoundingClientRect();
+    state.width=Math.max(320,Math.floor(rect.width));
+    state.height=Math.max(320,Math.floor(rect.height));
+    state.dpr=Math.min(window.devicePixelRatio||1,1.7);
+    state.canvas.width=Math.floor(state.width*state.dpr);
+    state.canvas.height=Math.floor(state.height*state.dpr);
+    state.ctx.setTransform(state.dpr,0,0,state.dpr,0,0);
+  }
+  function px(node){return {x:node.x*state.width,y:node.y*state.height};}
+  function drawBackground(t){
+    const ctx=state.ctx,w=state.width,h=state.height;
+    const g=ctx.createRadialGradient(w*.5,h*.5,10,w*.5,h*.5,Math.max(w,h)*.7);
+    g.addColorStop(0,'#101538');g.addColorStop(.25,'#091329');g.addColorStop(.65,'#050914');g.addColorStop(1,'#02040a');
+    ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+    for(const cloud of state.dust){
+      const x=cloud.x*w+Math.sin(t*.00008+cloud.phase)*18;
+      const y=cloud.y*h+Math.cos(t*.00006+cloud.phase)*14;
+      const rg=ctx.createRadialGradient(x,y,0,x,y,cloud.r*3.2);
+      rg.addColorStop(0,'rgba(80,158,255,'+cloud.a+')');
+      rg.addColorStop(.42,'rgba(125,82,255,'+(cloud.a*.55)+')');
+      rg.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=rg;ctx.beginPath();ctx.arc(x,y,cloud.r*3.2,0,Math.PI*2);ctx.fill();
+    }
+    for(const star of state.stars){
+      const tw=.55+.45*Math.sin(t*.0007+star.phase);
+      ctx.fillStyle='rgba(210,232,255,'+(star.a*tw)+')';
+      ctx.beginPath();ctx.arc(star.x*w,star.y*h,star.r,0,Math.PI*2);ctx.fill();
+    }
+  }
+  function drawSynapses(t){
+    const ctx=state.ctx;
+    for(const edge of state.field?.links||[]){
+      const a=px(edge.a),b=px(edge.b);
+      const activity=Math.max(.05,Math.min(1,Number(edge.activity)||0));
+      const weight=Math.max(.08,Math.min(1,Number(edge.weight)||.5));
+      const c=color(edge.a.cluster,edge.a.status);
+      ctx.save();
+      ctx.lineWidth=.45+weight*1.55;
+      ctx.strokeStyle=rgba(c,.07+activity*.25);
+      ctx.shadowBlur=activity>0.55?6:0;ctx.shadowColor=rgba(c,.38);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);
+      const bend=(hash01(edge.source+'>'+edge.target)-.5)*34;
+      const mx=(a.x+b.x)/2+(b.y-a.y)*.04+bend;
+      const my=(a.y+b.y)/2-(b.x-a.x)*.04-bend*.35;
+      ctx.quadraticCurveTo(mx,my,b.x,b.y);ctx.stroke();ctx.restore();
+
+      if(activity>.38&&!state.reduced){
+        const phase=(t*.00018*(.7+activity)+hash01(edge.source+edge.target))%1;
+        const q=1-phase;
+        const sx=q*q*a.x+2*q*phase*mx+phase*phase*b.x;
+        const sy=q*q*a.y+2*q*phase*my+phase*phase*b.y;
+        const glow=ctx.createRadialGradient(sx,sy,0,sx,sy,3+activity*7);
+        glow.addColorStop(0,'rgba(255,255,255,'+(.55+activity*.35)+')');
+        glow.addColorStop(.3,rgba(color(edge.b.cluster,edge.b.status),.52));
+        glow.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy,4+activity*7,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+  function drawDendrites(node,p,t){
+    if(node.id==='aura')return;
+    const ctx=state.ctx,c=color(node.cluster,node.status);
+    const intensity=Math.max(.08,Math.min(1,Number(node.activity)||0));
+    const count=node.role==='product'?2:3+Math.round(intensity*4);
+    for(let i=0;i<count;i++){
+      const angle=hash01(node.id+':branch:'+i)*Math.PI*2+Math.sin(t*.00012+i)*.05;
+      const length=(node.role==='product'?10:16)+hash01(node.id+':len:'+i)*24+intensity*12;
+      const x=p.x+Math.cos(angle)*length,y=p.y+Math.sin(angle)*length*.78;
+      ctx.strokeStyle=rgba(c,.08+intensity*.16);ctx.lineWidth=.45+intensity*.45;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      const cx=p.x+Math.cos(angle+.25)*length*.55,cy=p.y+Math.sin(angle-.18)*length*.42;
+      ctx.quadraticCurveTo(cx,cy,x,y);ctx.stroke();
+      ctx.fillStyle=rgba(c,.24+intensity*.34);ctx.beginPath();ctx.arc(x,y,1.1+intensity*1.4,0,Math.PI*2);ctx.fill();
+    }
+  }
+  function drawNeuron(node,t){
+    const ctx=state.ctx,p=px(node);
+    const c=color(node.cluster,node.status);
+    const intensity=Math.max(.06,Math.min(1,Number(node.activity)||0));
+    if(node.id==='aura'){
+      const breath=.94+.06*Math.sin(t*.0012);
+      const r=31*breath;
+      const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.9);
+      halo.addColorStop(0,'rgba(255,255,255,.95)');
+      halo.addColorStop(.10,'rgba(220,199,255,.82)');
+      halo.addColorStop(.34,'rgba(154,108,255,.56)');
+      halo.addColorStop(.70,'rgba(81,64,180,.16)');
+      halo.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*2.9,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='rgba(215,198,255,.48)';ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='rgba(249,247,255,.95)';ctx.font='600 14px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
+      return;
+    }
+    drawDendrites(node,p,t);
+    const role=String(node.role||'capability');
+    const base=role==='product'?4.5:role==='fabric-capability'?4:6.5;
+    const r=base+intensity*5.5;
+    const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.3);
+    halo.addColorStop(0,rgba(c,.45+intensity*.26));halo.addColorStop(.28,rgba(c,.16+intensity*.16));halo.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*3.3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=rgba(c,.26+intensity*.42);ctx.strokeStyle=rgba(c,.48+intensity*.42);
+    ctx.lineWidth=node.dominant?2:1;ctx.shadowBlur=node.dominant?12:4;ctx.shadowColor=rgba(c,.65);
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,'+(.38+intensity*.5)+')';ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1.5,r*.26),0,Math.PI*2);ctx.fill();
+
+    const show=node.dominant||state.hovered===node.id;
+    if(show){
+      const dx=p.x-state.width*.5;const dy=p.y-state.height*.5;const d=Math.sqrt(dx*dx+dy*dy)||1;
+      const lx=p.x+(dx/d)*(r+12),ly=p.y+(dy/d)*(r+10);
+      ctx.font='600 10px Inter,system-ui,sans-serif';ctx.textAlign=dx<0?'right':'left';ctx.textBaseline='middle';
+      ctx.lineWidth=3;ctx.strokeStyle='rgba(3,5,10,.88)';ctx.strokeText(node.label,lx,ly);ctx.fillStyle='#eef2ff';ctx.fillText(node.label,lx,ly);
+    }
+  }
+  function frame(t){
+    if(!state.canvas||!state.ctx)return;
+    const dt=Math.min(32,Math.max(0,t-state.last||16));state.last=t;
+    drawBackground(t);
+    if(state.field){
+      if(!state.reduced&&dt) stepNeuralField(state.field);
+      drawSynapses(t);
+      const ordered=[...state.field.nodes].sort((a,b)=>(a.id==='aura'?1:0)-(b.id==='aura'?1:0));
+      ordered.forEach(node=>drawNeuron(node,t));
+    }
+    state.raf=requestAnimationFrame(frame);
+  }
+  function init(){
+    if(state.canvas)return;
+    state.canvas=document.getElementById('neuralFieldCanvas');
+    if(!state.canvas)return;
+    state.ctx=state.canvas.getContext('2d',{alpha:false});
+    if(!state.ctx)return;
+    state.reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    seedSpace();resize();
+    window.addEventListener('resize',resize,{passive:true});
+    installNeuralInteraction(state.canvas,state,function(node,x,y){
+      const tooltip=document.getElementById('neuralTooltip');
+      const focus=document.getElementById('focusStatement');
+      if(node){
+        if(tooltip){
+          tooltip.classList.add('show');
+          tooltip.style.left=Math.max(8,Math.min(78,x*100))+'%';
+          tooltip.style.top=Math.max(8,Math.min(82,y*100))+'%';
+          tooltip.innerHTML='<strong>'+String(node.label||'')+'</strong><span>'+String(node.cluster||'')+' · activité '+Math.round((Number(node.activity)||0)*100)+'% · centralité '+Math.round((Number(node.centrality)||0)*100)+'%</span>';
+        }
+        if(focus)focus.textContent=String(node.label||'')+' · '+Math.round((Number(node.activity)||0)*100)+'%';
+      }else{
+        if(tooltip)tooltip.classList.remove('show');
+        if(focus)focus.textContent=String(state.field?.raw?.focus_statement||'Aucune intention dominante.');
+      }
+    });
+    state.raf=requestAnimationFrame(frame);
+  }
+  function render(data){
+    init();
+    if(!state.canvas||!data||!Array.isArray(data.nodes))return;
+    const previous=state.field;
+    state.field=initializeNeuralField(data,previous);
+    settleNeuralField(state.field,state.reduced?40:110);
+    const stats=document.getElementById('mapStats');
+    if(stats){
+      const s=data.stats||{};
+      stats.textContent=(s.nodes||data.nodes.length)+' neurones · '+(s.synapses||(data.links||[]).length)+' synapses · '+(s.active||0)+' actifs';
+    }
+    const focus=document.getElementById('focusStatement');
+    if(focus)focus.textContent=String(data.focus_statement||'Aucune intention dominante.');
+  }
+  function destroy(){
+    if(state.raf)cancelAnimationFrame(state.raf);
+    state.raf=0;
+  }
+  window.AURANeuralField={init,render,destroy,state};
+})();
+`;
