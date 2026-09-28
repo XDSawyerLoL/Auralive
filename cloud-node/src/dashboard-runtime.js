@@ -7,6 +7,26 @@ let voicePlayer = null;
 let voiceAudioContext = null;
 let voicePrimed = false;
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
+const AURA_API_BASE=(function(){
+  try{
+    const qp=new URLSearchParams(location.search).get('api');
+    if(qp && /^https:\/\//i.test(qp)){
+      const clean=qp.replace(/\/$/,'');
+      localStorage.setItem('aura_api_base',clean);
+      return clean;
+    }
+    const explicit=String(window.AURA_API_BASE||'').trim().replace(/\/$/,'');
+    if(explicit) return explicit;
+    const saved=String(localStorage.getItem('aura_api_base')||'').trim().replace(/\/$/,'');
+    if(saved) return saved;
+  }catch(_){}
+  return '';
+})();
+function apiUrl(path){
+  const value=String(path||'');
+  if(/^https?:\/\//i.test(value)) return value;
+  return AURA_API_BASE ? AURA_API_BASE + (value.startsWith('/')?value:'/'+value) : value;
+}
 
 function escapeHtml(value){
   return String(value == null ? '' : value).replace(/[&<>"']/g,function(c){
@@ -20,8 +40,8 @@ function headers(json){
 }
 async function api(path,options){
   options=options||{};
-  const response=await fetch(path,Object.assign(
-    {credentials:'same-origin'},
+  const response=await fetch(apiUrl(path),Object.assign(
+    {credentials:AURA_API_BASE?'include':'same-origin'},
     options,
     {headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}
   ));
