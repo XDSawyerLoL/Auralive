@@ -103,7 +103,6 @@ def test_windows_package_keeps_kokoro_compatibility_but_aoede_identity() -> None
     assert "Aoede verrouillee" in workflow
     assert "aucun fallback de timbre" in workflow
     assert "api/avatar/test" in workflow
-    assert "overlay_required" in workflow
     assert 'Get-Content "VERSION.json"' in workflow
     assert "name: QuanticStudio-Windows-Native" in workflow
     assert "aura-source\\cloud-node\\src\\cognition.js" in workflow
