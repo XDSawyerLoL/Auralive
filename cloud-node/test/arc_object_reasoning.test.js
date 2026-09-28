@@ -36,13 +36,13 @@ test('recolors an object congruent to a reference object', () => {
     [5,5,0,0,0,0],
     [5,0,0,0,3,0],
     [0,0,0,3,3,0],
-    [0,0,0,0,0,0],
+    [0,0,3,0,0,0],
   ];
   const output = [
     [5,5,0,0,0,0],
     [5,0,0,0,5,0],
     [0,0,0,5,5,0],
-    [0,0,0,0,0,0],
+    [0,0,3,0,0,0],
   ];
   const result = solve([{ input, output }], input);
   assert.equal(result.inferred.program.name, 'recolor-congruent-object');
@@ -51,20 +51,20 @@ test('recolors an object congruent to a reference object', () => {
 
 test('copies an object across both axes around a rectangular pivot', () => {
   const input = [
-    [2,2,0,0,0,0,0],
-    [2,0,0,0,0,0,0],
-    [0,0,0,3,3,0,0],
-    [0,0,0,3,3,0,0],
-    [0,0,0,0,0,0,0],
-    [0,0,0,0,0,0,0],
+    [2,2,0,0,0,0,0,0],
+    [2,0,0,0,0,0,0,0],
+    [0,0,0,3,3,0,0,0],
+    [0,0,0,3,3,0,0,0],
+    [0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0],
   ];
   const output = [
-    [2,2,0,0,0,2,2],
-    [2,0,0,0,0,0,2],
-    [0,0,0,3,3,0,0],
-    [0,0,0,3,3,0,0],
-    [2,0,0,0,0,0,2],
-    [2,2,0,0,0,2,2],
+    [2,2,0,0,0,0,2,2],
+    [2,0,0,0,0,0,0,2],
+    [0,0,0,3,3,0,0,0],
+    [0,0,0,3,3,0,0,0],
+    [2,0,0,0,0,0,0,2],
+    [2,2,0,0,0,0,2,2],
   ];
   const result = solve([{ input, output }], input);
   assert.equal(result.inferred.program.name, 'copy-around-pivot');
@@ -81,7 +81,7 @@ test('overlays four separator-defined quadrants by learned priority', () => {
   ];
   const output = [
     [7,4],
-    [8,7],
+    [4,7],
   ];
   const result = solve([{ input, output }], input);
   assert.equal(result.inferred.program.name, 'overlay-quadrants');
