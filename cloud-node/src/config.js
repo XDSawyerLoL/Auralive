@@ -72,7 +72,17 @@ function num(name, fallback, min = -Infinity, max = Infinity) {
   return Math.max(min, Math.min(max, value));
 }
 
-const AI_MODE = String(process.env.AI_MODE || 'off').trim().toLowerCase();
+const LEGACY_GEMINI_API_KEY = String(
+  process.env.AI_API_KEY
+  || process.env.GEMINI_API_KEY
+  || process.env.GOOGLE_API_KEY
+  || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  || ''
+).trim();
+const AI_MODE = String(
+  process.env.AI_MODE
+  || (LEGACY_GEMINI_API_KEY ? 'gemini' : 'off')
+).trim().toLowerCase();
 const AI_DEFAULT_BASE_URL = AI_MODE === 'gemini'
   ? 'https://generativelanguage.googleapis.com/v1beta'
   : 'http://localhost:11434';
@@ -126,7 +136,7 @@ export const config = Object.freeze({
   aiMode: AI_MODE,
   aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
   aiModel: process.env.AI_MODEL || AI_DEFAULT_MODEL,
-  aiApiKey: process.env.AI_API_KEY || '',
+  aiApiKey: LEGACY_GEMINI_API_KEY,
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
@@ -144,8 +154,8 @@ export const config = Object.freeze({
   openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
   openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),
 
-  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', false),
-  voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
+  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', true),
+  voiceApiKey: process.env.TTS_API_KEY || LEGACY_GEMINI_API_KEY,
   voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
   voiceModel: process.env.TTS_MODEL || 'gemini-3.1-flash-tts-preview',
   voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Aoede',
