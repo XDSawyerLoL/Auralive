@@ -196,7 +196,17 @@ class AvatarAudioService:
 
     @property
     def gemini_api_key(self) -> str:
-        return str(os.getenv("TTS_API_KEY") or os.getenv("AI_API_KEY") or "").strip()
+        # Preserve every key name used across Quantic/AURA deployments. Hostinger
+        # environment variables survive Git deployments, so an older Gemini key
+        # must remain discoverable after the voice pipeline is restored.
+        return str(
+            os.getenv("TTS_API_KEY")
+            or os.getenv("AI_API_KEY")
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GOOGLE_API_KEY")
+            or os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
+            or ""
+        ).strip()
 
     @property
     def gemini_model(self) -> str:
