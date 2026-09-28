@@ -109,7 +109,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .core-link{filter:drop-shadow(0 0 5px currentColor)}
 .energy-pulse{fill:none;pointer-events:none;stroke-linecap:round;filter:url(#glow);animation:energyFlow 4.6s linear infinite}
 .web-link{animation:webDrift 9s linear infinite}
-.aura-node{transform-box:fill-box;transform-origin:center;will-change:transform}
+.aura-node{transform-box:fill-box;transform-origin:center;will-change:transform;cursor:crosshair}.aura-node.active{filter:brightness(1.25)}.neural-label{pointer-events:none;paint-order:stroke;stroke:rgba(5,8,16,.86);stroke-width:3px;stroke-linejoin:round}.neural-sub{stroke-width:2.3px}
 @keyframes auraVignette{0%,100%{opacity:.72;transform:scale(.98) rotate(-1deg)}50%{opacity:1;transform:scale(1.055) rotate(1deg)}}
 @keyframes energyFlow{from{stroke-dashoffset:0}to{stroke-dashoffset:-170}}
 @keyframes webDrift{from{stroke-dashoffset:0}to{stroke-dashoffset:-90}}
