@@ -1,7 +1,7 @@
 import { config } from './config.js';
 
 const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
-const DEFAULT_VOICE = 'Leda';
+const DEFAULT_VOICE = 'Aoede';
 
 function clean(value, limit = 8000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -271,6 +271,9 @@ export class CloudVoice {
         total_chars: transcript.length,
         engine: this.lastEngine,
         voice: this.lastVoice,
+        engine_voice: String(this.lastVoice || DEFAULT_VOICE).toLowerCase(),
+        language: 'fr-fr',
+        model: this.model,
         profile: 'mairaiy',
         generation_ms: this.lastGenerationMs,
       };
