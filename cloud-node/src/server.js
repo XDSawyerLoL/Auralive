@@ -22,6 +22,7 @@ import {
 } from './db.js';
 import { DASHBOARD_HTML } from './dashboard.js';
 import { EvolutionLab } from './evolution.js';
+import { ExpertRelay } from './expert_relay.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
@@ -205,6 +206,8 @@ const horizon = new HorizonBridge(async (type, payload, source) => {
   }
 });
 kernel = new CognitiveKernel(ai, horizon, bridge, webSubstrate, fabric);
+const expertRelay = new ExpertRelay(ai, kernel);
+kernel.attachExpertRelay(expertRelay);
 const evolution = new EvolutionLab(ai, kernel, bridge);
 const commandCenter = new CommandCenter(
   kernel,
@@ -1337,6 +1340,55 @@ app.post('/api/fabric/execute', async (request, reply) => {
   } catch (error) {
     return reply.code(422).send({ error: String(error?.message || error) });
   }
+});
+
+app.get('/api/expert/status', async (_request, reply) =>
+  requireRuntime(reply) ? expertRelay.status() : undefined);
+
+app.get('/api/expert/incidents', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? expertRelay.recent(request.query?.limit)
+    : undefined);
+
+app.get('/api/expert/incidents/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const incident = await expertRelay.incident(request.params.id);
+  if (!incident) return reply.code(404).send({ error: 'Incident expert introuvable' });
+  return incident;
+});
+
+app.post('/api/expert/incidents/:id/ask', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await expertRelay.ask(request.params.id);
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/expert/incidents/:id/messages', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const content = String(request.body?.content || '').trim();
+  if (!content) return reply.code(422).send({ error: 'Message expert vide' });
+  try {
+    return await expertRelay.receiveAdvice(
+      request.params.id,
+      content,
+      String(request.body?.provider || request.body?.author || 'external-expert'),
+    );
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/expert/incidents/:id/testing', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return expertRelay.markTesting(request.params.id, request.body || {});
+});
+
+app.post('/api/expert/incidents/:id/resolve', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return expertRelay.resolve(request.params.id, request.body || {});
 });
 
 app.get('/api/command/status', async (request, reply) =>
