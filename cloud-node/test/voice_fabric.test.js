@@ -38,11 +38,11 @@ test('AURA pins the Quantic Mairaiy service even if stale Hostinger overrides ex
   assert.equal(payload.endpoint,'https://mediumorchid-badger-314305.hostingersite.com/voice');
   assert.equal(payload.strict,true);
   assert.equal(payload.language,'fr-fr');
-  assert.equal(payload.model,'kokoro');
+  assert.equal(payload.model,'gemini-3.1-flash-tts-preview');
   assert.equal(payload.profile,'Mairaiy');
 });
 
-test('VoiceStudio synthesis resolves only Mairaiy ff_siwis and sends exact identity', () => {
+test('VoiceStudio synthesis resolves only historical Mairaiy Aoede and sends exact identity', () => {
   const script = `
     process.env.AURA_ZERO_COST_MODE='true';
     delete process.env.AURA_VOICE_FABRIC_API_KEY;
@@ -52,7 +52,7 @@ test('VoiceStudio synthesis resolves only Mairaiy ff_siwis and sends exact ident
       if(String(url).endsWith('/v1/audio/voices')){
         return new Response(JSON.stringify({voices:[
           {voice_id:'wrong',name:'Mairaiy',type:'profile',engine_voice:'af_heart',language:'en'},
-          {voice_id:'mairaiy-ff-siwis',name:'Mairaiy',type:'profile',engine_voice:'ff_siwis',language:'fr-fr'}
+          {voice_id:'mairaiy-gemini-aoede',name:'Mairaiy',type:'profile',engine_voice:'Aoede',language:'fr-fr'}
         ]}),{status:200,headers:{'content-type':'application/json'}});
       }
       seen={
@@ -64,7 +64,7 @@ test('VoiceStudio synthesis resolves only Mairaiy ff_siwis and sends exact ident
         status:200,
         headers:{
           'content-type':'audio/wav',
-          'x-mairaiy-voice':'ff_siwis',
+          'x-mairaiy-voice':'Aoede',
           'x-mairaiy-language':'fr-fr'
         }
       });
@@ -98,23 +98,23 @@ test('VoiceStudio synthesis resolves only Mairaiy ff_siwis and sends exact ident
   assert.equal(payload.enabled,true);
   assert.equal(payload.seen.url,'https://mediumorchid-badger-314305.hostingersite.com/voice/v1/audio/speech');
   assert.equal(payload.seen.auth,'');
-  assert.equal(payload.seen.body.model,'kokoro');
-  assert.equal(payload.seen.body.voice,'mairaiy-ff-siwis');
-  assert.equal(payload.seen.body.engine_voice,'ff_siwis');
+  assert.equal(payload.seen.body.model,'gemini-3.1-flash-tts-preview');
+  assert.equal(payload.seen.body.voice,'mairaiy-gemini-aoede');
+  assert.equal(payload.seen.body.engine_voice,'aoede');
   assert.equal(payload.seen.body.language,'fr-fr');
   assert.equal(payload.out.ok,true);
-  assert.equal(payload.out.engine_voice,'ff_siwis');
+  assert.equal(payload.out.engine_voice,'aoede');
   assert.equal(payload.out.language,'fr-fr');
-  assert.equal(payload.out.voice_id,'mairaiy-ff-siwis');
+  assert.equal(payload.out.voice_id,'mairaiy-gemini-aoede');
   assert.equal(payload.out.cost,0);
 });
 
-test('VoiceStudio rejects audio that does not certify ff_siwis', () => {
+test('VoiceStudio rejects audio that does not certify Aoede', () => {
   const script = `
     global.fetch=async(url)=>{
       if(String(url).endsWith('/v1/audio/voices')){
         return new Response(JSON.stringify({voices:[
-          {voice_id:'mairaiy',name:'Mairaiy',type:'profile',engine_voice:'ff_siwis',language:'fr-fr'}
+          {voice_id:'mairaiy-gemini-aoede',name:'Mairaiy',type:'profile',engine_voice:'Aoede',language:'fr-fr'}
         ]}),{status:200,headers:{'content-type':'application/json'}});
       }
       return new Response(Buffer.from('RIFF0000WAVE','ascii'),{
@@ -171,6 +171,6 @@ test('exact Quantic Mairaiy endpoint remains zero-cost trusted', () => {
   assert.equal(payload.endpoint,'https://mediumorchid-badger-314305.hostingersite.com/voice');
   assert.equal(payload.trusted,true);
   assert.equal(payload.strict,true);
-  assert.equal(payload.expected,'ff_siwis');
+  assert.equal(payload.expected,'aoede');
   assert.equal(payload.language,'fr-fr');
 });
