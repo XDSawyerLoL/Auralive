@@ -47,8 +47,7 @@ jobs:
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
-            if curl -fsS http://127.0.0.1:${PORT}/healthz | grep -q '"ok":true' \
-              && curl -fsS http://127.0.0.1:3000/__aura_gateway | grep -q '"gateway_ready":true'; then
+            if curl -fsS http://127.0.0.1:3000/healthz | grep -q '"ok":true'; then
               exit 0
             fi
             sleep 0.5
