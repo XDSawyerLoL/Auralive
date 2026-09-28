@@ -17,16 +17,16 @@ test('AURA web never falls back to a generic browser TTS for Mairaiy', () => {
   assert.equal(dashboard.includes('speechSynthesis'), false);
   assert.equal(dashboard.includes('SpeechSynthesisUtterance'), false);
   assert.equal(dashboard.includes('speakBrowserFallback'), false);
-  assert.match(dashboard, /Mairaiy · ff_siwis/);
-  assert.match(dashboard, /aucun TTS générique utilisé/);
+  assert.match(dashboard, /Mairaiy · Aoede/);
+  assert.match(dashboard, /aucun autre timbre utilisé/);
 });
 
-test('Voice Fabric accepts only the Quantic Studio ff_siwis identity', () => {
+test('Voice Fabric accepts only the historical Quantic Studio Aoede identity', () => {
   const fabric = read('src/voice_fabric.js');
   const config = read('src/config.js');
   const env = read('.env.example');
 
-  assert.match(fabric, /EXPECTED_ENGINE_VOICE = 'ff_siwis'/);
+  assert.match(fabric, /EXPECTED_ENGINE_VOICE = 'aoede'/);
   assert.match(fabric, /EXPECTED_LANGUAGE = 'fr-fr'/);
   assert.match(fabric, /row\?\.engine_voice/);
   assert.match(fabric, /x-mairaiy-voice/);
