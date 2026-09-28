@@ -1,31 +1,33 @@
 {
   "product": "AURA Cloud",
-  "version": "1.8.3",
+  "version": "2.2.1",
   "status": "stable",
   "baseline": true,
-  "recorded_at": "2026-09-25",
-  "baseline_commit": "71bed35b11f8f21291de4f3337c6dc81b748c99a",
+  "recorded_at": "2026-09-28",
+  "source_base_commit": "bd63106b509787d04ea1e6353abff2df509a1d45",
   "validated": {
     "github_ci": true,
     "hostinger_package": true,
     "dashboard_interactive": true,
+    "direct_browser_access": true,
+    "browser_token_required": false,
+    "public_chat_rate_limited": true,
+    "private_admin_endpoints": true,
+    "hostinger_port_contract": true,
     "chat_operational": true,
     "live_metrics": true,
     "cognition_native": true,
     "evolution_phase3": true,
-    "mairaiy_cloud_voice": true,
-    "long_voice_segmentation": true,
+    "mairaiy_exact_identity": true,
     "mobile_responsive": true,
     "emotional_state_ui": true,
-    "visual_stability": true,
-    "full_stack_gate": true
+    "zero_cost_guard": true
   },
   "notes": [
-    "AURA 1.8.3 devient la nouvelle base stable après validation complète sur main.",
-    "Mairaiy ne tronque plus les réponses à 430 caractères: les réponses longues sont segmentées puis lues intégralement dans l'ordre.",
-    "Le fallback navigateur segmente également les phrases longues pour limiter les coupures SpeechSynthesis.",
-    "Les animations du dashboard sont plus calmes, moins chargées et plafonnées autour de 30 fps pour améliorer la stabilité visuelle.",
-    "Le mobile est renforcé jusqu'aux écrans <=410 px avec chat plus lisible et composer sticky.",
-    "Cognition native et Evolution Phase 3 restent actives."
+    "AURA Cloud 2.2.1 est la base Hostinger canonique dans cloud-node/.",
+    "Le dashboard et le chat borné fonctionnent sans saisie de AURA_CLOUD_TOKEN.",
+    "Les surfaces privées d'administration et de bridge restent protégées côté serveur.",
+    "Le listener Fastify honore le PORT injecté par Hostinger.",
+    "L'artefact aura-cloud-hostinger empaquette désormais exclusivement le runtime Node canonique."
   ]
 }

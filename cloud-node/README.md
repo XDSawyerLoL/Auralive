@@ -39,7 +39,7 @@ Quantic Studio n'est pas l'autorité d'exécution d'AURA. C'est le produit de st
 1. Créer une application web **Node.js** et sélectionner Node 22.
 2. Créer une base MySQL dans hPanel.
 3. Uploader le contenu de ce dossier comme racine de l’application.
-4. Définir les variables de `.env.example` dans Hostinger.
+4. Définir les variables nécessaires de `.env.example` dans Hostinger. `AURA_CLOUD_TOKEN` n'est pas requis pour le dashboard ni le chat public borné.
 5. Commande d’installation : `npm install --omit=dev`
 6. Commande de démarrage : `npm start`
 7. Vérifier `GET /healthz`.
@@ -54,7 +54,7 @@ MAIRAIY_CLOUD_VOICE_ENABLED=false
 
 Avec ce verrou, les appels IA/TTS/expert externes potentiellement facturables sont bloqués dans le runtime, même si une ancienne clé reste présente dans l’environnement. Les capacités de langage peuvent venir d’AURA Runtime, du Compute Mesh ou d’AURA Free Federation. Cette dernière n'accepte par défaut que `openrouter/free` ou des identifiants OpenRouter terminant par `:free`; tout identifiant potentiellement payant est rejeté avant l'appel. Si l'API renvoie un coût non nul, le fournisseur est immédiatement mis en quarantaine. Si aucune capacité gratuite n’est disponible, AURA continue avec son noyau natif au lieu de basculer vers un service payant.
 
-Hostinger fournit `PORT`; AURA l’utilise automatiquement.
+Hostinger fournit `PORT`; le point d'entrée AURA l'utilise automatiquement. Le ZIP de production doit contenir `package.json` et `server.js` directement à sa racine. Le dossier canonique à empaqueter est `cloud-node/`, jamais l'ancien paquet Python `deploy/hostinger/`.
 
 ## Endpoints principaux
 
@@ -63,11 +63,11 @@ Publics :
 - `GET /healthz`
 - `GET /api/ai/runtime` (diagnostic sans secret)
 - `GET /api/kernel/status`
-- `GET /api/kernel/soul` (vue publique expurgée)
-- `POST /api/chat` (contexte privé uniquement avec token)
+- `GET /api/kernel/public` (vue publique expurgée)
+- `POST /api/chat` (accès direct, session navigateur signée et rate-limitée ; aucun token saisi par l'utilisateur)
 - `GET /api/horizon/status` (vue publique réduite)
 
-Privés avec `Authorization: Bearer <AURA_CLOUD_TOKEN>` :
+Privés, uniquement si un `AURA_CLOUD_TOKEN` serveur est configuré, avec `Authorization: Bearer <AURA_CLOUD_TOKEN>` :
 - `POST /api/kernel/tick`
 - `GET /api/kernel/reflections`
 - `GET/POST /api/kernel/intentions`

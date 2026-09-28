@@ -88,8 +88,8 @@ function configBridgeMode() {
 
 export const config = Object.freeze({
   host: process.env.AURA_HOST || '0.0.0.0',
-  // Hostinger Node.js Web Apps proxy vers le port 3000. On ignore PORT pour éviter
-  // qu'une variable injectée par l'environnement détourne le listener.
+  // Fallback interne seulement. Le point d'entrée server.js honore d'abord
+  // le PORT fourni par Hostinger, puis AURA_GATEWAY_PORT, puis 3000.
   port: int('AURA_PORT', 3000, 1, 65535),
   publicBaseUrl: String(process.env.AURA_PUBLIC_BASE_URL || '').replace(/\/$/, ''),
   logLevel: process.env.LOG_LEVEL || 'info',
@@ -336,12 +336,9 @@ export function productionConfigIssues() {
       message: 'MySQL n’est pas encore configuré. Renseigne DATABASE_URL ou DB_USER + DB_NAME.',
     });
   }
-  if (process.env.NODE_ENV === 'production' && !config.cloudToken) {
-    issues.push({
-      code: 'cloud_token_missing',
-      message: 'AURA_CLOUD_TOKEN est absent. Les fonctions privées restent verrouillées.',
-    });
-  }
+  // AURA_CLOUD_TOKEN protège uniquement les surfaces privées d'administration.
+  // Le dashboard, l'état public et le chat borné restent volontairement utilisables
+  // sans secret navigateur ; son absence ne rend donc pas le runtime invalide.
   if (process.env.NODE_ENV === 'production' && config.evolutionCanaryRequired && config.evolutionCanaryMode === 'manual' && !config.canaryToken) {
     issues.push({
       code: 'canary_token_missing',
