@@ -124,13 +124,13 @@ test('dashboard runtime is an independently testable module', () => {
 });
 
 
-test('dashboard exposes always-online Mairaiy readiness without a login drawer', () => {
+test('dashboard exposes exact Mairaiy readiness without a generic TTS escape hatch', () => {
   assert.equal(DASHBOARD_HTML.includes('id="voiceDot"'), true);
   assert.equal(DASHBOARD_HTML.includes('id="voiceText"'), true);
   assert.equal(DASHBOARD_SCRIPT.includes("api('/api/capabilities')"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · en ligne"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Voix Mairaiy Cloud active"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes('browserVoiceAvailable()'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · ff_siwis"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Kokoro ff_siwis · fr-fr"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('browserVoiceAvailable()'), false);
 });
 
 
@@ -165,17 +165,18 @@ test('mobile dashboard uses readable phone typography and viewport-sized panels'
   assert.equal(DASHBOARD_HTML.includes('.top-actions{width:100%'), true);
 });
 
-test('mobile voice primes audio and falls back to device speech when needed', () => {
+test('mobile voice primes audio but never substitutes a device TTS for Mairaiy', () => {
   assert.equal(DASHBOARD_SCRIPT.includes('primeVoice();'), true);
-  assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("utterance.lang='fr-FR'"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('SpeechSynthesisUtterance'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('aucun TTS générique utilisé'), true);
 });
 
 
-test('long Mairaiy responses play every generated segment in sequence', () => {
+test('long Mairaiy responses play every generated exact-voice segment in sequence', () => {
   assert.equal(DASHBOARD_SCRIPT.includes("Array.isArray(out&&out.segments)"), true);
   assert.equal(DASHBOARD_SCRIPT.includes("await playVoiceSegment(segments[i])"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("splitBrowserSpeech(text,220)"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("splitBrowserSpeech(text,220)"), false);
 });
 
 test('living visualization uses calmer motion and a 30fps stability cap', () => {

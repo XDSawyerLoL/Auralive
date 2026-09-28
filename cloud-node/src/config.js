@@ -165,7 +165,7 @@ export const config = Object.freeze({
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
   voiceFabricProfileName: process.env.AURA_MAIRAIY_VOICE_PROFILE_NAME || 'Mairaiy',
   voiceFabricRequireProfile: bool('AURA_MAIRAIY_REQUIRE_PROFILE', true),
-  voiceFabricLanguage: process.env.AURA_MAIRAIY_LANGUAGE || 'fr',
+  voiceFabricLanguage: process.env.AURA_MAIRAIY_LANGUAGE || 'fr-fr',
   voiceFabricInstruct: process.env.AURA_MAIRAIY_VOICE_INSTRUCT || '',
   voiceFabricSpeed: num('AURA_MAIRAIY_VOICE_SPEED', 1, 0.5, 1.5),
   voiceFabricSeed: int('AURA_MAIRAIY_VOICE_SEED', 2388, 0, 2147483647),

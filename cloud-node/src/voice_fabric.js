@@ -3,6 +3,8 @@ import { config } from './config.js';
 const MAX_INPUT_CHARS = 3900;
 const DEFAULT_MODEL = 'kokoro';
 const DEFAULT_PROFILE_NAME = 'Mairaiy';
+const EXPECTED_ENGINE_VOICE = 'ff_siwis';
+const EXPECTED_LANGUAGE = 'fr-fr';
 
 function clean(value, limit = 16000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -288,6 +290,7 @@ export class VoiceStudioProvider {
     const profile = list.find((row) => (
       String(row?.type || '').toLowerCase() === 'profile'
       && String(row?.name || '').trim().toLowerCase() === profileName
+      && String(row?.engine_voice || '').trim().toLowerCase() === EXPECTED_ENGINE_VOICE
     ));
     this.profileCache = {
       id: String(profile?.voice_id || ''),
@@ -296,7 +299,7 @@ export class VoiceStudioProvider {
 
     if (!this.profileCache.id && config.voiceFabricRequireProfile) {
       throw new Error(
-        `Mairaiy profile not found in VoiceStudio. Create a profile named "${config.voiceFabricProfileName}" or set AURA_MAIRAIY_VOICE_PROFILE_ID.`,
+        `Mairaiy profile ${EXPECTED_ENGINE_VOICE} not found in VoiceStudio. The exact Quantic Studio voice is required.`,
       );
     }
 
@@ -314,7 +317,7 @@ export class VoiceStudioProvider {
       voice: voiceId,
       response_format: 'wav',
       speed: Math.max(0.5, Math.min(1.5, Number(options.speed || config.voiceFabricSpeed || 1))),
-      language: String(config.voiceFabricLanguage || 'fr'),
+      language: String(config.voiceFabricLanguage || EXPECTED_LANGUAGE),
       denoise: true,
       preprocess_prompt: true,
     };
@@ -333,6 +336,11 @@ export class VoiceStudioProvider {
     });
 
     if (!response.ok) throw await responseError(response, 'VoiceStudio synthesis failed');
+
+    const returnedVoice = String(response.headers.get('x-mairaiy-voice') || '').trim().toLowerCase();
+    if (returnedVoice && returnedVoice !== EXPECTED_ENGINE_VOICE) {
+      throw new Error(`VoiceStudio identity mismatch: expected ${EXPECTED_ENGINE_VOICE}, received ${returnedVoice}`);
+    }
 
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
     if (!contentType.startsWith('audio/')) {
@@ -363,6 +371,8 @@ export class VoiceStudioProvider {
       chars: body.input.length,
       engine: 'aura-voice-fabric/voicestudio',
       voice: 'Mairaiy',
+      engine_voice: EXPECTED_ENGINE_VOICE,
+      language: EXPECTED_LANGUAGE,
       voice_id: voiceId,
       model: body.model,
       profile: 'mairaiy',
@@ -396,6 +406,8 @@ export class VoiceStudioProvider {
         total_chars: transcript.length,
         engine: 'aura-voice-fabric/voicestudio',
         voice: 'Mairaiy',
+        engine_voice: EXPECTED_ENGINE_VOICE,
+        language: EXPECTED_LANGUAGE,
         voice_id: segments[0]?.voice_id || '',
         model: segments[0]?.model || config.voiceFabricModel,
         profile: 'mairaiy',
@@ -431,6 +443,8 @@ export class VoiceStudioProvider {
       zero_cost_trusted_endpoint: Boolean(this.zeroCostTrusted),
       pinned_quantic_endpoint: Boolean(config.voiceFabricPinQuanticEndpoint),
       strict_identity: Boolean(config.voiceFabricStrictIdentity),
+      expected_engine_voice: EXPECTED_ENGINE_VOICE,
+      expected_language: EXPECTED_LANGUAGE,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
       last_success_at: this.lastSuccessAt,

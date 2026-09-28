@@ -136,7 +136,7 @@ test('trusted Mairaiy endpoint emits no Authorization header when no key is conf
     let seen=null;
     global.fetch=async(url, options={})=>{
       if(String(url).endsWith('/v1/audio/voices')){
-        return new Response(JSON.stringify({voices:[{voice_id:'mairaiy',name:'Mairaiy',type:'profile'}]}),{
+        return new Response(JSON.stringify({voices:[{voice_id:'mairaiy',name:'Mairaiy',type:'profile',engine_voice:'ff_siwis',language:'fr-fr'}]}),{
           status:200,
           headers:{'content-type':'application/json'},
         });
@@ -148,7 +148,7 @@ test('trusted Mairaiy endpoint emits no Authorization header when no key is conf
       };
       return new Response(Buffer.from('RIFF0000WAVE','ascii'),{
         status:200,
-        headers:{'content-type':'audio/wav'},
+        headers:{'content-type':'audio/wav','x-mairaiy-voice':'ff_siwis'},
       });
     };
 
