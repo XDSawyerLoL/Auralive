@@ -413,6 +413,28 @@ function renderCuriosity(status){
     return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.content||'')+'</div><span class="badge">'+escapeHtml(target)+'</span></div><div class="memory-date">'+escapeHtml(domain)+'</div></div>';
   }).join('');
 }
+function renderScout(status){
+  const list=$('scoutList');
+  const meta=$('scoutMeta');
+  if(!list||!meta)return;
+  if(!status||!status.enabled){
+    meta.textContent='Arrêtée';
+    list.innerHTML='<div class="empty">Veille autonome indisponible.</div>';
+    return;
+  }
+  meta.textContent=status.running?'Scan en cours':'Sans prompt · '+Math.round(Number(status.interval_seconds||0)/60)+' min';
+  const rows=Array.isArray(status.recent_findings)?status.recent_findings:[];
+  if(!rows.length){
+    list.innerHTML='<div class="empty">AURA cherche seule de nouvelles capacités pertinentes.</div>';
+    return;
+  }
+  list.innerHTML=rows.slice(0,5).map(function(row){
+    const score=Math.round(Number(row.score||0)*100);
+    const license=String(row.license||'licence ?');
+    const badge=row.experiment_eligible?'test':'veille';
+    return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.repository||'Projet externe')+'</div><span class="badge">'+score+'% · '+escapeHtml(badge)+'</span></div><div class="memory-date">'+escapeHtml(license)+' · '+escapeHtml(row.theme||'veille')+'</div></div>';
+  }).join('');
+}
 function renderNext(work,attention){
   const item=(work&&work[0])||null;
   const node=attention&&attention.nodes?attention.nodes.find(function(n){return n.dominant;}):null;
@@ -432,14 +454,11 @@ async function refresh(){
         ? 'Le serveur est en ligne mais le noyau redémarre automatiquement : '+startup
         : 'L’interface est en ligne, mais le noyau attend encore MySQL. Reconnexion automatique en cours.';
     }
-    const auth=await api('/api/auth/session');
-    const privateView=Boolean(auth&&auth.authenticated);
-    const coreState=await Promise.all([
-      api('/api/kernel/status'),
-      api(privateView?'/api/kernel/soul':'/api/kernel/public')
-    ]);
-    const ks=coreState[0];
-    const soul=coreState[1];
+
+    const publicState=await api('/api/dashboard/public');
+    const ks=publicState.kernel_status||{};
+    const soul=publicState.soul||{};
+
     try{
       const capabilities=await api('/api/capabilities');
       const voice=(capabilities&&capabilities.voice)||{};
@@ -459,23 +478,26 @@ async function refresh(){
       $('voiceDot').className='live-dot';
       $('voiceText').textContent='Mairaiy · attente';
     }
-    try{
-      const evolution=await api('/api/evolution/status');
-      const phase=String(evolution.phase||'');
-      const local=Boolean(evolution.local_worker_online);
-      const active=Boolean(evolution.enabled);
-      $('evolutionDot').className='live-dot '+(active?'good':'');
-      $('evolutionText').textContent=local?'Évolution · Phase 2':'Évolution · Cloud';
-      $('evolutionText').title=phase;
-    }catch(_){
-      $('evolutionDot').className='live-dot';
-      $('evolutionText').textContent='Évolution · attente';
-    }
-    let commandStatus=null;
-    let curiosityStatus=null;
-    try{commandStatus=await api('/api/command/status');}catch(_){commandStatus=null;}
-    try{curiosityStatus=await api('/api/curiosity/status');}catch(_){curiosityStatus=null;}
-    metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
+
+    const evolution=publicState.evolution||{};
+    const phase=String(evolution.phase||'');
+    const local=Boolean(evolution.local_worker_online);
+    const active=Boolean(evolution.enabled);
+    $('evolutionDot').className='live-dot '+(active?'good':'');
+    $('evolutionText').textContent=local?'Évolution · Phase 2':'Évolution · Cloud';
+    $('evolutionText').title=phase;
+
+    const commandStatus=publicState.command||null;
+    const curiosityStatus=publicState.curiosity||null;
+    const scoutStatus=publicState.scout||null;
+
+    metric('energy',soul.energy,boot.runtime_ready);
+    metric('curiosity',soul.curiosity,boot.runtime_ready);
+    metric('pressure',soul.pressure,boot.runtime_ready);
+    metric('continuity',soul.continuity,boot.runtime_ready);
+    metric('introspection',soul.introspection,boot.runtime_ready);
+    metric('reactivity',soul.reactivity,boot.runtime_ready);
+
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     renderEmotion(organism);
     if(livingScene)livingScene.organism=organism;
@@ -485,25 +507,25 @@ async function refresh(){
     $('organismDot').style.background=moodColors[mood]||'#9f78ff';
     $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
-    $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
-    $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    $('chatState').textContent=boot.runtime_ready?'Noyau actif · autonomie visible':'Diagnostic';
+
+    const attention=publicState.attention||null;
+    $('dominantThought').textContent=(attention&&attention.focus_statement?attention.focus_statement:'Observation autonome du système.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
     lastSoul=Object.assign({},soul);
-    if(boot.runtime_ready&&privateView){
-      const results=await Promise.all([
-        api('/api/kernel/intentions?limit=5'),
-        api('/api/kernel/lessons?limit=5'),
-        api('/api/kernel/activity?limit=8'),
-        api('/api/kernel/work?limit=5'),
-        api('/api/kernel/attention')
-      ]);
-      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderCommandCenter(commandStatus,results[3],results[4]);renderCuriosity(curiosityStatus);
-    }else if(boot.runtime_ready){
-      $('intentList').innerHTML='<div class="empty">Détails privés · authentification AURA requise.</div>';
-      $('memoryList').innerHTML='<div class="empty">Mémoire privée · authentification AURA requise.</div>';
-      $('activityList').innerHTML='<div class="empty">Journal privé · authentification AURA requise.</div>';
-      $('workList').innerHTML='<div class="empty">Travail détaillé privé.</div>';
-      renderCommandCenter(commandStatus,[],null);
+
+    if(boot.runtime_ready){
+      const intentions=publicState.intentions||[];
+      const lessons=publicState.lessons||[];
+      const activity=publicState.activity||[];
+      const work=publicState.work||[];
+      renderIntentions(intentions);
+      renderLessons(lessons);
+      renderActivity(activity);
+      renderWork(work);
+      renderMap(attention);
+      renderCommandCenter(commandStatus,work,attention);
       renderCuriosity(curiosityStatus);
+      renderScout(scoutStatus);
     }else{
       $('intentList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('memoryList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
@@ -511,6 +533,7 @@ async function refresh(){
       $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       renderCommandCenter(commandStatus,[],null);
       renderCuriosity(curiosityStatus);
+      renderScout(scoutStatus);
     }
   }catch(error){
     setLive(false,'Indisponible');
