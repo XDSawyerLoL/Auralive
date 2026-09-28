@@ -172,6 +172,12 @@ test('mobile voice primes audio but never substitutes a device TTS for Mairaiy',
   assert.equal(DASHBOARD_SCRIPT.includes('aucun TTS générique utilisé'), true);
 });
 
+test('chat send path cannot be blocked by voice priming', () => {
+  assert.match(DASHBOARD_SCRIPT, /function primeVoice\(\)/);
+  assert.match(DASHBOARD_SCRIPT, /try\{primeVoice\(\);\}catch\(_\)\{\}/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat',\{method:'POST'/);
+});
+
 
 test('long Mairaiy responses play every generated exact-voice segment in sequence', () => {
   assert.equal(DASHBOARD_SCRIPT.includes("Array.isArray(out&&out.segments)"), true);
