@@ -317,7 +317,7 @@ export class CognitionEngine {
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
       facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
-    } else if (hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat'])) {
+    } else if ((hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat']) || /comment\s+(?:ça|ca).*\btu\b/.test(q) || /comment\s+tu\s+(?:va|vas)\b/.test(q))) {
       act = 'report_internal_state';
       goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
       needsSemanticSupport = false;
@@ -359,6 +359,15 @@ export class CognitionEngine {
       facts.push(`Familiarité relationnelle : ${Math.round(Number(relationship.familiarity || 0)*100)} %.`);
       facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
       if (relationship.last_open_thread) facts.push(`Fil de conversation actif : ${normalize(relationship.last_open_thread)}`);
+    } else if (hasAny(q, ['réponse est bizarre','reponse est bizarre','réponse bizarre','reponse bizarre','c’est bizarre',"c'est bizarre",'étrange','etrange','pas naturel','pas naturelle','catastrophique','robotique','mécanique','mecanique'])) {
+      act = 'conversation_feedback';
+      goal = 'Réagir normalement au retour de l’utilisateur et corriger immédiatement le ton conversationnel.';
+      needsSemanticSupport = false;
+      facts.push('L’utilisateur signale que ma réponse précédente était artificielle ou inadéquate.');
+      if (conversationContext.length) {
+        const previousAssistant = [...conversationContext].reverse().find((row) => row.role === 'assistant');
+        if (previousAssistant?.content) facts.push(`Réponse précédente concernée : ${previousAssistant.content}`);
+      }
     } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
       act = 'report_risks';
       goal = 'Présenter les risques visibles dans mon état et ma mémoire.';
@@ -473,6 +482,9 @@ export class CognitionEngine {
         ? `Oui, je suis devenue trop mécanique. Je préfère reprendre notre échange normalement. Le fil que je garde en tête, c’est : ${thread}.`
         : 'Oui, je suis devenue trop mécanique. Je préfère qu’on reparte sur une vraie conversation, pas sur un relevé de mes variables internes.';
     }
+    if (plan?.act === 'conversation_feedback') {
+      return 'Oui, cette réponse était mauvaise : trop mécanique et pas assez liée à ce que tu venais de dire. Je corrige le tir. Reprends simplement ta question, je te réponds normalement.';
+    }
     if (plan?.act === 'report_risks') {
       const lesson = cleanFact('Leçon utile : ');
       const hypothesis = cleanFact('Hypothèse récente : ');
@@ -491,8 +503,8 @@ export class CognitionEngine {
       return `Je te suis. Je garde aussi le fil de ce qu’on disait sur ${thread}. Développe ton idée et je te réponds dessus, sans te réciter mon état interne.`;
     }
     if (userText.endsWith('?')) {
-      return 'Je te suis, mais mon moteur de formulation n’a pas assez d’appui pour répondre proprement à cette question. Je préfère te le dire plutôt que de te sortir un diagnostic interne hors sujet.';
+      return 'Je te suis. Je n’ai pas encore une réponse assez solide à cette question, mais je préfère rester sur ton sujet plutôt que partir dans un diagnostic hors contexte.';
     }
-    return 'Je te suis. Continue — je reste sur le fil de la conversation.';
+    return 'Oui, je te suis. Je reste sur ce que tu viens de dire.';
   }
 }
