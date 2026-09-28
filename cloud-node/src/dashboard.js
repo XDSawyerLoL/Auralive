@@ -330,6 +330,10 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
         <div class="panel-head"><span>?</span><div class="panel-title">Curiosité active</div><div class="spacer"></div><div class="panel-meta" id="curiosityMeta">—</div></div>
         <div class="panel-body"><div class="intent-list" id="curiosityList"><div class="empty">Aucune question récente.</div></div></div>
       </section>
+      <section class="panel">
+        <div class="panel-head"><span>⌁</span><div class="panel-title">Veille autonome</div><div class="spacer"></div><div class="panel-meta" id="scoutMeta">—</div></div>
+        <div class="panel-body"><div class="intent-list" id="scoutList"><div class="empty">Premier scan en préparation.</div></div></div>
+      </section>
     </aside>
 
     <section class="bottom-grid">
