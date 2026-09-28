@@ -4,6 +4,7 @@ import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
 import { CuriosityEngine } from './curiosity.js';
+import { CapabilityScout } from './capability_scout.js';
 import { CapabilityFabric } from './capability_fabric.js';
 import {
   config,
@@ -271,6 +272,13 @@ const curiosity = new CuriosityEngine({
   commandCenter,
   ai,
 });
+const capabilityScout = new CapabilityScout({
+  kernel,
+  commandCenter,
+  webSubstrate,
+  fabric,
+  evolution,
+});
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
@@ -342,6 +350,11 @@ async function startRuntime() {
       await curiosity.start();
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: moteur de curiosité indisponible, noyau maintenu actif.');
+    }
+    try {
+      await capabilityScout.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: Capability Scout indisponible, noyau maintenu actif.');
     }
     startMaintenance();
   } catch (error) {
@@ -511,6 +524,8 @@ app.get('/api/bootstrap/status', async () => ({
   fabric_capabilities: fabric.list().length,
   fabric_discovery_configured: Boolean(config.fabricDiscoveryUrls.length),
   peer_mesh_enabled: Boolean(config.meshP2pEnabled),
+  capability_scout_enabled: Boolean(config.capabilityScoutEnabled),
+  capability_scout_prompt_required: false,
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -1602,6 +1617,7 @@ export async function stopAura() {
     clearInterval(metricsTimer);
     metricsTimer = null;
   }
+  capabilityScout.stop();
   curiosity.stop();
   commandCenter.stop();
   fabric.stop();
