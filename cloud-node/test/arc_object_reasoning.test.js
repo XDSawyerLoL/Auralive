@@ -88,6 +88,52 @@ test('overlays four separator-defined quadrants by learned priority', () => {
   assert.equal(gridEquals(result.output, output), true);
 });
 
+
+test('uses an L-shaped marker frame to recolor a matching object outside the frame', () => {
+  const input = [
+    [0,3,0,5,0,0,0,0],
+    [3,3,0,5,0,0,0,0],
+    [0,0,0,5,0,0,9,0],
+    [5,5,5,5,0,9,9,0],
+    [0,0,0,0,0,0,0,0],
+  ];
+  const output = [
+    [0,3,0,5,0,0,0,0],
+    [3,3,0,5,0,0,0,0],
+    [0,0,0,5,0,0,5,0],
+    [5,5,5,5,0,5,5,0],
+    [0,0,0,0,0,0,0,0],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'recolor-marker-matched-object');
+  assert.equal(gridEquals(result.output, output), true);
+});
+
+test('uses a small separator-defined key to recolor blocks of a larger pattern region', () => {
+  const input = [
+    [1,2,8,0,0,0,0,0,0],
+    [4,1,8,0,0,0,0,0,0],
+    [8,8,8,8,8,8,8,8,8],
+    [0,0,8,0,3,3,0,3,0],
+    [0,0,8,3,3,0,0,0,0],
+    [0,0,8,3,0,3,0,3,0],
+    [0,0,8,0,0,0,3,0,0],
+    [0,0,8,3,3,3,3,3,3],
+    [0,0,8,0,0,0,3,0,0],
+  ];
+  const output = [
+    [0,1,1,0,2,0],
+    [1,1,0,0,0,0],
+    [1,0,1,0,2,0],
+    [0,0,0,1,0,0],
+    [4,4,4,1,1,1],
+    [0,0,0,1,0,0],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'keyed-region-recolor');
+  assert.equal(gridEquals(result.output, output), true);
+});
+
 test('extends a periodic pattern and learns recoloring', () => {
   const input = [
     [0,1,0],
