@@ -582,18 +582,15 @@ app.post(
 
 app.get('/api/voice/status', async (request) => {
   const privateView = isPrivate(request);
-  const localOnline = await bridge.workerOnline().catch(() => false);
   return {
     profile: 'mairaiy',
-    ready: Boolean(voiceStudio.enabled || cloudVoice.enabled || localOnline),
-    primary: voiceStudio.enabled ? 'aura-voice-fabric' : (cloudVoice.enabled ? 'legacy-gemini' : (localOnline ? 'runtime-local' : 'offline')),
-    strict_identity: Boolean(config.voiceFabricStrictIdentity),
+    ready: Boolean(voiceStudio.enabled),
+    primary: voiceStudio.enabled ? 'aura-voice-fabric-exact-ff_siwis' : 'offline',
+    strict_identity: true,
+    expected_engine_voice: 'ff_siwis',
+    expected_language: 'fr-fr',
+    generic_fallback_allowed: false,
     fabric: voiceStudio.diagnostic({ publicView: !privateView }),
-    legacy_cloud: privateView ? cloudVoice.diagnostic() : {
-      enabled: Boolean(cloudVoice.enabled),
-      engine: cloudVoice.enabled ? 'gemini-cloud-tts' : 'unavailable',
-    },
-    runtime_local: Boolean(localOnline),
   };
 });
 
@@ -606,63 +603,36 @@ app.post('/api/voice/speak', async (request, reply) => {
     return reply.code(401).send({ error: 'Ticket vocal AURA invalide ou expiré' });
   }
 
-  const errors = [];
-  const endpoint = voiceStudio.endpoint;
-
-  // Once Voice Fabric is configured, it owns Mairaiy's identity. In strict mode,
-  // AURA never silently changes to another voice if the provider is unavailable.
-  if (endpoint.configured) {
-    if (voiceStudio.enabled) {
-      try {
-        return await voiceStudio.synthesize(text, request.body || {});
-      } catch (error) {
-        errors.push(`voice-fabric: ${String(error?.message || error)}`);
-      }
-    } else {
-      const diagnostic = voiceStudio.diagnostic({ publicView: true });
-      errors.push(`voice-fabric: ${diagnostic.endpoint_reason || (diagnostic.zero_cost_mode && !diagnostic.zero_cost_confirmed ? 'zero-cost confirmation required' : 'provider unavailable')}`);
-    }
-
-    if (config.voiceFabricStrictIdentity) {
-      return reply.code(503).send({
-        error: errors.join(' | ') || 'Mairaiy Voice Fabric indisponible',
-        code: 'AURA_MAIRAIY_IDENTITY_UNAVAILABLE',
-        fabric: voiceStudio.diagnostic({ publicView: true }),
-        fallback_blocked: true,
-      });
-    }
+  if (!voiceStudio.enabled) {
+    return reply.code(503).send({
+      error: 'La voix exacte Mairaiy ff_siwis est indisponible. Aucun TTS générique ne sera utilisé.',
+      code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
+      fabric: voiceStudio.diagnostic({ publicView: true }),
+      fallback_blocked: true,
+      expected_engine_voice: 'ff_siwis',
+      expected_language: 'fr-fr',
+    });
   }
 
-  // Legacy engines remain available only when Voice Fabric has not claimed the
-  // identity, or when strict identity has explicitly been disabled.
-  const preferLocal = request.body?.prefer_local === true;
-  const localOnline = await bridge.workerOnline().catch(() => false);
-  const attempts = preferLocal && localOnline ? ['local', 'cloud'] : ['cloud', 'local'];
-
-  for (const mode of attempts) {
-    if (mode === 'cloud' && cloudVoice.enabled) {
-      try {
-        return await cloudVoice.synthesize(text, request.body || {});
-      } catch (error) {
-        errors.push(`cloud: ${String(error?.message || error)}`);
-      }
+  try {
+    const audio = await voiceStudio.synthesize(text, request.body || {});
+    if (
+      String(audio?.engine_voice || '').toLowerCase() !== 'ff_siwis'
+      || String(audio?.language || '').toLowerCase() !== 'fr-fr'
+    ) {
+      throw new Error('Identité vocale Mairaiy non certifiée');
     }
-    if (mode === 'local' && localOnline) {
-      try {
-        return await bridge.synthesize(text, request.body || {});
-      } catch (error) {
-        errors.push(`runtime: ${String(error?.message || error)}`);
-      }
-    }
+    return audio;
+  } catch (error) {
+    return reply.code(503).send({
+      error: `Mairaiy ff_siwis indisponible: ${String(error?.message || error)}`,
+      code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
+      fabric: voiceStudio.diagnostic({ publicView: true }),
+      fallback_blocked: true,
+      expected_engine_voice: 'ff_siwis',
+      expected_language: 'fr-fr',
+    });
   }
-
-  return reply.code(503).send({
-    error: errors.join(' | ') || 'Voix Mairaiy indisponible',
-    code: 'AURA_VOICE_UNAVAILABLE',
-    fabric_ready: voiceStudio.enabled,
-    cloud_ready: cloudVoice.enabled,
-    runtime_ready: localOnline,
-  });
 });
 
 app.post('/api/image/generate', async (request, reply) => {
