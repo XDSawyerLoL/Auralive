@@ -160,9 +160,9 @@ export const config = Object.freeze({
   // Historical Mairaiy identity: Gemini 3.1 Flash TTS Preview + prebuilt Aoede.
   // Model and timbre are deliberately locked so stale Hostinger variables cannot
   // silently move AURA to Leda/Kokoro/another provider.
-  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', true),
+  voiceCloudEnabled: true,
   voiceApiKey: process.env.TTS_API_KEY || LEGACY_GEMINI_API_KEY,
-  voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
+  voiceBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
   voiceModel: 'gemini-3.1-flash-tts-preview',
   voiceName: 'Aoede',
   voiceTimeoutMs: int('TTS_TIMEOUT_MS', 35000, 5000, 120000),
