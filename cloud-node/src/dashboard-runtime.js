@@ -466,7 +466,7 @@ async function refresh(){
       $('voiceDot').className='live-dot '+(voiceReady?'good':'');
       if(voice.fabric_ready){
         $('voiceText').textContent='Mairaiy · Aoede';
-        $('voiceText').title='Voix Mairaiy historique · Gemini TTS Aoede · fr-fr';
+        $('voiceText').title='Voix Mairaiy historique · Gemini TTS · Aoede · fr-fr';
       }else if(voice.runtime_ready){
         $('voiceText').textContent='Mairaiy · Studio';
         $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
