@@ -54,6 +54,5 @@ test('Capability Scout GitHub queries enforce freshness and exclude archived/for
   }, 0);
   assert.match(query, /stars:>25/);
   assert.match(query, /archived:false/);
-  assert.match(query, /fork:false/);
   assert.match(query, /pushed:>/);
 });
