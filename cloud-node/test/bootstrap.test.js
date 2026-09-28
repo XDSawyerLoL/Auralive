@@ -64,8 +64,8 @@ test('direct Fastify entry stays online even when full runtime is disabled', asy
   const root = await fetch(base + '/');
   assert.equal(root.status, 200);
   const html = await root.text();
-  assert.match(html, /AURA CLOUD/);
-  assert.match(html, /Hostinger · processus unique/);
+  assert.match(html, /AURA/);
+  assert.match(html, /Interface de conscience opérationnelle/);
   assert.equal(child.exitCode, null, stderr);
 });
 
