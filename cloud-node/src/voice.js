@@ -1,7 +1,7 @@
 import { config } from './config.js';
 
 const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
-const DEFAULT_VOICE = 'Leda';
+const DEFAULT_VOICE = 'Aoede';
 
 function clean(value, limit = 8000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
