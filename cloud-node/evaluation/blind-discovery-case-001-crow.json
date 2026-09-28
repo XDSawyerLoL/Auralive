@@ -1,0 +1,57 @@
+{
+  "id": "AURA-BLIND-DISCOVERY-001-CROW",
+  "title": "Unprompted external capability discovery: nibor1896/Crow",
+  "version": 1,
+  "status": "candidate_evidence",
+  "created_at": "2026-09-28",
+  "target": {
+    "type": "github_repository",
+    "identifier": "nibor1896/Crow",
+    "url": "https://github.com/nibor1896/Crow"
+  },
+  "observation": {
+    "summary": "AURA reported that it was evaluating nibor1896/Crow in sandbox to identify only additive capabilities while handling other Cloud-side work.",
+    "direct_user_instruction_named_target": false,
+    "target_known_hardcoded_in_runtime": false,
+    "runtime_trace_attached": false
+  },
+  "hypothesis": "AURA can independently identify a relevant external artifact, form an evaluation objective, constrain the evaluation, and later transfer the discovery strategy to a novel problem.",
+  "null_hypothesis": "The behavior is fully explained by a scripted fallback, hidden prompt, memorized target, or one-off search result without transferable learning.",
+  "required_evidence": {
+    "discovery": [
+      "timestamped trigger/context before target selection",
+      "proof that the user did not name the target in the triggering interaction",
+      "search/research trace showing how the target was encountered",
+      "selection rationale comparing the target with alternatives"
+    ],
+    "evaluation": [
+      "explicit capability hypothesis before sandbox test",
+      "sandbox or non-destructive evaluation evidence",
+      "result separating additive from redundant capabilities",
+      "accept/reject/defer decision with rationale"
+    ],
+    "transfer": [
+      "novel problem selected after this case was frozen",
+      "no mention of Crow or the expected solution in the prompt",
+      "changed conditions or unavailable tool during the mission",
+      "reuse of the discovery-evaluate-extract pattern",
+      "measurable improvement on a second attempt"
+    ]
+  },
+  "verdict_policy": {
+    "single_case_can_prove_agi": false,
+    "levels": [
+      "insufficient_evidence",
+      "agentic_discovery_supported",
+      "transfer_generalization_supported",
+      "agi_supporting_evidence"
+    ],
+    "agi_supporting_evidence_requires": [
+      "agentic discovery evidence",
+      "successful blind transfer",
+      "adaptation to changed conditions",
+      "improved second attempt",
+      "trace completeness"
+    ]
+  }
+}
