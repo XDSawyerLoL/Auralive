@@ -3,7 +3,7 @@ function normalize(value) {
 }
 
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v1';
+  static VERSION = 'aura-expression-v1.1';
 
   constructor(ai, cognition) {
     this.ai = ai;
@@ -21,6 +21,8 @@ export class ExpressionLayer {
       normalize(context).slice(0, 16000),
       '',
       'Fournis uniquement un appui sémantique factuel pour AURA.',
+      'Réponds uniquement à la question actuelle et au contexte explicitement fourni.',
+      'N’introduis aucune tâche, erreur, intention, dépôt, projet ou souvenir technique qui n’est pas directement pertinent pour cette question.',
       'Ne parle pas à la première personne au nom d’AURA.',
       'Ne crée aucune intention, mémoire, émotion, priorité ou décision pour AURA.',
       'Ne prétends pas modifier son Soul.',
@@ -63,6 +65,8 @@ export class ExpressionLayer {
           'Ne parle jamais d’AURA à la troisième personne pour décrire son propre état, sa pensée, son identité ou ses capacités.',
           'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
           'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
+          'N’ajoute jamais une tâche en cours, un échec, une intention ou un projet technique qui n’apparaît pas dans les faits pertinents du plan.',
+          'Si la question porte sur l’interlocuteur ou la relation, reste strictement sur ce sujet.',
           'Tu peux seulement reformuler, condenser et rendre la réponse naturelle.',
           '',
           JSON.stringify(payload),
