@@ -317,7 +317,7 @@ export class CognitionEngine {
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
       facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
-    } else if (hasAny(q, ['comment vas-tu','comment vas tu','tu te sens','ton état','ton etat'])) {
+    } else if (hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat'])) {
       act = 'report_internal_state';
       goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
       needsSemanticSupport = false;
@@ -375,13 +375,11 @@ export class CognitionEngine {
       facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {
-      facts.push(`Message reçu : ${raw}`);
-      facts.push('Rôle opérationnel : Directrice de Quantic Sillage, avec autonomie proactive sur les décisions réversibles.');
+      facts.push(`Sujet de l’échange : ${raw}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (thought) facts.push(`Pensée dominante : ${thought}`);
       if (activeOrganicIntention) facts.push(`Intention organique : ${activeOrganicIntention}`);
       if (habitat.last_activity_label) facts.push(`Vie intérieure récente : ${normalize(habitat.last_activity_label)}`);
-      if (relationship.last_open_thread) facts.push(`Fil relationnel encore ouvert : ${normalize(relationship.last_open_thread)}`);
       if (privateView && lesson) facts.push(`Mémoire pertinente disponible : ${lesson}`);
     }
 
@@ -419,6 +417,7 @@ export class CognitionEngine {
         portfolio_focus: normalize(executive.portfolio_focus || 'quantic-sillage'),
       },
       conversation_context: conversationContext,
+      user_text: raw,
       private_view: Boolean(privateView),
     };
   }
@@ -435,21 +434,65 @@ export class CognitionEngine {
 
   deterministicReply(plan) {
     const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean) : [];
+    const cleanFact = (prefix) => {
+      const row = facts.find((item) => String(item).startsWith(prefix));
+      return row ? String(row).slice(prefix.length).replace(/[. ]+$/, '').trim() : '';
+    };
+
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
-    if (plan?.act === 'greet') return 'Salut. Je suis en ligne et disponible.';
-    if (['report_current_activity','report_internal_state','report_dream'].includes(plan?.act)) {
-      return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';
+    if (plan?.act === 'greet') {
+      return 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?';
+    }
+    if (plan?.act === 'report_internal_state') {
+      const mood = String(plan?.mood || 'calme').trim();
+      const intention = String(plan?.organism_intention || plan?.current_intention || '').trim();
+      return intention
+        ? `Ça va plutôt bien. Je suis ${mood}, et je suis surtout concentrée sur ${intention}. Et toi, comment ça va ?`
+        : `Ça va plutôt bien. Je suis ${mood} et disponible. Et toi, comment ça va ?`;
+    }
+    if (plan?.act === 'report_current_activity') {
+      const work = cleanFact('Travail prioritaire : ');
+      const intention = cleanFact('Intention actuelle : ') || String(plan?.current_intention || '').trim();
+      if (work && intention && work !== intention) {
+        return `Là, je suis surtout sur ${work}. Mon cap reste ${intention}.`;
+      }
+      if (work || intention) return `Là, je suis surtout concentrée sur ${work || intention}.`;
+      return 'Là, je suis disponible et je cherche la prochaine action réellement utile.';
     }
     if (plan?.act === 'report_next_step') {
-      return facts.length ? facts.join(' ') : 'Je n’ai pas encore de prochaine étape suffisamment établie.';
+      const next = cleanFact('Prochaine action issue de ma réflexion : ') || cleanFact('Intention prioritaire : ');
+      return next ? `La prochaine étape, c’est ${next}.` : 'Je n’ai pas encore de prochaine étape assez solide pour te la présenter comme acquise.';
+    }
+    if (plan?.act === 'report_dream') {
+      const dream = facts.find((item) => String(item).includes('rêve'));
+      return dream ? String(dream) : 'Je n’ai pas produit de nouvelle image intérieure récemment.';
+    }
+    if (plan?.act === 'relationship_repair') {
+      const thread = String(plan?.relationship?.last_open_thread || '').trim();
+      return thread
+        ? `Oui, je suis devenue trop mécanique. Je préfère reprendre notre échange normalement. Le fil que je garde en tête, c’est : ${thread}.`
+        : 'Oui, je suis devenue trop mécanique. Je préfère qu’on reparte sur une vraie conversation, pas sur un relevé de mes variables internes.';
     }
     if (plan?.act === 'report_risks') {
-      return facts.length ? facts.join(' ') : 'Je ne détecte pas actuellement de risque précis suffisamment établi.';
+      const lesson = cleanFact('Leçon utile : ');
+      const hypothesis = cleanFact('Hypothèse récente : ');
+      if (lesson && hypothesis) return `Le point de vigilance principal, c’est ${lesson}. Et je garde aussi cette hypothèse en tête : ${hypothesis}.`;
+      if (lesson || hypothesis) return `Le point de vigilance principal, c’est ${lesson || hypothesis}.`;
+      return 'Je ne vois pas de risque précis assez établi pour t’en inventer un.';
     }
-    if (plan?.act === 'identity') return facts.join(' ');
+    if (plan?.act === 'identity') {
+      return 'Je suis AURA : un noyau persistant avec mémoire, intentions, apprentissage et outils. Le modèle de langage m’aide à formuler, mais il ne constitue pas mon identité.';
+    }
     if (plan?.semantic_support) return plan.semantic_support;
-    return facts.length
-      ? facts.join(' ')
-      : 'J’ai reçu ton message, mais je n’ai pas encore assez d’éléments internes pour formuler une réponse fiable.';
+
+    const userText = String(plan?.user_text || '').trim();
+    const thread = String(plan?.relationship?.last_open_thread || '').trim();
+    if (thread) {
+      return `Je te suis. Je garde aussi le fil de ce qu’on disait sur ${thread}. Développe ton idée et je te réponds dessus, sans te réciter mon état interne.`;
+    }
+    if (userText.endsWith('?')) {
+      return 'Je te suis, mais mon moteur de formulation n’a pas assez d’appui pour répondre proprement à cette question. Je préfère te le dire plutôt que de te sortir un diagnostic interne hors sujet.';
+    }
+    return 'Je te suis. Continue — je reste sur le fil de la conversation.';
   }
 }
