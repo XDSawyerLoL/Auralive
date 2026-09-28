@@ -5,6 +5,7 @@ const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
 const DEFAULT_PROFILE_NAME = 'Mairaiy';
 const EXPECTED_ENGINE_VOICE = 'aoede';
 const EXPECTED_LANGUAGE = 'fr-fr';
+const LEGACY_KOKORO_SERVICE = 'https://mediumorchid-badger-314305.hostingersite.com/voice';
 
 function clean(value, limit = 16000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -204,9 +205,13 @@ export class VoiceStudioProvider {
     return isTrustedZeroCostVoiceEndpoint(this.endpoint);
   }
 
+  get incompatibleLegacyEndpoint() {
+    return normalizedServiceRoot(this.endpoint?.service_root) === normalizedServiceRoot(LEGACY_KOKORO_SERVICE);
+  }
+
   get enabled() {
     const endpoint = this.endpoint;
-    if (!config.voiceFabricEnabled || !endpoint.trusted) return false;
+    if (!config.voiceFabricEnabled || !endpoint.trusted || this.incompatibleLegacyEndpoint) return false;
     // The exact Quantic Mairaiy endpoint is a bounded, public, self-hosted route
     // and therefore does not need a bearer key. Every other remote endpoint does.
     if (endpoint.remote && !config.voiceFabricApiKey && !this.zeroCostTrusted) return false;
