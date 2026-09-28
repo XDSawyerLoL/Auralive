@@ -114,6 +114,7 @@ export class CapabilityFabric {
     this.webSubstrate = webSubstrate;
     this.bridge = bridge;
     this.peerMesh = peerMesh;
+    this.videoFactory = new VideoFactoryClient();
     this.registry = new Map();
     this.handlers = new Map();
     this.lastDiscoveryAt = '';
@@ -395,7 +396,7 @@ export class CapabilityFabric {
 
   registerBuiltins() {
     const workspace = new AuraCloudWorkspace();
-    const videoFactory = new VideoFactoryClient();
+    const videoFactory = this.videoFactory;
 
     this.register({
       id: 'cloud.workspace.create',
@@ -983,6 +984,7 @@ export class CapabilityFabric {
       last_error: this.lastError,
       arbitrary_remote_shell: false,
       policy: 'typed-capabilities-only',
+      video_factory: this.videoFactory?.diagnostic?.() || { enabled: false },
     };
   }
 }
