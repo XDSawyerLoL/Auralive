@@ -137,13 +137,13 @@ class AvatarTestInput(BaseModel):
 
 
 class VoiceSpeechInput(BaseModel):
-    model: str = Field(default="kokoro", max_length=80)
+    model: str = Field(default="gemini-3.1-flash-tts-preview", max_length=120)
     input: str = Field(min_length=1, max_length=3900)
-    voice: str = Field(default="mairaiy-kokoro-ff_siwis", max_length=120)
+    voice: str = Field(default="mairaiy-gemini-aoede", max_length=120)
     response_format: str = Field(default="wav", max_length=20)
     speed: float = Field(default=1.0, ge=0.5, le=1.5)
     language: str = Field(default="fr-fr", max_length=20)
-    engine_voice: str = Field(default="ff_siwis", max_length=80)
+    engine_voice: str = Field(default="Aoede", max_length=80)
     denoise: bool = True
     preprocess_prompt: bool = True
     seed: int | None = None
@@ -218,42 +218,44 @@ async def dashboard() -> HTMLResponse:
     return HTMLResponse((BASE_DIR / "app" / "web" / "templates" / "index.html").read_text(encoding="utf-8"))
 
 
-def _mairaiy_exact_kokoro() -> LocalKokoroVoice:
-    return getattr(aura, "local_kokoro_voice", None) or mairaiy_kokoro
+def _mairaiy_audio_service() -> Any:
+    return getattr(aura, "avatar_audio", None)
 
 
 @app.get("/voice/.well-known/voicestudio-speech")
 async def mairaiy_voice_discovery() -> dict[str, Any]:
-    diagnostic = _mairaiy_exact_kokoro().diagnostic()
+    service = _mairaiy_audio_service()
+    diagnostic = service.diagnostic() if service is not None else {}
+    identity = diagnostic.get("voice_identity") or {}
     return {
         "ok": True,
-        "provider": "quantic-studio-kokoro-direct",
+        "provider": "quantic-studio-gemini-aoede",
         "api_base": "/voice/v1",
-        "model": "kokoro",
+        "model": "gemini-3.1-flash-tts-preview",
         "voice": "Mairaiy",
-        "engine_voice": "ff_siwis",
+        "engine_voice": "Aoede",
         "language": "fr-fr",
-        "engine": "kokoro-onnx",
-        "ready": bool(diagnostic.get("ready")),
-        "assets_present": bool(diagnostic.get("assets_present")),
+        "engine": "gemini-tts",
+        "ready": bool(service is not None and service.gemini_api_key),
+        "historical_profile": identity.get("historical_profile", "aura-live-2.0.7-natural"),
         "generic_tts_fallback": False,
     }
 
 
 @app.get("/voice/v1/audio/voices")
 async def mairaiy_voice_list() -> dict[str, Any]:
-    diagnostic = _mairaiy_exact_kokoro().diagnostic()
+    service = _mairaiy_audio_service()
     return {
         "voices": [
             {
-                "voice_id": "mairaiy-kokoro-ff_siwis",
+                "voice_id": "mairaiy-gemini-aoede",
                 "name": "Mairaiy",
                 "type": "profile",
-                "engine": "kokoro-onnx",
-                "engine_voice": "ff_siwis",
+                "engine": "gemini-tts",
+                "engine_voice": "Aoede",
                 "language": "fr-fr",
-                "ready": bool(diagnostic.get("ready")),
-                "assets_present": bool(diagnostic.get("assets_present")),
+                "ready": bool(service is not None and service.gemini_api_key),
+                "historical_profile": "aura-live-2.0.7-natural",
             }
         ]
     }
@@ -261,34 +263,40 @@ async def mairaiy_voice_list() -> dict[str, Any]:
 
 @app.post("/voice/v1/audio/speech")
 async def mairaiy_voice_speech(payload: VoiceSpeechInput) -> FileResponse:
-    if str(payload.model or "").strip().lower() != "kokoro":
-        raise HTTPException(status_code=422, detail="Mairaiy utilise exclusivement Kokoro ONNX")
-    if str(payload.voice or "").strip() != "mairaiy-kokoro-ff_siwis":
-        raise HTTPException(status_code=422, detail="Profil Mairaiy exact requis")
-    if str(payload.engine_voice or "").strip().lower() != "ff_siwis":
-        raise HTTPException(status_code=422, detail="Voix Kokoro ff_siwis requise")
+    if str(payload.voice or "").strip() != "mairaiy-gemini-aoede":
+        raise HTTPException(status_code=422, detail="Profil historique Mairaiy/Aoede requis")
+    if str(payload.engine_voice or "").strip().casefold() != "aoede":
+        raise HTTPException(status_code=422, detail="Voix Gemini Aoede requise")
     if str(payload.language or "").strip().lower() != "fr-fr":
         raise HTTPException(status_code=422, detail="Langue fr-fr requise")
     if str(payload.response_format or "").strip().lower() != "wav":
         raise HTTPException(status_code=422, detail="Format WAV requis")
 
-    exact_voice = _mairaiy_exact_kokoro()
-    audio_url = await exact_voice.synthesize(
+    service = _mairaiy_audio_service()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Service audio Mairaiy non initialise")
+
+    audio_url = await service.synthesize(
         payload.input,
+        voice="Aoede",
         rate=float(payload.speed),
+        pitch=1.0,
         volume=1.0,
+        context="conversation",
+        style="",
     )
-    if not audio_url:
-        diagnostic = exact_voice.diagnostic()
+    if not audio_url or str(service.last_engine or "") != "gemini-tts":
         raise HTTPException(
             status_code=503,
-            detail=diagnostic.get("last_error") or "Kokoro ff_siwis indisponible",
+            detail=str(service.last_error or "Gemini TTS Aoede indisponible"),
         )
+    if str(service.last_voice or "").casefold() != "aoede":
+        raise HTTPException(status_code=503, detail="Le moteur vocal n'a pas rendu Aoede")
 
     filename = str(audio_url).rsplit("/", 1)[-1]
     path = settings.media_dir / "tts" / filename
     if not path.exists() or path.stat().st_size <= 44:
-        raise HTTPException(status_code=503, detail="Kokoro ff_siwis n'a produit aucun WAV valide")
+        raise HTTPException(status_code=503, detail="Gemini TTS Aoede n'a produit aucun WAV valide")
 
     return FileResponse(
         path,
@@ -296,10 +304,11 @@ async def mairaiy_voice_speech(payload: VoiceSpeechInput) -> FileResponse:
         filename=filename,
         headers={
             "Cache-Control": "no-store",
-            "X-Mairaiy-Voice": "ff_siwis",
+            "X-Mairaiy-Voice": "Aoede",
             "X-Mairaiy-Language": "fr-fr",
-            "X-Mairaiy-Engine": "kokoro-onnx",
+            "X-Mairaiy-Engine": "gemini-tts",
             "X-Mairaiy-Profile": "Mairaiy",
+            "X-Mairaiy-Historical-Profile": "aura-live-2.0.7-natural",
         },
     )
 
