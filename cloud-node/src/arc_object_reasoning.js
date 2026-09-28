@@ -299,7 +299,7 @@ function reflectCell([r, c], center2, axis) {
 
 function applyCopyAroundPivot(grid, params) {
   const background = dominantColor(grid);
-  const comps = components(grid, { background });
+  const comps = components(grid, { background, diagonal: true });
   const pivot = comps.find((item) => item.color === params.pivot_color && isFilledRectangle(item));
   const object = comps.find((item) => item.color === params.object_color);
   if (!pivot || !object) return cloneGrid(grid);
@@ -326,7 +326,7 @@ function applyCopyAroundPivot(grid, params) {
 function inferCopyAroundPivot(training) {
   const first = training[0];
   const background = dominantColor(first.input);
-  const comps = components(first.input, { background });
+  const comps = components(first.input, { background, diagonal: true });
   const colorsPresent = [...new Set(comps.map((item) => item.color))];
   const candidates = [];
   for (const pivotColor of colorsPresent) {
@@ -423,10 +423,8 @@ function applyTileGridModulo(grid, params) {
     if ((ri - source.ri) % params.row_modulo !== 0) continue;
     for (let ci = 0; ci < info.colSegments.length; ci += 1) {
       if ((ci - source.ci) % params.col_modulo !== 0) continue;
-      const [r0, r1] = info.rowSegments[ri];
-      const [c0, c1] = info.colSegments[ci];
-      if ((r1 - r0) !== (source.region.length - 1)
-        || (c1 - c0) !== (source.region[0].length - 1)) continue;
+      const [r0] = info.rowSegments[ri];
+      const [c0] = info.colSegments[ci];
       placeRegion(out, source.region, r0, c0, {
         backgroundOnly: true,
         background,
@@ -692,27 +690,33 @@ function constantColumnColor(grid, col) {
   return grid.every((row) => row[col] === value) ? value : null;
 }
 
+function detectRightEdgePalette(grid, background) {
+  let start = grid[0].length;
+  const palette = [];
+  for (let c = grid[0].length - 1; c >= 0; c -= 1) {
+    const color = constantColumnColor(grid, c);
+    if (color === null || color === background) break;
+    start = c;
+    palette.unshift(color);
+  }
+  return palette.length ? { start, palette } : null;
+}
+
 function applyMarkerPaletteCycle(grid, params) {
   const h = grid.length;
-  const w = grid[0].length;
   const background = params.background_color;
   const markerLength = topRunLength(grid, params.marker_color, params.marker_column);
   if (!markerLength) return cloneGrid(grid);
 
-  const palette = [];
-  for (let c = params.palette_start; c < w; c += 1) {
-    const color = constantColumnColor(grid, c);
-    if (color === null || color === background) return cloneGrid(grid);
-    palette.push(color);
-  }
-  if (!palette.length) return cloneGrid(grid);
+  const detected = detectRightEdgePalette(grid, background);
+  if (!detected || detected.start <= 0) return cloneGrid(grid);
+  const { start, palette } = detected;
 
   const out = cloneGrid(grid);
-  for (let c = params.palette_start; c < w; c += 1) {
+  for (let c = start; c < grid[0].length; c += 1) {
     for (let r = 0; r < h; r += 1) out[r][c] = background;
   }
-  const targetCol = params.palette_start - 1;
-  if (targetCol < 0) return cloneGrid(grid);
+  const targetCol = start - 1;
   for (let r = 0; r < h; r += 1) {
     out[r][targetCol] = palette[Math.floor(r / markerLength) % palette.length];
   }
@@ -727,16 +731,13 @@ function inferMarkerPaletteCycle(training) {
     for (const markerColor of colors(first.input).filter((color) => color !== background)) {
       const run = topRunLength(first.input, markerColor, markerColumn);
       if (!run) continue;
-      for (let paletteStart = 1; paletteStart < first.input[0].length; paletteStart += 1) {
-        const params = {
-          background_color: background,
-          marker_color: markerColor,
-          marker_column: markerColumn,
-          palette_start: paletteStart,
-        };
-        if (training.every((pair) => equalGrid(applyMarkerPaletteCycle(pair.input, params), pair.output))) {
-          candidates.push({ name: 'marker-palette-cycle', complexity: 6.4, params });
-        }
+      const params = {
+        background_color: background,
+        marker_color: markerColor,
+        marker_column: markerColumn,
+      };
+      if (training.every((pair) => equalGrid(applyMarkerPaletteCycle(pair.input, params), pair.output))) {
+        candidates.push({ name: 'marker-palette-cycle', complexity: 6.4, params });
       }
     }
   }
