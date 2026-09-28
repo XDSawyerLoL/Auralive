@@ -43,6 +43,7 @@ export class CognitiveKernel {
     this.organism = new AuraOrganism();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
+    this.expertRelay = null;
     this.lastInferenceAssessment = {};
     this.started = false;
     this.timer = null;
@@ -53,6 +54,11 @@ export class CognitiveKernel {
     this.lastError = '';
     this.lastTickAt = '';
     this.lastReflectionAt = '';
+  }
+
+  attachExpertRelay(expertRelay) {
+    this.expertRelay = expertRelay || null;
+    return this;
   }
 
   defaultSoul() {
@@ -494,6 +500,24 @@ export class CognitiveKernel {
         source: 'automation-outcomes',
       });
       await this.proposeImprovement(automationId, signature, count);
+      if (this.expertRelay?.openIncident) {
+        try {
+          await this.expertRelay.openIncident({
+            automationId,
+            eventType,
+            signature,
+            failures: count,
+            report: payload.report || payload,
+          });
+        } catch (error) {
+          await this.trace(
+            'expert-relay-error',
+            'Escalade expert indisponible',
+            String(error?.message || error).slice(0, 1200),
+            { automation_id: automationId, event_type: eventType, signature, failures: count },
+          ).catch(() => {});
+        }
+      }
     }
     await this.saveSoul();
     return {
