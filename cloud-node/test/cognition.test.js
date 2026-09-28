@@ -142,3 +142,19 @@ test('ordinary questions no longer receive dashboard state by default', () => {
   assert.doesNotMatch(payload, /nibor1896\/Crow/i);
   assert.doesNotMatch(payload, /dag aura vide/i);
 });
+
+
+test('legacy third-person internal objectives are normalized to first person', () => {
+  const engine = new CognitionEngine();
+  const result = engine.reflect(
+    { stimuli: [{ type: 'aura.command.reflection', source: 'command-center' }], intentions: [], lessons: [], outcomes: [] },
+    { organism: { stabilite: 1, clarte: 1 } },
+    {
+      trigger: 'command-center',
+      text: 'Évaluer ce qu’AURA peut continuer à faire côté Cloud sans Quantic Studio.',
+    },
+  );
+  assert.doesNotMatch(result.summary, /signal direct/i);
+  assert.doesNotMatch(result.summary, /ce qu’AURA peut/i);
+  assert.match(result.summary, /ce que je peux/i);
+});
