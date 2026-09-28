@@ -217,3 +217,16 @@ test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
 });
+
+
+test('dashboard renders the expanded neural interest graph', async () => {
+  const { DASHBOARD_HTML } = await import('../src/dashboard.js');
+  const { DASHBOARD_SCRIPT } = await import('../src/dashboard-runtime.js');
+  assert.match(DASHBOARD_HTML, /Carte neuronale d’intérêt/);
+  assert.match(DASHBOARD_HTML, /id="mapStats"/);
+  assert.match(DASHBOARD_HTML, /brain-contour/);
+  assert.match(DASHBOARD_SCRIPT, /const neuralGroups=/);
+  assert.match(DASHBOARD_SCRIPT, /data\.links/);
+  assert.match(DASHBOARD_SCRIPT, /micro-neurones|Dendrites/i);
+  assert.match(DASHBOARD_SCRIPT, /selfText\(soul\.dominant_thought/);
+});
