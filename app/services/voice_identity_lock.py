@@ -22,6 +22,7 @@ def install_voice_identity_lock(aura: Any) -> Any:
 
     original_diagnostic = service.diagnostic
     locked_voice = "Aoede"
+    locked_model = "gemini-3.1-flash-tts-preview"
 
     # Preserve the existing Kokoro component for setup/diagnostics and old UI
     # contracts, but it is deliberately outside the Mairaiy synthesis path.
@@ -66,6 +67,7 @@ def install_voice_identity_lock(aura: Any) -> Any:
                 pitch=pitch,
                 context=context,
                 style=style,
+                model=locked_model,
             )
             if url:
                 # _synthesize_gemini already records gemini-tts + Aoede.
@@ -83,6 +85,7 @@ def install_voice_identity_lock(aura: Any) -> Any:
             "locked": True,
             "historical_profile": "aura-live-2.0.7-natural",
             "primary_engine": "gemini-tts",
+            "primary_model": locked_model,
             "primary_voice": locked_voice,
             "current_voice": self.last_voice or locked_voice,
             "current_engine": self.last_engine or (
