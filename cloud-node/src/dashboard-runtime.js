@@ -4,6 +4,7 @@ let lastSoul = null;
 let lastAttention = null;
 let livingScene = null;
 let voicePlayer = null;
+let voiceAudioContext = null;
 let voicePrimed = false;
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
 
@@ -556,6 +557,14 @@ function primeVoice(){
   if(voicePrimed)return;
   voicePrimed=true;
   try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){
+      voiceAudioContext=voiceAudioContext||new AC();
+      const resumed=voiceAudioContext.resume();
+      if(resumed&&resumed.catch)resumed.catch(function(){});
+    }
+  }catch(_){voiceAudioContext=null;}
+  try{
     if(!voicePlayer)voicePlayer=new Audio();
     voicePlayer.preload='auto';
     voicePlayer.muted=false;
@@ -563,13 +572,34 @@ function primeVoice(){
     voicePlayer=null;
   }
 }
-function playVoiceSegment(payload){
-  return new Promise(function(resolve,reject){
-    if(!payload||!payload.audio_base64){reject(new Error('Segment audio absent'));return;}
+async function playVoiceSegment(payload){
+  if(!payload||!payload.audio_base64)throw new Error('Segment audio absent');
+  const raw=atob(payload.audio_base64);
+  const bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+
+  if(voiceAudioContext){
     try{
-      const raw=atob(payload.audio_base64);
-      const bytes=new Uint8Array(raw.length);
-      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      if(voiceAudioContext.state==='suspended')await voiceAudioContext.resume();
+      const copy=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+      const decoded=await voiceAudioContext.decodeAudioData(copy);
+      await new Promise(function(resolve,reject){
+        try{
+          const source=voiceAudioContext.createBufferSource();
+          source.buffer=decoded;
+          source.connect(voiceAudioContext.destination);
+          source.onended=resolve;
+          source.start(0);
+        }catch(error){reject(error);}
+      });
+      return;
+    }catch(error){
+      console.warn('Web Audio Mairaiy indisponible; essai lecteur HTML5.',error);
+    }
+  }
+
+  await new Promise(function(resolve,reject){
+    try{
       const blob=new Blob([bytes],{type:payload.mime_type||'audio/wav'});
       const url=URL.createObjectURL(blob);
       const audio=voicePlayer||new Audio();
@@ -584,7 +614,12 @@ function playVoiceSegment(payload){
       audio.onended=function(){finish(true);};
       audio.onerror=function(){finish(false,new Error('Lecture du segment Mairaiy impossible'));};
       const play=audio.play();
-      if(play&&play.catch)play.catch(function(error){finish(false,error);});
+      if(play&&play.catch)play.catch(function(error){
+        const blocked=error&&error.name==='NotAllowedError'
+          ? new Error('Le navigateur bloque le son. Clique dans la page puis renvoie un message.')
+          : error;
+        finish(false,blocked);
+      });
     }catch(error){reject(error);}
   });
 }
