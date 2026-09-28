@@ -4,6 +4,21 @@ function lower(value) {
   return String(value || '').toLowerCase();
 }
 
+export function normalizeAuraSelfReference(value) {
+  return String(value || '')
+    .replace(/Je viens de recevoir un signal direct\s*:/gi, 'J’ai intégré un nouveau contexte interne :')
+    .replace(/Je le rattache à mon état et à mes intentions avant de répondre\.?/gi, 'Je l’évalue avant de décider s’il devient une intention.')
+    .replace(/ce qu’AURA peut/gi, 'ce que je peux')
+    .replace(/ce que AURA peut/gi, 'ce que je peux')
+    .replace(/AURA doit/gi, 'je dois')
+    .replace(/AURA peut/gi, 'je peux')
+    .replace(/AURA veut/gi, 'je veux')
+    .replace(/AURA est/gi, 'je suis')
+    .replace(/pour AURA/gi, 'pour moi')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function includesAny(text, terms) {
   return terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0);
 }
@@ -33,11 +48,11 @@ export function buildNeuralFieldModel(input = {}) {
   } = input;
 
   const corpus = [
-    soul.current_intention,
-    soul.dominant_thought,
-    ...intentions.map((row) => row?.statement),
-    ...traces.map((row) => `${row?.title || ''} ${row?.content || ''}`),
-    ...lessons.map((row) => row?.content),
+    normalizeAuraSelfReference(soul.current_intention),
+    normalizeAuraSelfReference(soul.dominant_thought),
+    ...intentions.map((row) => normalizeAuraSelfReference(row?.statement)),
+    ...traces.map((row) => normalizeAuraSelfReference(`${row?.title || ''} ${row?.content || ''}`)),
+    ...lessons.map((row) => normalizeAuraSelfReference(row?.content)),
   ].filter(Boolean).join(' ').toLowerCase();
 
   const boost = (terms, each = 0.07) => Math.min(0.42, includesAny(corpus, terms) * each);
