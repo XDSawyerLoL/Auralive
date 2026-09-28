@@ -1,3 +1,5 @@
+import { applyAdvancedProgram, inferAdvancedPrograms } from './arc_object_reasoning.js';
+
 function cloneGrid(grid) {
   return (Array.isArray(grid) ? grid : []).map((row) => [...row]);
 }
@@ -98,6 +100,8 @@ export function applyGridProgram(name, grid, params = {}) {
   const fixed = FIXED_PROGRAMS.find((item) => item.name === name);
   if (fixed) return fixed.apply(grid);
   if (name === 'recolor') return recolor(grid, params.mapping || {});
+  const advanced = applyAdvancedProgram(name, grid, params);
+  if (advanced) return advanced;
   throw new Error('programme de grille inconnu: ' + name);
 }
 
@@ -117,6 +121,8 @@ export function induceGridProgram(training = []) {
   if (mapping && pairs.every((pair) => equalGrid(recolor(pair.input, mapping), pair.output))) {
     candidates.push({ name: 'recolor', complexity: 3 + Object.keys(mapping).length * 0.05, params: { mapping } });
   }
+
+  for (const candidate of inferAdvancedPrograms(pairs)) candidates.push(candidate);
 
   candidates.sort((a, b) => a.complexity - b.complexity || a.name.localeCompare(b.name));
   if (!candidates.length) return { solved: false, reason: 'no-program-fits', candidates: [] };
