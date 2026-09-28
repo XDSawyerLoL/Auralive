@@ -209,6 +209,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       <div class="pill build-pill" id="buildBadge" title="Build Hostinger vérifiable">AURA 2.2.1 · LONG HORIZON</div>
       <div class="pill"><span id="liveDot" class="live-dot"></span><span id="liveText">Connexion…</span></div>
       <div class="pill"><span id="voiceDot" class="live-dot"></span><span id="voiceText">Mairaiy…</span></div>
+      <div class="pill"><span id="languageDot" class="live-dot"></span><span id="languageText">Dialogue…</span></div>
       <div class="pill"><span id="evolutionDot" class="live-dot"></span><span id="evolutionText">Évolution…</span></div>
       <div class="clock"><div id="clockDate" class="date">—</div><div id="clockTime" class="time">—</div></div>
       <button class="mode-btn" id="modeBtn">⌁ Mode évolutif</button>
