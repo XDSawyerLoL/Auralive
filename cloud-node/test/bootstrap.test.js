@@ -81,11 +81,13 @@ test('Hostinger lsnode can require the ESM entry because server.js has no top-le
   );
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.gateway_port, requirePort);
-  assert.equal(gateway.framework, 'native-node-gateway');
+  assert.equal(gateway.framework, 'fastify');
+  assert.equal(gateway.application_ready, true);
+  assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('production entry forces Hostinger port 3000 and stays online with runtime disabled', async (t) => {
+test('production entry uses one Fastify listener on Hostinger port 3000 with runtime disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -97,19 +99,19 @@ test('production entry forces Hostinger port 3000 and stays online with runtime 
   assert.equal(gateway.gateway_ready, true);
   assert.equal(gateway.gateway_port, 3000);
   assert.equal(gateway.runtime_ready, false);
-  assert.equal(gateway.framework, 'native-node-gateway');
-  assert.equal(gateway.application_ready, false);
+  assert.equal(gateway.framework, 'fastify');
+  assert.equal(gateway.application_ready, true);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const health = JSON.parse(healthText);
   assert.equal(health.ok, true);
-  assert.equal(health.application_ready, false);
 
   const root = await fetch(base + '/');
   assert.equal(root.status, 200);
   const html = await root.text();
   assert.match(html, /AURA/);
-  assert.match(html, /Passerelle Hostinger active/);
+  assert.match(html, /Interface de conscience opérationnelle/);
+  assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
 
