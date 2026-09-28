@@ -5,7 +5,6 @@ let lastAttention = null;
 let livingScene = null;
 let voicePlayer = null;
 let voicePrimed = false;
-let browserSpeechToken = 0;
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
 
 function escapeHtml(value){
@@ -73,78 +72,6 @@ function renderEmotion(o){
   emotionValue('dream',o.pression_de_reve);
   emotionValue('silence',o.besoin_de_silence);
 }
-function browserVoiceAvailable(){
-  return 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance==='function';
-}
-function primeVoice(){
-  if(voicePrimed)return;
-  voicePrimed=true;
-  try{
-    voicePlayer=new Audio();
-    voicePlayer.preload='auto';
-    voicePlayer.muted=true;
-    voicePlayer.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-    const attempt=voicePlayer.play();
-    if(attempt&&attempt.then)attempt.then(function(){voicePlayer.pause();voicePlayer.currentTime=0;voicePlayer.muted=false;}).catch(function(){voicePrimed=false;});
-  }catch(_){voicePrimed=false;}
-}
-function splitBrowserSpeech(text,maxChars){
-  const value=String(text||'').replace(/\s+/g,' ').trim();
-  const limit=Math.max(140,Math.min(Number(maxChars)||220,320));
-  if(!value)return[];
-  const sentences=value.match(/[^.!?…]+[.!?…]+[»”"')\]]*|[^.!?…]+$/g)||[value];
-  const out=[];let current='';
-  function flush(){if(current){out.push(current);current='';}}
-  sentences.forEach(function(raw){
-    const sentence=String(raw||'').trim();if(!sentence)return;
-    if(sentence.length<=limit){
-      if(!current)current=sentence;
-      else if((current+' '+sentence).length<=limit)current+=' '+sentence;
-      else{flush();current=sentence;}
-      return;
-    }
-    flush();
-    const words=sentence.split(/\s+/);let part='';
-    words.forEach(function(word){
-      if(!part)part=word;
-      else if((part+' '+word).length<=limit)part+=' '+word;
-      else{out.push(part);part=word;}
-    });
-    if(part)out.push(part);
-  });
-  flush();
-  return out;
-}
-function speakBrowserFallback(text){
-  if(!browserVoiceAvailable()||!text)return false;
-  try{
-    const token=++browserSpeechToken;
-    speechSynthesis.cancel();
-    const chunks=splitBrowserSpeech(text,220);
-    const voices=speechSynthesis.getVoices();
-    const fr=voices.find(function(v){return /^fr(-|_)/i.test(v.lang||'')&&/female|audrey|hortense|denise|eloquence|google/i.test(v.name||'');})
-      || voices.find(function(v){return /^fr(-|_)/i.test(v.lang||'');});
-    let index=0;
-    function next(){
-      if(token!==browserSpeechToken)return;
-      if(index>=chunks.length){
-        document.body.classList.remove('aura-speaking');
-        $('voiceText').textContent='Mairaiy · en ligne';
-        return;
-      }
-      const utterance=new SpeechSynthesisUtterance(chunks[index++]);
-      utterance.lang='fr-FR';utterance.rate=1.02;utterance.pitch=1.08;utterance.volume=1;
-      if(fr)utterance.voice=fr;
-      utterance.onstart=function(){document.body.classList.add('aura-speaking');$('voiceText').textContent='Mairaiy · parle';};
-      utterance.onend=next;
-      utterance.onerror=function(){document.body.classList.remove('aura-speaking');};
-      speechSynthesis.speak(utterance);
-    }
-    next();
-    return true;
-  }catch(_){return false;}
-}
-
 function setLive(ok,text){$('liveDot').className='live-dot '+(ok?'good':'bad');$('liveText').textContent=text;}
 function fmtTime(value){
   if(!value) return '—';
@@ -516,20 +443,17 @@ async function refresh(){
     try{
       const capabilities=await api('/api/capabilities');
       const voice=(capabilities&&capabilities.voice)||{};
-      const voiceReady=Boolean(voice.ready)||browserVoiceAvailable();
+      const voiceReady=Boolean(voice.ready);
       $('voiceDot').className='live-dot '+(voiceReady?'good':'');
-      if(voice.cloud_ready){
-        $('voiceText').textContent='Mairaiy · en ligne';
-        $('voiceText').title='Voix Mairaiy Cloud active · Studio local optionnel';
-      }else if(voice.studio_ready){
+      if(voice.fabric_ready){
+        $('voiceText').textContent='Mairaiy · ff_siwis';
+        $('voiceText').title='Voix Mairaiy verrouillée · Kokoro ff_siwis · fr-fr';
+      }else if(voice.runtime_ready){
         $('voiceText').textContent='Mairaiy · Studio';
-        $('voiceText').title='Voix Mairaiy locale via Quantic Studio';
-      }else if(browserVoiceAvailable()){
-        $('voiceText').textContent='Mairaiy · secours';
-        $('voiceText').title='Voix navigateur de secours active';
+        $('voiceText').title='Voix Mairaiy locale via Quantic Studio · ff_siwis';
       }else{
         $('voiceText').textContent='Mairaiy · attente';
-        $('voiceText').title='Aucun moteur vocal disponible';
+        $('voiceText').title='Voix ff_siwis indisponible · aucun TTS générique autorisé';
       }
     }catch(_){
       $('voiceDot').className='live-dot';
@@ -620,7 +544,6 @@ function playVoiceSegment(payload){
 }
 async function speakAura(text,ticket){
   if(!text)return;
-  browserSpeechToken+=1;
   try{
     if(!ticket)throw new Error('Ticket vocal absent');
     const out=await api('/api/voice/speak',{
@@ -638,8 +561,10 @@ async function speakAura(text,ticket){
     $('voiceText').textContent='Mairaiy · en ligne';
   }catch(error){
     document.body.classList.remove('aura-speaking');
-    console.debug('Mairaiy Cloud indisponible, repli navigateur',error);
-    speakBrowserFallback(text);
+    $('voiceText').textContent='Mairaiy · indisponible';
+    $('voiceText').title='Voix ff_siwis indisponible · aucun TTS générique utilisé';
+    $('chatState').textContent='Réponse texte prête · voix Mairaiy ff_siwis indisponible';
+    console.error('Mairaiy ff_siwis indisponible; repli TTS générique interdit',error);
   }
 }
 async function sendMessage(text){
