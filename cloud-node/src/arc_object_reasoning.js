@@ -957,6 +957,98 @@ function inferKeyedRegionRecolor(training) {
   return candidates;
 }
 
+
+function markerBoundingBox(grid, markerColor) {
+  const cells = [];
+  for (let r = 0; r < grid.length; r += 1) {
+    for (let c = 0; c < grid[r].length; c += 1) {
+      if (grid[r][c] === markerColor) cells.push([r, c]);
+    }
+  }
+  if (!cells.length) return null;
+  const rows = cells.map(([r]) => r);
+  const cols = cells.map(([, c]) => c);
+  return {
+    minR: Math.min(...rows),
+    maxR: Math.max(...rows),
+    minC: Math.min(...cols),
+    maxC: Math.max(...cols),
+    cells,
+  };
+}
+
+function applySelfTemplateStencil(grid, params) {
+  const background = dominantColor(grid);
+  const box = markerBoundingBox(grid, params.marker_color);
+  if (!box) return cloneGrid(grid);
+  const h = box.maxR - box.minR + 1;
+  const w = box.maxC - box.minC + 1;
+  if (h < 2 || w < 2 || h > params.max_size || w > params.max_size) return cloneGrid(grid);
+
+  const template = extractRegion(grid, box.minR, box.maxR, box.minC, box.maxC);
+  const markerMask = [];
+  let anchorCount = 0;
+  for (let r = 0; r < h; r += 1) {
+    for (let c = 0; c < w; c += 1) {
+      if (template[r][c] === params.marker_color) markerMask.push([r, c]);
+      else if (template[r][c] !== background) anchorCount += 1;
+    }
+  }
+  if (markerMask.length < 2 || anchorCount < 2) return cloneGrid(grid);
+
+  const out = cloneGrid(grid);
+  for (let r0 = 0; r0 <= grid.length - h; r0 += 1) {
+    for (let c0 = 0; c0 <= grid[0].length - w; c0 += 1) {
+      if (r0 === box.minR && c0 === box.minC) continue;
+      let matches = true;
+      let needsFill = false;
+      for (let r = 0; r < h && matches; r += 1) {
+        for (let c = 0; c < w; c += 1) {
+          const expected = template[r][c];
+          const actual = grid[r0 + r][c0 + c];
+          if (expected === params.marker_color) {
+            if (actual !== background && actual !== params.marker_color) {
+              matches = false;
+              break;
+            }
+            if (actual === background) needsFill = true;
+          } else if (actual !== expected) {
+            matches = false;
+            break;
+          }
+        }
+      }
+      if (!matches || !needsFill) continue;
+      for (const [r, c] of markerMask) {
+        if (out[r0 + r][c0 + c] === background) {
+          out[r0 + r][c0 + c] = params.marker_color;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function inferSelfTemplateStencil(training) {
+  const changedTo = new Set();
+  for (const pair of training) {
+    const background = dominantColor(pair.input);
+    const diffs = changedCells(pair.input, pair.output);
+    if (!diffs.length) return [];
+    for (const [, , from, to] of diffs) {
+      if (from !== background) return [];
+      changedTo.add(to);
+    }
+  }
+  if (changedTo.size !== 1) return [];
+  const markerColor = [...changedTo][0];
+  if (!training.every((pair) => pair.input.some((row) => row.includes(markerColor)))) return [];
+  const params = { marker_color: markerColor, max_size: 7 };
+  if (!training.every((pair) =>
+    equalGrid(applySelfTemplateStencil(pair.input, params), pair.output))) return [];
+  return [{ name: 'self-template-stencil', complexity: 7.1, params }];
+}
+
 export function applyAdvancedProgram(name, grid, params = {}) {
   if (!rectangular(grid)) throw new Error('grid invalide');
   if (name === 'connect-anchors-l') return applyConnectAnchors(grid, params);
@@ -969,6 +1061,7 @@ export function applyAdvancedProgram(name, grid, params = {}) {
   if (name === 'repeat-periodic-recolor') return applyRepeatPeriodic(grid, params);
   if (name === 'diagonal-extrusion') return applyDiagonalExtrusion(grid, params);
   if (name === 'marker-palette-cycle') return applyMarkerPaletteCycle(grid, params);
+  if (name === 'self-template-stencil') return applySelfTemplateStencil(grid, params);
   return null;
 }
 
@@ -987,6 +1080,7 @@ export function inferAdvancedPrograms(training = []) {
     inferRepeatPeriodic,
     inferDiagonalExtrusion,
     inferMarkerPaletteCycle,
+    inferSelfTemplateStencil,
   ];
   const candidates = [];
   for (const inferer of inferers) {
