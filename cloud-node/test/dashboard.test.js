@@ -123,8 +123,8 @@ test('dashboard exposes exact Mairaiy readiness without a generic TTS escape hat
   assert.equal(DASHBOARD_HTML.includes('id="voiceDot"'), true);
   assert.equal(DASHBOARD_HTML.includes('id="voiceText"'), true);
   assert.equal(DASHBOARD_SCRIPT.includes("api('/api/capabilities')"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · ff_siwis"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Kokoro ff_siwis · fr-fr"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · Aoede"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Gemini TTS · Aoede · fr-fr"), true);
   assert.equal(DASHBOARD_SCRIPT.includes('browserVoiceAvailable()'), false);
 });
 
@@ -164,7 +164,7 @@ test('mobile voice primes audio but never substitutes a device TTS for Mairaiy',
   assert.equal(DASHBOARD_SCRIPT.includes('primeVoice();'), true);
   assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), false);
   assert.equal(DASHBOARD_SCRIPT.includes('SpeechSynthesisUtterance'), false);
-  assert.equal(DASHBOARD_SCRIPT.includes('aucun TTS générique utilisé'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('aucun autre timbre utilisé'), true);
 });
 
 test('chat send path cannot be blocked by voice priming', () => {
