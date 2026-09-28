@@ -51,6 +51,17 @@ test('blind and adversarial probes remain visible in the report', async () => {
 });
 
 
+test('persistent restart memory and blind software repair are behaviorally demonstrated', async () => {
+  const report = await runAgiBattery();
+  const byId = new Map(report.cases.map((item) => [item.id, item]));
+
+  assert.equal(byId.get('AGI-15')?.status, 'pass');
+  assert.match(byId.get('AGI-15')?.evidence || '', /after_restart_attempts=1/);
+  assert.equal(byId.get('AGI-18')?.status, 'pass');
+  assert.match(byId.get('AGI-18')?.evidence || '', /validation=pass/);
+  assert.match(byId.get('AGI-18')?.evidence || '', /independent=pass/);
+});
+
 test('blind behavioral battery measures condition changes, tool loss, contradiction and second-attempt learning', async () => {
   const report = await runAgiBattery();
   const byId = new Map(report.cases.map((item) => [item.id, item]));
