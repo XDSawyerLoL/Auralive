@@ -131,3 +131,55 @@ test('native symbolic cognition refuses inconsistent duplicate examples', () => 
   assert.notEqual(plan.act, 'solve_symbolic_rule');
   assert.equal(plan.needs_semantic_support, true);
 });
+
+
+test('casual wellbeing question stays conversational and does not dump internal labels', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: "Comment va tu aujourd'hui ?",
+    soul: {
+      current_intention: 'Améliorer AURA',
+      organism: {
+        mood: 'satisfaite',
+        intention_active: 'améliorer AURA',
+        stabilite: 1,
+        clarte: 1,
+        curiosite: 0.64,
+        relationship: {},
+        executive: {},
+      },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [],
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'report_internal_state');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /Ça va plutôt bien/);
+  assert.doesNotMatch(answer, /Message reçu|Rôle opérationnel|Vie intérieure|confiance=|preuves=/i);
+});
+
+test('generic fallback never recites AURA diagnostics when language layer is unavailable', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Tu en penses quoi ?',
+    soul: {
+      current_intention: 'Poursuivre le projet',
+      dominant_thought: 'Rester cohérente',
+      organism: { mood: 'calme', relationship: {}, executive: {} },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [],
+    privateView: true,
+  });
+  const answer = engine.deterministicReply(plan);
+  assert.doesNotMatch(answer, /Sujet de l’échange|Rôle opérationnel|Pensée dominante|Vie intérieure/i);
+});
