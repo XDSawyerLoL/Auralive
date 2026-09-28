@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
-const HOSTINGER_PORT = 3000;
+const HOSTINGER_PORT = 34567;
 const base = `http://127.0.0.1:${HOSTINGER_PORT}`;
 
 async function waitForBase(targetBase, path, matcher, timeoutMs = 15000) {
@@ -30,8 +30,9 @@ function launch(extraEnv = {}) {
       ...process.env,
       NODE_ENV: 'production',
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
-      PORT: '49999',
+      PORT: String(HOSTINGER_PORT),
       AURA_GATEWAY_PORT: '3987',
+      AURA_PORT: '3000',
       DB_HOST: '',
       DB_USER: '',
       DB_PASSWORD: '',
@@ -87,7 +88,7 @@ test('Hostinger lsnode can require the ESM entry because server.js has no top-le
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('production entry uses one Fastify listener on Hostinger port 3000 with runtime disabled', async (t) => {
+test('production entry honors Hostinger PORT before AURA fallbacks with runtime disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -97,7 +98,7 @@ test('production entry uses one Fastify listener on Hostinger port 3000 with run
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.ok, true);
   assert.equal(gateway.gateway_ready, true);
-  assert.equal(gateway.gateway_port, 3000);
+  assert.equal(gateway.gateway_port, HOSTINGER_PORT);
   assert.equal(gateway.runtime_ready, false);
   assert.equal(gateway.framework, 'fastify');
   assert.equal(gateway.application_ready, true);
