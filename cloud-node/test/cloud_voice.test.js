@@ -7,7 +7,7 @@ test('Mairaiy Cloud TTS produces browser-playable WAV without Quantic Studio', (
     process.env.AURA_ZERO_COST_MODE='false';
     process.env.TTS_API_KEY='unit-test-key';
     process.env.MAIRAIY_CLOUD_VOICE_ENABLED='true';
-    process.env.TTS_MODEL='unit-test-model';
+    process.env.TTS_MODEL='stale-unit-test-model';
     process.env.TTS_VOICE='Leda';
     global.fetch=async function(){
       const pcm=Buffer.alloc(4800);
@@ -26,7 +26,7 @@ test('Mairaiy Cloud TTS produces browser-playable WAV without Quantic Studio', (
     const { CloudVoice }=await import('./src/voice.js');
     const voice=new CloudVoice();
     const out=await voice.synthesize('Bonjour depuis AURA',{context:'aura-cloud-chat'});
-    console.log(JSON.stringify({enabled:voice.enabled,engine:out.engine,voice:out.voice,mime:out.mime_type,header:Buffer.from(out.audio_base64,'base64').subarray(0,4).toString('ascii')}));
+    console.log(JSON.stringify({enabled:voice.enabled,engine:out.engine,voice:out.voice,model:out.model,mime:out.mime_type,header:Buffer.from(out.audio_base64,'base64').subarray(0,4).toString('ascii')}));
   `;
   const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: new URL('..', import.meta.url).pathname,
@@ -38,7 +38,8 @@ test('Mairaiy Cloud TTS produces browser-playable WAV without Quantic Studio', (
   const payload = JSON.parse(line);
   assert.equal(payload.enabled, true);
   assert.equal(payload.engine, 'gemini-cloud-tts');
-  assert.equal(payload.voice, 'Leda');
+  assert.equal(payload.voice, 'Aoede');
+  assert.equal(payload.model, 'gemini-3.1-flash-tts-preview');
   assert.equal(payload.mime, 'audio/wav');
   assert.equal(payload.header, 'RIFF');
 });
