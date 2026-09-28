@@ -43,6 +43,18 @@ export function normalizeCapability(raw = {}) {
     tags,
     trust: clamp(raw.trust ?? 0.5),
     observed_reliability: clamp(raw.observed_reliability ?? raw.trust ?? 0.5),
+    semantic_reliability: clamp(
+      raw.semantic_reliability
+      ?? raw.observed_reliability
+      ?? raw.trust
+      ?? 0.5,
+    ),
+    semantic_observations: Math.max(0, Number(raw.semantic_observations || 0)),
+    semantic_successes: Math.max(0, Number(raw.semantic_successes || 0)),
+    semantic_failures: Math.max(0, Number(raw.semantic_failures || 0)),
+    semantic_last_verdict: clean(raw.semantic_last_verdict || '', 80),
+    semantic_last_reason: clean(raw.semantic_last_reason || '', 1000),
+    semantic_last_update_at: clean(raw.semantic_last_update_at || '', 80),
     latency_ms: Math.max(0, Number(raw.latency_ms || 0)),
     cost_microunits: Math.max(0, Number(raw.cost_microunits || 0)),
     side_effects: Boolean(raw.side_effects),
@@ -78,7 +90,13 @@ export function scoreCapability(capability, {
   const requested = requiredTags.filter(Boolean);
   if (requested.some((tag) => !tags.has(tag))) return -Infinity;
   const trust = clamp(capability.trust ?? 0.5);
-  const reliability = clamp(capability.observed_reliability ?? trust);
+  const executionReliability = clamp(capability.observed_reliability ?? trust);
+  const semanticReliability = clamp(
+    capability.semantic_reliability
+    ?? capability.observed_reliability
+    ?? trust,
+  );
+  const reliability = clamp(executionReliability * 0.55 + semanticReliability * 0.45);
   const latencyPenalty = Math.min(0.2, Number(capability.latency_ms || 0) / 20000);
   const costPenalty = maxCostMicrounits > 0
     ? Math.min(0.15, Number(capability.cost_microunits || 0) / maxCostMicrounits * 0.15)
@@ -184,6 +202,124 @@ export class CapabilityFabric {
     this.registry.set(next.id, next);
     await this.persistCapability(next).catch(() => {});
     return next;
+  }
+
+
+  async recordSemanticFeedback(capabilityOrId, feedback = {}) {
+    const id = typeof capabilityOrId === 'string'
+      ? stableId(capabilityOrId)
+      : stableId(capabilityOrId?.id);
+    const current = this.registry.get(id);
+    if (!current) return { applied: false, reason: 'capability-unknown', capability_id: id };
+
+    const verdict = clean(
+      feedback.verdict
+      || feedback.epistemic_status
+      || feedback.status
+      || '',
+      80,
+    ).toLowerCase();
+    const weightedSupport = Math.max(0, Number(feedback.weighted_support || 0));
+    const weightedContradiction = Math.max(0, Number(feedback.weighted_contradiction || 0));
+    const contradictionSources = Math.max(
+      0,
+      Number(feedback.independent_contradicting_sources || feedback.contradicting_sources || 0),
+    );
+    const supportSources = Math.max(
+      0,
+      Number(feedback.independent_supporting_sources || feedback.supporting_sources || 0),
+    );
+
+    let semanticSample = null;
+    let normalizedVerdict = verdict || 'unverified';
+    if (['verified', 'corroborated', 'supported', 'correct', 'true'].includes(verdict)) {
+      semanticSample = 1;
+      normalizedVerdict = 'verified';
+    } else if (['contradicted', 'rejected', 'incorrect', 'false', 'semantic-failure'].includes(verdict)) {
+      semanticSample = 0;
+      normalizedVerdict = 'contradicted';
+    } else if (
+      verdict === 'contested'
+      && contradictionSources > 0
+      && weightedContradiction > Math.max(0.15, weightedSupport * 1.2)
+    ) {
+      semanticSample = 0;
+      normalizedVerdict = 'contradicted-by-stronger-evidence';
+    } else if (
+      verdict === 'contested'
+      && supportSources >= 2
+      && weightedSupport > Math.max(0.15, weightedContradiction * 2.0)
+    ) {
+      semanticSample = 1;
+      normalizedVerdict = 'corroborated-despite-minor-contradiction';
+    }
+
+    if (semanticSample === null) {
+      return {
+        applied: false,
+        reason: 'semantic-evidence-inconclusive',
+        capability_id: id,
+        verdict: normalizedVerdict,
+      };
+    }
+
+    const prior = clamp(
+      current.semantic_reliability
+      ?? current.observed_reliability
+      ?? current.trust
+      ?? 0.5,
+    );
+    const explicitConfidence = clamp(
+      feedback.verifier_confidence
+      ?? feedback.confidence
+      ?? feedback.reliability
+      ?? 0.75,
+    );
+    const evidenceStrength = weightedSupport + weightedContradiction > 0
+      ? clamp(Math.abs(weightedSupport - weightedContradiction)
+        / (weightedSupport + weightedContradiction))
+      : explicitConfidence;
+    const strength = clamp(Math.max(explicitConfidence * 0.7, evidenceStrength));
+    const alpha = semanticSample === 0
+      ? 0.18 + 0.32 * strength
+      : 0.06 + 0.14 * strength;
+    const nextReliability = clamp(prior * (1 - alpha) + semanticSample * alpha);
+    const stamp = new Date().toISOString();
+    const next = normalizeCapability({
+      ...current,
+      semantic_reliability: nextReliability,
+      semantic_observations: Number(current.semantic_observations || 0) + 1,
+      semantic_successes: Number(current.semantic_successes || 0) + (semanticSample === 1 ? 1 : 0),
+      semantic_failures: Number(current.semantic_failures || 0) + (semanticSample === 0 ? 1 : 0),
+      semantic_last_verdict: normalizedVerdict,
+      semantic_last_reason: clean(feedback.reason || feedback.notes || '', 1000),
+      semantic_last_update_at: stamp,
+    });
+    this.registry.set(next.id, next);
+    await this.persistCapability(next).catch(() => {});
+    return {
+      applied: true,
+      capability_id: next.id,
+      verdict: normalizedVerdict,
+      semantic_sample: semanticSample,
+      strength: Number(strength.toFixed(4)),
+      before: Number(prior.toFixed(4)),
+      after: Number(next.semantic_reliability.toFixed(4)),
+      semantic_observations: next.semantic_observations,
+      semantic_failures: next.semantic_failures,
+      semantic_successes: next.semantic_successes,
+    };
+  }
+
+  async applyVerificationFeedback(capabilityOrId, verification = {}) {
+    if (!verification || typeof verification !== 'object') {
+      return { applied: false, reason: 'verification-missing' };
+    }
+    const target = clean(verification.target || verification.feedback_target || '', 80).toLowerCase();
+    if (!['capability-output', 'tool-output', 'answer'].includes(target)) {
+      return { applied: false, reason: 'verification-target-not-capability-output' };
+    }
+    return this.recordSemanticFeedback(capabilityOrId, verification);
   }
 
   async recordGraph(graph, { status = 'planned', result = {} } = {}) {

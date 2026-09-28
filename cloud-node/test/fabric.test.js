@@ -154,3 +154,97 @@ test('edge Fabric worker fails closed without its machine secret', { skip: !edge
   assert.match(edgeSource, /capability not allowed/);
   assert.match(edgeSource, /arbitrary_code:\s*false/);
 });
+
+
+test('semantic contradiction lowers semantic reliability and changes future routing', async () => {
+  const fabric = new CapabilityFabric();
+  fabric.register({
+    id: 'semantic.primary',
+    tags: ['semantic-check'],
+    trust: 0.84,
+    observed_reliability: 0.84,
+    semantic_reliability: 0.84,
+    latency_ms: 40,
+  }, async () => ({ ok: true, result: { answer: 'wrong' } }));
+  fabric.register({
+    id: 'semantic.backup',
+    tags: ['semantic-check'],
+    trust: 0.79,
+    observed_reliability: 0.79,
+    semantic_reliability: 0.79,
+    latency_ms: 80,
+  }, async () => ({ ok: true, result: { answer: 'right' } }));
+
+  const first = fabric.select({ requiredTags: ['semantic-check'] });
+  assert.equal(first.id, 'semantic.primary');
+  await fabric.execute(first.id, {});
+
+  const feedback = await fabric.applyVerificationFeedback(first.id, {
+    target: 'capability-output',
+    epistemic_status: 'contested',
+    independent_supporting_sources: 1,
+    independent_contradicting_sources: 1,
+    weighted_support: 0.68,
+    weighted_contradiction: 0.98,
+    verifier_confidence: 0.98,
+  });
+  assert.equal(feedback.applied, true);
+  assert.ok(feedback.after < feedback.before);
+
+  const second = fabric.select({ requiredTags: ['semantic-check'] });
+  assert.equal(second.id, 'semantic.backup');
+});
+
+test('world-state uncertainty does not punish a tool unless verification targets its output', async () => {
+  const fabric = new CapabilityFabric();
+  fabric.register({
+    id: 'research.safe',
+    tags: ['research-safe'],
+    trust: 0.8,
+    observed_reliability: 0.8,
+  }, async () => ({ ok: true }));
+
+  const before = fabric.registry.get('research.safe').semantic_reliability;
+  const feedback = await fabric.applyVerificationFeedback('research.safe', {
+    target: 'world-claim',
+    epistemic_status: 'contested',
+    weighted_support: 0.5,
+    weighted_contradiction: 0.7,
+  });
+  const after = fabric.registry.get('research.safe').semantic_reliability;
+
+  assert.equal(feedback.applied, false);
+  assert.equal(before, after);
+});
+
+test('DAG executor applies explicit capability-output verification feedback', async () => {
+  const fabric = new CapabilityFabric();
+  fabric.register({
+    id: 'semantic.dag',
+    tags: ['semantic-dag'],
+    trust: 0.82,
+    observed_reliability: 0.82,
+    semantic_reliability: 0.82,
+  }, async () => ({
+    ok: true,
+    result: { answer: 'suspect' },
+    verification: {
+      target: 'capability-output',
+      epistemic_status: 'contradicted',
+      verifier_confidence: 0.95,
+      reason: 'independent checker rejected output',
+    },
+  }));
+
+  const executor = new TaskGraphExecutor(fabric);
+  const result = await executor.execute({
+    objective: 'verify semantic feedback integration',
+    nodes: [
+      { id: 'answer', capability: 'semantic.dag', depends_on: [] },
+    ],
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.results.answer.semantic_feedback.applied, true);
+  assert.ok(fabric.registry.get('semantic.dag').semantic_failures >= 1);
+});

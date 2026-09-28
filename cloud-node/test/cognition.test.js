@@ -74,3 +74,60 @@ test('reply plan carries relational and executive continuity', () => {
   assert.equal(plan.executive.role, 'directrice_operationnelle');
   assert.equal(plan.conversation_context.length, 1);
 });
+
+
+test('native cognition infers an unseen affine rule without semantic support', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Règle inconnue VELA. f(3)=14, f(7)=30, f(11)=46. Sans recherche externe, déduis f(19).',
+    soul: { current_intention: 'résoudre', organism: {} },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [],
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'solve_symbolic_rule');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /f\(n\) = 4\*n \+ 2/);
+  assert.match(answer, /f\(19\) = 78/);
+});
+
+test('native cognition prefers the lowest polynomial degree that explains all examples', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Trouve la règle: f(0)=1, f(1)=4, f(2)=9, f(3)=16. Calcule f(5).',
+    soul: { organism: {} },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [],
+    privateView: true,
+  });
+
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /n\^2 \+ 2\*n \+ 1/);
+  assert.match(answer, /f\(5\) = 36/);
+});
+
+test('native symbolic cognition refuses inconsistent duplicate examples', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Règle inconnue. f(2)=5, f(2)=6, f(4)=9. Déduis f(8).',
+    soul: { organism: {} },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [],
+    privateView: true,
+  });
+
+  assert.notEqual(plan.act, 'solve_symbolic_rule');
+  assert.equal(plan.needs_semantic_support, true);
+});
