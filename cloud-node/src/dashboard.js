@@ -118,7 +118,7 @@ body.aura-speaking .aurora-vignette{animation:auraSpeakingLight .58s ease-in-out
 body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 22px rgba(177,128,255,.85)) drop-shadow(0 0 42px rgba(78,222,255,.34))}
 body.aura-speaking .energy-pulse{animation-duration:1.6s}
 @media(prefers-reduced-motion:reduce){.aurora-vignette,.energy-pulse,.web-link{animation:none!important}}
-.map-toolbar{display:flex;gap:6px}.map-toolbar button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b8c1d5;border-radius:999px;padding:6px 9px;font-size:9px}
+.map-toolbar{display:flex;gap:8px;align-items:center}.map-toolbar button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b8c1d5;border-radius:999px;padding:6px 9px;font-size:9px}.map-stats{font-size:8px;color:#7f8ba4;letter-spacing:.02em;white-space:nowrap}.brain-contour{fill:none;stroke:#9b83ff;stroke-width:1;opacity:.10;filter:url(#soft)}.brain-fold{fill:none;stroke:#72d9ef;stroke-width:.8;opacity:.07;stroke-dasharray:2 10}
 .legend{position:absolute;right:14px;bottom:13px;background:rgba(7,10,18,.78);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:8px;color:#aab5ca;backdrop-filter:blur(12px);display:grid;gap:5px}.legend-row{display:flex;align-items:center;gap:7px}.legend-line{width:22px;height:2px;border-radius:4px;background:linear-gradient(90deg,var(--violet),#fff)}.legend-line.rise{background:linear-gradient(90deg,var(--cyan),#fff)}.legend-line.stable{background:rgba(255,255,255,.3)}
 .map-foot{position:absolute;left:15px;bottom:14px;max-width:55%;font-size:9px;color:var(--muted);line-height:1.45;padding:8px 10px;border-radius:10px;background:rgba(7,10,18,.6);border:1px solid rgba(255,255,255,.05)}
 .right-stack{grid-area:side;display:grid;gap:12px;grid-template-rows:auto minmax(178px,1fr) auto}.thought-card{padding:13px;border:1px solid rgba(255,201,106,.17);border-radius:14px;background:linear-gradient(135deg,rgba(255,201,106,.08),rgba(154,108,255,.07));font-size:12px;line-height:1.48;color:#f2e0b9;min-height:74px}
@@ -265,7 +265,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     </section>
 
     <section class="panel map-panel">
-      <div class="panel-head"><span>◉</span><div class="panel-title">Carte d’intérêt</div><div class="spacer"></div><div class="map-toolbar"><button id="refreshMap">Vue dynamique</button></div></div>
+      <div class="panel-head"><span>◉</span><div class="panel-title">Carte neuronale d’intérêt</div><div class="spacer"></div><div class="map-toolbar"><span class="map-stats" id="mapStats">réseau en construction</span><button id="refreshMap">Vue dynamique</button></div></div>
       <div class="map-wrap" id="livingMap">
         <canvas id="nebulaFx" aria-hidden="true"></canvas>
         <canvas id="particleFx" aria-hidden="true"></canvas>
@@ -278,10 +278,13 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
             <filter id="coreBloom" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="13" result="blur1"/><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur2"/><feMerge><feMergeNode in="blur1"/><feMergeNode in="blur2"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
             <radialGradient id="coreAura"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".14" stop-color="#e6d9ff" stop-opacity=".92"/><stop offset=".34" stop-color="#a16fff" stop-opacity=".92"/><stop offset=".62" stop-color="#5e36d6" stop-opacity=".75"/><stop offset="1" stop-color="#17112d" stop-opacity=".1"/></radialGradient>
           </defs>
-          <g opacity=".28" stroke="#8b7fd0" fill="none">
-            <ellipse cx="450" cy="325" rx="330" ry="198" stroke-dasharray="3 9"/>
-            <ellipse cx="450" cy="325" rx="270" ry="250" transform="rotate(-22 450 325)" stroke-dasharray="2 11"/>
-            <ellipse cx="450" cy="325" rx="360" ry="118" transform="rotate(18 450 325)" stroke-dasharray="3 12"/>
+          <g aria-hidden="true">
+            <path class="brain-contour" d="M448 94 C360 62 260 82 205 153 C151 222 165 294 195 325 C157 371 170 453 233 503 C295 552 375 554 448 526"/>
+            <path class="brain-contour" d="M452 94 C540 62 640 82 695 153 C749 222 735 294 705 325 C743 371 730 453 667 503 C605 552 525 554 452 526"/>
+            <path class="brain-fold" d="M448 125 C380 116 318 144 288 193 C255 247 283 295 333 315 C278 345 264 405 306 450 C338 484 390 494 447 472"/>
+            <path class="brain-fold" d="M452 125 C520 116 582 144 612 193 C645 247 617 295 567 315 C622 345 636 405 594 450 C562 484 510 494 453 472"/>
+            <path class="brain-fold" d="M450 112 C430 177 474 216 449 270 C428 316 466 356 449 411 C438 447 449 483 451 520"/>
+            <ellipse cx="450" cy="325" rx="365" ry="246" fill="none" stroke="#8b7fd0" opacity=".08" stroke-width=".8" stroke-dasharray="2 13"/>
           </g>
           <g id="flowLinks"></g>
           <g id="energyPulses"></g>
