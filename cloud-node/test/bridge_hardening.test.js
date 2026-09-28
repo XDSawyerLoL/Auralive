@@ -22,12 +22,13 @@ test('bridge stores media results above the former 12 MB truncation threshold', 
 });
 
 
-test('Hostinger entry keeps Fastify route limits while native HTTP is recovery-only', () => {
+test('Hostinger entry opens a native public gateway before Fastify and preserves route limits', () => {
+  assert.match(gatewaySource, /const gateway = createServer/);
+  assert.match(gatewaySource, /gateway\.listen\(publicPort, publicHost/);
   assert.match(gatewaySource, /await import\('\.\/src\/server\.js'\)/);
-  assert.match(gatewaySource, /app\.listen\(\{ host, port \}\)/);
-  assert.match(gatewaySource, /framework: 'fastify'/);
-  assert.match(gatewaySource, /function startFallback\(error\)/);
-  assert.match(gatewaySource, /framework: 'native-node-recovery'/);
+  assert.match(gatewaySource, /app\.listen\(\{ host: '127\.0\.0\.1', port: 0 \}\)/);
+  assert.match(gatewaySource, /framework: applicationReady \? 'fastify-behind-node-gateway' : 'native-node-gateway'/);
+  assert.match(gatewaySource, /proxyToAura/);
   assert.match(serverSource, /bodyLimit:\s*24\s*\*\s*1024\s*\*\s*1024/);
 });
 
