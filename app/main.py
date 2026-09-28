@@ -218,9 +218,13 @@ async def dashboard() -> HTMLResponse:
     return HTMLResponse((BASE_DIR / "app" / "web" / "templates" / "index.html").read_text(encoding="utf-8"))
 
 
+def _mairaiy_exact_kokoro() -> LocalKokoroVoice:
+    return getattr(aura, "local_kokoro_voice", None) or mairaiy_kokoro
+
+
 @app.get("/voice/.well-known/voicestudio-speech")
 async def mairaiy_voice_discovery() -> dict[str, Any]:
-    diagnostic = mairaiy_kokoro.diagnostic()
+    diagnostic = _mairaiy_exact_kokoro().diagnostic()
     return {
         "ok": True,
         "provider": "quantic-studio-kokoro-direct",
@@ -238,7 +242,7 @@ async def mairaiy_voice_discovery() -> dict[str, Any]:
 
 @app.get("/voice/v1/audio/voices")
 async def mairaiy_voice_list() -> dict[str, Any]:
-    diagnostic = mairaiy_kokoro.diagnostic()
+    diagnostic = _mairaiy_exact_kokoro().diagnostic()
     return {
         "voices": [
             {
@@ -268,13 +272,14 @@ async def mairaiy_voice_speech(payload: VoiceSpeechInput) -> FileResponse:
     if str(payload.response_format or "").strip().lower() != "wav":
         raise HTTPException(status_code=422, detail="Format WAV requis")
 
-    audio_url = await mairaiy_kokoro.synthesize(
+    exact_voice = _mairaiy_exact_kokoro()
+    audio_url = await exact_voice.synthesize(
         payload.input,
         rate=float(payload.speed),
         volume=1.0,
     )
     if not audio_url:
-        diagnostic = mairaiy_kokoro.diagnostic()
+        diagnostic = exact_voice.diagnostic()
         raise HTTPException(
             status_code=503,
             detail=diagnostic.get("last_error") or "Kokoro ff_siwis indisponible",
