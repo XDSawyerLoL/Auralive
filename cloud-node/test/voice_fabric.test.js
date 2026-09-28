@@ -11,17 +11,18 @@ test('Voice Fabric only trusts HTTPS remotely and loopback HTTP locally', () => 
   assert.equal(normalizeVoiceStudioEndpoint('http://voice.example.com').trusted, false);
 });
 
-test('AURA pins the Quantic Mairaiy service even if stale Hostinger overrides exist', () => {
+test('historical Aoede does not hard-pin the old Providence Kokoro service', () => {
   const script = `
-    process.env.AURA_VOICE_FABRIC_BASE_URL='https://stale-voice.example.test';
-    process.env.AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT='false';
-    process.env.AURA_VOICE_FABRIC_STRICT_IDENTITY='false';
-    process.env.AURA_MAIRAIY_LANGUAGE='en-us';
+    process.env.AURA_VOICE_FABRIC_ENABLED='false';
+    process.env.AURA_VOICE_FABRIC_BASE_URL='';
+    process.env.AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT='true';
     const { VoiceStudioProvider }=await import('./src/voice_fabric.js');
     const { config }=await import('./src/config.js');
     const p=new VoiceStudioProvider();
     console.log(JSON.stringify({
+      enabled:p.enabled,
       endpoint:p.endpoint.service_root,
+      pinned:config.voiceFabricPinQuanticEndpoint,
       strict:config.voiceFabricStrictIdentity,
       language:config.voiceFabricLanguage,
       model:config.voiceFabricModel,
@@ -35,17 +36,21 @@ test('AURA pins the Quantic Mairaiy service even if stale Hostinger overrides ex
   });
   assert.equal(result.status,0,result.stderr||result.stdout);
   const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
-  assert.equal(payload.endpoint,'https://mediumorchid-badger-314305.hostingersite.com/voice');
+  assert.equal(payload.enabled,false);
+  assert.equal(payload.endpoint,'');
+  assert.equal(payload.pinned,false);
   assert.equal(payload.strict,true);
   assert.equal(payload.language,'fr-fr');
   assert.equal(payload.model,'gemini-3.1-flash-tts-preview');
   assert.equal(payload.profile,'Mairaiy');
 });
 
-test('VoiceStudio synthesis resolves only historical Mairaiy Aoede and sends exact identity', () => {
+test('optional VoiceStudio synthesis accepts only historical Mairaiy Aoede', () => {
   const script = `
-    process.env.AURA_ZERO_COST_MODE='true';
-    delete process.env.AURA_VOICE_FABRIC_API_KEY;
+    process.env.AURA_ZERO_COST_MODE='false';
+    process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_BASE_URL='https://voice.example.test';
+    process.env.AURA_VOICE_FABRIC_API_KEY='unit-key';
 
     let seen=null;
     global.fetch=async(url, options={})=>{
@@ -96,8 +101,8 @@ test('VoiceStudio synthesis resolves only historical Mairaiy Aoede and sends exa
   assert.equal(result.status,0,result.stderr||result.stdout);
   const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
   assert.equal(payload.enabled,true);
-  assert.equal(payload.seen.url,'https://mediumorchid-badger-314305.hostingersite.com/voice/v1/audio/speech');
-  assert.equal(payload.seen.auth,'');
+  assert.equal(payload.seen.url,'https://voice.example.test/v1/audio/speech');
+  assert.equal(payload.seen.auth,'Bearer unit-key');
   assert.equal(payload.seen.body.model,'gemini-3.1-flash-tts-preview');
   assert.equal(payload.seen.body.voice,'mairaiy-gemini-aoede');
   assert.equal(payload.seen.body.engine_voice,'aoede');
@@ -109,8 +114,12 @@ test('VoiceStudio synthesis resolves only historical Mairaiy Aoede and sends exa
   assert.equal(payload.out.cost,0);
 });
 
-test('VoiceStudio rejects audio that does not certify Aoede', () => {
+test('optional VoiceStudio rejects audio that does not certify Aoede', () => {
   const script = `
+    process.env.AURA_ZERO_COST_MODE='false';
+    process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_BASE_URL='https://voice.example.test';
+    process.env.AURA_VOICE_FABRIC_API_KEY='unit-key';
     global.fetch=async(url)=>{
       if(String(url).endsWith('/v1/audio/voices')){
         return new Response(JSON.stringify({voices:[
@@ -143,9 +152,12 @@ test('VoiceStudio rejects audio that does not certify Aoede', () => {
   assert.match(payload.error,/missing-header/i);
 });
 
-test('exact Quantic Mairaiy endpoint remains zero-cost trusted', () => {
+test('old Providence Kokoro endpoint is no longer trusted as canonical Mairaiy', () => {
   const script = `
     process.env.AURA_ZERO_COST_MODE='true';
+    process.env.AURA_VOICE_FABRIC_ENABLED='true';
+    process.env.AURA_VOICE_FABRIC_BASE_URL='https://mediumorchid-badger-314305.hostingersite.com/voice';
+    process.env.AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS='';
     delete process.env.AURA_VOICE_FABRIC_API_KEY;
     delete process.env.AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED;
     const { VoiceStudioProvider }=await import('./src/voice_fabric.js');
@@ -167,9 +179,9 @@ test('exact Quantic Mairaiy endpoint remains zero-cost trusted', () => {
   });
   assert.equal(result.status,0,result.stderr||result.stdout);
   const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
-  assert.equal(payload.enabled,true);
+  assert.equal(payload.enabled,false);
   assert.equal(payload.endpoint,'https://mediumorchid-badger-314305.hostingersite.com/voice');
-  assert.equal(payload.trusted,true);
+  assert.equal(payload.trusted,false);
   assert.equal(payload.strict,true);
   assert.equal(payload.expected,'aoede');
   assert.equal(payload.language,'fr-fr');
