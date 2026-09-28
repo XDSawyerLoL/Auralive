@@ -667,15 +667,25 @@ app.post('/api/image/generate', async (request, reply) => {
 
 app.get('/api/capabilities', async (request) => {
   const privateView = isPrivate(request);
-  const [kernelStatus, bridgeStatus] = await Promise.all([
+  const [kernelStatus, bridgeStatus, voiceDiscovery] = await Promise.all([
     bootstrap.runtimeReady ? kernel.status() : Promise.resolve(null),
     bootstrap.dbReady ? bridge.status() : Promise.resolve({ enabled: bridge.enabled, worker_online: false }),
+    voiceStudio.discover().catch((error) => ({
+      ok: false,
+      reason: String(error?.message || error).slice(0, 300),
+    })),
   ]);
   const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
     ? bridgeStatus.worker.capabilities
     : [];
   const workerActionNames = new Set(
     workerCapabilities.map((item) => String(item?.name || '')),
+  );
+  const languageDiagnostic = ai.diagnostic();
+  const voiceFabricActuallyReady = Boolean(
+    voiceStudio.enabled
+    && voiceDiscovery?.ok
+    && voiceDiscovery?.capabilities?.ready !== false
   );
   return {
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
@@ -686,25 +696,38 @@ app.get('/api/capabilities', async (request) => {
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
       ready: Boolean(ai.enabled),
-      provider: privateView ? ai.provider : (bridgeStatus?.worker_online ? 'local-or-fallback' : 'configured'),
+      provider: privateView ? ai.provider : String(languageDiagnostic.provider || 'unavailable'),
       local_worker: Boolean(bridgeStatus?.worker_online),
+      fallback_only: !ai.enabled,
+      last_backend: String(languageDiagnostic.last_backend || ''),
+      last_error: String(languageDiagnostic.last_error || '').slice(0, 300),
+      zero_cost_mode: Boolean(languageDiagnostic.zero_cost_mode),
+      remote_fallback_blocked: Boolean(languageDiagnostic.remote_fallback_blocked),
     },
     voice: {
       ready: Boolean(
-        voiceStudio.enabled
+        voiceFabricActuallyReady
         || cloudVoice.enabled
         || (bridgeStatus?.worker_online && bridgeStatus?.worker?.voice)
       ),
       profile: 'mairaiy',
-      mode: voiceStudio.enabled
+      mode: voiceFabricActuallyReady
         ? 'aura-voice-fabric'
         : (cloudVoice.enabled ? 'legacy-cloud' : (bridgeStatus?.worker_online ? 'runtime-local' : 'offline')),
-      engine: voiceStudio.enabled
+      engine: voiceFabricActuallyReady
         ? 'voicestudio-openai-compatible'
         : (cloudVoice.enabled
           ? 'gemini-cloud-tts'
           : (privateView ? String(bridgeStatus?.worker?.voice || '') : '')),
-      fabric_ready: Boolean(voiceStudio.enabled),
+      fabric_ready: voiceFabricActuallyReady,
+      fabric_configured: Boolean(voiceStudio.enabled),
+      fabric_reason: voiceFabricActuallyReady
+        ? ''
+        : String(
+            voiceDiscovery?.capabilities?.ready === false
+              ? 'provider-not-ready'
+              : (voiceDiscovery?.reason || voiceDiscovery?.capabilities?.reason || '')
+          ).slice(0, 300),
       cloud_ready: Boolean(cloudVoice.enabled),
       runtime_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
       strict_identity: Boolean(config.voiceFabricStrictIdentity),
