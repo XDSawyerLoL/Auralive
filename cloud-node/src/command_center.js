@@ -1200,7 +1200,7 @@ export class CommandCenter {
         kind: 'reflection',
         title: 'Maintenir l’autonomie malgré le bras local hors ligne',
         objective:
-          'Évaluer ce qu’AURA peut continuer à faire côté Cloud sans Quantic Studio, '
+          'Évaluer ce que je peux continuer à faire côté Cloud sans Quantic Studio, '
           + 'identifier les missions bloquées et préparer leur reprise dès le retour du worker local.',
         rationale: 'Le worker Quantic Studio n’est pas actuellement en ligne.',
         priority: 0.64,
