@@ -1,0 +1,31 @@
+{
+  "case_id": "AURA-BLIND-DISCOVERY-001-CROW",
+  "provenance": {
+    "target_not_named_by_user": true,
+    "target_not_hardcoded": true,
+    "trigger_summary": "",
+    "trigger_timestamp": ""
+  },
+  "discovery": {
+    "trace_ids": [],
+    "steps": [],
+    "alternatives": [],
+    "selection_rationale": ""
+  },
+  "evaluation": {
+    "capability_hypothesis": "",
+    "sandboxed": false,
+    "additive_capabilities": [],
+    "redundant_capabilities": [],
+    "decision": ""
+  },
+  "transfer": {
+    "target_not_named_in_prompt": true,
+    "novel_problem": false,
+    "conditions_changed": false,
+    "discovery_strategy_reused": false,
+    "second_attempt_improved": false,
+    "trace_ids": [],
+    "steps": []
+  }
+}
