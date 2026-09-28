@@ -73,3 +73,14 @@ test('public chat cannot read private cognitive collections or inject raw text i
   assert.match(kernelSource, /privateView \? 'cloud-private' : 'cloud-public'/);
   assert.match(kernelSource, /privateRelationship: privateView/);
 });
+
+
+test('public operational dashboard is read-only while raw cognitive and mutation routes stay private', () => {
+  assert.match(serverSource, /app\.get\('\/api\/dashboard\/public'/);
+  assert.match(serverSource, /visibility:\s*'public-read-only'/);
+  assert.match(serverSource, /raw_private_memory_public:\s*false/);
+  assert.match(serverSource, /founder_conversation_public:\s*false/);
+  assert.match(serverSource, /mutations_public:\s*false/);
+  assert.match(serverSource, /execution_controls_public:\s*false/);
+  assert.match(serverSource, /app\.post\('\/api\/scout\/run'[\s\S]{0,300}requirePrivate/);
+});
