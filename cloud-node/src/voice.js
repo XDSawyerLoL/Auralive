@@ -182,6 +182,15 @@ export class CloudVoice {
     );
   }
 
+  get blockedReason() {
+    if (!this.apiKey) return 'missing-api-key';
+    if (!config.voiceCloudEnabled) return 'cloud-disabled';
+    if (!config.zeroCostMode) return '';
+    if (!config.geminiFreeTierConfirmed) return 'free-tier-unconfirmed';
+    if (!freeTierModelAllowed(this.model, 'voice')) return 'model-not-free-tier-allowed';
+    return '';
+  }
+
   diagnostic() {
     return {
       version: CloudVoice.VERSION,
@@ -196,6 +205,7 @@ export class CloudVoice {
       zero_cost_mode: Boolean(config.zeroCostMode),
       gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
       free_tier_model_allowed: freeTierModelAllowed(this.model, 'voice'),
+      blocked_reason: this.enabled ? '' : this.blockedReason,
       free_tier_daily_cap: Number(config.geminiFreeTierVoiceMaxPerDay),
     };
   }
