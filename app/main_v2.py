@@ -203,10 +203,10 @@ aura.twitch.handler = _combined_twitch_handler
 
 
 async def _migrate_youthful_voice_preset() -> None:
-    """Applique le nouveau preset uniquement aux anciennes valeurs standard."""
+    """Restaure le preset vocal naturel historique de Mairaiy (Aura Live 2.0.7)."""
     current_voice = str(await db.get_setting("avatar.voice", "") or "").strip()
-    if current_voice.casefold() in {"", "aoede", "laomedeia"}:
-        await db.set_setting("avatar.voice", "Leda")
+    if current_voice.casefold() in {"", "leda", "laomedeia", "ff_siwis"}:
+        await db.set_setting("avatar.voice", "Aoede")
     try:
         current_rate = float(await db.get_setting("avatar.rate", 1.0))
     except (TypeError, ValueError):
@@ -215,10 +215,11 @@ async def _migrate_youthful_voice_preset() -> None:
         current_pitch = float(await db.get_setting("avatar.pitch", 1.0))
     except (TypeError, ValueError):
         current_pitch = 1.0
-    if current_rate <= 1.10:
-        await db.set_setting("avatar.rate", 1.12)
-    if current_pitch <= 1.08:
-        await db.set_setting("avatar.pitch", 1.14)
+    # The historical natural profile was centered on neutral rate/pitch.
+    if 1.10 <= current_rate <= 1.15:
+        await db.set_setting("avatar.rate", 1.0)
+    if 1.08 <= current_pitch <= 1.16:
+        await db.set_setting("avatar.pitch", 1.0)
 
 
 @asynccontextmanager
