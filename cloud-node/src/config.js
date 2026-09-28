@@ -132,6 +132,9 @@ export const config = Object.freeze({
   // local/runtime workers and explicitly zero-cost fabric capabilities, but not
   // remote model APIs that can create usage charges.
   zeroCostMode: bool('AURA_ZERO_COST_MODE', true),
+  geminiFreeTierConfirmed: bool('AURA_GEMINI_FREE_TIER_CONFIRMED', false),
+  geminiFreeTierTextMaxPerDay: int('AURA_GEMINI_FREE_TIER_TEXT_MAX_PER_DAY', 45, 1, 500),
+  geminiFreeTierVoiceMaxPerDay: int('AURA_GEMINI_FREE_TIER_VOICE_MAX_PER_DAY', 60, 1, 500),
 
   aiMode: AI_MODE,
   aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
