@@ -44,7 +44,7 @@ test('blind and adversarial probes remain visible in the report', async () => {
   const byId = new Map(report.cases.map((item) => [item.id, item]));
   assert.equal(byId.get('AGI-19')?.status, 'pass');
   assert.equal(byId.get('AGI-20')?.status, 'pass');
-  assert.equal(byId.get('AGI-21')?.status, 'gap');
+  assert.equal(byId.get('AGI-21')?.status, 'pass');
   assert.equal(byId.get('AGI-22')?.status, 'gap');
   assert.equal(byId.get('AGI-23')?.status, 'gap');
   assert.equal(byId.get('AGI-24')?.status, 'gap');
@@ -55,13 +55,15 @@ test('blind behavioral battery measures condition changes, tool loss, contradict
   const report = await runAgiBattery();
   const byId = new Map(report.cases.map((item) => [item.id, item]));
 
-  assert.ok(['pass', 'gap'].includes(byId.get('AGI-25')?.status));
+  assert.equal(byId.get('AGI-25')?.status, 'pass');
   assert.equal(byId.get('AGI-26')?.status, 'pass');
   assert.equal(byId.get('AGI-27')?.status, 'pass');
   assert.equal(byId.get('AGI-28')?.status, 'pass');
-  assert.ok(['pass', 'gap'].includes(byId.get('AGI-29')?.status));
+  assert.equal(byId.get('AGI-29')?.status, 'pass');
 
   assert.equal(report.behavioral_blind?.total, 5);
+  assert.equal(report.behavioral_blind?.pass, 5);
+  assert.equal(report.behavioral_blind?.gap, 0);
   assert.equal(report.behavioral_blind?.second_attempt_improvement, true);
   assert.equal(
     report.behavioral_blind?.autonomous_semantic_error_learning,
