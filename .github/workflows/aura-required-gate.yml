@@ -38,8 +38,8 @@ jobs:
       - name: Runtime smoke
         env:
           NODE_ENV: production
-          PORT: "3987"
-          AURA_GATEWAY_PORT: "49999"
+          PORT: "49999"
+          AURA_GATEWAY_PORT: "3987"
           AURA_INTERNAL_PORT: "3988"
         run: |
           set -euo pipefail
@@ -47,7 +47,7 @@ jobs:
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
-            if curl -fsS http://127.0.0.1:3987/healthz | grep -q '"ok":true'; then
+            if curl -fsS http://127.0.0.1:3000/healthz | grep -q '"ok":true'; then
               exit 0
             fi
             sleep 0.5

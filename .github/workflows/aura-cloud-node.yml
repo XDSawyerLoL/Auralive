@@ -44,8 +44,8 @@ jobs:
         shell: bash
         env:
           NODE_ENV: production
-          PORT: "3987"
-          AURA_GATEWAY_PORT: "49999"
+          PORT: "49999"
+          AURA_GATEWAY_PORT: "3987"
           AURA_INTERNAL_PORT: "3988"
         run: |
           set -euo pipefail
@@ -53,14 +53,14 @@ jobs:
           PID=$!
           trap 'kill "$PID" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do
-            if curl -fsS http://127.0.0.1:3987/ > /tmp/aura-dashboard.html; then
+            if curl -fsS http://127.0.0.1:3000/ > /tmp/aura-dashboard.html; then
               break
             fi
             sleep 0.5
           done
           grep -q "Interface de conscience opérationnelle" /tmp/aura-dashboard.html
           grep -q "Carte d’intérêt" /tmp/aura-dashboard.html
-          curl -fsS http://127.0.0.1:3987/healthz | grep -q '"ok":true'
-          curl -fsS http://127.0.0.1:3987/api/bootstrap/status | grep -q '"server_ready":true'
+          curl -fsS http://127.0.0.1:3000/healthz | grep -q '"ok":true'
+          curl -fsS http://127.0.0.1:3000/api/bootstrap/status | grep -q '"server_ready":true'
       - name: Dependency production tree
         run: npm ls --omit=dev

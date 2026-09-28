@@ -22,11 +22,12 @@ test('bridge stores media results above the former 12 MB truncation threshold', 
 });
 
 
-test('Hostinger entry delegates request sizing to Fastify route limits', () => {
-  assert.match(gatewaySource, /from '\.\/src\/server\.js'/);
+test('Hostinger entry keeps Fastify route limits while native HTTP is recovery-only', () => {
+  assert.match(gatewaySource, /await import\('\.\/src\/server\.js'\)/);
   assert.match(gatewaySource, /app\.listen\(\{ host, port \}\)/);
   assert.match(gatewaySource, /framework: 'fastify'/);
-  assert.doesNotMatch(gatewaySource, /createServer/);
+  assert.match(gatewaySource, /function startFallback\(error\)/);
+  assert.match(gatewaySource, /framework: 'native-node-recovery'/);
   assert.match(serverSource, /bodyLimit:\s*24\s*\*\s*1024\s*\*\s*1024/);
 });
 
