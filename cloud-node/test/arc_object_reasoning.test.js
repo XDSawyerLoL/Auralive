@@ -95,14 +95,14 @@ test('uses an L-shaped marker frame to recolor a matching object outside the fra
     [3,3,0,5,0,0,0,0],
     [0,0,0,5,0,0,9,0],
     [5,5,5,5,0,9,9,0],
-    [0,0,0,0,0,0,0,0],
+    [9,0,0,0,0,0,0,0],
   ];
   const output = [
     [0,3,0,5,0,0,0,0],
     [3,3,0,5,0,0,0,0],
     [0,0,0,5,0,0,5,0],
     [5,5,5,5,0,5,5,0],
-    [0,0,0,0,0,0,0,0],
+    [9,0,0,0,0,0,0,0],
   ];
   const result = solve([{ input, output }], input);
   assert.equal(result.inferred.program.name, 'recolor-marker-matched-object');
