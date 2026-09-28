@@ -15,8 +15,8 @@ RÉGLAGES HOSTINGER
 - Installation : npm install --omit=dev
 - Démarrage : npm start
 - Output directory : vide
-- Port public attendu par Hostinger : 3000
-- En production, AURA force 0.0.0.0:3000 même si une variable PORT différente est injectée
+- Port public : utiliser la variable PORT injectée par Hostinger
+- Fallback uniquement si PORT est absent : AURA_GATEWAY_PORT, puis AURA_PORT, puis 3000
 
 ACCÈS DIRECT
 - Le dashboard AURA est public.
@@ -37,7 +37,7 @@ ARCHITECTURE DE DÉMARRAGE
 - un seul process Node
 - un seul listener Fastify public
 - bind 0.0.0.0
-- port 3000 forcé en production
+- le listener suit d'abord process.env.PORT fourni par Hostinger
 - passerelle native de récupération sur 3000 si le bootstrap Fastify échoue
 - MySQL démarre sans empêcher l'interface de répondre
 - timeout connexion MySQL : 5 s par défaut
@@ -75,7 +75,7 @@ VÉRIFICATION APRÈS DÉPLOIEMENT
 
 2. GET /__aura_gateway doit retourner :
    "gateway_ready": true
-   "gateway_port": 3000
+   "gateway_port": <PORT injecté par Hostinger>
 
 3. GET /api/bootstrap/status doit retourner :
    "product": "AURA Cloud"
