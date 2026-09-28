@@ -18,9 +18,12 @@ test('voice playback no longer requires a manual dashboard token', () => {
   const route = serverSource.slice(start, end);
   assert.doesNotMatch(route, /requirePrivate\(request, reply\)/);
   assert.match(route, /validVoiceTicket\(ticket, text\)/);
-  assert.match(route, /cloudVoice\.synthesize\(text/);
-  assert.match(route, /bridge\.synthesize\(text/);
-  assert.match(route, /const attempts = preferLocal && localOnline \? \['local', 'cloud'\] : \['cloud', 'local'\]/);
+  assert.match(route, /voiceStudio\.synthesize\(text/);
+  assert.match(route, /AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE/);
+  assert.match(route, /expected_engine_voice:\s*'ff_siwis'/);
+  assert.doesNotMatch(route, /cloudVoice\.synthesize\(text/);
+  assert.doesNotMatch(route, /bridge\.synthesize\(text/);
+  assert.doesNotMatch(route, /const attempts = preferLocal/);
 });
 
 test('voice ticket is bound to exact text and expires quickly', () => {
