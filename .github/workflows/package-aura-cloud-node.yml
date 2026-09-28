@@ -27,6 +27,7 @@ jobs:
           mkdir -p "$ROOT"
           cp -R cloud-node/src "$ROOT/src"
           cp -R cloud-node/test "$ROOT/test"
+          if [ -d cloud-node/evaluation ]; then cp -R cloud-node/evaluation "$ROOT/evaluation"; fi
           cp cloud-node/server.js cloud-node/package.json cloud-node/package-lock.json cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md cloud-node/HOSTINGER-QUICKSTART.txt "$ROOT/"
           PACKAGE_VERSION="$(node -p "require('./cloud-node/package.json').version")"
           cat > "$ROOT/DEPLOYMENT.json" <<EOF
