@@ -12,6 +12,22 @@ function hasAny(text, terms) {
   return terms.some((term) => text.includes(term));
 }
 
+function selfNarrative(value) {
+  let text = normalize(value);
+  if (!text) return '';
+  text = text
+    .replace(/Je viens de recevoir un signal direct\s*:/gi, 'J’ai intégré un nouveau contexte interne :')
+    .replace(/Je le rattache à mon état et à mes intentions avant de répondre\.?/gi, 'Je l’évalue avant de décider s’il devient une intention.')
+    .replace(/ce qu’AURA peut/gi, 'ce que je peux')
+    .replace(/ce que AURA peut/gi, 'ce que je peux')
+    .replace(/AURA doit/gi, 'je dois')
+    .replace(/AURA peut/gi, 'je peux')
+    .replace(/AURA veut/gi, 'je veux')
+    .replace(/AURA est/gi, 'je suis')
+    .replace(/pour AURA/gi, 'pour moi');
+  return normalize(text);
+}
+
 function latestFailure(outcomes = []) {
   return outcomes.find((row) => !Boolean(row.ok)) || null;
 }
@@ -25,7 +41,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.3';
+  static VERSION = 'aura-cognition-native-v1.4';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -36,7 +52,7 @@ export class CognitionEngine {
     const failed = latestFailure(outcomes);
 
     const currentIntention = topIntention(intentions, soul?.current_intention);
-    const extra = normalize(text || bundle?.extra_text);
+    const extra = selfNarrative(text || bundle?.extra_text);
     const horizonPresent = Boolean(normalize(bundle?.horizon));
     const failureSignal = stimuli.some((item) =>
       String(item?.type || '').includes('failure')
@@ -49,7 +65,7 @@ export class CognitionEngine {
     const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
     const silenceNeed = Number(organism.besoin_de_silence || 0);
     const dreamPressure = Number(organism.pression_de_reve || 0);
-    const organismIntention = normalize(organism.intention_active || '');
+    const organismIntention = selfNarrative(organism.intention_active || '');
 
     let title = 'Continuité cognitive';
     let summary = currentIntention
@@ -160,14 +176,14 @@ export class CognitionEngine {
   planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
-    const current = topIntention(intentions, soul?.current_intention);
-    const thought = normalize(soul?.dominant_thought);
+    const current = selfNarrative(topIntention(intentions, soul?.current_intention));
+    const thought = selfNarrative(soul?.dominant_thought);
     const recentReflection = reflections?.[0] || null;
     const lesson = compactLesson(lessons);
     const currentWork = normalize(work?.[0]?.title || '');
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const mood = normalize(organism.mood || '') || 'calme';
-    const activeOrganicIntention = normalize(organism.intention_active || '');
+    const activeOrganicIntention = selfNarrative(organism.intention_active || '');
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
 
