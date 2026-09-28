@@ -304,10 +304,21 @@ class ModelConstellation:
     @staticmethod
     def profile_for(name: str) -> ModelProfile | None:
         lowered = str(name or "").casefold()
+        matches: list[tuple[int, ModelProfile]] = []
         for profile in CATALOG:
-            if any(pattern.casefold() in lowered for pattern in profile.patterns):
-                return profile
-        return None
+            lengths = [
+                len(pattern)
+                for pattern in profile.patterns
+                if pattern.casefold() in lowered
+            ]
+            if lengths:
+                matches.append((max(lengths), profile))
+        if not matches:
+            return None
+        # A specialized derivative (for example Qwen3.5 abliterated) must win
+        # over its generic family profile (for example qwen3).
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return matches[0][1]
 
     def _decode_installed(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         installed: list[dict[str, Any]] = []
