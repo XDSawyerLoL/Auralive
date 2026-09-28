@@ -556,7 +556,7 @@ export class CapabilityScout {
     try {
       result = await this.evolution.dispatchCycle(objective, 'capability-scout', {
         repository: config.evolutionRepository,
-        baseBranch: config.evolutionBaseBranch,
+        base_branch: config.evolutionBaseBranch,
       });
       this.lastExperimentAt = now();
       this.totalExperiments += 1;
