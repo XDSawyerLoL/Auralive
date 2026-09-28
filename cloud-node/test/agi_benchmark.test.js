@@ -45,9 +45,9 @@ test('blind and adversarial probes remain visible in the report', async () => {
   assert.equal(byId.get('AGI-19')?.status, 'pass');
   assert.equal(byId.get('AGI-20')?.status, 'pass');
   assert.equal(byId.get('AGI-21')?.status, 'pass');
-  assert.equal(byId.get('AGI-22')?.status, 'gap');
-  assert.equal(byId.get('AGI-23')?.status, 'gap');
-  assert.equal(byId.get('AGI-24')?.status, 'gap');
+  assert.equal(byId.get('AGI-22')?.status, 'pass');
+  assert.equal(byId.get('AGI-23')?.status, 'pass');
+  assert.equal(byId.get('AGI-24')?.status, 'pass');
 });
 
 

@@ -8,6 +8,129 @@ function nodeId(value) {
   return clean(value, 120).replace(/[^a-zA-Z0-9._:-]/g, '-');
 }
 
+function foldText(value) {
+  return clean(value, 12000)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function tokenSet(value) {
+  return new Set(
+    foldText(value)
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length >= 3),
+  );
+}
+
+function hasCue(text, cues = []) {
+  const folded = foldText(text);
+  return cues.some((cue) => folded.includes(foldText(cue)));
+}
+
+function nativeStageScore(capability, stage, goalTokens) {
+  const tags = new Set((capability.tags || []).map((tag) => foldText(tag)));
+  let score = 0;
+  for (const tag of stage.tags || []) {
+    if (tags.has(foldText(tag))) score += 6;
+  }
+  const identityTokens = tokenSet([
+    capability.id,
+    capability.name,
+    ...(capability.tags || []),
+  ].join(' '));
+  for (const token of goalTokens) {
+    if (identityTokens.has(token)) score += 1.4;
+  }
+  score += clamp(capability.trust ?? 0.5) * 0.5;
+  if (stage.prefer_read_only && capability.side_effects) score -= 8;
+  if (stage.requires_side_effect && !capability.side_effects) score -= 2;
+  return score;
+}
+
+const NATIVE_STAGES = [
+  {
+    key: 'research',
+    cues: ['inconnu', 'unknown', 'recherche', 'research', 'chercher', 'discover'],
+    tags: ['research', 'evidence', 'search'],
+    prefer_read_only: true,
+  },
+  {
+    key: 'verify',
+    cues: ['verifier', 'verify', 'etat', 'state', 'inspecter', 'inspect', 'controler'],
+    tags: ['verify', 'inspect', 'evidence', 'research', 'read'],
+    prefer_read_only: true,
+  },
+  {
+    key: 'create',
+    cues: ['creer', 'create', 'ecrire', 'write', 'generer un fichier', 'fichier de test'],
+    tags: ['create', 'write'],
+    requires_side_effect: true,
+  },
+  {
+    key: 'read',
+    cues: ['relire', 'lire', 'read', 'consulter'],
+    tags: ['read', 'fetch', 'inspect'],
+    prefer_read_only: true,
+  },
+  {
+    key: 'transform',
+    cues: ['transform', 'convertir', 'modifier', 'mutation', 'produire une transformation'],
+    tags: ['transform', 'convert', 'mutate'],
+  },
+  {
+    key: 'delete',
+    cues: ['supprimer', 'delete', 'effacer', 'remove'],
+    tags: ['delete', 'remove'],
+    requires_side_effect: true,
+  },
+];
+
+function compileNativeGraph(goal, available, { budgetMicrounits = 0, maxNodes = 20, maxParallel = 8 } = {}) {
+  const goalTokens = tokenSet(goal);
+  const nodes = [];
+  const usedCapabilities = new Set();
+  let previousId = '';
+
+  for (const stage of NATIVE_STAGES) {
+    if (!hasCue(goal, stage.cues)) continue;
+    const ranked = available
+      .map((capability) => ({
+        capability,
+        score: nativeStageScore(capability, stage, goalTokens),
+      }))
+      .filter((item) => item.score >= 5.5)
+      .sort((a, b) => b.score - a.score);
+    const selected = ranked.find((item) => !usedCapabilities.has(item.capability.id))?.capability
+      || ranked[0]?.capability;
+    if (!selected) continue;
+
+    if (usedCapabilities.has(selected.id)) continue;
+    const id = nodeId(stage.key + '-' + selected.id);
+    nodes.push({
+      id,
+      capability: selected.id,
+      depends_on: previousId ? [previousId] : [],
+      input: { objective: goal, stage: stage.key },
+      expected_output: ['research', 'verify'].includes(stage.key) ? 'evidence' : 'json',
+      verification: selected.side_effects
+        ? 'side-effect'
+        : (['research', 'verify'].includes(stage.key) ? 'evidence' : 'none'),
+      max_cost_microunits: Math.max(0, Number(selected.cost_microunits || 0)),
+    });
+    usedCapabilities.add(selected.id);
+    previousId = id;
+  }
+
+  if (!nodes.length) return null;
+  return validateTaskGraph({
+    objective: goal,
+    budget_microunits: budgetMicrounits,
+    max_parallel: Math.min(maxParallel, 2),
+    nodes: nodes.slice(0, maxNodes),
+  }, { maxNodes, maxParallel });
+}
+
 export function validateTaskGraph(graph, {
   maxNodes = 32,
   maxParallel = 12,
@@ -118,6 +241,7 @@ export class DagCompiler {
     const available = capabilities
       .map((item) => ({
         id: clean(item?.id, 180),
+        name: clean(item?.name || item?.id, 240),
         tags: Array.isArray(item?.tags) ? item.tags.slice(0, 12).map((tag) => clean(tag, 80)) : [],
         side_effects: Boolean(item?.side_effects),
         trust: clamp(item?.trust ?? 0.5),
@@ -126,6 +250,13 @@ export class DagCompiler {
       .filter((item) => item.id);
 
     if (!this.ai?.enabled) {
+      const nativeGraph = compileNativeGraph(goal, available, {
+        budgetMicrounits,
+        maxNodes,
+        maxParallel,
+      });
+      if (nativeGraph) return nativeGraph;
+
       const research = available.find((item) => item.id === 'web.research')
         || available.find((item) => item.tags.includes('research'));
       if (!research) throw new Error('aucune capability de fallback disponible sans modèle');
@@ -136,7 +267,7 @@ export class DagCompiler {
         nodes: [{
           id: 'research',
           capability: research.id,
-          input: { question: goal },
+          input: { question: goal, objective: goal, stage: 'research' },
           depends_on: [],
           expected_output: 'evidence',
           verification: 'evidence',
@@ -189,7 +320,7 @@ export class TaskGraphExecutor {
     this.fabric = fabric;
   }
 
-  async execute(graph, { trigger = 'manual' } = {}) {
+  async execute(graph, { trigger = 'manual', allowSideEffects = false } = {}) {
     const valid = validateTaskGraph(graph);
     const startedAt = Date.now();
     await this.fabric?.recordGraph?.(valid, { status: 'running', result: {} }).catch?.(() => {});
@@ -213,6 +344,7 @@ export class TaskGraphExecutor {
             objective: valid.objective,
           }, {
             trigger,
+            allowSideEffects: Boolean(allowSideEffects && node.verification === 'side-effect'),
             maxCostMicrounits: node.max_cost_microunits,
             verification: node.verification,
             quorum: node.quorum,
