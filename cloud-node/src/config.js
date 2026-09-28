@@ -153,19 +153,19 @@ export const config = Object.freeze({
 
   // AURA Voice Fabric: provider-neutral Mairaiy identity.
   // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
-  voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', true),
-  voiceFabricPinQuanticEndpoint: bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true),
+  voiceFabricEnabled: true,
+  voiceFabricPinQuanticEndpoint: true,
   voiceFabricBaseUrl: String(
     bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true)
       ? 'https://mediumorchid-badger-314305.hostingersite.com/voice'
       : (process.env.AURA_VOICE_FABRIC_BASE_URL || 'https://mediumorchid-badger-314305.hostingersite.com/voice')
   ).replace(/\/$/, ''),
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
-  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'kokoro',
+  voiceFabricModel: 'kokoro',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
-  voiceFabricProfileName: process.env.AURA_MAIRAIY_VOICE_PROFILE_NAME || 'Mairaiy',
-  voiceFabricRequireProfile: bool('AURA_MAIRAIY_REQUIRE_PROFILE', true),
-  voiceFabricLanguage: process.env.AURA_MAIRAIY_LANGUAGE || 'fr-fr',
+  voiceFabricProfileName: 'Mairaiy',
+  voiceFabricRequireProfile: true,
+  voiceFabricLanguage: 'fr-fr',
   voiceFabricInstruct: process.env.AURA_MAIRAIY_VOICE_INSTRUCT || '',
   voiceFabricSpeed: num('AURA_MAIRAIY_VOICE_SPEED', 1, 0.5, 1.5),
   voiceFabricSeed: int('AURA_MAIRAIY_VOICE_SEED', 2388, 0, 2147483647),
@@ -175,7 +175,7 @@ export const config = Object.freeze({
   voiceFabricMaxAudioBytes: int('AURA_VOICE_FABRIC_MAX_AUDIO_BYTES', 20 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
   voiceFabricZeroCostConfirmed: bool('AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED', false),
   voiceFabricTrustedZeroCostOrigins: csv('AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS', 'https://mediumorchid-badger-314305.hostingersite.com/voice'),
-  voiceFabricStrictIdentity: bool('AURA_VOICE_FABRIC_STRICT_IDENTITY', true),
+  voiceFabricStrictIdentity: true,
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
