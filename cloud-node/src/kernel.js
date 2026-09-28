@@ -7,6 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
+import { buildNeuralFieldModel } from './neural-field.js';
 
 const now = () => new Date().toISOString();
 
@@ -961,137 +962,48 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status] = await Promise.all([
-      this.intentions(8),
-      this.activity(18),
+    const [intentions, traces, status, services, lessons, bridgeStatus] = await Promise.all([
+      this.intentions(12),
+      this.activity(30),
       this.status(),
+      query(
+        `SELECT id,name,kind,objective,criticality,state,state_detail,last_observed_at
+         FROM aura_command_services
+         WHERE enabled=1
+         ORDER BY criticality DESC,name ASC LIMIT 16`,
+      ).catch(() => []),
+      this.lessons(12),
+      this.bridge?.status
+        ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
+        : Promise.resolve({ enabled: false, worker_online: false }),
     ]);
 
-    const text = [
-      soul.current_intention,
-      soul.dominant_thought,
-      ...intentions.map((row) => row.statement),
-      ...traces.map((row) => `${row.title || ''} ${row.content || ''}`),
-    ].join(' ').toLowerCase();
+    const organism = this.organism.migrate(soul);
+    const fabricCaps = Array.isArray(this.fabric?.list?.()) ? this.fabric.list() : [];
 
-    const keywordBoost = (words) => words.reduce(
-      (score, word) => score + (text.includes(word) ? 0.12 : 0),
-      0,
+    const graph = buildNeuralFieldModel({
+      soul,
+      organism,
+      intentions,
+      traces,
+      lessons,
+      counts: status.counts || {},
+      services,
+      fabricCaps,
+      bridgeStatus,
+      webEnabled: Boolean(this.webSubstrate?.enabled),
+      horizonEnabled: Boolean(this.horizon?.enabled),
+      previous: this._lastAttention || {},
+    });
+
+    this._lastAttention = Object.fromEntries(
+      graph.nodes.map((node) => [node.id, node.score]),
     );
 
-    const count = status.counts || {};
-    const nodes = [
-      {
-        id: 'stability',
-        label: 'Stabilité',
-        subtitle: 'Équilibre du système',
-        score: clamp(
-          0.18
-          + Number(soul.pressure || 0) * 0.58
-          + keywordBoost(['stabil', 'erreur', 'incident', 'fiabil', 'risque']),
-        ),
-      },
-      {
-        id: 'learning',
-        label: 'Apprentissage',
-        subtitle: 'Exploration active',
-        score: clamp(
-          0.12
-          + Number(soul.curiosity || 0) * 0.46
-          + Number(soul.introspection || 0) * 0.25
-          + keywordBoost(['appren', 'comprendre', 'analyse', 'recherche']),
-        ),
-      },
-      {
-        id: 'studio',
-        label: 'Quantic Studio',
-        subtitle: 'Création · Tests',
-        score: clamp(
-          0.14
-          + Math.min(Number(count.outcomes || 0) / 20, 0.24)
-          + keywordBoost(['studio', 'stream', 'obs', 'automation', 'quantic']),
-        ),
-      },
-      {
-        id: 'horizon',
-        label: 'HORIZON',
-        subtitle: 'Anticipation',
-        score: clamp(
-          0.08
-          + (this.horizon?.enabled ? 0.24 : 0)
-          + keywordBoost(['horizon', 'prévision', 'prediction', 'signal']),
-        ),
-      },
-      {
-        id: 'automation',
-        label: 'Automatisation',
-        subtitle: 'Optimisation',
-        score: clamp(
-          0.12
-          + Math.min(Number(count.routines || 0) / 12, 0.22)
-          + Math.min(Number(count.improvements || 0) / 12, 0.18)
-          + keywordBoost(['automat', 'routine', 'opérateur', 'action']),
-        ),
-      },
-      {
-        id: 'memory',
-        label: 'Mémoire',
-        subtitle: 'Consolidation',
-        score: clamp(
-          0.1
-          + Number(soul.continuity || 0) * 0.33
-          + Math.min(Number(count.lessons || 0) / 25, 0.22)
-          + keywordBoost(['mémoire', 'leçon', 'souvenir', 'consolid']),
-        ),
-      },
-      {
-        id: 'evolution',
-        label: 'Évolution',
-        subtitle: 'Amélioration',
-        score: clamp(
-          0.1
-          + Math.min(Number(count.improvements || 0) / 10, 0.28)
-          + keywordBoost(['évolution', 'amélioration', 'corriger', 'version']),
-        ),
-      },
-      {
-        id: 'watch',
-        label: 'Veille',
-        subtitle: 'Collecte d’informations',
-        score: clamp(
-          0.1
-          + Number(soul.openness || 0) * 0.24
-          + Number(soul.curiosity || 0) * 0.24
-          + keywordBoost(['veille', 'article', 'nouveau', 'information']),
-        ),
-      },
-    ].map((node) => ({
-      ...node,
-      score: Number(node.score.toFixed(4)),
-    }));
-
-    const ranked = [...nodes].sort((a, b) => b.score - a.score);
-    const top = ranked[0];
-    const second = ranked[1];
-    const prior = this._lastAttention || {};
-    const enriched = nodes.map((node) => {
-      const previous = Number(prior[node.id] ?? node.score);
-      const delta = Number((node.score - previous).toFixed(4));
-      return {
-        ...node,
-        trend: delta > 0.025 ? 'rising' : delta < -0.025 ? 'falling' : 'stable',
-        delta,
-        dominant: node.id === top?.id,
-      };
-    });
-    this._lastAttention = Object.fromEntries(nodes.map((node) => [node.id, node.score]));
-
     return {
+      ...graph,
       updated_at: now(),
-      dominant: top?.id || '',
-      secondary: second?.id || '',
       focus_statement: String(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
-      nodes: enriched,
     };
   }
 
