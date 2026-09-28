@@ -150,15 +150,6 @@ gateway.on('error', (error) => {
   process.exitCode = 1;
 });
 
-await new Promise((resolve, reject) => {
-  gateway.once('error', reject);
-  gateway.listen(publicPort, publicHost, () => {
-    gateway.off('error', reject);
-    console.log(`[AURA] Hostinger gateway listening immediately on ${publicHost}:${publicPort}`);
-    resolve();
-  });
-});
-
 async function bootAura() {
   try {
     const runtime = await import('./src/server.js');
@@ -185,7 +176,10 @@ async function bootAura() {
   }
 }
 
-bootAura();
+gateway.listen(publicPort, publicHost, () => {
+  console.log(`[AURA] Hostinger gateway listening immediately on ${publicHost}:${publicPort}`);
+  void bootAura();
+});
 
 async function shutdown(signal) {
   if (shuttingDown) return;
