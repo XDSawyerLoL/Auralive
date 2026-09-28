@@ -108,8 +108,8 @@ function extractSymbolicFunctionProblem(text) {
   }
   if (points.length < 2) return null;
   const targetPatterns = [
-    /(?:déduis|deduis|calcule|trouve|détermine|determine|prédit|predit|predict|infer)[^.!?]{0,120}?f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)/i,
-    /(?:donne|quelle est|quel est)[^.!?]{0,120}?f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)/i,
+    /(?:déduis|deduis|calcule|trouve|détermine|determine|prédit|predit|predict|infer)[^.!?]{0,120}?f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)(?!\s*=)/i,
+    /(?:donne|quelle est|quel est)[^.!?]{0,120}?f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)(?!\s*=)/i,
   ];
   let target = null;
   for (const pattern of targetPatterns) {
