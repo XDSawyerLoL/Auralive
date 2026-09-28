@@ -68,9 +68,11 @@ export function scoreCapability(capability, {
   requiredTags = [],
   allowSideEffects = false,
   maxCostMicrounits = 0,
+  zeroCostOnly = false,
 } = {}) {
   if (!capability?.enabled) return -Infinity;
   if (capability.side_effects && !allowSideEffects) return -Infinity;
+  if (zeroCostOnly && Number(capability.cost_microunits || 0) > 0) return -Infinity;
   if (maxCostMicrounits > 0 && capability.cost_microunits > maxCostMicrounits) return -Infinity;
   const tags = new Set(capability.tags || []);
   const requested = requiredTags.filter(Boolean);
@@ -451,16 +453,17 @@ export class CapabilityFabric {
     requiredTags = [],
     allowSideEffects = false,
     maxCostMicrounits = 0,
+    zeroCostOnly = config.zeroCostMode,
   } = {}) {
     if (capabilityId) {
       const item = this.registry.get(stableId(capabilityId));
       if (!item) return null;
-      const score = scoreCapability(item, { requiredTags, allowSideEffects, maxCostMicrounits });
+      const score = scoreCapability(item, { requiredTags, allowSideEffects, maxCostMicrounits, zeroCostOnly });
       return Number.isFinite(score) ? { ...item, routing_score: score } : null;
     }
     let best = null;
     for (const item of this.registry.values()) {
-      const score = scoreCapability(item, { requiredTags, allowSideEffects, maxCostMicrounits });
+      const score = scoreCapability(item, { requiredTags, allowSideEffects, maxCostMicrounits, zeroCostOnly });
       if (!Number.isFinite(score)) continue;
       if (!best || score > best.routing_score) best = { ...item, routing_score: score };
     }
@@ -598,6 +601,9 @@ export class CapabilityFabric {
     if (capability.side_effects) {
       throw new Error('effet de bord remote interdit par politique AURA');
     }
+    if (config.zeroCostMode && Number(capability.cost_microunits || 0) > 0) {
+      throw new Error('capability payante interdite en mode zéro coût');
+    }
     if (maxCostMicrounits > 0 && capability.cost_microunits > maxCostMicrounits) {
       throw new Error('budget capability dépassé');
     }
@@ -633,6 +639,13 @@ export class CapabilityFabric {
       if (body?.manifest_hash && body.manifest_hash !== capability.manifest_hash) {
         throw new Error('manifest capability modifié pendant exécution');
       }
+      const reportedCost = Math.max(
+        Number(body?.metrics?.cost_microunits || 0),
+        Number(capability.cost_microunits || 0),
+      );
+      if (config.zeroCostMode && reportedCost > 0) {
+        throw new Error('coût non nul retourné par une capability en mode zéro coût');
+      }
       return {
         ok: body?.ok !== false,
         result: body?.result ?? body,
@@ -640,10 +653,7 @@ export class CapabilityFabric {
         verification: body?.verification || {},
         metrics: {
           ...(body?.metrics || {}),
-          cost_microunits: Math.max(
-            Number(body?.metrics?.cost_microunits || 0),
-            Number(capability.cost_microunits || 0),
-          ),
+          cost_microunits: reportedCost,
         },
       };
     } finally {
