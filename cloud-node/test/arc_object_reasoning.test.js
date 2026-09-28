@@ -254,6 +254,42 @@ test('infers whole-grid tiling independently of colors', () => {
   assert.equal(gridEquals(result.output, output), true);
 });
 
+
+test('learns a boolean occupancy rule between separator-defined panels', () => {
+  const input = [
+    [1,0,1,8,0,1,1],
+    [0,1,0,8,1,1,0],
+    [1,1,0,8,1,0,0],
+  ];
+  const output = [
+    [2,2,0],
+    [2,0,0],
+    [0,2,0],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'combine-separated-occupancy');
+  assert.equal(gridEquals(result.output, output), true);
+});
+
+test('extracts a uniquely largest component and learns output recoloring', () => {
+  const input = [
+    [0,2,2,0,0,3,0],
+    [0,2,0,0,0,3,0],
+    [0,2,0,0,0,0,0],
+    [0,0,0,0,4,0,0],
+    [0,0,0,0,0,0,0],
+  ];
+  const output = [
+    [7,7],
+    [7,0],
+    [7,0],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'extract-selected-object');
+  assert.equal(gridEquals(result.output, output), true);
+  assert.equal(result.inferred.program.params.selector, 'largest-size');
+});
+
 test('extends a periodic pattern and learns recoloring', () => {
   const input = [
     [0,1,0],
