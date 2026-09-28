@@ -1,4 +1,4 @@
-name: Package Mairaiy Kokoro Hostinger
+name: Package Mairaiy Gemini Aoede Hostinger
 
 on:
   push:
@@ -8,11 +8,11 @@ on:
       - "config/**"
       - "requirements.txt"
       - "deploy/hostinger/**"
-      - ".github/workflows/package-mairaiy-kokoro-hostinger.yml"
+      - ".github/workflows/package-mairaiy-aoede-hostinger.yml"
   workflow_dispatch:
 
 jobs:
-  package-mairaiy-kokoro-hostinger:
+  package-mairaiy-aoede-hostinger:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,22 +21,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validate exact Kokoro bridge source
+      - name: Validate historical Gemini Aoede bridge source
         shell: bash
         run: |
           set -euo pipefail
           python -m py_compile app/main.py app/main_v2.py app/main_v3.py app/services/local_kokoro_voice.py app/services/voice_identity_lock.py
           grep -q '@app.post("/voice/v1/audio/speech")' app/main.py
-          grep -q '"X-Mairaiy-Voice": "ff_siwis"' app/main.py
-          grep -q 'getattr(aura, "local_kokoro_voice", None) or mairaiy_kokoro' app/main.py
+          grep -q '"X-Mairaiy-Voice": "Aoede"' app/main.py
+          grep -q 'locked_voice = "Aoede"' app/services/voice_identity_lock.py
           grep -q 'install_voice_identity_lock(aura)' app/main_v3.py
-          grep -q 'MAIRAIY_KOKORO_VOICE", "ff_siwis"' app/services/local_kokoro_voice.py
+          grep -q '_GEMINI_TTS_DEFAULT_VOICE = "Aoede"' app/services/avatar_audio.py
 
       - name: Build Hostinger Python project root
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="$RUNNER_TEMP/mairaiy-kokoro-hostinger"
+          ROOT="$RUNNER_TEMP/mairaiy-aoede-hostinger"
           rm -rf "$ROOT"
           mkdir -p "$ROOT"
 
@@ -60,9 +60,9 @@ jobs:
           GET  /voice/v1/audio/voices
           POST /voice/v1/audio/speech
 
-          The POST endpoint calls the same aura.local_kokoro_voice instance used by
-          Quantic Studio v3. No Gemini, Piper, Windows or browser TTS fallback is
-          used by this endpoint.
+          The POST endpoint uses the historical Aura Live 2.0.7 Mairaiy pipeline:
+          Gemini TTS + Aoede + the natural close-mic prompt. Piper, Kokoro, Windows
+          and browser TTS are not used as silent substitutions for Mairaiy.
           EOF
 
           test -f "$ROOT/app/main_v3.py"
@@ -73,8 +73,8 @@ jobs:
       - name: Upload Hostinger-ready Mairaiy project
         uses: actions/upload-artifact@v4
         with:
-          name: mairaiy-kokoro-hostinger
-          path: ${{ runner.temp }}/mairaiy-kokoro-hostinger/
+          name: mairaiy-aoede-hostinger
+          path: ${{ runner.temp }}/mairaiy-aoede-hostinger/
           retention-days: 14
           if-no-files-found: error
           include-hidden-files: true
