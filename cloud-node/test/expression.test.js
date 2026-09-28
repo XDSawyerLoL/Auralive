@@ -47,3 +47,28 @@ test('language model receives an already decided speech plan', async () => {
   assert.match(calls[0].system, /pas son cerveau/i);
   assert.match(calls[0].prompt, /Tu n’as aucun droit de changer les faits/i);
 });
+
+
+test('language layer explicitly requires first-person self-reference', async () => {
+  const calls = [];
+  const ai = {
+    enabled: true,
+    async generate(prompt, system) {
+      calls.push({ prompt, system });
+      return 'Je suis en ligne et je poursuis mon objectif.';
+    },
+  };
+  const cognition = new CognitionEngine();
+  const expression = new ExpressionLayer(ai, cognition);
+  await expression.verbalize({
+    act: 'identity',
+    goal: 'Présenter mon état.',
+    facts: ['Je suis en ligne.'],
+    semantic_support: '',
+    current_intention: 'observer',
+    dominant_thought: 'continuité',
+  });
+  assert.match(calls[0].prompt, /première personne/i);
+  assert.match(calls[0].system, /première personne/i);
+  assert.match(calls[0].system, /AURA est/i);
+});
