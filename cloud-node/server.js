@@ -1,17 +1,7 @@
-import { createServer, request as httpRequest } from 'node:http';
+import { createServer } from 'node:http';
 
 const publicHost = '0.0.0.0';
-const hostingerPort = 3000;
-const configuredPort = Number.parseInt(
-  process.env.PORT || process.env.AURA_GATEWAY_PORT || process.env.AURA_PORT || '3000',
-  10,
-) || 3000;
-const publicPorts = [...new Set([hostingerPort, configuredPort])].filter(
-  (port) => Number.isInteger(port) && port > 0 && port < 65536,
-);
-let internalPort = Number.parseInt(process.env.AURA_INTERNAL_PORT || '3988', 10) || 3988;
-while (publicPorts.includes(internalPort)) internalPort += 1;
-
+const publicPort = Number.parseInt(process.env.AURA_PORT || '3000', 10) || 3000;
 const gatewayOnly = process.env.AURA_GATEWAY_ONLY === 'true';
 
 let app = null;
@@ -19,8 +9,8 @@ let bootstrap = null;
 let stopAura = async () => {};
 let applicationReady = false;
 let startupError = '';
+let fallbackServer = null;
 let shuttingDown = false;
-const gatewayServers = new Map();
 
 function safeError(error) {
   return String(error?.message || error || 'Erreur inconnue')
@@ -39,13 +29,11 @@ function escapeHtml(value) {
   }[char]));
 }
 
-function gatewayState(port, framework = applicationReady ? 'fastify-via-native-gateway' : 'native-node-recovery') {
+function gatewayState(framework = 'fastify') {
   return {
     ok: true,
     gateway_ready: true,
-    gateway_port: port,
-    gateway_ports: publicPorts,
-    internal_port: internalPort,
+    gateway_port: publicPort,
     application_ready: applicationReady,
     application_state: applicationReady ? 'ready' : (startupError ? 'recovery' : 'booting'),
     runtime_ready: Boolean(bootstrap?.runtimeReady),
@@ -56,7 +44,7 @@ function gatewayState(port, framework = applicationReady ? 'fastify-via-native-g
   };
 }
 
-function recoveryHtml(port) {
+function recoveryHtml() {
   const error = startupError
     ? `<code>${escapeHtml(startupError)}</code>`
     : '<p class="muted">Chargement du runtime AURA en cours…</p>';
@@ -76,99 +64,44 @@ code{display:block;white-space:pre-wrap;background:#050812;border:1px solid #202
 </head>
 <body><main>
 <h1>AURA</h1>
-<p class="ok">Passerelle Hostinger active sur le port ${port}.</p>
-<p>Le runtime AURA est ${startupError ? 'en récupération' : 'en cours de démarrage'}.</p>
+<p class="ok">Processus Hostinger actif sur le port ${publicPort}.</p>
+<p>Le runtime Fastify n'a pas pu terminer son démarrage. L'erreur réelle est affichée ci-dessous.</p>
 ${error}
 </main></body></html>`;
 }
 
-function sendGatewayJson(res, port) {
-  res.writeHead(200, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-  });
-  res.end(JSON.stringify(gatewayState(port)));
-}
+function startFallback(error) {
+  startupError = safeError(error);
+  if (fallbackServer) return;
 
-function proxyToAura(req, res, port) {
-  const forwardedFor = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').trim();
-  const headers = {
-    ...req.headers,
-    host: `127.0.0.1:${internalPort}`,
-    'x-forwarded-host': String(req.headers.host || ''),
-    'x-forwarded-proto': String(req.headers['x-forwarded-proto'] || 'https'),
-    'x-forwarded-port': String(port),
-  };
-  if (forwardedFor) headers['x-forwarded-for'] = forwardedFor;
+  console.error('[AURA] Fastify bootstrap failed; starting single-listener recovery server:', error);
 
-  const upstream = httpRequest({
-    host: '127.0.0.1',
-    port: internalPort,
-    path: req.url || '/',
-    method: req.method,
-    headers,
-  }, (upstreamRes) => {
-    res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
-    upstreamRes.pipe(res);
-  });
-
-  upstream.on('error', (error) => {
-    startupError = safeError(error);
-    if (res.headersSent) {
-      res.destroy();
+  fallbackServer = createServer((req, res) => {
+    const url = req.url || '/';
+    if (url === '/healthz' || url === '/__aura_gateway') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(JSON.stringify(gatewayState('native-node-recovery')));
       return;
     }
-    res.writeHead(503, {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-    });
-    res.end(JSON.stringify({
-      ...gatewayState(port, 'native-gateway-upstream-error'),
-      error: 'AURA internal runtime temporarily unavailable',
-    }));
-  });
 
-  req.pipe(upstream);
-}
-
-function handleGateway(port, req, res) {
-  const url = req.url || '/';
-
-  if (url === '/__aura_gateway') {
-    sendGatewayJson(res, port);
-    return;
-  }
-
-  if (!applicationReady) {
-    if (url === '/healthz') {
-      sendGatewayJson(res, port);
-      return;
-    }
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
     });
-    res.end(recoveryHtml(port));
-    return;
-  }
+    res.end(recoveryHtml());
+  });
 
-  proxyToAura(req, res, port);
-}
+  fallbackServer.on('error', (listenError) => {
+    console.error('[AURA] recovery server failed:', listenError);
+    process.exitCode = 1;
+  });
 
-function startPublicGateways() {
-  for (const port of publicPorts) {
-    const server = createServer((req, res) => handleGateway(port, req, res));
-    gatewayServers.set(port, server);
-
-    server.on('error', (error) => {
-      startupError = safeError(error);
-      console.error(`[AURA] public gateway failed on ${publicHost}:${port}`, error);
-    });
-
-    server.listen(port, publicHost, () => {
-      console.log(`[AURA] Hostinger gateway listening on ${publicHost}:${port}`);
-    });
-  }
+  fallbackServer.listen(publicPort, publicHost, () => {
+    console.log(`[AURA] recovery server listening on ${publicHost}:${publicPort}`);
+  });
 }
 
 async function bootAura() {
@@ -178,33 +111,28 @@ async function bootAura() {
     bootstrap = runtime.bootstrap;
     stopAura = runtime.stopAura;
 
-    await app.listen({ host: '127.0.0.1', port: internalPort });
+    app.get('/__aura_gateway', async () => gatewayState('fastify'));
+
+    await app.listen({ host: publicHost, port: publicPort });
     applicationReady = true;
     startupError = '';
-    console.log(`[AURA] Fastify internal runtime listening on 127.0.0.1:${internalPort}`);
+    console.log(`[AURA] Fastify listening directly on ${publicHost}:${publicPort}`);
 
     if (gatewayOnly) {
-      console.log('[AURA] AURA_GATEWAY_ONLY=true — gateways online, runtime loop skipped.');
+      console.log('[AURA] AURA_GATEWAY_ONLY=true — Fastify is online, runtime loop skipped.');
       return;
     }
 
     runtime.startRuntimeLoop();
   } catch (error) {
     applicationReady = false;
-    startupError = safeError(error);
-    console.error('[AURA] Fastify bootstrap failed; native Hostinger gateways remain online:', error);
+    startFallback(error);
   }
 }
 
-// Hostinger/LiteSpeed may require() this ESM entry. Keep the entry graph free of top-level await.
-// Open the public listeners first so Hostinger never sees a dead application while AURA imports.
-startPublicGateways();
+// Important for Hostinger/LiteSpeed lsnode:
+// do not use top-level await here. lsnode loads this ESM entry through require().
 void bootAura();
-
-async function closeGateway(server) {
-  if (!server?.listening) return;
-  await new Promise((resolve) => server.close(resolve));
-}
 
 async function shutdown(signal) {
   if (shuttingDown) return;
@@ -214,18 +142,11 @@ async function shutdown(signal) {
   try {
     if (applicationReady && app) {
       await stopAura();
-      await app.close();
+    } else if (fallbackServer) {
+      await new Promise((resolve) => fallbackServer.close(resolve));
     }
   } catch (error) {
-    console.error('[AURA] runtime shutdown warning:', error);
-  }
-
-  for (const server of gatewayServers.values()) {
-    try {
-      await closeGateway(server);
-    } catch (error) {
-      console.error('[AURA] gateway shutdown warning:', error);
-    }
+    console.error('[AURA] shutdown warning:', error);
   }
 
   process.exit(0);
@@ -233,7 +154,6 @@ async function shutdown(signal) {
 
 process.on('uncaughtException', (error) => {
   startupError = safeError(error);
-  applicationReady = false;
   console.error('[AURA] uncaught exception:', error);
 });
 
