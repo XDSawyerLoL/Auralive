@@ -1,0 +1,63 @@
+name: AURA ARC-AGI-2 Training Development
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'cloud-node/src/arc_object_reasoning.js'
+      - 'cloud-node/src/grid_reasoning.js'
+      - 'cloud-node/test/arc_object_reasoning.test.js'
+      - 'evaluation/external/arc_agi2_training.mjs'
+      - '.github/workflows/arc-training-development.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  arc-training-dev:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ARC_AGI2_SHA: f3283f727488ad98fe575ea6a5ac981e4a188e49
+    steps:
+      - name: Checkout AURA candidate
+        uses: actions/checkout@v4
+
+      - name: Checkout official ARC-AGI-2 training data
+        uses: actions/checkout@v4
+        with:
+          repository: arcprize/ARC-AGI-2
+          ref: ${{ env.ARC_AGI2_SHA }}
+          path: external/ARC-AGI-2
+
+      - name: Verify training corpus only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C external/ARC-AGI-2 rev-parse HEAD)" = "$ARC_AGI2_SHA"
+          test "$(find external/ARC-AGI-2/data/training -maxdepth 1 -name '*.json' | wc -l)" -eq 1000
+          test ! -e external/ARC-AGI-2/data/evaluation/.aura-development-marker
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run object reasoning regression tests
+        working-directory: cloud-node
+        run: node --test test/arc_object_reasoning.test.js
+
+      - name: Score development split only
+        run: |
+          node evaluation/external/arc_agi2_training.mjs \
+            --dataset external/ARC-AGI-2/data/training \
+            --aura-root . \
+            --split dev \
+            --out artifacts/external/arc-agi-2-training-dev.json
+
+      - name: Publish development artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-arc-agi-2-training-dev
+          path: artifacts/external/arc-agi-2-training-dev.json
+          if-no-files-found: error
