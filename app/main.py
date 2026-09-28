@@ -6,7 +6,7 @@ from typing import Any
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -15,6 +15,7 @@ from app.core.orchestrator import AuraOrchestrator
 from app.database import Database
 from app.power_routes import build_power_router
 from app.complete_routes import build_complete_router
+from app.services.local_kokoro_voice import LocalKokoroVoice
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level, logging.INFO),
@@ -24,6 +25,7 @@ logger = logging.getLogger("aura-live")
 
 db = Database(settings.database_path)
 aura = AuraOrchestrator(settings, db)
+mairaiy_kokoro = LocalKokoroVoice(settings.media_dir / "tts")
 
 
 @asynccontextmanager
@@ -134,6 +136,20 @@ class AvatarTestInput(BaseModel):
     text: str = Field(default="Bonjour, je suis Aura. Test vocal de Mairaiy.", min_length=1, max_length=430)
 
 
+class VoiceSpeechInput(BaseModel):
+    model: str = Field(default="kokoro", max_length=80)
+    input: str = Field(min_length=1, max_length=3900)
+    voice: str = Field(default="mairaiy-kokoro-ff_siwis", max_length=120)
+    response_format: str = Field(default="wav", max_length=20)
+    speed: float = Field(default=1.0, ge=0.5, le=1.5)
+    language: str = Field(default="fr-fr", max_length=20)
+    engine_voice: str = Field(default="ff_siwis", max_length=80)
+    denoise: bool = True
+    preprocess_prompt: bool = True
+    seed: int | None = None
+    instruct: str = Field(default="", max_length=600)
+
+
 class CounterInput(BaseModel):
     value: int = Field(ge=0, le=1_000_000)
 
@@ -200,6 +216,87 @@ class PredictionResolveInput(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def dashboard() -> HTMLResponse:
     return HTMLResponse((BASE_DIR / "app" / "web" / "templates" / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/voice/.well-known/voicestudio-speech")
+async def mairaiy_voice_discovery() -> dict[str, Any]:
+    diagnostic = mairaiy_kokoro.diagnostic()
+    return {
+        "ok": True,
+        "provider": "quantic-studio-kokoro-direct",
+        "api_base": "/voice/v1",
+        "model": "kokoro",
+        "voice": "Mairaiy",
+        "engine_voice": "ff_siwis",
+        "language": "fr-fr",
+        "engine": "kokoro-onnx",
+        "ready": bool(diagnostic.get("ready")),
+        "assets_present": bool(diagnostic.get("assets_present")),
+        "generic_tts_fallback": False,
+    }
+
+
+@app.get("/voice/v1/audio/voices")
+async def mairaiy_voice_list() -> dict[str, Any]:
+    diagnostic = mairaiy_kokoro.diagnostic()
+    return {
+        "voices": [
+            {
+                "voice_id": "mairaiy-kokoro-ff_siwis",
+                "name": "Mairaiy",
+                "type": "profile",
+                "engine": "kokoro-onnx",
+                "engine_voice": "ff_siwis",
+                "language": "fr-fr",
+                "ready": bool(diagnostic.get("ready")),
+                "assets_present": bool(diagnostic.get("assets_present")),
+            }
+        ]
+    }
+
+
+@app.post("/voice/v1/audio/speech")
+async def mairaiy_voice_speech(payload: VoiceSpeechInput) -> FileResponse:
+    if str(payload.model or "").strip().lower() != "kokoro":
+        raise HTTPException(status_code=422, detail="Mairaiy utilise exclusivement Kokoro ONNX")
+    if str(payload.voice or "").strip() != "mairaiy-kokoro-ff_siwis":
+        raise HTTPException(status_code=422, detail="Profil Mairaiy exact requis")
+    if str(payload.engine_voice or "").strip().lower() != "ff_siwis":
+        raise HTTPException(status_code=422, detail="Voix Kokoro ff_siwis requise")
+    if str(payload.language or "").strip().lower() != "fr-fr":
+        raise HTTPException(status_code=422, detail="Langue fr-fr requise")
+    if str(payload.response_format or "").strip().lower() != "wav":
+        raise HTTPException(status_code=422, detail="Format WAV requis")
+
+    audio_url = await mairaiy_kokoro.synthesize(
+        payload.input,
+        rate=float(payload.speed),
+        volume=1.0,
+    )
+    if not audio_url:
+        diagnostic = mairaiy_kokoro.diagnostic()
+        raise HTTPException(
+            status_code=503,
+            detail=diagnostic.get("last_error") or "Kokoro ff_siwis indisponible",
+        )
+
+    filename = str(audio_url).rsplit("/", 1)[-1]
+    path = settings.media_dir / "tts" / filename
+    if not path.exists() or path.stat().st_size <= 44:
+        raise HTTPException(status_code=503, detail="Kokoro ff_siwis n'a produit aucun WAV valide")
+
+    return FileResponse(
+        path,
+        media_type="audio/wav",
+        filename=filename,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Mairaiy-Voice": "ff_siwis",
+            "X-Mairaiy-Language": "fr-fr",
+            "X-Mairaiy-Engine": "kokoro-onnx",
+            "X-Mairaiy-Profile": "Mairaiy",
+        },
+    )
 
 
 def overlay_html(mode: str) -> HTMLResponse:
