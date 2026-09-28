@@ -201,12 +201,12 @@ function selfText(value){
     .trim();
 }
 const neuralGroups={
-  regulation:{x:260,y:205,color:'#60e6ad',label:'Régulation'},
-  cognition:{x:450,y:145,color:'#b08cff',label:'Cognition'},
-  perception:{x:650,y:220,color:'#59e0ef',label:'Perception'},
-  memory:{x:260,y:435,color:'#ffc96a',label:'Mémoire'},
-  agency:{x:650,y:430,color:'#f178d6',label:'Agentivité'},
-  infrastructure:{x:455,y:525,color:'#6da7ff',label:'Infrastructure'},
+  regulation:{x:265,y:205,color:'#60e6ad',label:'Régulation'},
+  cognition:{x:450,y:155,color:'#b08cff',label:'Cognition'},
+  perception:{x:635,y:215,color:'#59e0ef',label:'Perception'},
+  memory:{x:285,y:420,color:'#ffc96a',label:'Mémoire'},
+  agency:{x:615,y:420,color:'#f178d6',label:'Agentivité'},
+  infrastructure:{x:450,y:505,color:'#6da7ff',label:'Infrastructure'},
   ecosystem:{x:450,y:325,color:'#9a86ff',label:'Écosystème'}
 };
 function nodeSeed(value){
@@ -225,11 +225,12 @@ function neuralLayout(rows){
     if(group==='ecosystem'){
       const total=Math.max(1,items.length);
       items.forEach(function(n,i){
-        const angle=(-Math.PI*.86)+(i/(Math.max(total-1,1)))*Math.PI*1.72;
-        const jitter=(nodeSeed(n.id)-.5)*.11;
+        // Products sit on a cortical rim, away from the dense cognitive lobes.
+        const angle=(-Math.PI*.92)+(i/(Math.max(total-1,1)))*Math.PI*1.84;
+        const jitter=(nodeSeed(n.id)-.5)*.055;
         layout[n.id]={
-          x:450+Math.cos(angle+jitter)*355,
-          y:325+Math.sin(angle+jitter)*245,
+          x:450+Math.cos(angle+jitter)*382,
+          y:325+Math.sin(angle+jitter)*260,
           color:meta.color,
           group:group
         };
@@ -239,19 +240,23 @@ function neuralLayout(rows){
     const total=Math.max(1,items.length);
     items.forEach(function(n,i){
       const seed=nodeSeed(n.id);
-      const angle=(i/total)*Math.PI*2+(seed-.5)*.85;
-      const radius=total===1?0:34+Math.min(38,total*7)+(seed*10);
+      // Deterministic fan layout avoids circular clumps and label collisions.
+      const span=Math.min(Math.PI*1.28,Math.PI*.62+total*.17);
+      const angle=(-span/2)+(total===1?0:(i/(total-1))*span)+(seed-.5)*.12;
+      const radius=total===1?0:52+Math.min(28,total*5)+(seed*8);
+      const axis=group==='cognition'||group==='infrastructure' ? Math.PI/2 : (meta.x<450?Math.PI:0);
+      const a=angle+axis;
       layout[n.id]={
-        x:meta.x+Math.cos(angle)*radius,
-        y:meta.y+Math.sin(angle)*radius*.72,
+        x:meta.x+Math.cos(a)*radius,
+        y:meta.y+Math.sin(a)*radius*.68,
         color:meta.color,
         group:group
       };
     });
   });
   Object.keys(layout).forEach(function(id){
-    layout[id].x=Math.max(70,Math.min(830,layout[id].x));
-    layout[id].y=Math.max(70,Math.min(580,layout[id].y));
+    layout[id].x=Math.max(54,Math.min(846,layout[id].x));
+    layout[id].y=Math.max(58,Math.min(592,layout[id].y));
   });
   return layout;
 }
@@ -388,18 +393,31 @@ function renderMap(data){
     const core=document.createElementNS(svgNS,'circle');core.setAttribute('r',String(3.5+intensity*3));core.setAttribute('fill',pos.color);core.setAttribute('opacity',String(.58+intensity*.40));
     g.appendChild(halo);g.appendChild(outer);g.appendChild(circle);g.appendChild(core);
     nodes.appendChild(g);
+    g.addEventListener('mouseenter',function(){
+      g.classList.add('active');
+      const status=n.status?' · '+n.status:'';
+      $('focusStatement').textContent=n.label+' — '+(n.subtitle||n.group||'')+' · '+Math.round(intensity*100)+'%'+status;
+    });
+    g.addEventListener('mouseleave',function(){
+      g.classList.remove('active');
+      $('focusStatement').textContent=selfText(lastAttention?.focus_statement)||'Aucune intention dominante.';
+    });
 
-    const dir=pos.x<450?-1:1;
-    const label=document.createElementNS(svgNS,'text');
-    label.setAttribute('x',String(pos.x+dir*(r+14)));label.setAttribute('y',String(pos.y-1));
-    label.setAttribute('text-anchor',dir<0?'end':'start');
-    label.setAttribute('fill','#eef2ff');label.setAttribute('font-size',n.kind==='product'?'8.5':'10.5');label.setAttribute('font-weight',n.dominant?'700':'560');label.textContent=n.label;nodes.appendChild(label);
-    if(n.kind!=='product' || intensity>.48){
+    const alwaysLabel=n.dominant || intensity>=.56 || n.id==='worker';
+    if(alwaysLabel){
+      const dir=pos.x<450?-1:1;
+      const label=document.createElementNS(svgNS,'text');
+      label.setAttribute('x',String(pos.x+dir*(r+14)));label.setAttribute('y',String(pos.y-1));
+      label.setAttribute('text-anchor',dir<0?'end':'start');
+      label.setAttribute('class','neural-label');
+      label.setAttribute('fill','#eef2ff');label.setAttribute('font-size',n.kind==='product'?'8.4':'10.2');label.setAttribute('font-weight',n.dominant?'720':'600');
+      label.textContent=n.label;nodes.appendChild(label);
       const sub=document.createElementNS(svgNS,'text');
-      sub.setAttribute('x',String(pos.x+dir*(r+14)));sub.setAttribute('y',String(pos.y+12));
+      sub.setAttribute('x',String(pos.x+dir*(r+14)));sub.setAttribute('y',String(pos.y+11));
       sub.setAttribute('text-anchor',dir<0?'end':'start');
-      sub.setAttribute('fill','#77849d');sub.setAttribute('font-size','7.5');
-      sub.textContent=(n.subtitle||n.group||'')+' · '+Math.round(intensity*100)+'%';nodes.appendChild(sub);
+      sub.setAttribute('class','neural-label neural-sub');
+      sub.setAttribute('fill','#77849d');sub.setAttribute('font-size','7.2');
+      sub.textContent=Math.round(intensity*100)+'%';nodes.appendChild(sub);
     }
   });
 }
