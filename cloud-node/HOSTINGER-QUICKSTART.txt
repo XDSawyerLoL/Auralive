@@ -1,37 +1,46 @@
-AURA Cloud Node — Hostinger 2.1.0 — ZERO COST
+AURA Cloud Node — Hostinger 2.2.1 — CANONICAL / ZERO COST
 
-Réglages :
-- Framework : Other
+SOURCE À DÉPLOYER
+- Dépôt : XDSawyerLoL/Auralive
+- Runtime canonique : cloud-node/
+- Artefact GitHub Actions recommandé : aura-cloud-hostinger
+- Ne pas déployer l'ancien paquet Python deploy/hostinger/.
+
+RÉGLAGES HOSTINGER
+- Framework : Other / Node.js
 - Node.js : 22.x
-- Répertoire racine : ./
-- Entry File : server.js
+- Répertoire racine du ZIP : ./
+- package.json doit être directement à la racine
+- server.js doit être directement à la racine
 - Installation : npm install --omit=dev
 - Démarrage : npm start
 - Output directory : vide
+- PORT : fourni par Hostinger et honoré automatiquement par server.js
 
-Garantie financière :
-- AURA_ZERO_COST_MODE=true est la valeur par défaut et doit rester activée
-- aucun fallback Gemini/OpenAI distant potentiellement facturable
-- Expert Bridge externe bloqué même si une ancienne clé existe dans Hostinger
-- TTS Gemini Cloud bloqué ; voix Mairaiy via Providence/Kokoro ff_siwis, route publique bornée et sans facturation API
-- nœuds Runtime déclarés payants, coût > 0 ou modèles Ollama :cloud exclus du Mesh
-- sans worker local/gratuit disponible, AURA reste en mode natif/offline plutôt que de dépenser
+ACCÈS DIRECT
+- Le dashboard AURA est public.
+- POST /api/chat fonctionne sans AURA_CLOUD_TOKEN, avec session navigateur signée et rate limiting.
+- Aucun champ "Accès privé" ni token n'est demandé à l'utilisateur.
+- AURA_CLOUD_TOKEN est optionnel et protège uniquement les endpoints privés d'administration / bridge.
+- Ne jamais exposer AURA_CLOUD_TOKEN dans le navigateur.
 
-Architecture de démarrage :
+GARANTIE FINANCIÈRE
+- AURA_ZERO_COST_MODE=true doit rester activé.
+- Aucun fallback Gemini/OpenAI distant potentiellement facturable.
+- Expert Bridge externe bloqué en mode zéro coût.
+- TTS Gemini Cloud bloqué.
+- Mairaiy utilise Providence/Kokoro ff_siwis via la route Quantic autorisée à 0 €.
+- Sans capacité gratuite disponible, AURA reste sur son noyau natif plutôt que de dépenser.
+
+ARCHITECTURE DE DÉMARRAGE
 - un seul process Node
-- un seul listener public : 0.0.0.0:3000
-- Fastify est embarqué dans le même process via injection interne
-- aucun port interne 3001
-- MySQL démarre en arrière-plan et ne bloque jamais l’interface
+- un seul listener Fastify public
+- bind 0.0.0.0
+- PORT Hostinger prioritaire
+- MySQL démarre sans empêcher l'interface de répondre
 - timeout connexion MySQL : 5 s par défaut
 
-Après déploiement :
-- / -> interface AURA
-- /healthz -> état runtime
-- /__aura_gateway -> état du gateway/application
-- /api/bootstrap/status -> état du noyau cognitif
-
-Variables fonctionnelles :
+VARIABLES MINIMALES
 NODE_ENV=production
 AURA_ZERO_COST_MODE=true
 AI_MODE=off
@@ -42,12 +51,14 @@ DB_USER=...
 DB_PASSWORD=...
 DB_NAME=...
 DB_CONNECT_TIMEOUT_MS=5000
-AURA_CLOUD_TOKEN=...
-AURA_EVOLUTION_CANARY_TOKEN=...
 
+OPTIONNEL — SURFACES PRIVÉES SERVEUR
+AURA_CLOUD_TOKEN=
+AURA_EVOLUTION_CANARY_TOKEN=
 
-Voix Mairaiy en ligne :
+VOIX MAIRAIY EN LIGNE
 AURA_VOICE_FABRIC_ENABLED=true
+AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT=true
 AURA_VOICE_FABRIC_BASE_URL=https://mediumorchid-badger-314305.hostingersite.com/voice
 AURA_VOICE_FABRIC_API_KEY=
 AURA_VOICE_FABRIC_MODEL=kokoro
@@ -56,26 +67,26 @@ AURA_MAIRAIY_VOICE_PROFILE_NAME=Mairaiy
 AURA_MAIRAIY_REQUIRE_PROFILE=true
 AURA_VOICE_FABRIC_STRICT_IDENTITY=true
 
-Le domaine/path ci-dessus est le seul endpoint distant autorisé sans clé et sans
-confirmation manuelle de facturation. Toute autre URL distante reste bloquée
-sans bearer et, en mode zéro coût, sans confirmation explicite.
-
-
-AURA Cloud 2.2.1 — vérification après déploiement
--------------------------------------------------
-1. La page d'accueil doit afficher le badge:
+VÉRIFICATION APRÈS DÉPLOIEMENT
+1. GET / doit afficher :
    AURA 2.2.1 · LONG HORIZON
 
-2. Si ce badge n'apparait pas, Hostinger sert un ancien répertoire ou un ancien processus.
-   Vérifier que le contenu du ZIP est extrait directement dans la racine de l'application Node,
-   avec package.json et server.js à cette racine, puis redémarrer/redeploy l'application.
+2. GET /__aura_gateway doit retourner :
+   "gateway_ready": true
 
-3. La voix Quantic Mairaiy est verrouillée par défaut sur:
-   https://mediumorchid-badger-314305.hostingersite.com/voice
+3. GET /api/bootstrap/status doit retourner :
+   "product": "AURA Cloud"
+   "version": "2.2.1"
+   "server_ready": true
 
-   AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT=true empêche une ancienne variable
-   AURA_VOICE_FABRIC_BASE_URL de détourner la voix vers un endpoint obsolète.
+4. GET /api/auth/session peut retourner authenticated:false :
+   c'est normal en accès direct et cela ne doit pas bloquer le chat.
 
-4. Après démarrage, contrôler:
-   GET /api/bootstrap/status -> version 2.2.1
-   GET /api/voice/status -> primary aura-voice-fabric si Mairaiy est joignable.
+5. POST /api/chat doit répondre sans Authorization Bearer lorsque le runtime est prêt.
+
+6. GET /api/voice/status doit indiquer Mairaiy / aura-voice-fabric lorsque le service voix est joignable.
+
+DIAGNOSTIC D'UN ANCIEN DÉPLOIEMENT
+- Si la page affiche "Accès privé", AURA_CLOUD_TOKEN à saisir, ou un badge antérieur à 2.2.1 :
+  Hostinger sert encore un ancien paquet ou un ancien processus.
+- Redéployer l'artefact aura-cloud-hostinger et redémarrer l'application.
