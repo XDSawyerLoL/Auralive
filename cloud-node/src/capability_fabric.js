@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { query } from './db.js';
 import { clamp } from './policy.js';
 import { AuraCloudWorkspace } from './cloud_workspace.js';
+import { VideoFactoryClient } from './video_factory.js';
 
 const clean = (value, limit = 4000) =>
   String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -394,6 +395,7 @@ export class CapabilityFabric {
 
   registerBuiltins() {
     const workspace = new AuraCloudWorkspace();
+    const videoFactory = new VideoFactoryClient();
 
     this.register({
       id: 'cloud.workspace.create',
@@ -454,6 +456,65 @@ export class CapabilityFabric {
       result: await workspace.remove(input),
       metrics: { cost_microunits: 0 },
     }));
+
+    this.register({
+      id: 'media.video.plan',
+      name: 'AURA autonomous short-video workflow planner',
+      transport: 'local',
+      tags: ['media', 'video', 'creative', 'script', 'subtitles', 'voice', 'render', 'plan'],
+      trust: 0.91,
+      observed_reliability: 0.9,
+      latency_ms: 10,
+      cost_microunits: 0,
+      side_effects: false,
+      risk: 'safe',
+      input_contract: { subject: 'string', script: 'string?', video_aspect: '9:16|16:9|1:1?' },
+      output_contract: { pipeline: 'array', subject: 'string', video_source: 'string' },
+      provider: 'aura-video-factory',
+    }, async (input) => ({
+      ok: true,
+      result: videoFactory.plan(input),
+      metrics: { cost_microunits: 0 },
+    }));
+
+    this.register({
+      id: 'media.video.generate',
+      name: 'AURA autonomous short-video generator',
+      transport: 'local',
+      tags: ['media', 'video', 'creative', 'script', 'subtitles', 'voice', 'render', 'generate'],
+      trust: 0.86,
+      observed_reliability: 0.82,
+      latency_ms: 120000,
+      cost_microunits: 0,
+      side_effects: true,
+      risk: 'remote-write',
+      enabled: videoFactory.enabled,
+      input_contract: {
+        subject: 'string',
+        script: 'string?',
+        video_aspect: '9:16|16:9|1:1?',
+        video_source: 'local|pexels|pixabay|coverr?',
+      },
+      output_contract: { task_id: 'string', state: 'string', plan: 'object' },
+      provider: 'aura-video-factory',
+    }, async (input) => videoFactory.create(input));
+
+    this.register({
+      id: 'media.video.status',
+      name: 'AURA short-video task status',
+      transport: 'local',
+      tags: ['media', 'video', 'status', 'verify', 'read'],
+      trust: 0.9,
+      observed_reliability: 0.86,
+      latency_ms: 800,
+      cost_microunits: 0,
+      side_effects: false,
+      risk: 'safe',
+      enabled: videoFactory.enabled,
+      input_contract: { task_id: 'string' },
+      output_contract: { task_id: 'string', state: 'number|string', videos: 'array?' },
+      provider: 'aura-video-factory',
+    }, async (input) => videoFactory.status(input?.task_id));
 
     if (this.webSubstrate) {
       this.register({
