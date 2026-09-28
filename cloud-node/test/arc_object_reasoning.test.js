@@ -134,6 +134,68 @@ test('uses a small separator-defined key to recolor blocks of a larger pattern r
   assert.equal(gridEquals(result.output, output), true);
 });
 
+
+test('learns a marker stencil from the completed exemplar inside each grid', () => {
+  const input = [
+    [0,8,0,0,0,8,0],
+    [8,1,1,0,8,1,1],
+    [0,1,0,0,0,1,0],
+    [0,0,0,0,0,0,0],
+    [4,8,4,0,0,0,0],
+    [8,1,1,0,0,0,0],
+    [4,1,4,0,0,0,0],
+  ];
+  const output = [
+    [4,8,4,0,4,8,4],
+    [8,1,1,0,8,1,1],
+    [4,1,4,0,4,1,4],
+    [0,0,0,0,0,0,0],
+    [4,8,4,0,0,0,0],
+    [8,1,1,0,0,0,0],
+    [4,1,4,0,0,0,0],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'self-template-stencil');
+  assert.equal(gridEquals(result.output, output), true);
+});
+
+test('recolors the larger diagonal orientation differently from the smaller one', () => {
+  const inputA = [
+    [5,0,0,0,5],
+    [0,5,0,5,0],
+    [0,0,5,0,0],
+    [0,0,0,5,0],
+    [0,0,0,0,5],
+  ];
+  const outputA = [
+    [8,0,0,0,2],
+    [0,8,0,2,0],
+    [0,0,8,0,0],
+    [0,0,0,8,0],
+    [0,0,0,0,8],
+  ];
+  const inputB = [
+    [0,0,0,5,0],
+    [0,0,5,0,0],
+    [5,5,0,0,0],
+    [0,0,5,0,0],
+    [0,0,0,5,0],
+  ];
+  const outputB = [
+    [0,0,0,8,0],
+    [0,0,8,0,0],
+    [2,2,0,0,0],
+    [0,0,8,0,0],
+    [0,0,0,8,0],
+  ];
+  const result = solve([
+    { input: inputA, output: outputA },
+    { input: inputB, output: outputB },
+  ], inputA);
+  assert.equal(result.inferred.program.name, 'recolor-diagonal-orientations-by-mass');
+  assert.equal(gridEquals(result.output, outputA), true);
+});
+
 test('extends a periodic pattern and learns recoloring', () => {
   const input = [
     [0,1,0],
