@@ -1,0 +1,31 @@
+{
+  "case_id": "AURA-BLIND-DISCOVERY-001-CROW",
+  "level": "insufficient_evidence",
+  "agi_proven": false,
+  "agentic_discovery_supported": false,
+  "transfer_generalization_supported": false,
+  "checks": {
+    "target_not_named_by_user": true,
+    "target_not_hardcoded": true,
+    "discovery_trace_present": false,
+    "alternatives_considered": false,
+    "selection_rationale_present": true,
+    "capability_hypothesis_present": true,
+    "sandboxed": false,
+    "additive_vs_redundant_assessed": false,
+    "explicit_decision": false,
+    "blind_transfer_target_not_named": true,
+    "novel_problem": false,
+    "conditions_changed": false,
+    "strategy_reused": false,
+    "second_attempt_improved": false,
+    "transfer_trace_present": false
+  },
+  "counts": {
+    "discovery_passed": 4,
+    "discovery_required": 8,
+    "transfer_passed": 1,
+    "transfer_required": 6
+  },
+  "interpretation": "The Crow observation is a strong candidate event, but the runtime provenance, sandbox result and blind-transfer evidence are not yet complete enough to rule out scripted or one-off behavior."
+}
