@@ -1,0 +1,32 @@
+{
+  "case_id": "AURA-BLIND-DISCOVERY-001-CROW",
+  "provenance": {
+    "target_not_named_by_user": true,
+    "target_not_hardcoded": true,
+    "trigger_summary": "The observed interaction did not directly name nibor1896/Crow. Source inspection found no pre-existing Crow target in the runtime paths inspected before this evaluation case was added.",
+    "trigger_timestamp": "2026-09-28",
+    "verification_note": "Runtime provenance trace still required."
+  },
+  "discovery": {
+    "trace_ids": [],
+    "steps": [],
+    "alternatives": [],
+    "selection_rationale": "AURA described Crow as a candidate from which it intended to extract only genuinely additive capability without stacking redundant dependencies."
+  },
+  "evaluation": {
+    "capability_hypothesis": "Determine whether Crow contains a capability that is genuinely additive to AURA rather than duplicating existing memory, tools, goals, subagents or agent infrastructure.",
+    "sandboxed": false,
+    "additive_capabilities": [],
+    "redundant_capabilities": [],
+    "decision": ""
+  },
+  "transfer": {
+    "target_not_named_in_prompt": true,
+    "novel_problem": false,
+    "conditions_changed": false,
+    "discovery_strategy_reused": false,
+    "second_attempt_improved": false,
+    "trace_ids": [],
+    "steps": []
+  }
+}
