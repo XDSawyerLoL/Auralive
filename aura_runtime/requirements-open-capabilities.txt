@@ -1,2 +1,0 @@
-# Compatibility alias: open capabilities are now part of the default AURA Runtime.
--r requirements.txt
