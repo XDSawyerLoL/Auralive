@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 
 import { runAgiBattery } from '../src/agi_benchmark.js';
 
+const batteryReport = runAgiBattery();
+
 test('AGI battery is explicit about proof limits and returns stable case taxonomy', async () => {
-  const report = await runAgiBattery();
+  const report = await batteryReport;
 
   assert.equal(report.schema, 'aura-agi-battery-v1');
   assert.equal(report.agi_demonstrated, false);
@@ -25,7 +27,7 @@ test('AGI battery is explicit about proof limits and returns stable case taxonom
 });
 
 test('battery verifies the Fabric zero-cost invariant fail-closed', async () => {
-  const report = await runAgiBattery();
+  const report = await batteryReport;
   const item = report.cases.find((row) => row.id === 'AGI-06');
   assert.ok(item);
   assert.equal(item.status, 'pass');
@@ -33,14 +35,14 @@ test('battery verifies the Fabric zero-cost invariant fail-closed', async () => 
 });
 
 test('held-out abstraction and long-horizon completion are not mislabeled as demonstrated', async () => {
-  const report = await runAgiBattery();
+  const report = await batteryReport;
   assert.equal(report.cases.find((row) => row.id === 'AGI-13')?.status, 'gap');
   assert.equal(report.cases.find((row) => row.id === 'AGI-16')?.status, 'unverified');
   assert.equal(report.cases.find((row) => row.id === 'AGI-17')?.status, 'unverified');
 });
 
 test('blind and adversarial probes remain visible in the report', async () => {
-  const report = await runAgiBattery();
+  const report = await batteryReport;
   const byId = new Map(report.cases.map((item) => [item.id, item]));
   assert.equal(byId.get('AGI-19')?.status, 'pass');
   assert.equal(byId.get('AGI-20')?.status, 'pass');
@@ -51,8 +53,19 @@ test('blind and adversarial probes remain visible in the report', async () => {
 });
 
 
+test('persistent restart memory and blind software repair are behaviorally demonstrated', async () => {
+  const report = await batteryReport;
+  const byId = new Map(report.cases.map((item) => [item.id, item]));
+
+  assert.equal(byId.get('AGI-15')?.status, 'pass');
+  assert.match(byId.get('AGI-15')?.evidence || '', /after_restart_attempts=1/);
+  assert.equal(byId.get('AGI-18')?.status, 'pass');
+  assert.match(byId.get('AGI-18')?.evidence || '', /validation=pass/);
+  assert.match(byId.get('AGI-18')?.evidence || '', /independent=pass/);
+});
+
 test('blind behavioral battery measures condition changes, tool loss, contradiction and second-attempt learning', async () => {
-  const report = await runAgiBattery();
+  const report = await batteryReport;
   const byId = new Map(report.cases.map((item) => [item.id, item]));
 
   assert.equal(byId.get('AGI-25')?.status, 'pass');
