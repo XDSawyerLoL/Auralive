@@ -21,14 +21,9 @@ test('AURA operational consciousness interface exposes core product surfaces', (
 
 test('dashboard is wired to live AURA APIs', () => {
   for (const endpoint of [
-    '/api/kernel/soul',
-    '/api/kernel/intentions',
-    '/api/kernel/lessons',
-    '/api/kernel/activity',
-    '/api/kernel/work',
-    '/api/kernel/attention',
+    '/api/dashboard/public',
     '/api/chat',
-    '/api/command/status',
+    '/api/capabilities',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(endpoint), true, endpoint);
   }
@@ -192,10 +187,26 @@ test('living visualization uses calmer motion and a 30fps stability cap', () => 
 });
 
 
-test('dashboard refresh falls back to redacted public kernel state', () => {
-  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/auth\/session'\)/);
-  assert.match(DASHBOARD_SCRIPT, /privateView\?'\/api\/kernel\/soul':'\/api\/kernel\/public'/);
-  assert.match(DASHBOARD_SCRIPT, /Détails privés/);
+test('dashboard renders the public operational projection without locked placeholders', () => {
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/dashboard\/public'\)/);
+  assert.equal(DASHBOARD_SCRIPT.includes('/api/auth/session'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('Détails privés'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('Mémoire privée'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('Travail détaillé privé'), false);
+});
+
+
+
+test('dashboard exposes autonomous capability scouting publicly', () => {
+  for (const token of [
+    'Veille autonome',
+    'id="scoutMeta"',
+    'id="scoutList"',
+    'renderScout(scoutStatus)',
+    'Sans prompt',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token) || DASHBOARD_SCRIPT.includes(token), true, token);
+  }
 });
 
 test('dashboard exposes operational command-center state instead of decorative autonomy', () => {
