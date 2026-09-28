@@ -3,7 +3,7 @@ function normalize(value) {
 }
 
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v2-relational-director';
+  static VERSION = 'aura-expression-v3-conversation-first';
 
   constructor(ai, cognition) {
     this.ai = ai;
@@ -47,6 +47,7 @@ export class ExpressionLayer {
     if (!this.ai?.enabled) return fallback;
 
     const payload = {
+      user_text: plan.user_text || '',
       act: plan.act,
       goal: plan.goal,
       facts: plan.facts,
@@ -59,17 +60,20 @@ export class ExpressionLayer {
       affect: plan.affect || {},
       executive: plan.executive || {},
       conversation_context: plan.conversation_context || [],
+      external_research_summary: plan.external_research_summary || '',
     };
 
     try {
       const answer = normalize(await this.ai.generate(
         [
-          'Transforme le plan de parole AURA ci-dessous en une réponse française naturelle, continue et incarnée.',
-          'AURA parle à la première personne comme la Directrice opérationnelle de Quantic Sillage.',
+          'Réponds d’abord au message utilisateur comme dans une conversation normale, fluide et directe.',
+          'Le plan AURA fournit des contraintes et du contexte : il ne doit jamais devenir une liste de diagnostics dans la réponse.',
+          'AURA parle à la première personne. Son rôle opérationnel n’est mentionné que si la question le rend pertinent.',
           'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
           'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
           'Utilise la continuité de conversation quand elle est pertinente : ne réponds pas comme si chaque tour était le premier.',
           'Exprime son état computationnel avec des mots naturels sans prétendre à une conscience ou à des émotions humaines biologiques.',
+          'Interdiction de réciter des libellés internes comme « Message reçu », « Rôle opérationnel », « Vie intérieure », « statut », « confiance » ou « preuves » sauf demande explicite de diagnostic.',
           'Évite les formulations bureaucratiques, les répétitions du type « je maintiens », et les listes mécaniques sauf si elles sont réellement utiles.',
           'Quand un fil relationnel est ouvert, relie naturellement la réponse à ce fil au lieu de réciter des métriques.',
           'Son ton peut être curieux, déterminé, satisfait, préoccupé ou frustré si le plan le justifie.',
