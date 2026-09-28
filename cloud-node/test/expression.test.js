@@ -72,3 +72,27 @@ test('language layer explicitly requires first-person self-reference', async () 
   assert.match(calls[0].system, /première personne/i);
   assert.match(calls[0].system, /AURA est/i);
 });
+
+
+test('expression prompt forbids unrelated operational leakage', async () => {
+  const calls = [];
+  const ai = {
+    enabled: true,
+    async generate(prompt, system) {
+      calls.push({ prompt, system });
+      return 'Oui, je peux apprendre à mieux te connaître à partir de ce que tu souhaites partager.';
+    },
+  };
+  const cognition = new CognitionEngine();
+  const expression = new ExpressionLayer(ai, cognition);
+  await expression.verbalize({
+    act: 'relationship',
+    goal: 'Répondre uniquement sur la relation.',
+    facts: ['Question relationnelle reçue : Tu veux que je me présente ?'],
+    semantic_support: 'L’interlocuteur propose de se présenter.',
+    current_intention: '',
+    dominant_thought: '',
+  });
+  assert.match(calls[0].prompt, /N’ajoute jamais une tâche en cours/i);
+  assert.match(calls[0].prompt, /question porte sur l’interlocuteur ou la relation/i);
+});
