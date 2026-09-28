@@ -32,6 +32,14 @@ jobs:
         run: npm run check
       - name: Policy tests
         run: npm test
+      - name: Run falsifiable AGI capability battery
+        run: npm run audit:agi -- --json=agi-audit-report.json
+      - name: Upload AGI audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-agi-audit
+          path: cloud-node/agi-audit-report.json
+          if-no-files-found: error
       - name: Diagnostic startup smoke test
         shell: bash
         env:
