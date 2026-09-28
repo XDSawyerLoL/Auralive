@@ -18,7 +18,7 @@ test('expression falls back to AURA-native wording without an LLM', async () => 
   });
 
   const answer = await expression.verbalize(plan);
-  assert.match(answer, /Tester le nouveau noyau/);
+  assert.match(answer, /Valider les tests/);
 });
 
 test('language model receives an already decided speech plan', async () => {
@@ -47,5 +47,5 @@ test('language model receives an already decided speech plan', async () => {
   assert.match(calls[0].system, /voix d’AURA|voix d'AURA/i);
   assert.match(calls[0].prompt, /Tu n’as aucun droit de changer les faits/i);
   assert.match(calls[0].prompt, /continuité de conversation/i);
-  assert.match(calls[0].prompt, /Directrice opérationnelle de Quantic Sillage/i);
+  assert.match(calls[0].prompt, /rôle opérationnel n’est mentionné que si la question le rend pertinent/i);
 });
