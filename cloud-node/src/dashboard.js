@@ -271,7 +271,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     </section>
 
     <section class="panel map-panel">
-      <div class="panel-head"><span>◉</span><div class="panel-title">Champ neuronal d’activité</div><div class="spacer"></div><div class="map-toolbar"><span class="map-stats" id="mapStats">réseau en formation</span><button id="refreshMap">Recalculer</button></div></div>
+      <div class="panel-head"><span>◉</span><div class="panel-title">Carte d’intérêt · champ neuronal</div><div class="spacer"></div><div class="map-toolbar"><span class="map-stats" id="mapStats">réseau en formation</span><button id="refreshMap">Recalculer</button></div></div>
       <div class="map-wrap" id="livingMap">
         <canvas id="nebulaFx" aria-hidden="true"></canvas>
         <canvas id="particleFx" aria-hidden="true"></canvas>
