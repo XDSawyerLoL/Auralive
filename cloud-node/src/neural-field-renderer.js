@@ -76,6 +76,30 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       ctx.beginPath();ctx.arc(star.x*w,star.y*h,star.r,0,Math.PI*2);ctx.fill();
     }
   }
+  function drawClusterNebula(t){
+    const ctx=state.ctx;
+    if(!state.field)return;
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(const node of state.field.nodes){
+      if(node.id==='aura')continue;
+      const activity=Math.max(.04,Math.min(1,Number(node.activity)||0));
+      if(activity<.22)continue;
+      const p=px(node);
+      const c=color(node.cluster,node.status);
+      const breathe=.84+.16*Math.sin(t*.00045+hash01(node.id)*Math.PI*2);
+      const radius=(42+activity*78)*breathe;
+      const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
+      g.addColorStop(0,rgba(c,.025+activity*.035));
+      g.addColorStop(.26,rgba(c,.018+activity*.025));
+      g.addColorStop(.64,rgba(c,.006+activity*.012));
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawSynapses(t){
     const ctx=state.ctx;
     for(const edge of state.field?.links||[]){
@@ -110,17 +134,49 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     if(node.id==='aura')return;
     const ctx=state.ctx,c=color(node.cluster,node.status);
     const intensity=Math.max(.08,Math.min(1,Number(node.activity)||0));
-    const count=node.role==='product'?2:3+Math.round(intensity*4);
+    const role=String(node.role||'capability');
+    const count=role==='product'?2:4+Math.round(intensity*5);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
     for(let i=0;i<count;i++){
-      const angle=hash01(node.id+':branch:'+i)*Math.PI*2+Math.sin(t*.00012+i)*.05;
-      const length=(node.role==='product'?10:16)+hash01(node.id+':len:'+i)*24+intensity*12;
-      const x=p.x+Math.cos(angle)*length,y=p.y+Math.sin(angle)*length*.78;
-      ctx.strokeStyle=rgba(c,.08+intensity*.16);ctx.lineWidth=.45+intensity*.45;
+      const seed=hash01(node.id+':branch:'+i);
+      const angle=seed*Math.PI*2+Math.sin(t*.00010+i*1.7)*.06;
+      const length=(role==='product'?12:22)+hash01(node.id+':len:'+i)*32+intensity*20;
+      const x=p.x+Math.cos(angle)*length;
+      const y=p.y+Math.sin(angle)*length*.78;
+      const cx1=p.x+Math.cos(angle+.22)*length*.42;
+      const cy1=p.y+Math.sin(angle-.18)*length*.34;
+      const cx2=p.x+Math.cos(angle-.16)*length*.74;
+      const cy2=p.y+Math.sin(angle+.15)*length*.60;
+      ctx.strokeStyle=rgba(c,.10+intensity*.20);
+      ctx.lineWidth=.50+intensity*.55;
+      ctx.shadowBlur=3+intensity*5;
+      ctx.shadowColor=rgba(c,.28+intensity*.30);
       ctx.beginPath();ctx.moveTo(p.x,p.y);
-      const cx=p.x+Math.cos(angle+.25)*length*.55,cy=p.y+Math.sin(angle-.18)*length*.42;
-      ctx.quadraticCurveTo(cx,cy,x,y);ctx.stroke();
-      ctx.fillStyle=rgba(c,.24+intensity*.34);ctx.beginPath();ctx.arc(x,y,1.1+intensity*1.4,0,Math.PI*2);ctx.fill();
+      ctx.bezierCurveTo(cx1,cy1,cx2,cy2,x,y);ctx.stroke();
+
+      if(role!=='product'){
+        const forkAngle=angle+(hash01(node.id+':fork:'+i)>.5?.38:-.38);
+        const forkLen=length*(.26+hash01(node.id+':forklen:'+i)*.20);
+        const fx=x+Math.cos(forkAngle)*forkLen;
+        const fy=y+Math.sin(forkAngle)*forkLen*.75;
+        ctx.strokeStyle=rgba(c,.06+intensity*.13);
+        ctx.lineWidth=.35+intensity*.30;
+        ctx.beginPath();ctx.moveTo(x,y);
+        ctx.quadraticCurveTo(
+          x+Math.cos(forkAngle+.14)*forkLen*.48,
+          y+Math.sin(forkAngle-.12)*forkLen*.38,
+          fx,fy
+        );
+        ctx.stroke();
+        ctx.fillStyle=rgba(c,.20+intensity*.34);
+        ctx.beginPath();ctx.arc(fx,fy,.9+intensity*1.25,0,Math.PI*2);ctx.fill();
+      }
+
+      ctx.fillStyle=rgba(c,.34+intensity*.40);
+      ctx.beginPath();ctx.arc(x,y,1.2+intensity*1.6,0,Math.PI*2);ctx.fill();
     }
+    ctx.restore();
   }
   function drawNeuron(node,t){
     const ctx=state.ctx,p=px(node);
@@ -166,6 +222,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     drawBackground(t);
     if(state.field){
       if(!state.reduced&&dt) stepNeuralField(state.field);
+      drawClusterNebula(t);
       drawSynapses(t);
       const ordered=[...state.field.nodes].sort((a,b)=>(a.id==='aura'?1:0)-(b.id==='aura'?1:0));
       ordered.forEach(node=>drawNeuron(node,t));
