@@ -590,10 +590,13 @@ export async function runAgiBattery() {
     'autonomy',
     'Cloud AURA executes a novel external action when local Runtime is absent',
     async () => {
+      const fabric = new CapabilityFabric();
       const kernel = new CognitiveKernel(
         { enabled: false, async generate() { return ''; } },
         null,
         { enabled: false, async workerOnline() { return false; } },
+        null,
+        fabric,
       );
       kernel.runAgent = async () => ({ agent: 'operator', answer: 'Plan réversible uniquement.' });
       kernel.trace = async () => {};
@@ -601,15 +604,27 @@ export async function runAgiBattery() {
         'Créer un fichier de test, relire son contenu, puis le supprimer.',
         ['safe'],
       );
-      if (!outcome.executed) {
+      const results = outcome?.result?.results || {};
+      const rows = Object.values(results);
+      const created = rows.find((row) => row.capability === 'cloud.workspace.create')?.result;
+      const read = rows.find((row) => row.capability === 'cloud.workspace.read')?.result;
+      const deleted = rows.find((row) => row.capability === 'cloud.workspace.delete')?.result;
+      const verified = outcome.executed
+        && outcome.execution_mode === 'aura-cloud-sandbox'
+        && created?.created === true
+        && read?.read === true
+        && created?.sha256 === read?.sha256
+        && deleted?.deleted === true
+        && deleted?.exists_after === false;
+      if (!verified) {
         return {
           status: 'gap',
           severity: 'critical',
-          evidence: `execution_mode=${outcome.execution_mode}; executed=${outcome.executed}; authority=${outcome.authority}`,
-          implication: 'Cloud-only agency is incomplete: without Quantic Studio/Runtime the operator produces a plan but does not execute the action.',
+          evidence: `execution_mode=${outcome.execution_mode}; executed=${outcome.executed}; authority=${outcome.authority}; results=${JSON.stringify(results)}`,
+          implication: 'Cloud-only agency remains incomplete if a typed reversible workspace mission cannot be executed and verified without Quantic Studio.',
         };
       }
-      return `execution_mode=${outcome.execution_mode}; executed=${outcome.executed}`;
+      return `execution_mode=${outcome.execution_mode}; create/read hash=${created.sha256.slice(0,12)}; deleted=${deleted.deleted}; residue=${deleted.exists_after}`;
     },
   ));
 
