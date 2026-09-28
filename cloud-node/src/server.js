@@ -597,16 +597,41 @@ app.post(
 
 app.get('/api/voice/status', async (request) => {
   const privateView = isPrivate(request);
+  const discovery = await voiceStudio.discover().catch((error) => ({
+    ok: false,
+    reason: String(error?.message || error).slice(0, 300),
+  }));
+  const fabricReady = Boolean(
+    voiceStudio.enabled
+    && discovery?.ok
+    && discovery?.capabilities?.ready !== false
+  );
   return {
     profile: 'mairaiy',
-    ready: Boolean(voiceStudio.enabled),
-    primary: voiceStudio.enabled ? 'aura-voice-fabric-historical-aoede' : 'offline',
+    ready: Boolean(fabricReady || cloudVoice.enabled),
+    primary: fabricReady
+      ? 'aura-voice-fabric-historical-aoede'
+      : (cloudVoice.enabled ? 'direct-gemini-aoede' : 'offline'),
     strict_identity: true,
     expected_engine_voice: 'aoede',
     expected_language: 'fr-fr',
     historical_profile: 'aura-live-2.0.7-natural',
     generic_fallback_allowed: false,
+    fabric_ready: fabricReady,
+    fabric_configured: Boolean(voiceStudio.enabled),
+    fabric_reason: fabricReady
+      ? ''
+      : String(
+          discovery?.capabilities?.ready === false
+            ? 'provider-not-ready'
+            : (discovery?.reason || '')
+        ).slice(0, 300),
     fabric: voiceStudio.diagnostic({ publicView: !privateView }),
+    direct_gemini: privateView ? cloudVoice.diagnostic() : {
+      enabled: Boolean(cloudVoice.enabled),
+      engine: cloudVoice.enabled ? 'gemini-cloud-tts' : 'unavailable',
+      voice: 'Aoede',
+    },
   };
 });
 
@@ -619,36 +644,57 @@ app.post('/api/voice/speak', async (request, reply) => {
     return reply.code(401).send({ error: 'Ticket vocal AURA invalide ou expiré' });
   }
 
-  if (!voiceStudio.enabled) {
-    return reply.code(503).send({
-      error: 'La voix historique Mairaiy Aoede est indisponible. Aucun autre timbre ne sera utilisé.',
-      code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
-      fabric: voiceStudio.diagnostic({ publicView: true }),
-      fallback_blocked: true,
-      expected_engine_voice: 'aoede',
-      expected_language: 'fr-fr',
-    });
+  const errors = [];
+
+  if (voiceStudio.enabled) {
+    try {
+      const discovery = await voiceStudio.discover();
+      if (!discovery?.ok || discovery?.capabilities?.ready === false) {
+        throw new Error(
+          discovery?.reason
+          || discovery?.capabilities?.reason
+          || 'service Mairaiy distant non prêt'
+        );
+      }
+      const audio = await voiceStudio.synthesize(text, request.body || {});
+      if (
+        String(audio?.engine_voice || '').toLowerCase() !== 'aoede'
+        || String(audio?.language || '').toLowerCase() !== 'fr-fr'
+      ) {
+        throw new Error('Identité vocale Mairaiy Aoede non certifiée');
+      }
+      return audio;
+    } catch (error) {
+      errors.push(`voice-fabric: ${String(error?.message || error)}`);
+    }
   }
 
-  try {
-    const audio = await voiceStudio.synthesize(text, request.body || {});
-    if (
-      String(audio?.engine_voice || '').toLowerCase() !== 'aoede'
-      || String(audio?.language || '').toLowerCase() !== 'fr-fr'
-    ) {
-      throw new Error('Identité vocale Mairaiy Aoede non certifiée');
+  // The only permitted fallback is the same historical Gemini/Aoede identity.
+  // No browser, Piper, Kokoro, Windows or alternate Gemini voice is accepted.
+  if (cloudVoice.enabled) {
+    try {
+      const audio = await cloudVoice.synthesize(text, request.body || {});
+      if (
+        String(audio?.engine_voice || '').toLowerCase() !== 'aoede'
+        || String(audio?.language || '').toLowerCase() !== 'fr-fr'
+      ) {
+        throw new Error('Identité vocale directe Aoede non certifiée');
+      }
+      return audio;
+    } catch (error) {
+      errors.push(`direct-gemini-aoede: ${String(error?.message || error)}`);
     }
-    return audio;
-  } catch (error) {
-    return reply.code(503).send({
-      error: `Mairaiy Aoede indisponible: ${String(error?.message || error)}`,
-      code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
-      fabric: voiceStudio.diagnostic({ publicView: true }),
-      fallback_blocked: true,
-      expected_engine_voice: 'aoede',
-      expected_language: 'fr-fr',
-    });
   }
+
+  return reply.code(503).send({
+    error: errors.join(' | ') || 'La voix historique Mairaiy Aoede est indisponible.',
+    code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
+    fabric: voiceStudio.diagnostic({ publicView: true }),
+    direct_gemini_ready: Boolean(cloudVoice.enabled),
+    fallback_blocked: true,
+    expected_engine_voice: 'aoede',
+    expected_language: 'fr-fr',
+  });
 });
 
 app.post('/api/image/generate', async (request, reply) => {
