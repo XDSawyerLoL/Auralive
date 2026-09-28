@@ -187,92 +187,223 @@ function renderActivity(rows){
     return '<div class="activity-row"><div class="activity-time">'+escapeHtml(fmtTime(r.created_at))+'</div><div class="activity-title">'+escapeHtml(r.title||r.content||r.kind)+'</div><div class="activity-kind">'+escapeHtml(r.kind||'activité')+'</div></div>';
   }).join('');
 }
-const nodeLayout={
-  stability:{x:205,y:190,color:'#60e6ad'},
-  learning:{x:455,y:112,color:'#a478ff'},
-  studio:{x:700,y:190,color:'#6da7ff'},
-  horizon:{x:755,y:355,color:'#ffc96a'},
-  automation:{x:650,y:500,color:'#59e0ef'},
-  memory:{x:450,y:535,color:'#ffc96a'},
-  evolution:{x:250,y:500,color:'#f178d6'},
-  watch:{x:145,y:355,color:'#6da7ff'}
+function selfText(value){
+  return String(value||'')
+    .replace(/Je viens de recevoir un signal direct\s*:/gi,'J’ai intégré un nouveau contexte interne :')
+    .replace(/Je le rattache à mon état et à mes intentions avant de répondre\.?/gi,'Je l’évalue avant de décider s’il devient une intention.')
+    .replace(/ce qu’AURA peut/gi,'ce que je peux')
+    .replace(/AURA doit/gi,'je dois')
+    .replace(/AURA peut/gi,'je peux')
+    .replace(/AURA veut/gi,'je veux')
+    .replace(/AURA est/gi,'je suis')
+    .replace(/pour AURA/gi,'pour moi')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+const neuralGroups={
+  regulation:{x:260,y:205,color:'#60e6ad',label:'Régulation'},
+  cognition:{x:450,y:145,color:'#b08cff',label:'Cognition'},
+  perception:{x:650,y:220,color:'#59e0ef',label:'Perception'},
+  memory:{x:260,y:435,color:'#ffc96a',label:'Mémoire'},
+  agency:{x:650,y:430,color:'#f178d6',label:'Agentivité'},
+  infrastructure:{x:455,y:525,color:'#6da7ff',label:'Infrastructure'},
+  ecosystem:{x:450,y:325,color:'#9a86ff',label:'Écosystème'}
 };
+function nodeSeed(value){
+  let h=2166136261;
+  const s=String(value||'');
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}
+  return (h>>>0)/4294967295;
+}
+function neuralLayout(rows){
+  const grouped={};
+  rows.forEach(function(n){const g=n.group||'cognition';(grouped[g]||(grouped[g]=[])).push(n);});
+  const layout={};
+  Object.keys(grouped).forEach(function(group){
+    const items=grouped[group];
+    const meta=neuralGroups[group]||neuralGroups.cognition;
+    if(group==='ecosystem'){
+      const total=Math.max(1,items.length);
+      items.forEach(function(n,i){
+        const angle=(-Math.PI*.86)+(i/(Math.max(total-1,1)))*Math.PI*1.72;
+        const jitter=(nodeSeed(n.id)-.5)*.11;
+        layout[n.id]={
+          x:450+Math.cos(angle+jitter)*355,
+          y:325+Math.sin(angle+jitter)*245,
+          color:meta.color,
+          group:group
+        };
+      });
+      return;
+    }
+    const total=Math.max(1,items.length);
+    items.forEach(function(n,i){
+      const seed=nodeSeed(n.id);
+      const angle=(i/total)*Math.PI*2+(seed-.5)*.85;
+      const radius=total===1?0:34+Math.min(38,total*7)+(seed*10);
+      layout[n.id]={
+        x:meta.x+Math.cos(angle)*radius,
+        y:meta.y+Math.sin(angle)*radius*.72,
+        color:meta.color,
+        group:group
+      };
+    });
+  });
+  Object.keys(layout).forEach(function(id){
+    layout[id].x=Math.max(70,Math.min(830,layout[id].x));
+    layout[id].y=Math.max(70,Math.min(580,layout[id].y));
+  });
+  return layout;
+}
 function renderMap(data){
   if(!data || !Array.isArray(data.nodes)) return;
   lastAttention=data;
-  $('focusStatement').textContent=data.focus_statement||'Aucune intention dominante.';
+  $('focusStatement').textContent=selfText(data.focus_statement)||'Aucune intention dominante.';
+  const mapStats=$('mapStats');
+  if(mapStats){
+    const stats=data.stats||{};
+    mapStats.textContent=(stats.nodes||data.nodes.length)+' nœuds · '+(stats.synapses||(data.links||[]).length)+' synapses';
+  }
   const svgNS='http://www.w3.org/2000/svg';
   const links=$('flowLinks'); const nodes=$('interestNodes'); const pulses=$('energyPulses');
   links.innerHTML=''; nodes.innerHTML=''; pulses.innerHTML='';
+  const layout=neuralLayout(data.nodes);
+  const nodeById={};data.nodes.forEach(function(n){nodeById[n.id]=n;});
 
-  const visibleNodes=data.nodes.filter(function(n){return Boolean(nodeLayout[n.id]);});
-  visibleNodes.forEach(function(n,i){
-    [1,2].forEach(function(offset){
-      const other=visibleNodes[(i+offset)%visibleNodes.length];
-      if(!other || other===n) return;
-      if(offset===2 && i%2) return;
-      const a=nodeLayout[n.id]; const b=nodeLayout[other.id];
-      const web=document.createElementNS(svgNS,'path');
-      const bend=(i%2===0?1:-1)*(18+offset*8);
-      const mx=(a.x+b.x)/2+(b.y-a.y)*.035*bend/8;
-      const my=(a.y+b.y)/2-(b.x-a.x)*.035*bend/8;
-      web.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
-      web.setAttribute('class','web-link');
-      web.setAttribute('fill','none');
-      web.setAttribute('stroke',offset===1?a.color:'#7b78c8');
-      web.setAttribute('stroke-width',offset===1?'1.15':'.75');
-      web.setAttribute('opacity',offset===1?'.16':'.085');
-      web.setAttribute('stroke-dasharray',offset===1?'2 8':'1 12');
-      links.appendChild(web);
-    });
+  // Lobes: chaque groupe est un territoire cognitif souple plutôt qu’un anneau fixe.
+  Object.keys(neuralGroups).forEach(function(group){
+    if(group==='ecosystem') return;
+    const groupNodes=data.nodes.filter(function(n){return (n.group||'cognition')===group;});
+    if(!groupNodes.length)return;
+    const meta=neuralGroups[group];
+    const halo=document.createElementNS(svgNS,'ellipse');
+    halo.setAttribute('cx',String(meta.x));halo.setAttribute('cy',String(meta.y));
+    halo.setAttribute('rx',String(64+groupNodes.length*9));halo.setAttribute('ry',String(42+groupNodes.length*6));
+    halo.setAttribute('fill',meta.color);halo.setAttribute('fill-opacity','.018');
+    halo.setAttribute('stroke',meta.color);halo.setAttribute('stroke-opacity','.09');
+    halo.setAttribute('stroke-width','.8');halo.setAttribute('stroke-dasharray','2 12');
+    links.appendChild(halo);
+  });
+
+  // Synapses sémantiques fournies par le noyau.
+  (data.links||[]).forEach(function(edge,index){
+    const a=layout[edge.source],b=layout[edge.target];if(!a||!b)return;
+    const strength=Math.max(.12,Math.min(1,Number(edge.strength)||.5));
+    const bend=(nodeSeed(edge.source+'>'+edge.target)-.5)*80;
+    const mx=(a.x+b.x)/2+(b.y-a.y)*.06+bend*.25;
+    const my=(a.y+b.y)/2-(b.x-a.x)*.06-bend*.18;
+    const path=document.createElementNS(svgNS,'path');
+    path.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
+    path.setAttribute('class','web-link neural-synapse');
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke',a.color);
+    path.setAttribute('stroke-width',String(.55+strength*2.1));
+    path.setAttribute('opacity',String(.10+strength*.34));
+    path.setAttribute('stroke-dasharray',edge.kind==='learning-loop'?'6 8':edge.kind==='verification'?'2 7':'1.5 10');
+    links.appendChild(path);
+    const source=nodeById[edge.source],target=nodeById[edge.target];
+    if(strength>.6 || source?.dominant || target?.dominant){
+      const pulse=document.createElementNS(svgNS,'path');
+      pulse.setAttribute('class','energy-pulse');
+      pulse.setAttribute('d',path.getAttribute('d'));
+      pulse.setAttribute('stroke',b.color||a.color);
+      pulse.setAttribute('stroke-width',String(.8+strength*1.2));
+      pulse.setAttribute('stroke-dasharray','2 24');
+      pulse.setAttribute('opacity',String(.28+strength*.42));
+      pulse.style.animationDuration=String(6.4-strength*2.8)+'s';
+      pulse.style.animationDelay=String(-index*.31)+'s';
+      pulses.appendChild(pulse);
+    }
+  });
+
+  // Synapses locales supplémentaires: elles donnent une topologie de réseau
+  // sans inventer de nouvelles capacités.
+  Object.keys(neuralGroups).forEach(function(group){
+    const groupNodes=data.nodes.filter(function(n){return (n.group||'cognition')===group && layout[n.id];});
+    for(let i=0;i<groupNodes.length-1;i++){
+      const a=layout[groupNodes[i].id],b=layout[groupNodes[i+1].id];
+      const line=document.createElementNS(svgNS,'path');
+      const mx=(a.x+b.x)/2, my=(a.y+b.y)/2-12;
+      line.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
+      line.setAttribute('fill','none');line.setAttribute('stroke',a.color);
+      line.setAttribute('stroke-width','.65');line.setAttribute('opacity','.10');
+      line.setAttribute('stroke-dasharray','1 13');links.appendChild(line);
+    }
   });
 
   data.nodes.forEach(function(n){
-    const pos=nodeLayout[n.id]; if(!pos) return;
-    const intensity=Math.max(.18,Math.min(1,Number(n.score)||0));
-    const line=document.createElementNS(svgNS,'path');
-    const midX=(450+pos.x)/2+(pos.y-325)*.09;
-    const midY=(325+pos.y)/2-(pos.x-450)*.07;
-    line.setAttribute('d','M 450 325 Q '+midX+' '+midY+' '+pos.x+' '+pos.y);
-    line.setAttribute('class','core-link');
-    line.setAttribute('fill','none'); line.setAttribute('stroke',pos.color);
-    line.setAttribute('stroke-width',String(1.2+intensity*3.8));
-    line.setAttribute('opacity',String(.16+intensity*.54));
-    line.setAttribute('stroke-dasharray',n.dominant?'0':(n.trend==='rising'?'7 8':'3 11'));
-    if(n.dominant) line.setAttribute('filter','url(#glow)');
-    links.appendChild(line);
+    const pos=layout[n.id];if(!pos)return;
+    const intensity=Math.max(.10,Math.min(1,Number(n.score)||0));
+    const r=11+intensity*12;
 
-    const pulse=document.createElementNS(svgNS,'path');
-    pulse.setAttribute('class','energy-pulse');
-    pulse.setAttribute('d',line.getAttribute('d'));
-    pulse.setAttribute('stroke',pos.color);
-    pulse.setAttribute('stroke-width',String(1.1+intensity*1.5));
-    pulse.setAttribute('stroke-dasharray',n.dominant?'3 17':'2 22');
-    pulse.setAttribute('opacity',String(.40+intensity*.46));
-    pulse.style.animationDuration=String(5.8-intensity*2.2)+'s';
-    pulse.style.animationDelay=String(-intensity*2.7)+'s';
-    $('energyPulses').appendChild(pulse);
+    // Connexion au noyau uniquement pour les neurones réellement actifs.
+    if(intensity>.34 || n.dominant){
+      const line=document.createElementNS(svgNS,'path');
+      const midX=(450+pos.x)/2+(pos.y-325)*.055;
+      const midY=(325+pos.y)/2-(pos.x-450)*.045;
+      line.setAttribute('d','M 450 325 Q '+midX+' '+midY+' '+pos.x+' '+pos.y);
+      line.setAttribute('class','core-link');
+      line.setAttribute('fill','none');line.setAttribute('stroke',pos.color);
+      line.setAttribute('stroke-width',String(.5+intensity*2.4));
+      line.setAttribute('opacity',String(.06+intensity*.32));
+      line.setAttribute('stroke-dasharray',n.dominant?'0':'3 13');
+      if(n.dominant)line.setAttribute('filter','url(#glow)');
+      links.appendChild(line);
+    }
 
     const g=document.createElementNS(svgNS,'g');
-    const scale=.78+intensity*.58;
+    const scale=.84+intensity*.35;
     g.setAttribute('class','aura-node');
     g.setAttribute('data-node-id',n.id);
     g.setAttribute('data-base-x',String(pos.x));
     g.setAttribute('data-base-y',String(pos.y));
     g.setAttribute('data-scale',String(scale));
-    g.setAttribute('data-phase',String((n.id.length*0.73)+(intensity*2.4)));
+    g.setAttribute('data-phase',String((nodeSeed(n.id)*6.2)+(intensity*2.4)));
     g.setAttribute('transform','translate('+pos.x+' '+pos.y+') scale('+scale+')');
-    const halo=document.createElementNS(svgNS,'circle'); halo.setAttribute('r',String(35+intensity*16)); halo.setAttribute('fill',pos.color); halo.setAttribute('opacity',String(.035+intensity*.07)); halo.setAttribute('filter','url(#soft)');
-    const orbit=document.createElementNS(svgNS,'ellipse'); orbit.setAttribute('rx','43'); orbit.setAttribute('ry','18'); orbit.setAttribute('fill','none'); orbit.setAttribute('stroke',pos.color); orbit.setAttribute('opacity',String(.18+intensity*.34)); orbit.setAttribute('transform','rotate('+(n.id.length*13%60-30)+')');
-    const circle=document.createElementNS(svgNS,'circle'); circle.setAttribute('r','24'); circle.setAttribute('fill',pos.color); circle.setAttribute('fill-opacity',String(.17+intensity*.25)); circle.setAttribute('stroke',pos.color); circle.setAttribute('stroke-width',n.dominant?'2.2':'1.2'); circle.setAttribute('filter','url(#glow)');
-    const core=document.createElementNS(svgNS,'circle'); core.setAttribute('r','8'); core.setAttribute('fill',pos.color); core.setAttribute('opacity',String(.55+intensity*.45));
-    g.appendChild(halo);g.appendChild(orbit);g.appendChild(circle);g.appendChild(core);
+
+    const title=document.createElementNS(svgNS,'title');
+    title.textContent=n.label+' — '+(n.subtitle||'')+' · '+Math.round(intensity*100)+'%'+(n.status?' · '+n.status:'');
+    g.appendChild(title);
+
+    // Dendrites et micro-neurones autour de chaque capacité.
+    const satellites=2+Math.round(intensity*3);
+    for(let s=0;s<satellites;s++){
+      const angle=(s/satellites)*Math.PI*2+nodeSeed(n.id+':'+s)*1.1;
+      const dist=r+13+nodeSeed(n.id+'#'+s)*13;
+      const sx=Math.cos(angle)*dist,sy=Math.sin(angle)*dist*.72;
+      const dendrite=document.createElementNS(svgNS,'line');
+      dendrite.setAttribute('x1','0');dendrite.setAttribute('y1','0');
+      dendrite.setAttribute('x2',String(sx));dendrite.setAttribute('y2',String(sy));
+      dendrite.setAttribute('stroke',pos.color);dendrite.setAttribute('stroke-width','.7');
+      dendrite.setAttribute('opacity',String(.10+intensity*.16));g.appendChild(dendrite);
+      const micro=document.createElementNS(svgNS,'circle');
+      micro.setAttribute('cx',String(sx));micro.setAttribute('cy',String(sy));
+      micro.setAttribute('r',String(1.5+intensity*1.5));micro.setAttribute('fill',pos.color);
+      micro.setAttribute('opacity',String(.30+intensity*.38));g.appendChild(micro);
+    }
+
+    const halo=document.createElementNS(svgNS,'circle');halo.setAttribute('r',String(r+13));halo.setAttribute('fill',pos.color);halo.setAttribute('opacity',String(.025+intensity*.055));halo.setAttribute('filter','url(#soft)');
+    const outer=document.createElementNS(svgNS,'circle');outer.setAttribute('r',String(r+4));outer.setAttribute('fill','none');outer.setAttribute('stroke',pos.color);outer.setAttribute('stroke-width','.75');outer.setAttribute('stroke-opacity',String(.14+intensity*.30));outer.setAttribute('stroke-dasharray',n.trend==='rising'?'5 4':'2 7');
+    const circle=document.createElementNS(svgNS,'circle');circle.setAttribute('r',String(r));circle.setAttribute('fill',pos.color);circle.setAttribute('fill-opacity',String(.13+intensity*.24));circle.setAttribute('stroke',pos.color);circle.setAttribute('stroke-width',n.dominant?'2.2':'1.05');circle.setAttribute('filter','url(#glow)');
+    const core=document.createElementNS(svgNS,'circle');core.setAttribute('r',String(3.5+intensity*3));core.setAttribute('fill',pos.color);core.setAttribute('opacity',String(.58+intensity*.40));
+    g.appendChild(halo);g.appendChild(outer);g.appendChild(circle);g.appendChild(core);
     nodes.appendChild(g);
 
-    const label=document.createElementNS(svgNS,'text'); label.setAttribute('x',String(pos.x+38)); label.setAttribute('y',String(pos.y-3)); label.setAttribute('fill','#eef2ff'); label.setAttribute('font-size','13'); label.setAttribute('font-weight','600'); label.textContent=n.label; nodes.appendChild(label);
-    const sub=document.createElementNS(svgNS,'text'); sub.setAttribute('x',String(pos.x+38)); sub.setAttribute('y',String(pos.y+13)); sub.setAttribute('fill','#77849d'); sub.setAttribute('font-size','9'); sub.textContent=n.subtitle+' · '+Math.round(intensity*100)+'%'; nodes.appendChild(sub);
+    const dir=pos.x<450?-1:1;
+    const label=document.createElementNS(svgNS,'text');
+    label.setAttribute('x',String(pos.x+dir*(r+14)));label.setAttribute('y',String(pos.y-1));
+    label.setAttribute('text-anchor',dir<0?'end':'start');
+    label.setAttribute('fill','#eef2ff');label.setAttribute('font-size',n.kind==='product'?'8.5':'10.5');label.setAttribute('font-weight',n.dominant?'700':'560');label.textContent=n.label;nodes.appendChild(label);
+    if(n.kind!=='product' || intensity>.48){
+      const sub=document.createElementNS(svgNS,'text');
+      sub.setAttribute('x',String(pos.x+dir*(r+14)));sub.setAttribute('y',String(pos.y+12));
+      sub.setAttribute('text-anchor',dir<0?'end':'start');
+      sub.setAttribute('fill','#77849d');sub.setAttribute('font-size','7.5');
+      sub.textContent=(n.subtitle||n.group||'')+' · '+Math.round(intensity*100)+'%';nodes.appendChild(sub);
+    }
   });
 }
+
 function initLivingAuraScene(){
   if(livingScene) return livingScene;
   const wrap=$('livingMap');
@@ -556,7 +687,7 @@ async function refresh(){
     $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
     $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
-    $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    $('dominantThought').textContent=selfText(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+selfText(organism.active_intention||'observer');
     lastSoul=Object.assign({},soul);
     if(boot.runtime_ready){
       const results=await Promise.all([
