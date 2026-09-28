@@ -743,14 +743,87 @@ app.get('/api/kernel/public', async () => {
   if (!bootstrap.runtimeReady) {
     return {
       ...publicFallbackSoul(false),
+      current_intention: '',
+      dominant_thought: '',
       organism: { ready: false },
     };
   }
-  const [soul, organism] = await Promise.all([
+  const [safeSoul, privateSoul, organism] = await Promise.all([
     kernel.soul({ privateView: false }),
+    kernel.soul({ privateView: true }),
     kernel.organismState({ publicView: true }),
   ]);
-  return { ...soul, organism };
+  return {
+    ...safeSoul,
+    current_intention: String(privateSoul.current_intention || '').slice(0, 500),
+    dominant_thought: String(privateSoul.dominant_thought || '').slice(0, 700),
+    organism,
+  };
+});
+
+app.get('/api/kernel/public/intentions', async (request) => {
+  if (!bootstrap.runtimeReady) return [];
+  const rows = await kernel.intentions(request.query?.limit);
+  return rows.slice(0, 8).map((row) => ({
+    statement: String(row.statement || '').slice(0, 600),
+    priority: Number(row.priority || 0),
+    source: String(row.source || '').slice(0, 80),
+    updated_at: row.updated_at || '',
+  }));
+});
+
+app.get('/api/kernel/public/lessons', async (request) => {
+  if (!bootstrap.runtimeReady) return [];
+  const rows = await kernel.lessons(request.query?.limit);
+  return rows.slice(0, 8).map((row) => ({
+    content: String(row.content || '').slice(0, 900),
+    confidence: Number(row.confidence || 0),
+    evidence_count: Number(row.evidence_count || 0),
+    updated_at: row.updated_at || '',
+  }));
+});
+
+app.get('/api/kernel/public/activity', async (request) => {
+  if (!bootstrap.runtimeReady) return [];
+  const rows = await kernel.activity(request.query?.limit);
+  return rows.slice(0, 10).map((row) => ({
+    kind: String(row.kind || 'activité').slice(0, 80),
+    title: String(row.title || row.content || row.kind || '').slice(0, 500),
+    created_at: row.created_at || '',
+  }));
+});
+
+app.get('/api/kernel/public/work', async (request) => {
+  if (!bootstrap.runtimeReady) return [];
+  const rows = await kernel.workItems(request.query?.limit);
+  return rows.slice(0, 8).map((row) => ({
+    kind: String(row.kind || 'travail').slice(0, 80),
+    title: String(row.title || '').slice(0, 500),
+    priority: Number(row.priority || 0),
+    updated_at: row.updated_at || '',
+  }));
+});
+
+app.get('/api/kernel/public/attention', async () => {
+  if (!bootstrap.runtimeReady) {
+    return { updated_at: '', dominant: '', secondary: '', focus_statement: '', nodes: [] };
+  }
+  const map = await kernel.attentionMap();
+  return {
+    updated_at: map.updated_at || '',
+    dominant: String(map.dominant || ''),
+    secondary: String(map.secondary || ''),
+    focus_statement: String(map.focus_statement || '').slice(0, 500),
+    nodes: Array.isArray(map.nodes) ? map.nodes.map((node) => ({
+      id: String(node.id || '').slice(0, 80),
+      label: String(node.label || '').slice(0, 120),
+      subtitle: String(node.subtitle || '').slice(0, 160),
+      score: Number(node.score || 0),
+      trend: String(node.trend || 'stable').slice(0, 24),
+      delta: Number(node.delta || 0),
+      dominant: Boolean(node.dominant),
+    })) : [],
+  };
 });
 
 
