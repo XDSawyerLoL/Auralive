@@ -233,6 +233,17 @@ export const config = Object.freeze({
   horizonCurrency: process.env.HORIZON_CURRENCY || 'EUR',
   horizonTimezone: process.env.HORIZON_TIMEZONE || 'Europe/Paris',
 
+  expertRelayEnabled: bool('AURA_EXPERT_RELAY_ENABLED', true),
+  expertMode: String(process.env.AURA_EXPERT_MODE || 'queue').trim().toLowerCase(),
+  expertFailureThreshold: int('AURA_EXPERT_FAILURE_THRESHOLD', 3, 2, 100),
+  expertAllowPaid: bool('AURA_EXPERT_ALLOW_PAID', false),
+  expertOpenAiApiKey: process.env.AURA_EXPERT_OPENAI_API_KEY || '',
+  expertOpenAiBaseUrl: String(process.env.AURA_EXPERT_OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+  expertOpenAiModel: String(process.env.AURA_EXPERT_OPENAI_MODEL || '').trim(),
+  expertTimeoutMs: int('AURA_EXPERT_TIMEOUT_MS', 60000, 5000, 180000),
+  expertMaxContextChars: int('AURA_EXPERT_MAX_CONTEXT_CHARS', 18000, 2000, 60000),
+  expertMaxOutputTokens: int('AURA_EXPERT_MAX_OUTPUT_TOKENS', 1200, 128, 4000),
+
   evolutionEnabled: bool('AURA_EVOLUTION_ENABLED', true),
   evolutionIntervalSeconds: int('AURA_EVOLUTION_INTERVAL_SECONDS', 21600, 3600, 604800),
   evolutionRepository: process.env.AURA_EVOLUTION_GITHUB_REPOSITORY || 'XDSawyerLoL/Auralive',
