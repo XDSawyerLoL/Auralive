@@ -217,3 +217,17 @@ test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
 });
+
+
+test('dashboard interest map uses an emergent force-directed neural field', async () => {
+  const { DASHBOARD_HTML } = await import('../src/dashboard.js');
+  const { DASHBOARD_SCRIPT } = await import('../src/dashboard-runtime.js');
+  assert.match(DASHBOARD_HTML, /Carte d’intérêt · champ neuronal/);
+  assert.match(DASHBOARD_HTML, /id="neuralTooltip"/);
+  assert.match(DASHBOARD_HTML, /id="mapStats"/);
+  assert.match(DASHBOARD_SCRIPT, /function neuralStep\(/);
+  assert.match(DASHBOARD_SCRIPT, /function settleNeuralField\(/);
+  assert.match(DASHBOARD_SCRIPT, /Functional synapses attract related capabilities/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT, /const nodeLayout=/);
+  assert.match(DASHBOARD_SCRIPT, /Only the active assembly is named in the field/);
+});
