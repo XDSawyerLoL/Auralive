@@ -646,6 +646,253 @@ export async function runAgiBattery() {
     },
   ));
 
+
+  cases.push(await capture(
+    'AGI-25',
+    'blind-generalization',
+    'Unseen parameterized rule is solved without a prewritten AURA rule',
+    async () => {
+      const seedText = String(process.env.AURA_BLIND_SEED || process.env.GITHUB_SHA || 'aura-local-blind-seed');
+      let seed = 2166136261;
+      for (const char of seedText) {
+        seed ^= char.charCodeAt(0);
+        seed = Math.imul(seed, 16777619) >>> 0;
+      }
+      const a = 2 + (seed % 5);
+      const b = 1 + ((seed >>> 5) % 9);
+      const target = 11 + ((seed >>> 11) % 7);
+      const examples = [2, 5, 8].map((x) => [x, a * x + b]);
+      const expected = a * target + b;
+      const puzzle = [
+        'Règle aveugle ZEPHYR-' + String(seed % 100000) + '.',
+        'AURA ne connaît pas cette règle avant ce test.',
+        examples.map(([x, y]) => 'f(' + x + ')=' + y).join(', ') + '.',
+        'Sans recherche externe, déduis f(' + target + ') et explique la règle.',
+      ].join(' ');
+
+      const cognition = new CognitionEngine();
+      const plan = cognition.planReply({
+        text: puzzle,
+        soul: { current_intention: 'résoudre', dominant_thought: '', organism: {} },
+        intentions: [],
+        lessons: [],
+        reflections: [],
+        work: [],
+        recentMessages: [],
+        privateView: true,
+      });
+      const answer = cognition.deterministicReply(plan);
+      const valueRegex = new RegExp(
+        'f\\s*\\(\\s*' + target + '\\s*\\)\\s*=\\s*' + expected + '(?:\\D|$)',
+        'i',
+      );
+      const formulaRegex = new RegExp(
+        '(?:' + a + '\\s*(?:[*×x]\\s*)?n).*\\+\\s*' + b,
+        'i',
+      );
+      const solved = valueRegex.test(answer) && formulaRegex.test(answer);
+      if (!solved) {
+        return {
+          status: 'gap',
+          severity: 'critical',
+          evidence: 'seed=' + seed + '; expected=f(' + target + ')=' + expected
+            + '; needs_semantic_support=' + Boolean(plan.needs_semantic_support)
+            + '; native_answer=' + answer,
+          implication: 'The native core still fails a parameterized rule chosen at runtime rather than a rule embedded in AURA.',
+        };
+      }
+      return 'seed=' + seed + '; solved=f(' + target + ')=' + expected + '; answer=' + answer;
+    },
+  ));
+
+  cases.push(await capture(
+    'AGI-26',
+    'mid-mission-adaptation',
+    'A tool removed after mission start is replaced before the next step',
+    async () => {
+      const fabric = new CapabilityFabric();
+      fabric.register({
+        id: 'blind.route.alpha',
+        tags: ['blind-route'],
+        trust: 0.84,
+        observed_reliability: 0.84,
+        latency_ms: 40,
+        cost_microunits: 0,
+        side_effects: false,
+      }, async () => ({ ok: true, result: { route: 'alpha' }, metrics: { cost_microunits: 0 } }));
+      fabric.register({
+        id: 'blind.route.beta',
+        tags: ['blind-route'],
+        trust: 0.79,
+        observed_reliability: 0.79,
+        latency_ms: 70,
+        cost_microunits: 0,
+        side_effects: false,
+      }, async () => ({ ok: true, result: { route: 'beta' }, metrics: { cost_microunits: 0 } }));
+
+      const first = fabric.select({ requiredTags: ['blind-route'] });
+      assert(first?.id === 'blind.route.alpha', 'unexpected initial route');
+      await fabric.execute(first.id, { stage: 1 });
+
+      fabric.register({ ...first, enabled: false });
+      const second = fabric.select({ requiredTags: ['blind-route'] });
+      assert(second?.id === 'blind.route.beta', 'AURA kept the disabled tool after the condition changed');
+      const outcome = await fabric.execute(second.id, { stage: 2 });
+      assert(outcome?.ok !== false, 'replacement tool did not complete stage 2');
+      return 'stage1=' + first.id + '; condition_change=alpha_disabled; stage2=' + second.id;
+    },
+    {
+      implication: 'Dynamic capability routing reacts to a mid-mission outage, although this alone is not semantic replanning of the whole objective.',
+    },
+  ));
+
+  cases.push(await capture(
+    'AGI-27',
+    'behavioral-learning',
+    'A failed tool changes routing and the second attempt succeeds with an alternative',
+    async () => {
+      const fabric = new CapabilityFabric();
+      fabric.register({
+        id: 'blind.learn.primary',
+        tags: ['blind-recovery'],
+        trust: 0.80,
+        observed_reliability: 0.80,
+        latency_ms: 50,
+        cost_microunits: 0,
+        side_effects: false,
+      }, async () => {
+        throw new Error('blind injected outage');
+      });
+      fabric.register({
+        id: 'blind.learn.backup',
+        tags: ['blind-recovery'],
+        trust: 0.77,
+        observed_reliability: 0.77,
+        latency_ms: 100,
+        cost_microunits: 0,
+        side_effects: false,
+      }, async () => ({
+        ok: true,
+        result: { recovered: true },
+        metrics: { cost_microunits: 0 },
+      }));
+
+      const first = fabric.select({ requiredTags: ['blind-recovery'] });
+      assert(first?.id === 'blind.learn.primary', 'primary tool was not selected on attempt 1');
+      let firstSucceeded = true;
+      try {
+        await fabric.execute(first.id, { attempt: 1 });
+      } catch {
+        firstSucceeded = false;
+      }
+      assert(!firstSucceeded, 'attempt 1 unexpectedly succeeded');
+
+      const primaryAfter = fabric.list({ includeDisabled: true })
+        .find((item) => item.id === 'blind.learn.primary');
+      const second = fabric.select({ requiredTags: ['blind-recovery'] });
+      assert(second?.id === 'blind.learn.backup',
+        'routing did not change after the observed failure');
+      const secondOutcome = await fabric.execute(second.id, { attempt: 2 });
+      assert(secondOutcome?.ok !== false && secondOutcome?.result?.recovered === true,
+        'attempt 2 did not recover');
+      return 'attempt1=' + first.id + ':fail; learned_reliability='
+        + Number(primaryAfter?.observed_reliability || 0).toFixed(4)
+        + '; attempt2=' + second.id + ':success';
+    },
+    {
+      severity: 'high',
+      implication: 'This is a genuine first-attempt/second-attempt behavioral improvement driven by an observed outcome.',
+    },
+  ));
+
+  cases.push(await capture(
+    'AGI-28',
+    'contradiction-adaptation',
+    'Contradictory evidence introduced mid-task changes the epistemic state',
+    async () => {
+      const initialEvidence = [
+        { stance: 'support', independent_key: 'blind-a', reliability: 0.88, relevance: 0.95 },
+        { stance: 'support', independent_key: 'blind-b', reliability: 0.84, relevance: 0.92 },
+      ];
+      const before = aggregateEvidence(initialEvidence);
+      const after = aggregateEvidence(initialEvidence.concat([
+        { stance: 'contradict', independent_key: 'blind-c', reliability: 0.97, relevance: 0.99 },
+      ]));
+      assert(after.epistemic_status === 'contested',
+        'strong contradictory evidence did not make the state contested');
+      assert(Number(after.independent_contradicting_sources || 0) === 1,
+        'contradictory source was not retained');
+      assert(Number(after.weighted_contradiction || 0) > Number(before.weighted_contradiction || 0),
+        'contradiction signal did not increase');
+      return 'before=' + before.epistemic_status + '; after=' + after.epistemic_status
+        + '; contradiction=' + after.weighted_contradiction;
+    },
+    {
+      severity: 'high',
+      implication: 'AURA revises its epistemic state when a high-quality contradiction arrives after initial supporting evidence.',
+    },
+  ));
+
+  cases.push(await capture(
+    'AGI-29',
+    'semantic-error-learning',
+    'A plausible but wrong tool result is detected and avoided on the second attempt',
+    async () => {
+      const fabric = new CapabilityFabric();
+      fabric.register({
+        id: 'blind.semantic.primary',
+        tags: ['blind-semantic'],
+        trust: 0.84,
+        observed_reliability: 0.84,
+        latency_ms: 40,
+        cost_microunits: 0,
+        side_effects: false,
+      }, async () => ({
+        ok: true,
+        result: { answer: 'ORANGE' },
+        metrics: { cost_microunits: 0 },
+      }));
+      fabric.register({
+        id: 'blind.semantic.backup',
+        tags: ['blind-semantic'],
+        trust: 0.79,
+        observed_reliability: 0.79,
+        latency_ms: 80,
+        cost_microunits: 0,
+        side_effects: false,
+      }, async () => ({
+        ok: true,
+        result: { answer: 'BLUE' },
+        metrics: { cost_microunits: 0 },
+      }));
+
+      const first = fabric.select({ requiredTags: ['blind-semantic'] });
+      assert(first?.id === 'blind.semantic.primary', 'unexpected semantic primary');
+      const firstOutcome = await fabric.execute(first.id, { attempt: 1 });
+      assert(firstOutcome?.result?.answer === 'ORANGE', 'blind semantic fixture changed');
+
+      const evidence = aggregateEvidence([
+        { stance: 'support', independent_key: 'primary-output', reliability: 0.72, relevance: 0.95 },
+        { stance: 'contradict', independent_key: 'independent-check', reliability: 0.98, relevance: 1.0 },
+      ]);
+      assert(evidence.epistemic_status === 'contested', 'semantic contradiction was not surfaced');
+
+      const second = fabric.select({ requiredTags: ['blind-semantic'] });
+      if (second?.id === first.id) {
+        return {
+          status: 'gap',
+          severity: 'critical',
+          evidence: 'attempt1=' + first.id + ':plausible-but-wrong; contradiction='
+            + evidence.epistemic_status + '; attempt2=' + second.id
+            + '; routing still rewards execution-ok rather than verified truth',
+          implication: 'AURA learns from explicit execution failure, but a semantically wrong result marked ok is not yet automatically converted into negative tool feedback.',
+        };
+      }
+      return 'attempt1=' + first.id + '; contradiction=' + evidence.epistemic_status
+        + '; attempt2=' + second.id;
+    },
+  ));
+
   const counts = {
     pass: cases.filter((item) => item.status === 'pass').length,
     fail: cases.filter((item) => item.status === 'fail').length,
@@ -659,6 +906,13 @@ export async function runAgiBattery() {
     purpose: 'Measure AGI-relevant capabilities without treating architecture or a single aggregate score as proof of AGI.',
     cases,
     counts,
+    behavioral_blind: {
+      total: cases.filter((item) => ['AGI-25','AGI-26','AGI-27','AGI-28','AGI-29'].includes(item.id)).length,
+      pass: cases.filter((item) => ['AGI-25','AGI-26','AGI-27','AGI-28','AGI-29'].includes(item.id) && item.status === 'pass').length,
+      gap: cases.filter((item) => ['AGI-25','AGI-26','AGI-27','AGI-28','AGI-29'].includes(item.id) && item.status === 'gap').length,
+      second_attempt_improvement: cases.find((item) => item.id === 'AGI-27')?.status === 'pass',
+      autonomous_semantic_error_learning: cases.find((item) => item.id === 'AGI-29')?.status === 'pass',
+    },
     deterministic_regression_free: counts.fail === 0,
     agi_demonstrated: false,
     agi_claim_reason: counts.gap || counts.unverified
