@@ -7,7 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
-import { buildNeuralFieldModel } from './neural-field.js';
+import { buildNeuralFieldModel, normalizeAuraSelfReference } from './neural-field.js';
 
 const now = () => new Date().toISOString();
 
@@ -1003,7 +1003,7 @@ export class CognitiveKernel {
     return {
       ...graph,
       updated_at: now(),
-      focus_statement: String(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      focus_statement: normalizeAuraSelfReference(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
     };
   }
 
