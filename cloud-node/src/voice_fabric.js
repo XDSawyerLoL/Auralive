@@ -277,33 +277,37 @@ export class VoiceStudioProvider {
   }
 
   async resolveMairaiyProfile() {
-    const explicit = String(config.voiceFabricProfileId || '').trim();
-    if (explicit) return explicit;
-
     const now = Date.now();
     if (this.profileCache.id && now - this.profileCache.checkedAt < 300_000) {
       return this.profileCache.id;
     }
 
     const profileName = clean(config.voiceFabricProfileName || DEFAULT_PROFILE_NAME, 120).toLowerCase();
+    const explicit = String(config.voiceFabricProfileId || '').trim();
     const list = await this.voices();
-    const profile = list.find((row) => (
-      String(row?.type || '').toLowerCase() === 'profile'
-      && String(row?.name || '').trim().toLowerCase() === profileName
-      && String(row?.engine_voice || '').trim().toLowerCase() === EXPECTED_ENGINE_VOICE
-    ));
+    const profile = list.find((row) => {
+      const exactIdentity = (
+        String(row?.type || '').toLowerCase() === 'profile'
+        && String(row?.name || '').trim().toLowerCase() === profileName
+        && String(row?.engine_voice || '').trim().toLowerCase() === EXPECTED_ENGINE_VOICE
+        && String(row?.language || EXPECTED_LANGUAGE).trim().toLowerCase() === EXPECTED_LANGUAGE
+      );
+      if (!exactIdentity) return false;
+      return !explicit || String(row?.voice_id || '') === explicit;
+    });
+
     this.profileCache = {
       id: String(profile?.voice_id || ''),
       checkedAt: now,
     };
 
-    if (!this.profileCache.id && config.voiceFabricRequireProfile) {
+    if (!this.profileCache.id) {
       throw new Error(
-        `Mairaiy profile ${EXPECTED_ENGINE_VOICE} not found in VoiceStudio. The exact Quantic Studio voice is required.`,
+        `Mairaiy exact profile ${EXPECTED_ENGINE_VOICE}/${EXPECTED_LANGUAGE} not found in VoiceStudio. Generic TTS is forbidden.`,
       );
     }
 
-    return this.profileCache.id || 'default';
+    return this.profileCache.id;
   }
 
   async synthesizeChunk(text, options = {}) {
@@ -317,7 +321,8 @@ export class VoiceStudioProvider {
       voice: voiceId,
       response_format: 'wav',
       speed: Math.max(0.5, Math.min(1.5, Number(options.speed || config.voiceFabricSpeed || 1))),
-      language: String(config.voiceFabricLanguage || EXPECTED_LANGUAGE),
+      language: EXPECTED_LANGUAGE,
+      engine_voice: EXPECTED_ENGINE_VOICE,
       denoise: true,
       preprocess_prompt: true,
     };
@@ -338,8 +343,16 @@ export class VoiceStudioProvider {
     if (!response.ok) throw await responseError(response, 'VoiceStudio synthesis failed');
 
     const returnedVoice = String(response.headers.get('x-mairaiy-voice') || '').trim().toLowerCase();
-    if (returnedVoice && returnedVoice !== EXPECTED_ENGINE_VOICE) {
-      throw new Error(`VoiceStudio identity mismatch: expected ${EXPECTED_ENGINE_VOICE}, received ${returnedVoice}`);
+    const returnedLanguage = String(response.headers.get('x-mairaiy-language') || EXPECTED_LANGUAGE).trim().toLowerCase();
+    if (returnedVoice !== EXPECTED_ENGINE_VOICE) {
+      throw new Error(
+        `VoiceStudio identity not certified: expected ${EXPECTED_ENGINE_VOICE}, received ${returnedVoice || 'missing-header'}`,
+      );
+    }
+    if (returnedLanguage !== EXPECTED_LANGUAGE) {
+      throw new Error(
+        `VoiceStudio language mismatch: expected ${EXPECTED_LANGUAGE}, received ${returnedLanguage || 'missing-header'}`,
+      );
     }
 
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
