@@ -30,7 +30,10 @@ test('Voice Fabric accepts only the Quantic Studio ff_siwis identity', () => {
   assert.match(fabric, /EXPECTED_LANGUAGE = 'fr-fr'/);
   assert.match(fabric, /row\?\.engine_voice/);
   assert.match(fabric, /x-mairaiy-voice/);
-  assert.match(fabric, /VoiceStudio identity mismatch/);
-  assert.match(config, /voiceFabricLanguage: process\.env\.AURA_MAIRAIY_LANGUAGE \|\| 'fr-fr'/);
+  assert.match(fabric, /VoiceStudio identity not certified/);
+  assert.match(fabric, /engine_voice: EXPECTED_ENGINE_VOICE/);
+  assert.match(config, /voiceFabricLanguage: 'fr-fr'/);
+  assert.match(config, /voiceFabricStrictIdentity: true/);
+  assert.match(config, /voiceFabricBaseUrl: 'https:\/\/mediumorchid-badger-314305\.hostingersite\.com\/voice'/);
   assert.match(env, /AURA_MAIRAIY_LANGUAGE=fr-fr/);
 });
