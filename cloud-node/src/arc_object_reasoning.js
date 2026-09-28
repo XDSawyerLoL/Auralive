@@ -1111,6 +1111,249 @@ function inferDiagonalOrientationMass(training) {
   return [];
 }
 
+
+function splitBySingleSeparators(grid, separatorColor) {
+  const rows = [];
+  const cols = [];
+  for (let r = 0; r < grid.length; r += 1) {
+    if (grid[r].every((value) => value === separatorColor)) rows.push(r);
+  }
+  for (let c = 0; c < grid[0].length; c += 1) {
+    let full = true;
+    for (let r = 0; r < grid.length; r += 1) {
+      if (grid[r][c] !== separatorColor) {
+        full = false;
+        break;
+      }
+    }
+    if (full) cols.push(c);
+  }
+
+  if (rows.length === 1 && cols.length === 0) {
+    const sr = rows[0];
+    if (sr <= 0 || sr >= grid.length - 1) return null;
+    const top = extractRegion(grid, 0, sr - 1, 0, grid[0].length - 1);
+    const bottom = extractRegion(grid, sr + 1, grid.length - 1, 0, grid[0].length - 1);
+    if (top.length !== bottom.length || top[0].length !== bottom[0].length) return null;
+    return { kind: 'horizontal-pair', regions: [top, bottom] };
+  }
+
+  if (rows.length === 0 && cols.length === 1) {
+    const sc = cols[0];
+    if (sc <= 0 || sc >= grid[0].length - 1) return null;
+    const left = extractRegion(grid, 0, grid.length - 1, 0, sc - 1);
+    const right = extractRegion(grid, 0, grid.length - 1, sc + 1, grid[0].length - 1);
+    if (left.length !== right.length || left[0].length !== right[0].length) return null;
+    return { kind: 'vertical-pair', regions: [left, right] };
+  }
+
+  if (rows.length === 1 && cols.length === 1) {
+    const cross = singleCrossSeparator(grid, separatorColor);
+    if (!cross) return null;
+    return { kind: 'cross-four', regions: cross.quadrants };
+  }
+  return null;
+}
+
+function occupancyMask(regions, r, c, background) {
+  let mask = 0;
+  for (let index = 0; index < regions.length; index += 1) {
+    if (regions[index][r][c] !== background) mask |= (1 << index);
+  }
+  return String(mask);
+}
+
+function applyOccupancyCombine(grid, params) {
+  const split = splitBySingleSeparators(grid, params.separator_color);
+  if (!split || split.kind !== params.layout) return cloneGrid(grid);
+  const h = split.regions[0].length;
+  const w = split.regions[0][0].length;
+  return Array.from({ length: h }, (_, r) =>
+    Array.from({ length: w }, (_, c) => {
+      const mask = occupancyMask(split.regions, r, c, params.background_color);
+      return Object.prototype.hasOwnProperty.call(params.mapping, mask)
+        ? params.mapping[mask]
+        : params.background_color;
+    }));
+}
+
+function inferOccupancyCombine(training) {
+  const first = training[0];
+  const candidates = [];
+  for (const separatorColor of colors(first.input)) {
+    const firstSplit = splitBySingleSeparators(first.input, separatorColor);
+    if (!firstSplit) continue;
+    const background = dominantColorExcluding(first.input, new Set([separatorColor]));
+    const mapping = new Map();
+    let valid = true;
+    for (const pair of training) {
+      const split = splitBySingleSeparators(pair.input, separatorColor);
+      if (!split || split.kind !== firstSplit.kind) {
+        valid = false;
+        break;
+      }
+      const h = split.regions[0].length;
+      const w = split.regions[0][0].length;
+      if (pair.output.length !== h || pair.output[0].length !== w) {
+        valid = false;
+        break;
+      }
+      for (let r = 0; r < h && valid; r += 1) {
+        for (let c = 0; c < w; c += 1) {
+          const mask = occupancyMask(split.regions, r, c, background);
+          const value = pair.output[r][c];
+          if (mapping.has(mask) && mapping.get(mask) !== value) {
+            valid = false;
+            break;
+          }
+          mapping.set(mask, value);
+        }
+      }
+      if (!valid) break;
+    }
+    if (!valid || mapping.size < 2) continue;
+    const params = {
+      separator_color: separatorColor,
+      background_color: background,
+      layout: firstSplit.kind,
+      mapping: Object.fromEntries(mapping),
+    };
+    if (training.every((pair) =>
+      equalGrid(applyOccupancyCombine(pair.input, params), pair.output))) {
+      candidates.push({
+        name: 'combine-separated-occupancy',
+        complexity: 6.2 + mapping.size * 0.05,
+        params,
+      });
+    }
+  }
+  return candidates;
+}
+
+function selectUniqueComponent(comps, selector) {
+  if (!comps.length) return null;
+  const metric = {
+    'largest-size': (item) => item.size,
+    'smallest-size': (item) => -item.size,
+    'largest-area': (item) => item.height * item.width,
+    'smallest-area': (item) => -(item.height * item.width),
+    'widest': (item) => item.width,
+    'tallest': (item) => item.height,
+  }[selector];
+  if (!metric) return null;
+  const ranked = comps
+    .map((item) => ({ item, score: metric(item) }))
+    .sort((a, b) => b.score - a.score);
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
+  return ranked[0].item;
+}
+
+function extractComponentMask(grid, comp, background) {
+  const out = Array.from({ length: comp.height }, () =>
+    Array(comp.width).fill(background));
+  for (const [r, c] of comp.cells) out[r - comp.minR][c - comp.minC] = comp.color;
+  return out;
+}
+
+function transformObjectGrid(grid, transform) {
+  if (transform === 'identity') return cloneGrid(grid);
+  if (transform === 'mirror-horizontal') return grid.map((row) => [...row].reverse());
+  if (transform === 'mirror-vertical') return [...grid].reverse().map((row) => [...row]);
+  if (transform === 'rotate-90') {
+    return Array.from({ length: grid[0].length }, (_, r) =>
+      Array.from({ length: grid.length }, (_, c) => grid[grid.length - 1 - c][r]));
+  }
+  if (transform === 'rotate-180') return transformObjectGrid(transformObjectGrid(grid, 'rotate-90'), 'rotate-90');
+  if (transform === 'rotate-270') return transformObjectGrid(transformObjectGrid(grid, 'rotate-180'), 'rotate-90');
+  return cloneGrid(grid);
+}
+
+function inferLocalMapping(inputs, outputs) {
+  const mapping = new Map();
+  for (let i = 0; i < inputs.length; i += 1) {
+    const input = inputs[i];
+    const output = outputs[i];
+    if (input.length !== output.length || input[0].length !== output[0].length) return null;
+    for (let r = 0; r < input.length; r += 1) {
+      for (let c = 0; c < input[r].length; c += 1) {
+        const key = String(input[r][c]);
+        if (mapping.has(key) && mapping.get(key) !== output[r][c]) return null;
+        mapping.set(key, output[r][c]);
+      }
+    }
+  }
+  return Object.fromEntries(mapping);
+}
+
+function applyExtractSelectedObject(grid, params) {
+  const background = dominantColor(grid);
+  const comps = components(grid, { background, diagonal: params.diagonal });
+  const selected = selectUniqueComponent(comps, params.selector);
+  if (!selected) return cloneGrid(grid);
+  let out = extractComponentMask(grid, selected, background);
+  out = transformObjectGrid(out, params.transform);
+  if (params.mapping) {
+    out = out.map((row) => row.map((value) =>
+      Object.prototype.hasOwnProperty.call(params.mapping, String(value))
+        ? params.mapping[String(value)]
+        : value));
+  }
+  return out;
+}
+
+function inferExtractSelectedObject(training) {
+  const selectors = ['largest-size', 'smallest-size', 'largest-area', 'smallest-area', 'widest', 'tallest'];
+  const transforms = ['identity', 'mirror-horizontal', 'mirror-vertical', 'rotate-90', 'rotate-180', 'rotate-270'];
+  const candidates = [];
+
+  for (const diagonal of [false, true]) {
+    for (const selector of selectors) {
+      for (const transform of transforms) {
+        const extracted = [];
+        let possible = true;
+        for (const pair of training) {
+          const background = dominantColor(pair.input);
+          const selected = selectUniqueComponent(
+            components(pair.input, { background, diagonal }),
+            selector,
+          );
+          if (!selected) {
+            possible = false;
+            break;
+          }
+          extracted.push(transformObjectGrid(
+            extractComponentMask(pair.input, selected, background),
+            transform,
+          ));
+        }
+        if (!possible) continue;
+
+        if (training.every((pair, index) => equalGrid(extracted[index], pair.output))) {
+          candidates.push({
+            name: 'extract-selected-object',
+            complexity: 6.0,
+            params: { selector, diagonal, transform, mapping: null },
+          });
+          continue;
+        }
+
+        const mapping = inferLocalMapping(extracted, training.map((pair) => pair.output));
+        if (!mapping) continue;
+        const params = { selector, diagonal, transform, mapping };
+        if (training.every((pair) =>
+          equalGrid(applyExtractSelectedObject(pair.input, params), pair.output))) {
+          candidates.push({
+            name: 'extract-selected-object',
+            complexity: 6.5 + Object.keys(mapping).length * 0.05,
+            params,
+          });
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
 export function applyAdvancedProgram(name, grid, params = {}) {
   if (!rectangular(grid)) throw new Error('grid invalide');
   if (name === 'connect-anchors-l') return applyConnectAnchors(grid, params);
@@ -1125,6 +1368,8 @@ export function applyAdvancedProgram(name, grid, params = {}) {
   if (name === 'marker-palette-cycle') return applyMarkerPaletteCycle(grid, params);
   if (name === 'self-template-stencil') return applySelfTemplateStencil(grid, params);
   if (name === 'recolor-diagonal-orientations-by-mass') return applyDiagonalOrientationMass(grid, params);
+  if (name === 'combine-separated-occupancy') return applyOccupancyCombine(grid, params);
+  if (name === 'extract-selected-object') return applyExtractSelectedObject(grid, params);
   return null;
 }
 
@@ -1145,6 +1390,8 @@ export function inferAdvancedPrograms(training = []) {
     inferMarkerPaletteCycle,
     inferSelfTemplateStencil,
     inferDiagonalOrientationMass,
+    inferOccupancyCombine,
+    inferExtractSelectedObject,
   ];
   const candidates = [];
   for (const inferer of inferers) {
