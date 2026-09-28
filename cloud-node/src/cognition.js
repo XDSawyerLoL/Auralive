@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.1';
+  static VERSION = 'aura-cognition-native-v1.2';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -97,13 +97,18 @@ export class CognitionEngine {
       summary = 'La pression de rêve est élevée ; une activité symbolique intérieure peut contribuer à la régulation.';
       nextAction = 'Laisser l’organisme produire puis relâcher une image intérieure sans la confondre avec un fait.';
       confidence = 0.68;
-    } else if (userSignal || extra) {
-      title = 'Interaction active';
+    } else if (userSignal) {
+      title = 'Interaction avec mon interlocuteur';
       summary = extra
-        ? `Je viens de recevoir un signal direct : « ${extra.slice(0, 280)} ». Je le rattache à mon état et à mes intentions avant de répondre.`
-        : 'Une interaction directe est active ; je maintiens la continuité entre la conversation et mes intentions.';
+        ? `Mon interlocuteur vient de m’écrire : « ${extra.slice(0, 280)} ». J’intègre cette demande à mon état et à mes intentions avant de répondre.`
+        : 'Une interaction avec mon interlocuteur est active ; je maintiens la continuité entre la conversation et mes intentions.';
       nextAction = currentIntention || 'Répondre à partir de mon état réel et conserver uniquement ce qui mérite d’être mémorisé.';
       confidence = 0.74;
+    } else if (extra) {
+      title = 'Contexte interne actif';
+      summary = `Un nouveau contexte a été intégré à mon cycle de réflexion : « ${extra.slice(0, 280)} ». Je l’évalue avant de décider s’il devient une intention.`;
+      nextAction = currentIntention || 'Évaluer ce contexte sans le confondre avec une demande extérieure.';
+      confidence = 0.7;
     } else if (latest) {
       title = 'Observation active';
       summary = `Je traite le signal « ${normalize(latest.type).slice(0, 180)} » sans changer de cap sans raison suffisante.`;
