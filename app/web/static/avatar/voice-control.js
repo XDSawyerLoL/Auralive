@@ -93,7 +93,7 @@
       );
 
       if (voiceReady) {
-        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · MAIRAIY AOede`.replace('AOede','AOEDE');
+        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · MAIRAIY AOEDE`;
         statusNode.style.color = '#a9f7df';
       } else {
         statusNode.textContent = 'MAIRAIY AOEDE À CONFIGURER';
