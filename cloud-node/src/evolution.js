@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { canaryReady, parseJsonObject, validateResearchUrl } from './policy.js';
+import { SoftwareRepairEngine } from './software_repair.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packagePath = resolve(here, '..', 'package.json');
@@ -200,6 +201,17 @@ export class EvolutionLab {
       lesson_key: learned.lesson_key,
       proposal_id: proposalId,
       risk,
+    };
+  }
+
+  async repairSandbox({ workspaceRoot, sourceFile, testFile, timeoutMs = 5000, maxCandidates = 160 } = {}) {
+    const engine = new SoftwareRepairEngine({ workspaceRoot, timeoutMs, maxCandidates });
+    const outcome = await engine.repair({ sourceFile, testFile });
+    return {
+      ...outcome,
+      mode: 'sandbox-test-gated-repair',
+      auto_promote: false,
+      requires_ci_and_canary: true,
     };
   }
 
