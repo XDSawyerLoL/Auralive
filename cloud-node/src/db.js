@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 9;
+export const LATEST_SCHEMA_VERSION = 10;
 
 export function getDb() {
   if (pool) return pool;
@@ -476,6 +476,41 @@ async function applyMigrations(db) {
       ['canonical-quantic-glide-product-id', new Date().toISOString()],
     );
     current = 9;
+  }
+
+  if (current < 10) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_expert_incidents (
+      id CHAR(36) PRIMARY KEY,
+      incident_key VARCHAR(64) NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'queued',
+      automation_id VARCHAR(220) NOT NULL DEFAULT '',
+      event_type VARCHAR(220) NOT NULL DEFAULT '',
+      signature VARCHAR(1000) NOT NULL DEFAULT '',
+      failures INT NOT NULL DEFAULT 0,
+      summary TEXT NOT NULL,
+      context LONGTEXT NOT NULL,
+      provider VARCHAR(120) NOT NULL DEFAULT '',
+      result LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_expert_incidents_key(incident_key,updated_at),
+      INDEX idx_aura_expert_incidents_status(status,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_expert_messages (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      incident_id CHAR(36) NOT NULL,
+      role VARCHAR(40) NOT NULL,
+      author VARCHAR(120) NOT NULL,
+      content LONGTEXT NOT NULL,
+      metadata LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_expert_messages_incident(incident_id,id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(10,?,?)',
+      ['expert-relay-incident-chat-ledger', new Date().toISOString()],
+    );
+    current = 10;
   }
 }
 
