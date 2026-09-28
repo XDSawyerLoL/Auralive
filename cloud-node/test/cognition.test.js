@@ -86,3 +86,59 @@ test('cognition distinguishes user requests from internally supplied context', (
   assert.match(internal.summary, /avant de décider s’il devient une intention/i);
   assert.doesNotMatch(internal.summary, /mon interlocuteur/i);
 });
+
+
+test('relationship questions do not leak operational state', () => {
+  const engine = new CognitionEngine();
+  const common = {
+    soul: {
+      current_intention: 'Évaluer nibor1896/Crow',
+      dominant_thought: 'dag aura vide',
+      organism: {
+        mood: 'calme',
+        intention_active: 'résoudre command-center:aura',
+        habitat: { last_activity_label: 'Crow sandbox' },
+      },
+    },
+    intentions: [{ statement: 'Évaluer nibor1896/Crow', priority: 0.9 }],
+    lessons: [{ content: 'command-center:aura a échoué dix fois avec dag aura vide' }],
+    reflections: [],
+    work: [{ title: 'Crow sandbox' }],
+    privateView: true,
+  };
+
+  for (const text of ['Tu sais qui je suis ?', 'Tu veux que je me présente ?']) {
+    const plan = engine.planReply({ text, ...common });
+    const payload = JSON.stringify(plan);
+    assert.equal(plan.act, 'relationship');
+    assert.equal(plan.context_scope, 'relationship');
+    assert.equal(plan.current_intention, '');
+    assert.equal(plan.dominant_thought, '');
+    assert.equal(plan.organism_intention, '');
+    assert.doesNotMatch(payload, /nibor1896\/Crow/i);
+    assert.doesNotMatch(payload, /dag aura vide/i);
+    assert.doesNotMatch(payload, /command-center:aura/i);
+  }
+});
+
+test('ordinary questions no longer receive dashboard state by default', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Quelle est ta couleur préférée ?',
+    soul: {
+      current_intention: 'Évaluer nibor1896/Crow',
+      dominant_thought: 'dag aura vide',
+      organism: { intention_active: 'résoudre command-center:aura' },
+    },
+    intentions: [{ statement: 'Évaluer nibor1896/Crow', priority: 0.9 }],
+    lessons: [{ content: 'dag aura vide' }],
+    reflections: [],
+    work: [{ title: 'Crow sandbox' }],
+    privateView: true,
+  });
+  const payload = JSON.stringify(plan);
+  assert.equal(plan.act, 'respond');
+  assert.equal(plan.context_scope, 'conversation');
+  assert.doesNotMatch(payload, /nibor1896\/Crow/i);
+  assert.doesNotMatch(payload, /dag aura vide/i);
+});
