@@ -846,6 +846,204 @@ app.get('/api/kernel/public', async () => {
 });
 
 
+
+function publicContextObject(value) {
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function publicOperationalSnapshot() {
+  if (!bootstrap.runtimeReady) {
+    return {
+      visibility: 'public-read-only',
+      runtime_ready: false,
+      soul: { ...publicFallbackSoul(false), organism: { ready: false } },
+      kernel_status: {
+        version: CognitiveKernel.VERSION,
+        enabled: config.cognitiveEnabled,
+        started: false,
+        counts: {},
+      },
+      intentions: [],
+      lessons: [],
+      activity: [],
+      work: [],
+      attention: { nodes: [], focus_statement: 'AURA démarre son noyau.' },
+      command: null,
+      curiosity: null,
+      scout: await capabilityScout.status().catch(() => null),
+      evolution: null,
+    };
+  }
+
+  const [
+    soul,
+    organism,
+    kernelStatus,
+    rawIntentions,
+    rawLessons,
+    rawActivity,
+    rawInitiatives,
+    attention,
+    commandStatus,
+    curiosityStatus,
+    scoutStatus,
+    evolutionStatus,
+  ] = await Promise.all([
+    kernel.soul({ privateView: false }),
+    kernel.organismState({ publicView: true }),
+    kernel.status(),
+    kernel.intentions(20),
+    kernel.lessons(20),
+    kernel.activity(30),
+    commandCenter.initiatives(20),
+    kernel.attentionMap(),
+    commandCenter.status({ publicView: true }),
+    curiosity.status(),
+    capabilityScout.status(),
+    evolution.status().catch(() => ({ enabled: false, phase: 'unavailable' })),
+  ]);
+
+  const intentions = rawIntentions
+    .filter((row) => {
+      const source = String(row.source || '').toLowerCase();
+      const context = publicContextObject(row.context);
+      return ['curiosity','capability-scout'].includes(source)
+        && String(context.target || 'system') !== 'interlocutor';
+    })
+    .slice(0, 8)
+    .map((row) => ({
+      statement: String(row.statement || '').slice(0, 500),
+      priority: Number(row.priority || 0),
+      source: String(row.source || ''),
+      updated_at: row.updated_at,
+    }));
+
+  const scoutLessons = (scoutStatus?.recent_findings || []).slice(0, 5).map((row) => ({
+    content:
+      `Découverte: ${row.repository} · score ${Math.round(Number(row.score || 0) * 100)}% · `
+      + `licence ${row.license || 'à vérifier'} · ${row.experiment_eligible ? 'expérimentable' : 'observation'}.`,
+    confidence: Number(row.research_confidence || row.score || 0),
+    evidence_count: row.researched ? 2 : 1,
+    source: 'capability-scout',
+    updated_at: row.discovered_at,
+  }));
+  const technicalLessons = rawLessons
+    .filter((row) => ['automation-outcomes'].includes(String(row.source || '').toLowerCase()))
+    .slice(0, 3)
+    .map((row) => ({
+      content: String(row.content || '').slice(0, 700),
+      confidence: Number(row.confidence || 0),
+      evidence_count: Number(row.evidence_count || 0),
+      source: String(row.source || ''),
+      updated_at: row.updated_at,
+    }));
+
+  const allowedTraceKinds = new Set([
+    'capability-scout',
+    'capability-experiment',
+    'curiosity-question',
+    'curiosity-research',
+    'curiosity-research-error',
+    'director-promotion',
+    'fleet-scan',
+    'service-observation',
+  ]);
+  const activity = rawActivity
+    .filter((row) => allowedTraceKinds.has(String(row.kind || '')))
+    .slice(0, 10)
+    .map((row) => ({
+      kind: String(row.kind || 'activité'),
+      title: String(row.title || row.kind || 'Activité AURA').slice(0, 240),
+      content: String(row.content || '').slice(0, 500),
+      created_at: row.created_at,
+    }));
+
+  const safeKinds = new Set(['github','evolution','research']);
+  const work = rawInitiatives
+    .filter((row) => safeKinds.has(String(row.kind || '')))
+    .slice(0, 8)
+    .map((row) => ({
+      kind: String(row.kind || 'initiative'),
+      title: String(row.title || 'Initiative AURA').slice(0, 240),
+      detail: `${String(row.domain || 'AURA')} · ${String(row.status || 'queued')}`,
+      priority: Number(row.priority || 0),
+      confidence: Number(row.confidence || 0),
+      status: String(row.status || ''),
+      updated_at: row.updated_at,
+    }));
+
+  const publicFocus = intentions[0]?.statement
+    || commandStatus?.top_initiative?.title
+    || scoutStatus?.recent_findings?.[0]?.repository
+    || (attention?.dominant ? `Focus autonome: ${attention.dominant}` : 'Observation autonome du système.');
+  const publicAttention = {
+    ...(attention || {}),
+    focus_statement: String(publicFocus).slice(0, 500),
+  };
+
+  const publicCuriosity = {
+    version: curiosityStatus.version,
+    enabled: curiosityStatus.enabled,
+    started: curiosityStatus.started,
+    running: curiosityStatus.running,
+    questions_last_hour: curiosityStatus.questions_last_hour,
+    last_run_at: curiosityStatus.last_run_at,
+    last_research_at: curiosityStatus.last_research_at,
+    recent_questions: (curiosityStatus.recent_questions || [])
+      .filter((item) => ['system','web'].includes(String(item?.context?.target || '')))
+      .slice(0, 6)
+      .map((item) => ({
+        content: item.content,
+        title: item.title,
+        created_at: item.created_at,
+        target: item.context?.target || '',
+        domain: item.context?.domain || '',
+      })),
+  };
+
+  return {
+    visibility: 'public-read-only',
+    runtime_ready: true,
+    soul: { ...soul, organism },
+    kernel_status: { ...kernelStatus, organism },
+    intentions,
+    lessons: [...scoutLessons, ...technicalLessons].slice(0, 8),
+    activity,
+    work,
+    attention: publicAttention,
+    command: commandStatus,
+    curiosity: publicCuriosity,
+    scout: scoutStatus,
+    evolution: evolutionStatus,
+    privacy_boundary: {
+      interface_public: true,
+      raw_private_memory_public: false,
+      founder_conversation_public: false,
+      secrets_public: false,
+      mutations_public: false,
+      execution_controls_public: false,
+    },
+  };
+}
+
+app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
+
+app.get('/api/scout/status', async () => capabilityScout.status());
+
+app.post('/api/scout/run', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await capabilityScout.runCycle(String(request.body?.trigger || 'private-api'));
+  } catch (error) {
+    return reply.code(502).send({ error: String(error?.message || error) });
+  }
+});
+
 app.get('/api/kernel/soul', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return publicFallbackSoul(true);
