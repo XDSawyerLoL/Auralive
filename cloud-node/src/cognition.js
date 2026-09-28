@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.2';
+  static VERSION = 'aura-cognition-native-v1.3';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -172,8 +172,9 @@ export class CognitionEngine {
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
 
     let act = 'respond';
-    let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
+    let goal = 'Répondre directement au message sans injecter mon état opérationnel s’il n’est pas pertinent.';
     let needsSemanticSupport = true;
+    let contextScope = 'conversation';
     const facts = [];
 
     if (hasAny(q, ['salut', 'bonjour', 'bonsoir', 'coucou', 'hello'])) {
@@ -183,6 +184,7 @@ export class CognitionEngine {
       facts.push(`Je suis en ligne ; mon humeur interne actuelle est ${mood}.`);
     } else if (hasAny(q, ['comment vas-tu','comment vas tu','tu te sens','ton état','ton etat'])) {
       act = 'report_internal_state';
+      contextScope = 'operational';
       goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
       needsSemanticSupport = false;
       facts.push(
@@ -196,12 +198,14 @@ export class CognitionEngine {
       if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
     } else if (hasAny(q, ['rêve','rêves','reve','reves'])) {
       act = 'report_dream';
+      contextScope = 'operational';
       goal = 'Décrire une image intérieure réelle si l’organisme en a produit une.';
       needsSemanticSupport = false;
       if (normalize(dream.last_image)) facts.push(`Mon dernier rêve computationnel est une image intérieure symbolique, pas un sommeil humain : ${normalize(dream.last_image)}.`);
       else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
+      contextScope = 'operational';
       goal = 'Décrire mon activité actuelle sans inventer.';
       needsSemanticSupport = false;
       if (thought) facts.push(`Pensée dominante : ${thought}`);
@@ -209,12 +213,14 @@ export class CognitionEngine {
       if (current) facts.push(`Intention actuelle : ${current}`);
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
+      contextScope = 'operational';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
       needsSemanticSupport = false;
       if (current) facts.push(`Intention prioritaire : ${current}`);
       if (recentReflection?.next_action) facts.push(`Prochaine action issue de ma réflexion : ${normalize(recentReflection.next_action)}`);
     } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
       act = 'report_risks';
+      contextScope = 'operational';
       goal = 'Présenter les risques visibles dans mon état et ma mémoire.';
       needsSemanticSupport = false;
       facts.push(`Pression interne : ${Math.round(Number(soul?.pressure || 0) * 100)} %`);
@@ -224,18 +230,45 @@ export class CognitionEngine {
       act = 'identity';
       goal = 'Expliquer mon architecture sans prétendre à une conscience démontrée ni à une AGI.';
       needsSemanticSupport = false;
+      contextScope = 'identity';
       facts.push('Je suis un noyau persistant avec Soul, mémoire, organisme homéostatique, intentions, routines, apprentissage et outils.');
       facts.push('Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
       facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
+    } else if (hasAny(q, [
+      'tu sais qui je suis',
+      'tu me connais',
+      'qui suis-je',
+      'qui suis je',
+      'tu te souviens de moi',
+      'tu te rappelles de moi',
+      'tu sais mon nom',
+      'tu connais mon nom',
+      'je me présente',
+      'je me presente',
+      'me présenter',
+      'me presenter',
+      'tu veux que je me présente',
+      'tu veux que je me presente'
+    ])) {
+      act = 'relationship';
+      goal = 'Répondre uniquement à propos de mon interlocuteur et de notre relation, à partir de ce qu’il a réellement partagé. Ne pas détourner la réponse vers mes tâches, erreurs, intentions ou travaux en cours.';
+      needsSemanticSupport = true;
+      contextScope = 'relationship';
+      facts.push(`Question relationnelle reçue : ${raw}`);
     } else {
       facts.push(`Message reçu : ${raw}`);
-      if (current) facts.push(`Intention actuelle : ${current}`);
-      if (thought) facts.push(`Pensée dominante : ${thought}`);
-      if (activeOrganicIntention) facts.push(`Intention organique : ${activeOrganicIntention}`);
-      if (habitat.last_activity_label) facts.push(`Vie intérieure récente : ${normalize(habitat.last_activity_label)}`);
-      if (privateView && lesson) facts.push(`Mémoire pertinente disponible : ${lesson}`);
+      contextScope = 'conversation';
     }
+
+    const operationalActs = new Set([
+      'report_current_activity',
+      'report_next_step',
+      'report_risks',
+      'report_internal_state',
+      'report_dream',
+    ]);
+    const exposeOperationalState = operationalActs.has(act);
 
     return {
       act,
@@ -243,10 +276,11 @@ export class CognitionEngine {
       facts,
       needs_semantic_support: needsSemanticSupport,
       semantic_query: needsSemanticSupport ? raw : '',
-      current_intention: current,
-      dominant_thought: thought,
+      context_scope: contextScope,
+      current_intention: exposeOperationalState ? current : '',
+      dominant_thought: exposeOperationalState ? thought : '',
       mood,
-      organism_intention: activeOrganicIntention,
+      organism_intention: exposeOperationalState ? activeOrganicIntention : '',
       private_view: Boolean(privateView),
     };
   }
