@@ -286,6 +286,12 @@ export const config = Object.freeze({
   fabricMaxParallel: int('AURA_FABRIC_MAX_PARALLEL', 12, 1, 64),
   fabricDefaultBudgetMicrounits: int('AURA_FABRIC_DEFAULT_BUDGET_MICROUNITS', 0, 0, 1_000_000_000),
 
+  videoFactoryEnabled: bool('AURA_VIDEO_FACTORY_ENABLED', false),
+  videoFactoryBaseUrl: String(process.env.AURA_VIDEO_FACTORY_BASE_URL || '').replace(/\/$/, ''),
+  videoFactoryApiKey: process.env.AURA_VIDEO_FACTORY_API_KEY || '',
+  videoFactoryTimeoutMs: int('AURA_VIDEO_FACTORY_TIMEOUT_MS', 120000, 5000, 600000),
+  videoFactoryZeroCostConfirmed: bool('AURA_VIDEO_FACTORY_ZERO_COST_CONFIRMED', false),
+
   meshP2pEnabled: bool('AURA_MESH_P2P_ENABLED', true),
   meshPeerOnlineMs: int('AURA_MESH_PEER_ONLINE_MS', 45_000, 5_000, 300_000),
   meshPeerClockSkewMs: int('AURA_MESH_PEER_CLOCK_SKEW_MS', 300_000, 30_000, 900_000),

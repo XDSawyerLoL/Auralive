@@ -62,6 +62,10 @@ function roleAffinity(model, role) {
     math: ['math', 'mathematics', 'reasoning', 'science'],
     research: ['research', 'knowledge', 'long-context', 'document', 'reasoning'],
     security: ['security', 'cyber', 'reasoning', 'code'],
+    creative: ['creative', 'writing', 'multilingual', 'qwen', 'instruction'],
+    redteam: ['abliterated', 'uncensored', 'red-team', 'adversarial', 'reasoning'],
+    vision: ['vision', 'multimodal', 'image', 'visual'],
+    'long-context': ['long-context', 'context', 'document', 'research'],
     conversation: ['conversation', 'general-purpose', 'multilingual', 'instruction'],
     translation: ['translation', 'multilingual', 'language'],
   }[roleName(role)] || ['general-purpose', 'reasoning', 'instruction'];

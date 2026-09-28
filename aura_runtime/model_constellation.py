@@ -52,6 +52,63 @@ CATALOG: tuple[ModelProfile, ...] = (
         tags=("tools", "reasoning", "moe", "open-weight"),
     ),
     ModelProfile(
+        key="qwen3.5-9b-abliterated",
+        patterns=(
+            "qwen3.5-9b-abliterated",
+            "qwen3_5-9b-abliterated",
+            "lukey03/qwen3.5-9b-abliterated",
+        ),
+        roles={
+            "redteam": 1.00,
+            "creative": 0.97,
+            "brainstorm": 0.96,
+            "conversation": 0.58,
+            "general": 0.18,
+        },
+        license="Apache-2.0",
+        legal_class="permissive",
+        family="qwen-abliterated",
+        notes=(
+            "Modèle à refus supprimés. Réservé à la divergence créative/red-team; "
+            "jamais utilisé comme autorité de sécurité, opérateur ou évolution autonome."
+        ),
+        install_hint="lukey03/Qwen3.5-9B-abliterated (Transformers/Docker Model Runner/OpenAI-compatible)",
+        min_ram_gb=12,
+        tags=(
+            "abliterated",
+            "uncensored",
+            "redteam-only",
+            "no-autonomous-actions",
+            "creative",
+            "open-weight",
+        ),
+    ),
+    ModelProfile(
+        key="kimi-k3",
+        patterns=("kimi-k3", "moonshotai/kimi-k3"),
+        roles={
+            "reasoning": 0.99,
+            "research": 0.99,
+            "vision": 1.00,
+            "code": 0.97,
+            "critic": 0.96,
+            "long-context": 1.00,
+            "tools": 0.94,
+            "general": 0.96,
+            "conversation": 0.86,
+        },
+        license="Kimi K3 License",
+        legal_class="custom-license",
+        family="kimi",
+        notes=(
+            "Frontier multimodal MoE 2.8T, contexte 1M. Profil remote/frontier: "
+            "ne pas auto-télécharger sur une machine standard; utiliser un worker compatible."
+        ),
+        install_hint="moonshotai/Kimi-K3 via vLLM/OpenAI-compatible worker",
+        min_ram_gb=1536,
+        tags=("frontier", "multimodal", "vision", "long-context", "remote-frontier", "open-weight"),
+    ),
+    ModelProfile(
         key="deepseek-r1",
         patterns=("deepseek-r1", "deepseek-r1:8b", "deepseek-r1:14b", "deepseek-r1:32b"),
         roles={
@@ -390,6 +447,14 @@ class ModelConstellation:
             if row["name"].casefold() in excluded:
                 continue
             profile = self.profile_for(row["name"])
+            if profile and "no-autonomous-actions" in profile.tags and role in {
+                "tools", "security", "evolution", "operator"
+            }:
+                continue
+            if profile and "redteam-only" in profile.tags and role not in {
+                "redteam", "creative", "brainstorm"
+            }:
+                continue
             learned_bonus, learned = self._performance_bonus(row["name"], role)
             if profile:
                 role_score = float(profile.roles.get(role, profile.roles.get("general", 0.55)))
