@@ -22,13 +22,13 @@ test('bridge stores media results above the former 12 MB truncation threshold', 
 });
 
 
-test('Hostinger entry opens a native public gateway before Fastify and preserves route limits', () => {
-  assert.match(gatewaySource, /const gateway = createServer/);
-  assert.match(gatewaySource, /gateway\.listen\(publicPort, publicHost/);
+test('Hostinger entry uses one direct Fastify listener and keeps lsnode-compatible async boot', () => {
   assert.match(gatewaySource, /await import\('\.\/src\/server\.js'\)/);
-  assert.match(gatewaySource, /app\.listen\(\{ host: '127\.0\.0\.1', port: 0 \}\)/);
-  assert.match(gatewaySource, /framework: applicationReady \? 'fastify-behind-node-gateway' : 'native-node-gateway'/);
-  assert.match(gatewaySource, /proxyToAura/);
+  assert.match(gatewaySource, /await app\.listen\(\{ host: publicHost, port: publicPort \}\)/);
+  assert.match(gatewaySource, /void bootAura\(\)/);
+  assert.doesNotMatch(gatewaySource, /proxyToAura/);
+  assert.doesNotMatch(gatewaySource, /app\.listen\(\{ host: '127\.0\.0\.1', port: 0 \}\)/);
+  assert.match(gatewaySource, /single-listener recovery server/);
   assert.match(serverSource, /bodyLimit:\s*24\s*\*\s*1024\s*\*\s*1024/);
 });
 
