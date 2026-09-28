@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { freeTierModelAllowed, markConfirmedFreeTier, reserveConfirmedFreeTier } from './gemini_free_tier.js';
 
 const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
 const DEFAULT_VOICE = 'Aoede';
@@ -164,7 +165,12 @@ export class CloudVoice {
   }
 
   get enabled() {
-    return Boolean(this.apiKey && config.voiceCloudEnabled && !config.zeroCostMode);
+    if (!this.apiKey || !config.voiceCloudEnabled) return false;
+    if (!config.zeroCostMode) return true;
+    return Boolean(
+      config.geminiFreeTierConfirmed
+      && freeTierModelAllowed(this.model, 'voice')
+    );
   }
 
   diagnostic() {
@@ -179,10 +185,24 @@ export class CloudVoice {
       generated_count: this.generatedCount,
       profile: 'mairaiy',
       zero_cost_mode: Boolean(config.zeroCostMode),
+      gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
+      free_tier_model_allowed: freeTierModelAllowed(this.model, 'voice'),
+      free_tier_daily_cap: Number(config.geminiFreeTierVoiceMaxPerDay),
     };
   }
 
   async synthesizeChunk(transcript, options = {}) {
+    const guardedFreeTier = Boolean(
+      config.zeroCostMode
+      && config.geminiFreeTierConfirmed
+      && freeTierModelAllowed(this.model, 'voice')
+    );
+    if (guardedFreeTier) {
+      await reserveConfirmedFreeTier(
+        'gemini-free-tts',
+        config.geminiFreeTierVoiceMaxPerDay,
+      );
+    }
     const endpoint = `${String(config.voiceBaseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '')}/models/${this.model}:generateContent`;
     const payload = {
       contents: [{ parts: [{ text: promptFor(transcript, options) }] }],
@@ -211,6 +231,9 @@ export class CloudVoice {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (guardedFreeTier) {
+          await markConfirmedFreeTier('gemini-free-tts', false, `HTTP ${response.status}`);
+        }
         const message = data?.error?.message || `HTTP ${response.status}`;
         throw new Error(`Mairaiy Cloud TTS: ${message}`);
       }
@@ -222,6 +245,9 @@ export class CloudVoice {
       const mime = String(inline.mimeType || inline.mime_type || '');
       const rate = pcmRate(mime);
       const wav = pcmToWav(raw, rate);
+      if (guardedFreeTier) {
+        await markConfirmedFreeTier('gemini-free-tts', true, 'ok');
+      }
       return {
         audio_base64: wav.toString('base64'),
         mime_type: 'audio/wav',
