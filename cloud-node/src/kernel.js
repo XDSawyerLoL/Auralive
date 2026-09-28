@@ -961,137 +961,211 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status] = await Promise.all([
-      this.intentions(8),
-      this.activity(18),
+    const [intentions, traces, status, services, lessons] = await Promise.all([
+      this.intentions(12),
+      this.activity(30),
       this.status(),
+      query(
+        `SELECT id,name,kind,objective,criticality,state,state_detail,last_observed_at
+         FROM aura_command_services
+         WHERE enabled=1
+         ORDER BY criticality DESC,name ASC LIMIT 18`,
+      ).catch(() => []),
+      this.lessons(12),
     ]);
 
+    const organism = this.organism.migrate(soul);
+    const bridgeStatus = this.bridge?.status
+      ? await this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
+      : { enabled: false, worker_online: false };
+    const fabricCaps = this.fabric?.list?.() || [];
+
+    const normalizeSelf = (value) => String(value || '')
+      .replace(/Je viens de recevoir un signal direct\s*:/gi, 'J’ai intégré un nouveau contexte interne :')
+      .replace(/Je le rattache à mon état et à mes intentions avant de répondre\.?/gi, 'Je l’évalue avant de décider s’il devient une intention.')
+      .replace(/ce qu’AURA peut/gi, 'ce que je peux')
+      .replace(/AURA doit/gi, 'je dois')
+      .replace(/AURA peut/gi, 'je peux')
+      .replace(/AURA veut/gi, 'je veux')
+      .replace(/AURA est/gi, 'je suis')
+      .replace(/pour AURA/gi, 'pour moi')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     const text = [
-      soul.current_intention,
-      soul.dominant_thought,
-      ...intentions.map((row) => row.statement),
+      normalizeSelf(soul.current_intention),
+      normalizeSelf(soul.dominant_thought),
+      ...intentions.map((row) => normalizeSelf(row.statement)),
       ...traces.map((row) => `${row.title || ''} ${row.content || ''}`),
+      ...lessons.map((row) => row.content || ''),
     ].join(' ').toLowerCase();
 
-    const keywordBoost = (words) => words.reduce(
-      (score, word) => score + (text.includes(word) ? 0.12 : 0),
+    const keywordBoost = (words, each = 0.1) => words.reduce(
+      (score, word) => score + (text.includes(word) ? each : 0),
       0,
     );
-
     const count = status.counts || {};
+    const stateScore = (state) => {
+      const value = String(state || '').toLowerCase();
+      if (['error','offline','unhealthy','degraded'].includes(value)) return 0.34;
+      if (['standby','waiting'].includes(value)) return 0.18;
+      if (['online','healthy','ready'].includes(value)) return 0.12;
+      return 0.08;
+    };
+
     const nodes = [
       {
-        id: 'stability',
-        label: 'Stabilité',
-        subtitle: 'Équilibre du système',
-        score: clamp(
-          0.18
-          + Number(soul.pressure || 0) * 0.58
-          + keywordBoost(['stabil', 'erreur', 'incident', 'fiabil', 'risque']),
-        ),
+        id: 'stability', label: 'Stabilité', subtitle: 'Homéostasie', group: 'regulation', kind: 'core',
+        score: clamp(0.18 + Number(soul.pressure || 0) * 0.48 + (1 - Number(organism.stabilite ?? 1)) * 0.34 + keywordBoost(['stabil','erreur','incident','fiabil','risque'])),
       },
       {
-        id: 'learning',
-        label: 'Apprentissage',
-        subtitle: 'Exploration active',
-        score: clamp(
-          0.12
-          + Number(soul.curiosity || 0) * 0.46
-          + Number(soul.introspection || 0) * 0.25
-          + keywordBoost(['appren', 'comprendre', 'analyse', 'recherche']),
-        ),
+        id: 'clarity', label: 'Clarté', subtitle: 'Cohérence interne', group: 'regulation', kind: 'core',
+        score: clamp(0.14 + (1 - Number(organism.clarte ?? 1)) * 0.36 + Number(soul.introspection || 0) * 0.25 + keywordBoost(['clarif','cohér','contradic','comprendre'])),
       },
       {
-        id: 'studio',
-        label: 'Quantic Studio',
-        subtitle: 'Création · Tests',
-        score: clamp(
-          0.14
-          + Math.min(Number(count.outcomes || 0) / 20, 0.24)
-          + keywordBoost(['studio', 'stream', 'obs', 'automation', 'quantic']),
-        ),
+        id: 'curiosity', label: 'Curiosité', subtitle: 'Nouveauté', group: 'perception', kind: 'core',
+        score: clamp(0.12 + Number(soul.curiosity || organism.curiosite || 0) * 0.52 + keywordBoost(['nouveau','github','découvr','explor','crow'])),
       },
       {
-        id: 'horizon',
-        label: 'HORIZON',
-        subtitle: 'Anticipation',
+        id: 'memory', label: 'Mémoire', subtitle: 'Consolidation', group: 'memory', kind: 'core',
+        score: clamp(0.1 + Number(soul.continuity || 0) * 0.30 + Math.min(Number(count.lessons || 0) / 25, 0.24) + keywordBoost(['mémoire','leçon','souvenir','consolid'])),
+      },
+      {
+        id: 'learning', label: 'Apprentissage', subtitle: 'Adaptation', group: 'memory', kind: 'core',
+        score: clamp(0.12 + Number(soul.curiosity || 0) * 0.34 + Number(soul.introspection || 0) * 0.23 + Math.min(Number(count.outcomes || 0) / 30, 0.18) + keywordBoost(['appren','amélior','deuxième essai','adapter'])),
+      },
+      {
+        id: 'reasoning', label: 'Raisonnement', subtitle: 'Hypothèses · Critique', group: 'cognition', kind: 'core',
+        score: clamp(0.18 + Number(organism.clarte || 0) * 0.20 + Math.min(Number(count.reflections || 0) / 18, 0.20) + keywordBoost(['hypoth','raison','diagnostic','analyse','critique'])),
+      },
+      {
+        id: 'planning', label: 'Planification', subtitle: 'DAG · Étapes', group: 'cognition', kind: 'core',
+        score: clamp(0.12 + Math.min(Number(count.initiatives || 0) / 12, 0.26) + keywordBoost(['dag','plan','étape','mission','objectif'])),
+      },
+      {
+        id: 'evidence', label: 'Evidence Engine', subtitle: 'Vérification', group: 'perception', kind: 'capability',
+        score: clamp(0.10 + keywordBoost(['preuve','source','vérif','evidence','contradic'], 0.12) + (this.webSubstrate?.enabled ? 0.16 : 0)),
+      },
+      {
+        id: 'web', label: 'Web', subtitle: 'Recherche externe', group: 'perception', kind: 'capability',
+        score: clamp(0.08 + (this.webSubstrate?.enabled ? 0.22 : 0.03) + keywordBoost(['web','github','internet','source','recherche'])),
+      },
+      {
+        id: 'horizon', label: 'HORIZON', subtitle: 'Anticipation', group: 'perception', kind: 'capability',
+        score: clamp(0.07 + (this.horizon?.enabled ? 0.24 : 0.04) + keywordBoost(['horizon','prévision','prediction','signal'])),
+      },
+      {
+        id: 'automation', label: 'Automatisation', subtitle: 'Actions · Routines', group: 'agency', kind: 'capability',
+        score: clamp(0.12 + Math.min(Number(count.routines || 0) / 12, 0.20) + Math.min(Number(count.outcomes || 0) / 24, 0.16) + keywordBoost(['automat','routine','opérateur','action','command-center'])),
+      },
+      {
+        id: 'evolution', label: 'Évolution', subtitle: 'Auto-amélioration', group: 'agency', kind: 'capability',
+        score: clamp(0.1 + Math.min(Number(count.improvements || 0) / 10, 0.28) + keywordBoost(['évolution','amélioration','corriger','version','sandbox'])),
+      },
+      {
+        id: 'fabric', label: 'Capability Fabric', subtitle: 'Routage de capacités', group: 'infrastructure', kind: 'capability',
+        score: clamp(0.08 + (this.fabric?.enabled !== false ? 0.20 : 0.03) + Math.min(fabricCaps.length / 30, 0.24) + keywordBoost(['fabric','capability','outil','route'])),
+      },
+      {
+        id: 'mesh', label: 'Mesh', subtitle: 'Essaim · Pairs', group: 'infrastructure', kind: 'capability',
+        score: clamp(0.07 + Math.min(fabricCaps.filter((row) => /peer|mesh|webrtc/i.test(String(row.transport || '') + ' ' + String(row.provider || ''))).length / 10, 0.28) + keywordBoost(['mesh','pair','peer','essaim','worker'])),
+      },
+      {
+        id: 'worker', label: 'Worker local', subtitle: bridgeStatus.worker_online ? 'Connecté' : 'Hors ligne', group: 'infrastructure', kind: 'bridge',
+        status: bridgeStatus.worker_online ? 'online' : 'offline',
+        score: clamp((bridgeStatus.worker_online ? 0.16 : 0.38) + keywordBoost(['worker','studio','local','bloqué','reprendre'])),
+      },
+    ];
+
+    const productNodes = services
+      .filter((service) => !['aura','horizon'].includes(String(service.id || '')))
+      .slice(0, 9)
+      .map((service) => ({
+        id: 'product:' + String(service.id || '').slice(0, 80),
+        label: String(service.name || service.id || 'Produit').slice(0, 28),
+        subtitle: String(service.state_detail || service.objective || service.kind || 'Produit Quantic').slice(0, 52),
+        group: 'ecosystem',
+        kind: 'product',
+        status: String(service.state || 'unknown'),
         score: clamp(
           0.08
-          + (this.horizon?.enabled ? 0.24 : 0)
-          + keywordBoost(['horizon', 'prévision', 'prediction', 'signal']),
+          + Number(service.criticality || 0.5) * 0.24
+          + stateScore(service.state)
+          + keywordBoost([
+            String(service.id || '').toLowerCase(),
+            String(service.name || '').toLowerCase(),
+          ], 0.08),
         ),
-      },
-      {
-        id: 'automation',
-        label: 'Automatisation',
-        subtitle: 'Optimisation',
-        score: clamp(
-          0.12
-          + Math.min(Number(count.routines || 0) / 12, 0.22)
-          + Math.min(Number(count.improvements || 0) / 12, 0.18)
-          + keywordBoost(['automat', 'routine', 'opérateur', 'action']),
-        ),
-      },
-      {
-        id: 'memory',
-        label: 'Mémoire',
-        subtitle: 'Consolidation',
-        score: clamp(
-          0.1
-          + Number(soul.continuity || 0) * 0.33
-          + Math.min(Number(count.lessons || 0) / 25, 0.22)
-          + keywordBoost(['mémoire', 'leçon', 'souvenir', 'consolid']),
-        ),
-      },
-      {
-        id: 'evolution',
-        label: 'Évolution',
-        subtitle: 'Amélioration',
-        score: clamp(
-          0.1
-          + Math.min(Number(count.improvements || 0) / 10, 0.28)
-          + keywordBoost(['évolution', 'amélioration', 'corriger', 'version']),
-        ),
-      },
-      {
-        id: 'watch',
-        label: 'Veille',
-        subtitle: 'Collecte d’informations',
-        score: clamp(
-          0.1
-          + Number(soul.openness || 0) * 0.24
-          + Number(soul.curiosity || 0) * 0.24
-          + keywordBoost(['veille', 'article', 'nouveau', 'information']),
-        ),
-      },
-    ].map((node) => ({
-      ...node,
-      score: Number(node.score.toFixed(4)),
-    }));
+      }));
+    nodes.push(...productNodes);
 
     const ranked = [...nodes].sort((a, b) => b.score - a.score);
     const top = ranked[0];
     const second = ranked[1];
     const prior = this._lastAttention || {};
     const enriched = nodes.map((node) => {
-      const previous = Number(prior[node.id] ?? node.score);
-      const delta = Number((node.score - previous).toFixed(4));
+      const score = Number(clamp(node.score).toFixed(4));
+      const previous = Number(prior[node.id] ?? score);
+      const delta = Number((score - previous).toFixed(4));
       return {
         ...node,
+        score,
         trend: delta > 0.025 ? 'rising' : delta < -0.025 ? 'falling' : 'stable',
         delta,
         dominant: node.id === top?.id,
       };
     });
-    this._lastAttention = Object.fromEntries(nodes.map((node) => [node.id, node.score]));
+    this._lastAttention = Object.fromEntries(enriched.map((node) => [node.id, node.score]));
+
+    const links = [];
+    const link = (source, target, strength = 0.5, kind = 'association') => {
+      if (!enriched.some((node) => node.id === source) || !enriched.some((node) => node.id === target)) return;
+      links.push({ source, target, strength: Number(clamp(strength).toFixed(3)), kind });
+    };
+
+    link('stability','clarity',0.82,'regulation');
+    link('clarity','reasoning',0.78,'cognitive');
+    link('reasoning','planning',0.84,'cognitive');
+    link('planning','automation',0.76,'action');
+    link('automation','evolution',0.68,'learning-loop');
+    link('evolution','learning',0.72,'learning-loop');
+    link('learning','memory',0.88,'memory-loop');
+    link('memory','reasoning',0.64,'recall');
+    link('curiosity','web',0.86,'exploration');
+    link('web','evidence',0.84,'verification');
+    link('evidence','reasoning',0.78,'verification');
+    link('horizon','evidence',0.58,'forecast-check');
+    link('fabric','automation',0.72,'execution');
+    link('fabric','mesh',0.70,'routing');
+    link('mesh','worker',0.62,'execution');
+    link('worker','automation',0.74,'execution');
+
+    for (const node of productNodes) {
+      if (/studio/i.test(node.id)) link(node.id,'worker',0.82,'product');
+      else if (/glide/i.test(node.id)) link(node.id,'web',0.72,'product');
+      else if (/news/i.test(node.id)) link(node.id,'evidence',0.65,'product');
+      else if (/mail/i.test(node.id)) link(node.id,'memory',0.48,'product');
+      else if (/zoon|pulse/i.test(node.id)) link(node.id,'curiosity',0.54,'product');
+      else if (/providence/i.test(node.id)) link(node.id,'memory',0.72,'product');
+      else if (/os/i.test(node.id)) link(node.id,'fabric',0.66,'product');
+      else link(node.id,'fabric',0.46,'product');
+    }
 
     return {
+      version: 'aura-neural-interest-map-v1',
       updated_at: now(),
       dominant: top?.id || '',
       secondary: second?.id || '',
-      focus_statement: String(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      focus_statement: normalizeSelf(soul.current_intention || soul.dominant_thought || ''),
       nodes: enriched,
+      links,
+      stats: {
+        nodes: enriched.length,
+        synapses: links.length,
+        groups: [...new Set(enriched.map((node) => node.group))].length,
+        active_intentions: intentions.length,
+        recent_traces: traces.length,
+      },
     };
   }
 
