@@ -57,7 +57,7 @@ const NATIVE_STAGES = [
   },
   {
     key: 'verify',
-    cues: ['verifier', 'verify', 'etat', 'state', 'inspecter', 'inspect', 'controler'],
+    cues: ['verifier', 'verifie', 'verify', 'check', 'etat', 'state', 'inspecter', 'inspect', 'controler'],
     tags: ['verify', 'inspect', 'evidence', 'research', 'read'],
     prefer_read_only: true,
   },
@@ -69,7 +69,7 @@ const NATIVE_STAGES = [
   },
   {
     key: 'read',
-    cues: ['relire', 'lire', 'read', 'consulter', 'fetch'],
+    cues: ['relire', 'lire', 'lis', 'read', 'consulter', 'fetch'],
     tags: ['read', 'fetch', 'inspect'],
     prefer_read_only: true,
   },
