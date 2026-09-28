@@ -15,8 +15,8 @@ RÉGLAGES HOSTINGER
 - Installation : npm install --omit=dev
 - Démarrage : npm start
 - Output directory : vide
-- Port public : utiliser la variable PORT injectée par Hostinger
-- Fallback uniquement si PORT est absent : AURA_GATEWAY_PORT, puis AURA_PORT, puis 3000
+- Port Hostinger géré : 3000 (contrat documenté par Hostinger)
+- AURA ouvre aussi le PORT configuré/injecté s'il diffère de 3000, via une passerelle native
 
 ACCÈS DIRECT
 - Le dashboard AURA est public.
@@ -29,16 +29,16 @@ GARANTIE FINANCIÈRE
 - AURA_ZERO_COST_MODE=true doit rester activé.
 - Aucun fallback Gemini/OpenAI distant potentiellement facturable.
 - Expert Bridge externe bloqué en mode zéro coût.
-- TTS Gemini Cloud bloqué.
-- Mairaiy utilise Providence/Kokoro ff_siwis via la route Quantic autorisée à 0 €.
+- TTS Gemini Aoede reste fail-closed en mode zéro coût : activé uniquement si la clé est présente et le Free Tier explicitement confirmé.
+- Aucun fallback Kokoro/Piper/voix générique ne remplace Mairaiy Aoede.
 - Sans capacité gratuite disponible, AURA reste sur son noyau natif plutôt que de dépenser.
 
 ARCHITECTURE DE DÉMARRAGE
 - un seul process Node
-- un seul listener Fastify public
-- bind 0.0.0.0
-- le listener suit d'abord process.env.PORT fourni par Hostinger
-- passerelle native de récupération sur 3000 si le bootstrap Fastify échoue
+- passerelle native publique ouverte immédiatement sur 0.0.0.0:3000
+- seconde passerelle native sur PORT si PORT diffère de 3000
+- Fastify tourne uniquement en interne et les passerelles lui transmettent le trafic
+- même si Fastify échoue, / et /healthz restent accessibles avec le diagnostic réel
 - MySQL démarre sans empêcher l'interface de répondre
 - timeout connexion MySQL : 5 s par défaut
 
@@ -75,7 +75,7 @@ VÉRIFICATION APRÈS DÉPLOIEMENT
 
 2. GET /__aura_gateway doit retourner :
    "gateway_ready": true
-   "gateway_port": <PORT injecté par Hostinger>
+   "gateway_port": 3000 (ou le PORT secondaire utilisé pour cette requête)
 
 3. GET /api/bootstrap/status doit retourner :
    "product": "AURA Cloud"
