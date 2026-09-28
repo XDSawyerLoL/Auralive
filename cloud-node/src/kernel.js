@@ -7,6 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
+import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
 
@@ -690,19 +691,18 @@ export class CognitiveKernel {
   async swarm(task, names) {
     const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic']).filter((name) => AGENT_ROLES[name]).slice(0, 5);
     if (!selected.length) throw new Error('Aucun agent valide');
-    const outputs = [];
-    for (const name of selected) {
-      try { outputs.push(await this.runAgent(name, task)); }
-      catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
-    }
+    const outputs = await Promise.all(selected.map(async (name) => {
+      try { return await this.runAgent(name, task); }
+      catch (error) { return { agent: name, answer: `ERREUR: ${String(error?.message || error)}` }; }
+    }));
     const synthesis = await this.ai.generate(
       `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
       'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
       900,
       'critic',
     );
-    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
-    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
+    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected, concurrent: true });
+    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.', concurrent: true };
   }
 
   async operate(task, requestedRisks = []) {
@@ -724,6 +724,53 @@ export class CognitiveKernel {
       };
     }
 
+    if (this.fabric) {
+      try {
+        const sandboxCapabilities = this.fabric.list()
+          .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
+        if (sandboxCapabilities.length) {
+          const compiler = new DagCompiler({ enabled: false });
+          const graph = await compiler.compile(mission, sandboxCapabilities, {
+            maxNodes: 8,
+            maxParallel: 2,
+            budgetMicrounits: 0,
+          });
+          const sandboxOnly = graph.nodes.length > 0
+            && graph.nodes.every((node) => String(node.capability || '').startsWith('cloud.workspace.'));
+          if (sandboxOnly) {
+            const executor = new TaskGraphExecutor(this.fabric);
+            const result = await executor.execute(graph, {
+              trigger: 'cloud-sandbox-operator',
+              allowSideEffects: true,
+            });
+            if (result.ok) {
+              await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
+                delegated: false,
+                executed: true,
+                graph_id: result.graph_id,
+                capabilities: graph.nodes.map((node) => node.capability),
+              });
+              return {
+                ok: true,
+                task: mission,
+                execution_mode: 'aura-cloud-sandbox',
+                executed: true,
+                authority: 'typed-reversible-cloud-workspace',
+                graph,
+                result,
+              };
+            }
+          }
+        }
+      } catch (error) {
+        await this.trace('operator', 'AURA Cloud sandbox refused', mission, {
+          delegated: false,
+          executed: false,
+          error: String(error?.message || error).slice(0, 1000),
+        }).catch(() => {});
+      }
+    }
+
     const plan = await this.runAgent(
       'operator',
       `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
@@ -734,7 +781,7 @@ export class CognitiveKernel {
       execution_mode: 'plan-only-fallback',
       executed: false,
       plan: plan.answer,
-      authority: 'Quantic Studio worker offline',
+      authority: 'Quantic Studio worker offline; no typed cloud capability matched',
     };
   }
 
