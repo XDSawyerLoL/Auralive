@@ -69,8 +69,14 @@ const NATIVE_STAGES = [
   },
   {
     key: 'read',
-    cues: ['relire', 'lire', 'read', 'consulter'],
+    cues: ['relire', 'lire', 'read', 'consulter', 'fetch'],
     tags: ['read', 'fetch', 'inspect'],
+    prefer_read_only: true,
+  },
+  {
+    key: 'compute',
+    cues: ['calculer', 'calcule', 'compute', 'calculate', 'score', 'total', 'correction'],
+    tags: ['compute', 'calculate', 'math', 'transform'],
     prefer_read_only: true,
   },
   {
@@ -88,12 +94,26 @@ const NATIVE_STAGES = [
 
 function compileNativeGraph(goal, available, { budgetMicrounits = 0, maxNodes = 20, maxParallel = 8 } = {}) {
   const goalTokens = tokenSet(goal);
+  const foldedGoal = foldText(goal);
+  const stages = NATIVE_STAGES
+    .map((stage, index) => {
+      const positions = (stage.cues || [])
+        .map((cue) => foldedGoal.indexOf(foldText(cue)))
+        .filter((position) => position >= 0);
+      return {
+        ...stage,
+        cue_position: positions.length ? Math.min(...positions) : -1,
+        declaration_order: index,
+      };
+    })
+    .filter((stage) => stage.cue_position >= 0)
+    .sort((a, b) => a.cue_position - b.cue_position || a.declaration_order - b.declaration_order);
+
   const nodes = [];
   const usedCapabilities = new Set();
   let previousId = '';
 
-  for (const stage of NATIVE_STAGES) {
-    if (!hasCue(goal, stage.cues)) continue;
+  for (const stage of stages) {
     const ranked = available
       .map((capability) => ({
         capability,
