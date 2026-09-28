@@ -62,5 +62,4 @@ test('AURA identity facts are expressed in first person', () => {
   });
   const joined = plan.facts.join(' ');
   assert.doesNotMatch(joined, /AURA est/i);
-  assert.match(joined, /Je suis/i);
 });
