@@ -76,7 +76,7 @@ def test_windows_build_uses_console_bootloader_with_hidden_console() -> None:
     assert "VERSION.json" in versioning
     assert "BUILD-ID.txt" in versioning
 
-def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
+def test_windows_package_keeps_kokoro_compatibility_but_aoede_identity() -> None:
     build = BUILD.read_text(encoding="utf-8")
     env_example = ENV_EXAMPLE.read_text(encoding="utf-8")
     workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -93,13 +93,16 @@ def test_windows_package_bundles_kokoro_and_quality_first_env() -> None:
     assert "AI_MODE=ollama" in env_example
     assert "AI_MODEL=gemma3:12b" in env_example
     assert "AI_AUTO_FAST_MODEL=false" in env_example
-    assert "MAIRAIY_KOKORO_PRIMARY=true" in env_example
+    assert "MAIRAIY_KOKORO_PRIMARY=false" in env_example
     assert "MAIRAIY_KOKORO_VOICE=ff_siwis" in env_example
+    assert "TTS_MODE=gemini" in env_example
+    assert "TTS_MODEL=gemini-3.1-flash-tts-preview" in env_example
     assert "TTS_VOICE=Aoede" in env_example
+    assert "MAIRAIY_LOCKED_VOICE=Aoede" in env_example
     assert "include-hidden-files: true" in workflow
-    assert "Kokoro ff_siwis n'est pas pret" in workflow
+    assert "Aoede verrouillee" in workflow
+    assert "aucun fallback de timbre" in workflow
     assert "api/avatar/test" in workflow
-    assert "overlay_required" in workflow
     assert 'Get-Content "VERSION.json"' in workflow
     assert "name: QuanticStudio-Windows-Native" in workflow
     assert "aura-source\\cloud-node\\src\\cognition.js" in workflow

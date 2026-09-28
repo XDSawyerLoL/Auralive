@@ -443,8 +443,11 @@ async def voice_control_status_v3() -> dict[str, Any]:
         "avatar_connected": aura.overlay.count("avatar") > 0,
         "audio": aura.avatar_audio.diagnostic(),
         "response_sync": response_sync.diagnostic(),
-        "local_voice_mode": True,
-        "gemini_required": False,
+        "local_voice_mode": False,
+        "gemini_required": True,
+        "gemini_configured": bool(aura.avatar_audio.gemini_api_key),
+        "historical_voice": "Aoede",
+        "historical_model": "gemini-3.1-flash-tts-preview",
     }
 
 
@@ -1069,14 +1072,76 @@ async def local_setup_page() -> HTMLResponse:
 
 @app.get("/api/setup/status")
 async def local_setup_status() -> dict[str, Any]:
-    kokoro = getattr(aura, "local_kokoro_voice", None)
+    audio = aura.avatar_audio.diagnostic()
+    identity = dict(audio.get("voice_identity") or {})
     return {
         "ok": True,
         "twitch_configured": bool(settings.twitch_configured),
         "twitch_client_id_present": bool(settings.twitch_client_id),
         "twitch_secret_present": bool(settings.twitch_client_secret),
-        "kokoro": kokoro.diagnostic() if kokoro is not None else {"enabled": False, "ready": False},
-        "gemini_required": False,
+        "gemini_required": True,
+        "gemini_configured": bool(aura.avatar_audio.gemini_api_key),
+        "voice": {
+            "ready": bool(aura.avatar_audio.gemini_api_key),
+            "provider": "gemini-tts",
+            "model": identity.get("primary_model") or "gemini-3.1-flash-tts-preview",
+            "engine_voice": identity.get("primary_voice") or "Aoede",
+            "last_error": str(audio.get("last_error") or ""),
+            "generic_fallback_allowed": False,
+        },
+    }
+
+
+@app.post("/api/setup/voice")
+async def local_setup_voice(
+    request: Request,
+    payload: dict[str, Any] = Body(...),
+) -> dict[str, Any]:
+    client_host = str(request.client.host if request.client else "")
+    if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        raise HTTPException(status_code=403, detail="Configuration vocale disponible uniquement depuis ce PC")
+
+    api_key = str(payload.get("api_key") or "").strip()
+    if not api_key or len(api_key) > 512 or any(char in api_key for char in ("\\r", "\\n")):
+        raise HTTPException(status_code=422, detail="Clé Gemini TTS invalide")
+
+    previous = os.environ.get("TTS_API_KEY")
+    os.environ["TTS_API_KEY"] = api_key
+    try:
+        audio_url = await aura.avatar_audio.synthesize(
+            "Bonjour, je suis Mairaiy.",
+            voice="Aoede",
+            rate=1.0,
+            pitch=1.0,
+            volume=1.0,
+            context="test",
+        )
+        if not audio_url:
+            raise RuntimeError(str(aura.avatar_audio.last_error or "Gemini TTS Aoede indisponible"))
+    except Exception as exc:
+        if previous is None:
+            os.environ.pop("TTS_API_KEY", None)
+        else:
+            os.environ["TTS_API_KEY"] = previous
+        raise HTTPException(status_code=503, detail=str(exc)[:500]) from exc
+
+    _write_runtime_env({
+        "TTS_API_KEY": api_key,
+        "TTS_MODEL": "gemini-3.1-flash-tts-preview",
+        "TTS_VOICE": "Aoede",
+        "TTS_MODE": "gemini",
+        "MAIRAIY_CLOUD_VOICE_ENABLED": "true",
+    })
+    os.environ["TTS_MODEL"] = "gemini-3.1-flash-tts-preview"
+    os.environ["TTS_VOICE"] = "Aoede"
+    os.environ["TTS_MODE"] = "gemini"
+    return {
+        "ok": True,
+        "configured": True,
+        "provider": "gemini-tts",
+        "model": "gemini-3.1-flash-tts-preview",
+        "voice": "Aoede",
+        "audio_url": audio_url,
     }
 
 
@@ -1152,28 +1217,11 @@ async def twitch_auth_v3(role: str, request: Request) -> HTMLResponse:
 _original_v3_lifespan = app.router.lifespan_context
 
 
-async def _prewarm_kokoro() -> None:
-    voice = getattr(aura, "local_kokoro_voice", None)
-    if voice is None or not getattr(voice, "enabled", False):
-        return
-    try:
-        ready = await voice.ensure_ready()
-        if ready:
-            logger.info("Voix Kokoro locale prete: %s", voice.voice_name)
-        else:
-            logger.warning("Voix Kokoro locale indisponible: %s", voice.last_error)
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Prechargement Kokoro non bloquant impossible: %s", exc)
-
-
 @asynccontextmanager
 async def _v3_lifespan(application):
     async with _original_v3_lifespan(application):
         aura.overlay.subscribe(_native_overlay_audio_listener)
         await cloud_worker.start()
-        kokoro_warmup = asyncio.create_task(_prewarm_kokoro(), name="kokoro-voice-warmup")
         if settings.broadcast_engine == "native" and settings.native_engine_autostart:
             try:
                 await asyncio.to_thread(native_broadcast.start)
@@ -1182,12 +1230,6 @@ async def _v3_lifespan(application):
         try:
             yield
         finally:
-            if not kokoro_warmup.done():
-                kokoro_warmup.cancel()
-                try:
-                    await kokoro_warmup
-                except asyncio.CancelledError:
-                    pass
             aura.overlay.unsubscribe(_native_overlay_audio_listener)
             await cloud_worker.close()
             await voice_realtime.close()

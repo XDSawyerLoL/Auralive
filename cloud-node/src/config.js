@@ -157,20 +157,24 @@ export const config = Object.freeze({
   openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
   openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),
 
-  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', true),
+  // Historical Mairaiy identity: Gemini 3.1 Flash TTS Preview + prebuilt Aoede.
+  // Model and timbre are deliberately locked so stale Hostinger variables cannot
+  // silently move AURA to Leda/Kokoro/another provider.
+  voiceCloudEnabled: true,
   voiceApiKey: process.env.TTS_API_KEY || LEGACY_GEMINI_API_KEY,
-  voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
-  voiceModel: process.env.TTS_MODEL || 'gemini-3.1-flash-tts-preview',
-  voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Aoede',
+  voiceBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  voiceModel: 'gemini-3.1-flash-tts-preview',
+  voiceName: 'Aoede',
   voiceTimeoutMs: int('TTS_TIMEOUT_MS', 35000, 5000, 120000),
 
-  // AURA Voice Fabric: provider-neutral Mairaiy identity.
-  // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
-  voiceFabricEnabled: true,
-  voiceFabricPinQuanticEndpoint: true,
-  voiceFabricBaseUrl: 'https://mediumorchid-badger-314305.hostingersite.com/voice',
+  // Optional Voice Fabric for a future provider that really serves Aoede.
+  // The old Providence endpoint renders Kokoro ff_siwis and is therefore not a
+  // valid Mairaiy/Aoede provider. It must never be pinned as the default.
+  voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', false),
+  voiceFabricPinQuanticEndpoint: false,
+  voiceFabricBaseUrl: String(process.env.AURA_VOICE_FABRIC_BASE_URL || '').replace(/\/$/, ''),
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
-  voiceFabricModel: 'gemini-3.1-flash-tts-preview',
+  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'gemini-3.1-flash-tts-preview',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
   voiceFabricProfileName: 'Mairaiy',
   voiceFabricRequireProfile: true,
@@ -183,7 +187,7 @@ export const config = Object.freeze({
   voiceFabricChunkChars: int('AURA_VOICE_FABRIC_CHUNK_CHARS', 3200, 800, 3900),
   voiceFabricMaxAudioBytes: int('AURA_VOICE_FABRIC_MAX_AUDIO_BYTES', 20 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
   voiceFabricZeroCostConfirmed: bool('AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED', false),
-  voiceFabricTrustedZeroCostOrigins: ['https://mediumorchid-badger-314305.hostingersite.com/voice'],
+  voiceFabricTrustedZeroCostOrigins: csv('AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS', ''),
   voiceFabricStrictIdentity: true,
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),

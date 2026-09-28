@@ -8,13 +8,13 @@ MAIN_V3 = ROOT / "app" / "main_v3.py"
 VOICE_REALTIME = ROOT / "app" / "services" / "voice_realtime.py"
 
 
-def test_voice_control_no_longer_requires_gemini() -> None:
+def test_voice_control_exposes_historical_aoede_status() -> None:
     content = VOICE_UI.read_text(encoding="utf-8")
-    assert "CONFIGURATION GEMINI MANQUANTE" not in content
-    assert "Voix Gemini en préparation" not in content
-    assert "La voix Gemini n’a pas été produite" not in content
-    assert "KOKORO LOCAL" in content
-    assert "Voix de Mairaiy en préparation" in content
+    assert "KOKORO LOCAL" not in content
+    assert "VOIX DE SECOURS" not in content
+    assert "MAIRAIY AOEDE" in content
+    assert "MAIRAIY AOEDE À CONFIGURER" in content
+    assert "voix Aoede" in content
 
 
 def test_kokoro_counts_as_a_delivered_realtime_engine() -> None:
@@ -36,8 +36,10 @@ def test_missing_twitch_credentials_redirect_to_local_setup() -> None:
     assert "Renseigne TWITCH_CLIENT_ID et TWITCH_CLIENT_SECRET dans .env" not in main
     assert "Twitch Client ID" in setup
     assert "Twitch Client Secret" in setup
-    assert "Gemini n’est pas requis" in setup
-    assert "ff_siwis" in setup
+    assert "Gemini TTS · Aoede" in setup
+    assert "Enregistrer et tester Aoede" in setup
+    assert "Gemini n’est pas requis" not in setup
+    assert "Voix attendue : ff_siwis" not in setup
 
 
 def test_setup_api_never_returns_twitch_secret() -> None:

@@ -280,11 +280,13 @@ class AvatarAudioService:
         pitch: float,
         context: str,
         style: str,
+        model: str = "",
     ) -> str | None:
         selected_voice = _select_gemini_voice(voice)
+        selected_model = str(model or self.gemini_model).strip() or _GEMINI_TTS_DEFAULT_MODEL
         filename = f"mairaiy-{uuid4().hex}.wav"
         path = self.output_dir / filename
-        endpoint = f"{_GEMINI_TTS_BASE_URL}/models/{self.gemini_model}:generateContent"
+        endpoint = f"{_GEMINI_TTS_BASE_URL}/models/{selected_model}:generateContent"
         payload = {
             "contents": [{
                 "parts": [{

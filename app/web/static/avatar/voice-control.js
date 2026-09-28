@@ -85,25 +85,18 @@
       const data = await response.json();
       const visionActive = Boolean(data?.live_awareness?.vision?.active);
       const audio = data?.audio || {};
-      const kokoro = audio?.kokoro_voice || {};
       const identity = audio?.voice_identity || {};
       const currentEngine = String(identity.current_engine || audio.last_engine || '');
-      const localVoiceReady = Boolean(kokoro.ready);
-      const fallbackReady = ['kokoro-local', 'gemini-tts', 'piper-local'].includes(currentEngine);
-      const voiceReady = localVoiceReady || fallbackReady;
-      const kokoroLoading = Boolean(kokoro.enabled && kokoro.assets_present && !kokoro.ready && !kokoro.last_error);
+      const currentVoice = String(identity.current_voice || audio.last_voice || 'Aoede');
+      const voiceReady = Boolean(data?.gemini_configured) || (
+        currentEngine === 'gemini-tts' && currentVoice.toLowerCase() === 'aoede'
+      );
 
-      if (localVoiceReady) {
-        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · KOKORO LOCAL`;
-        statusNode.style.color = '#a9f7df';
-      } else if (kokoroLoading) {
-        statusNode.textContent = 'CHARGEMENT KOKORO LOCAL…';
-        statusNode.style.color = '#f7d98b';
-      } else if (voiceReady) {
-        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · VOIX DE SECOURS`;
+      if (voiceReady) {
+        statusNode.textContent = `${visionActive ? 'PRÊTE · MICRO + VISION' : 'PRÊTE · MICRO'} · MAIRAIY AOEDE`;
         statusNode.style.color = '#a9f7df';
       } else {
-        statusNode.textContent = 'VOIX LOCALE INDISPONIBLE';
+        statusNode.textContent = 'MAIRAIY AOEDE À CONFIGURER';
         statusNode.style.color = '#ff9ab2';
       }
       visionRuntime.textContent = visionLabel(data);
@@ -318,7 +311,7 @@
       waitingVoice = true;
       clearPhrase();
       render();
-      setHint('Réponse prête', 'Mairaiy prépare maintenant sa voix locale.');
+      setHint('Réponse prête', 'Mairaiy prépare maintenant sa voix Aoede.');
       waitForVoiceCompletion();
     } catch (error) {
       processing = false;
