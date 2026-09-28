@@ -188,6 +188,23 @@ export const config = Object.freeze({
   curiosityMaxInterlocutorQuestionsPerHour: int('AURA_CURIOSITY_MAX_INTERLOCUTOR_QUESTIONS_PER_HOUR', 4, 0, 12),
   curiosityProductStaleSeconds: int('AURA_CURIOSITY_PRODUCT_STALE_SECONDS', 900, 60, 86400),
 
+  // Capability Scout — AURA cherche elle-même des briques externes utiles,
+  // vérifie leur licence/maturité et expérimente les meilleures en sandbox.
+  capabilityScoutEnabled: bool('AURA_CAPABILITY_SCOUT_ENABLED', true),
+  capabilityScoutIntervalSeconds: int('AURA_CAPABILITY_SCOUT_INTERVAL_SECONDS', 5400, 900, 86400),
+  capabilityScoutWarmupSeconds: int('AURA_CAPABILITY_SCOUT_WARMUP_SECONDS', 75, 15, 1800),
+  capabilityScoutQueriesPerCycle: int('AURA_CAPABILITY_SCOUT_QUERIES_PER_CYCLE', 2, 1, 4),
+  capabilityScoutSearchResults: int('AURA_CAPABILITY_SCOUT_SEARCH_RESULTS', 8, 3, 20),
+  capabilityScoutInspectPerCycle: int('AURA_CAPABILITY_SCOUT_INSPECT_PER_CYCLE', 6, 1, 12),
+  capabilityScoutInvestigationsPerCycle: int('AURA_CAPABILITY_SCOUT_INVESTIGATIONS_PER_CYCLE', 2, 1, 4),
+  capabilityScoutMaxFindingsPerCycle: int('AURA_CAPABILITY_SCOUT_MAX_FINDINGS_PER_CYCLE', 5, 1, 10),
+  capabilityScoutMinScore: num('AURA_CAPABILITY_SCOUT_MIN_SCORE', 0.64, 0.3, 0.95),
+  capabilityScoutExperimentMinScore: num('AURA_CAPABILITY_SCOUT_EXPERIMENT_MIN_SCORE', 0.78, 0.5, 0.99),
+  capabilityScoutResearchMinConfidence: num('AURA_CAPABILITY_SCOUT_RESEARCH_MIN_CONFIDENCE', 0.60, 0.3, 0.95),
+  capabilityScoutAutoExperiment: bool('AURA_CAPABILITY_SCOUT_AUTO_EXPERIMENT', true),
+  capabilityScoutMaxExperimentsPerDay: int('AURA_CAPABILITY_SCOUT_MAX_EXPERIMENTS_PER_DAY', 2, 0, 8),
+  capabilityScoutDedupeDays: int('AURA_CAPABILITY_SCOUT_DEDUPE_DAYS', 14, 1, 90),
+
   commandCenterEnabled: bool('AURA_COMMAND_CENTER_ENABLED', true),
   commandCenterAutoExecute: bool('AURA_COMMAND_CENTER_AUTO_EXECUTE', true),
   directorModeEnabled: bool('AURA_DIRECTOR_MODE_ENABLED', true),
