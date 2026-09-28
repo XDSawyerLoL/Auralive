@@ -109,10 +109,11 @@ export function scoreCapability(capability, {
 export class CapabilityFabric {
   static VERSION = 'aura-capability-fabric-v1';
 
-  constructor({ webSubstrate = null, bridge = null, peerMesh = null } = {}) {
+  constructor({ webSubstrate = null, bridge = null, peerMesh = null, persistence = null } = {}) {
     this.webSubstrate = webSubstrate;
     this.bridge = bridge;
     this.peerMesh = peerMesh;
+    this.persistence = persistence;
     this.registry = new Map();
     this.handlers = new Map();
     this.lastDiscoveryAt = '';
@@ -131,6 +132,10 @@ export class CapabilityFabric {
 
   async persistCapability(capability) {
     const item = capability || {};
+    if (this.persistence?.save) {
+      await this.persistence.save(item);
+      return;
+    }
     const stamp = new Date().toISOString();
     await query(
       `INSERT INTO aura_fabric_capabilities(
@@ -168,19 +173,43 @@ export class CapabilityFabric {
 
   async hydrate() {
     try {
-      const rows = await query(
-        `SELECT manifest FROM aura_fabric_capabilities
-         ORDER BY observed_reliability DESC,updated_at DESC LIMIT ?`,
-        [Math.max(1, Math.min(config.fabricMaxRemoteCapabilities * 4, 256))],
-      );
+      const limit = Math.max(1, Math.min(config.fabricMaxRemoteCapabilities * 4, 256));
+      const rows = this.persistence?.load
+        ? await this.persistence.load(limit)
+        : await query(
+          `SELECT manifest FROM aura_fabric_capabilities
+           ORDER BY observed_reliability DESC,updated_at DESC LIMIT ?`,
+          [limit],
+        );
+      let restored = 0;
       for (const row of rows) {
         try {
           const parsed = JSON.parse(row.manifest || '{}');
-          if (!parsed?.id || parsed.transport === 'local' || parsed.transport === 'studio-bridge') continue;
+          if (!parsed?.id) continue;
+          const current = this.registry.get(stableId(parsed.id));
+          if (current && ['local', 'studio-bridge'].includes(current.transport)) {
+            this.register({
+              ...current,
+              observed_reliability: parsed.observed_reliability ?? current.observed_reliability,
+              semantic_reliability: parsed.semantic_reliability ?? current.semantic_reliability,
+              semantic_observations: parsed.semantic_observations ?? current.semantic_observations,
+              semantic_successes: parsed.semantic_successes ?? current.semantic_successes,
+              semantic_failures: parsed.semantic_failures ?? current.semantic_failures,
+              semantic_last_verdict: parsed.semantic_last_verdict ?? current.semantic_last_verdict,
+              semantic_last_reason: parsed.semantic_last_reason ?? current.semantic_last_reason,
+              semantic_last_update_at: parsed.semantic_last_update_at ?? current.semantic_last_update_at,
+              latency_ms: parsed.latency_ms ?? current.latency_ms,
+              enabled: current.enabled,
+            });
+            restored += 1;
+            continue;
+          }
+          if (parsed.transport === 'local' || parsed.transport === 'studio-bridge') continue;
           this.register(parsed);
+          restored += 1;
         } catch {}
       }
-      return { ok: true, restored: rows.length };
+      return { ok: true, restored };
     } catch (error) {
       this.lastError = String(error?.message || error).slice(0, 1000);
       return { ok: false, restored: 0, error: this.lastError };
