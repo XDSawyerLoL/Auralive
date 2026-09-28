@@ -233,12 +233,17 @@ export class TaskGraphExecutor {
           if (valid.budget_microunits && spent > valid.budget_microunits) {
             throw new Error(`budget DAG dépassé: ${spent}/${valid.budget_microunits}`);
           }
+          const semanticFeedback = await this.fabric?.applyVerificationFeedback?.(
+            node.capability,
+            outcome?.verification || {},
+          ).catch?.(() => ({ applied: false, reason: 'semantic-feedback-error' }));
           const stored = {
             ok: outcome?.ok !== false,
             capability: node.capability,
             result: outcome?.result ?? outcome,
             evidence: outcome?.evidence || [],
             verification: outcome?.verification || {},
+            semantic_feedback: semanticFeedback || { applied: false, reason: 'not-supported' },
             metrics: outcome?.metrics || {},
           };
           results.set(node.id, stored);
