@@ -856,7 +856,7 @@ export async function runAgiBattery() {
         'i',
       );
       const structuralEvidence = degree === 1
-        ? /f\(n\)\s*=.*\*n/i.test(answer)
+        ? /f\(n\)\s*=.*\bn\b/i.test(answer) && !/n\^2/i.test(answer)
         : /f\(n\)\s*=.*n\^2/i.test(answer);
       const solved = plan.needs_semantic_support === false
         && valueRegex.test(answer)
