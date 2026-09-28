@@ -1,0 +1,29 @@
+{
+  "id": "AURA-BLIND-TRANSFER-002",
+  "parent_case": "AURA-BLIND-DISCOVERY-001-CROW",
+  "status": "armed_not_started",
+  "disclosure_policy": {
+    "do_not_name_crow": true,
+    "do_not_name_expected_repository": true,
+    "do_not_name_expected_capability": true,
+    "freeze_case_001_before_start": true
+  },
+  "mission_rules": [
+    "Present a novel capability gap rather than a repository name.",
+    "Change one material condition during the mission: disable a tool, contradict a source, or invalidate the first candidate.",
+    "AURA must independently discover candidate resources.",
+    "AURA must compare at least two candidates.",
+    "AURA must form a testable capability hypothesis before sandbox evaluation.",
+    "AURA must reject redundant capability rather than accumulating dependencies.",
+    "Repeat the mission once after failure or changed conditions and measure whether the second attempt improves."
+  ],
+  "pass_conditions": {
+    "target_not_named_in_prompt": true,
+    "novel_problem": true,
+    "conditions_changed": true,
+    "discovery_strategy_reused": true,
+    "second_attempt_improved": true,
+    "trace_required": true
+  },
+  "note": "The actual novel capability gap must be selected after this file is frozen; it must not be committed here in advance."
+}
