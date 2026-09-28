@@ -103,14 +103,16 @@ export class SoftwareRepairEngine {
   async validate(testFile) {
     const testPath = this.safePath(testFile);
     return new Promise((resolve) => {
+      const childEnv = {
+        ...process.env,
+        NODE_ENV: 'test',
+      };
+      delete childEnv.NODE_TEST_CONTEXT;
       const child = spawn(process.execPath, ['--test', testPath], {
         cwd: this.root,
         shell: false,
         windowsHide: true,
-        env: {
-          ...process.env,
-          NODE_ENV: 'test',
-        },
+        env: childEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '';
