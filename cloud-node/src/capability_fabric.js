@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { query } from './db.js';
 import { clamp } from './policy.js';
 import { AuraCloudWorkspace } from './cloud_workspace.js';
+import { MoneyPrinterSkill } from './video_skill.js';
 
 const clean = (value, limit = 4000) =>
   String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -423,6 +424,90 @@ export class CapabilityFabric {
 
   registerBuiltins() {
     const workspace = new AuraCloudWorkspace();
+    const videoSkill = new MoneyPrinterSkill();
+
+    this.register({
+      id: 'video.pipeline.plan',
+      name: 'AURA automatic short-video pipeline planner',
+      transport: 'local',
+      tags: ['video', 'creative', 'plan', 'script', 'subtitles', 'voiceover', 'editing'],
+      trust: 0.88,
+      observed_reliability: 0.88,
+      latency_ms: 15,
+      cost_microunits: 0,
+      side_effects: false,
+      risk: 'safe',
+      input_contract: {
+        subject: 'string?',
+        topic: 'string?',
+        script: 'string?',
+        aspect: '9:16|16:9|1:1?',
+        language: 'string?',
+      },
+      output_contract: { stages: 'array', payload: 'json', execution: 'json' },
+      provider: 'aura-video-skill',
+    }, async (input) => ({
+      ok: true,
+      result: videoSkill.plan(input),
+      metrics: { cost_microunits: 0 },
+    }));
+
+    this.register({
+      id: 'video.autoproduce',
+      name: 'AURA MoneyPrinterTurbo-compatible automatic video producer',
+      transport: 'local',
+      tags: ['video', 'creative', 'render', 'compose', 'subtitles', 'voiceover'],
+      trust: 0.82,
+      observed_reliability: 0.72,
+      latency_ms: 30000,
+      cost_microunits: 0,
+      side_effects: true,
+      risk: 'remote-render-job',
+      input_contract: {
+        subject: 'string?',
+        topic: 'string?',
+        script: 'string?',
+        aspect: '9:16|16:9|1:1?',
+        language: 'string?',
+      },
+      output_contract: { task_id: 'string', status_url: 'string', plan: 'json' },
+      provider: 'moneyprinterturbo-compatible',
+      enabled: videoSkill.enabled,
+    }, async (input) => {
+      const result = await videoSkill.submit(input);
+      return {
+        ok: true,
+        result,
+        verification: {
+          zero_cost_confirmed: Boolean(config.videoMoneyPrinterZeroCostConfirmed),
+          auto_publish_disabled_confirmed: Boolean(
+            config.videoMoneyPrinterAutoPublishDisabledConfirmed
+          ),
+        },
+        metrics: { cost_microunits: 0 },
+      };
+    });
+
+    this.register({
+      id: 'video.task.status',
+      name: 'AURA video production task status',
+      transport: 'local',
+      tags: ['video', 'read', 'status', 'verify'],
+      trust: 0.90,
+      observed_reliability: 0.84,
+      latency_ms: 900,
+      cost_microunits: 0,
+      side_effects: false,
+      risk: 'safe',
+      input_contract: { task_id: 'string' },
+      output_contract: { task: 'json' },
+      provider: 'moneyprinterturbo-compatible',
+      enabled: videoSkill.enabled,
+    }, async (input) => ({
+      ok: true,
+      result: await videoSkill.status(input?.task_id),
+      metrics: { cost_microunits: 0 },
+    }));
 
     this.register({
       id: 'cloud.workspace.create',

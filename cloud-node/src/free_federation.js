@@ -1,7 +1,8 @@
 import { config, databaseConfigured } from './config.js';
 import { one, query } from './db.js';
+import { constellationRoleScore } from './model_constellation.js';
 
-const COMPLEX_ROLES = new Set(['reasoning', 'code', 'research', 'critic', 'security', 'evolution', 'math']);
+const COMPLEX_ROLES = new Set(['reasoning', 'code', 'research', 'critic', 'security', 'evolution', 'math', 'divergent', 'creative', 'vision', 'long_context']);
 const SAFE_OPENROUTER_MODEL = /^(?:openrouter\/free|[a-z0-9._-]+\/[a-z0-9._:-]+:free)$/i;
 const EXCLUDED_SPECIALIST_TERMS = [
   'content safety',
@@ -53,6 +54,7 @@ function modelText(model) {
 }
 
 function roleAffinity(model, role) {
+  const curated = constellationRoleScore(model?.id || model?.name || '', role);
   const text = modelText(model);
   const keywords = {
     code: ['code', 'coding', 'software', 'terminal', 'developer', 'agentic'],
@@ -62,12 +64,17 @@ function roleAffinity(model, role) {
     math: ['math', 'mathematics', 'reasoning', 'science'],
     research: ['research', 'knowledge', 'long-context', 'document', 'reasoning'],
     security: ['security', 'cyber', 'reasoning', 'code'],
+    divergent: ['creative', 'uncensored', 'abliterated', 'brainstorm', 'reasoning'],
+    creative: ['creative', 'story', 'brainstorm', 'multimodal', 'instruction'],
+    vision: ['vision', 'multimodal', 'image', 'video'],
+    long_context: ['long-context', 'context', 'document', 'million'],
     conversation: ['conversation', 'general-purpose', 'multilingual', 'instruction'],
     translation: ['translation', 'multilingual', 'language'],
   }[roleName(role)] || ['general-purpose', 'reasoning', 'instruction'];
 
   const hits = keywords.reduce((sum, keyword) => sum + (text.includes(keyword) ? 1 : 0), 0);
-  return Math.min(1, hits / Math.max(2, Math.ceil(keywords.length / 2)));
+  const lexical = Math.min(1, hits / Math.max(2, Math.ceil(keywords.length / 2)));
+  return curated == null ? lexical : Math.max(lexical, curated);
 }
 
 function modelEligible(row) {

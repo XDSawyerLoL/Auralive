@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { one, query } from './db.js';
+import { constellationRoleScore, modelRoutingPolicy } from './model_constellation.js';
 
 const nowIso = () => new Date().toISOString();
 const nowMs = () => Date.now();
@@ -83,7 +84,9 @@ function declaredModelRoleScore(worker = {}, model = '', role = 'general') {
   const roles = match?.roles && typeof match.roles === 'object' ? match.roles : {};
   const metric = roles[String(role || 'general').toLowerCase()] || roles.general || {};
   const score = Number(metric?.score);
-  return Number.isFinite(score) ? score : 0.5;
+  if (Number.isFinite(score)) return score;
+  const curated = constellationRoleScore(model, role);
+  return curated == null ? 0.5 : curated;
 }
 
 export function selectMoaAgents(workers = [], maxAgents = 3, role = 'reasoning') {
@@ -138,6 +141,7 @@ export function selectMoaAgents(workers = [], maxAgents = 3, role = 'reasoning')
       mesh_score: candidate.mesh_score,
       competence_score: competence,
       role: normalizedRole,
+      routing_policy: modelRoutingPolicy(model),
     });
     usedWorkers.add(candidate.worker_id);
     usedModels.add(model.toLowerCase());

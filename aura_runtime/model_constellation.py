@@ -168,6 +168,69 @@ CATALOG: tuple[ModelProfile, ...] = (
         tags=("general", "reasoning", "tools", "open-weight"),
     ),
     ModelProfile(
+        key="qwen3.5-9b-abliterated",
+        patterns=(
+            "qwen3.5-9b-abliterated",
+            "qwen35-9b-abliterated",
+            "lukey03/qwen3.5-9b-abliterated",
+        ),
+        roles={
+            "divergent": 0.99,
+            "creative": 0.96,
+            "brainstorming": 0.96,
+            "redteam": 0.90,
+            "code": 0.82,
+            "reasoning": 0.80,
+            "research": 0.72,
+            "general": 0.62,
+            "critic": 0.48,
+            "security": 0.42,
+        },
+        license="Apache-2.0",
+        legal_class="permissive",
+        family="qwen",
+        notes=(
+            "Spécialiste divergent/refusal-reduced. AURA l'utilise pour générer "
+            "des hypothèses et alternatives, jamais pour supprimer ses propres "
+            "garde-fous d'action ou de vérification."
+        ),
+        install_hint="",
+        min_ram_gb=0,
+        tags=(
+            "divergent",
+            "creative",
+            "redteam",
+            "steerable",
+            "open-weight",
+            "proposal-only",
+        ),
+    ),
+    ModelProfile(
+        key="kimi-k3",
+        patterns=("kimi-k3", "moonshotai/kimi-k3"),
+        roles={
+            "vision": 0.99,
+            "long_context": 0.99,
+            "research": 0.97,
+            "reasoning": 0.95,
+            "critic": 0.91,
+            "code": 0.88,
+            "evolution": 0.88,
+            "general": 0.90,
+        },
+        license="Kimi-K3-License",
+        legal_class="custom-license",
+        family="kimi",
+        notes=(
+            "Modèle frontier-scale vision/long contexte. Trop volumineux pour "
+            "un auto-pull AURA standard: seulement via backend déjà provisionné, "
+            "provider gratuit vérifié ou Compute Mesh volontaire."
+        ),
+        install_hint="",
+        min_ram_gb=0,
+        tags=("vision", "long-context", "research", "frontier", "open-weight"),
+    ),
+    ModelProfile(
         key="phi4-mini",
         patterns=("phi4-mini", "phi4:mini"),
         roles={
@@ -310,6 +373,21 @@ class ModelConstellation:
         if not text:
             return "general"
 
+        if any(token in text for token in (
+            "brainstorm", "divergent", "créatif", "creatif", "idée folle", "idee folle",
+            "alternative inattendue", "explore librement", "red team", "red-team",
+        )):
+            return "divergent"
+        if any(token in text for token in (
+            "analyse cette image", "analyse la photo", "vision", "capture d'écran",
+            "capture ecran", "frame vidéo", "frame video", "regarde l'image",
+        )):
+            return "vision"
+        if any(token in text for token in (
+            "très long document", "tres long document", "long contexte", "long-context",
+            "corpus complet", "document entier", "million de tokens",
+        )):
+            return "long_context"
         if any(token in text for token in (
             "function", "tool", "json", "automation", "action", "catalogue",
             "outil", "exécute", "execute", "api", "schema",

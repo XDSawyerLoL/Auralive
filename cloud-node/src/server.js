@@ -32,6 +32,7 @@ import { CloudVoice } from './voice.js';
 import { VoiceStudioProvider } from './voice_fabric.js';
 import { WebSubstrate } from './web_substrate.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
+import { modelProfiles } from './model_constellation.js';
 
 function tokenEquals(actual, expected) {
   if (!actual || !expected) return false;
@@ -691,6 +692,9 @@ app.get('/api/capabilities', async (request) => {
   const workerActionNames = new Set(
     workerCapabilities.map((item) => String(item?.name || '')),
   );
+  const fabricCatalog = fabric.list({ includeDisabled: true });
+  const videoPlanner = fabricCatalog.find((item) => item.id === 'video.pipeline.plan');
+  const videoProducer = fabricCatalog.find((item) => item.id === 'video.autoproduce');
   return {
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
     organism: {
@@ -731,6 +735,28 @@ app.get('/api/capabilities', async (request) => {
         && workerActionNames.has('aura.image.generate')
       ),
       mode: bridgeStatus?.worker_online ? 'local-worker' : 'offline',
+    },
+    video: {
+      planning_ready: Boolean(videoPlanner?.enabled),
+      production_ready: Boolean(videoProducer?.enabled),
+      provider: 'moneyprinterturbo-compatible',
+      zero_cost_mode: Boolean(config.zeroCostMode),
+      zero_cost_confirmed: Boolean(config.videoMoneyPrinterZeroCostConfirmed),
+      auto_publish_disabled_confirmed: Boolean(
+        config.videoMoneyPrinterAutoPublishDisabledConfirmed
+      ),
+    },
+    model_constellation: {
+      profiles: modelProfiles().map((item) => ({
+        id: item.id,
+        kind: item.kind,
+        roles: item.roles,
+        authority: item.authority,
+        deployment: item.deployment,
+        license: item.license,
+      })),
+      safety_owner: 'AURA',
+      paid_fallback: false,
     },
     hands: {
       ready: Boolean(bridgeStatus?.worker_online),
@@ -1317,6 +1343,47 @@ app.post('/api/mesh/execute', async (request, reply) => {
     });
   } catch (error) {
     return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/video/plan', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await fabric.execute('video.pipeline.plan', request.body || {}, {
+      trigger: 'private-video-plan',
+      maxCostMicrounits: 0,
+      allowSideEffects: false,
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error) });
+  }
+});
+
+app.post('/api/video/produce', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await fabric.execute('video.autoproduce', request.body || {}, {
+      trigger: 'private-video-produce',
+      maxCostMicrounits: 0,
+      allowSideEffects: true,
+    });
+  } catch (error) {
+    return reply.code(409).send({ error: String(error?.message || error) });
+  }
+});
+
+app.get('/api/video/tasks/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await fabric.execute('video.task.status', {
+      task_id: request.params.id,
+    }, {
+      trigger: 'private-video-status',
+      maxCostMicrounits: 0,
+      allowSideEffects: false,
+    });
+  } catch (error) {
+    return reply.code(404).send({ error: String(error?.message || error) });
   }
 });
 

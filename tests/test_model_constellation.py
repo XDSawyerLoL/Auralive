@@ -195,3 +195,50 @@ def test_mesh_scorecard_contains_skill_metrics_without_user_content():
     assert payload[0]["name"] == "deepseek-r1:8b"
     assert payload[0]["roles"]["reasoning"]["samples"] == 1
     assert "prompt" not in str(payload).casefold()
+
+
+
+def test_constellation_knows_divergent_qwen_and_frontier_kimi_profiles():
+    router = ModelConstellation(settings())
+    qwen = router.profile_for("lukey03/Qwen3.5-9B-abliterated")
+    kimi = router.profile_for("moonshotai/Kimi-K3")
+
+    assert qwen is not None
+    assert qwen.license == "Apache-2.0"
+    assert qwen.legal_class == "permissive"
+    assert qwen.roles["divergent"] > qwen.roles["reasoning"]
+    assert "proposal-only" in qwen.tags
+    assert qwen.install_hint == ""
+
+    assert kimi is not None
+    assert kimi.legal_class == "custom-license"
+    assert kimi.roles["vision"] >= 0.99
+    assert kimi.roles["long_context"] >= 0.99
+    assert kimi.install_hint == ""
+
+
+def test_role_inference_recognizes_divergence_vision_and_long_context():
+    router = ModelConstellation(settings())
+    assert router.infer_role([{"content": "brainstorm des idées créatives et divergentes"}]) == "divergent"
+    assert router.infer_role([{"content": "analyse cette image et sa composition visuelle"}]) == "vision"
+    assert router.infer_role([{"content": "analyse ce très long document en entier"}]) == "long_context"
+
+
+@pytest.mark.asyncio
+async def test_curated_specialists_route_when_already_provisioned(monkeypatch):
+    router = ModelConstellation(settings())
+    router.installed = router._decode_installed([
+        {"name": "lukey03/Qwen3.5-9B-abliterated", "size": 6_000_000_000},
+        {"name": "moonshotai/Kimi-K3", "size": 0},
+        {"name": "qwen3:8b", "size": 5_000_000_000},
+    ])
+
+    async def no_refresh(*, force=False):
+        return router.installed
+
+    monkeypatch.setattr(router, "refresh", no_refresh)
+
+    divergent = await router.choose("divergent")
+    vision = await router.choose("vision")
+    assert divergent["name"] == "lukey03/Qwen3.5-9B-abliterated"
+    assert vision["name"] == "moonshotai/Kimi-K3"

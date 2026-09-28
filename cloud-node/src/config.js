@@ -144,6 +144,19 @@ export const config = Object.freeze({
   openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
   openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),
 
+  // AURA Video Skill — MoneyPrinterTurbo-compatible workflow.
+  // In hard zero-cost mode, rendering stays disabled until the operator
+  // confirms the connected instance itself uses no billable providers.
+  videoSkillEnabled: bool('AURA_VIDEO_SKILL_ENABLED', true),
+  videoMoneyPrinterBaseUrl: String(process.env.AURA_MPT_BASE_URL || '').replace(/\/$/, ''),
+  videoMoneyPrinterApiKey: process.env.AURA_MPT_API_KEY || '',
+  videoMoneyPrinterTimeoutMs: int('AURA_MPT_TIMEOUT_MS', 30000, 3000, 180000),
+  videoMoneyPrinterZeroCostConfirmed: bool('AURA_MPT_ZERO_COST_CONFIRMED', false),
+  videoMoneyPrinterAutoPublishDisabledConfirmed: bool(
+    'AURA_MPT_AUTO_PUBLISH_DISABLED_CONFIRMED',
+    false,
+  ),
+
   voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', false),
   voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
   voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
