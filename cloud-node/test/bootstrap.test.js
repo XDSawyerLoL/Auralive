@@ -5,18 +5,22 @@ import { spawn } from 'node:child_process';
 const HOSTINGER_PORT = 3000;
 const base = `http://127.0.0.1:${HOSTINGER_PORT}`;
 
-async function waitFor(path, matcher, timeoutMs = 15000) {
+async function waitForBase(targetBase, path, matcher, timeoutMs = 15000) {
   const started = Date.now();
   let last = '';
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await fetch(base + path);
+      const response = await fetch(targetBase + path);
       last = await response.text();
       if (response.ok && matcher(last)) return last;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   throw new Error(`AURA Cloud did not become ready for ${path}. Last response: ${last}`);
+}
+
+async function waitFor(path, matcher, timeoutMs = 15000) {
+  return waitForBase(base, path, matcher, timeoutMs);
 }
 
 function launch(extraEnv = {}) {
@@ -42,6 +46,44 @@ function launch(extraEnv = {}) {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
+
+
+test('Hostinger lsnode can require the ESM entry because server.js has no top-level await', async (t) => {
+  const requirePort = 3011;
+  const child = spawn(process.execPath, ['-e', "require('./server.js')"], {
+    cwd: new URL('..', import.meta.url).pathname,
+    env: {
+      ...process.env,
+      AURA_PORT: String(requirePort),
+      AURA_GATEWAY_ONLY: 'true',
+      DB_HOST: '',
+      DB_USER: '',
+      DB_PASSWORD: '',
+      DB_NAME: '',
+      DATABASE_URL: '',
+      AURA_CLOUD_TOKEN: '',
+      AURA_EVOLUTION_CANARY_TOKEN: '',
+      AI_MODE: 'off',
+      HORIZON_ENABLED: 'false',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  let stderr = '';
+  child.stderr.on('data', (chunk) => { stderr += String(chunk); });
+  t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
+
+  const targetBase = `http://127.0.0.1:${requirePort}`;
+  const gatewayText = await waitForBase(
+    targetBase,
+    '/__aura_gateway',
+    (text) => text.includes('"gateway_ready":true'),
+  );
+  const gateway = JSON.parse(gatewayText);
+  assert.equal(gateway.gateway_port, requirePort);
+  assert.equal(gateway.framework, 'native-node-gateway');
+  assert.equal(child.exitCode, null, stderr);
+});
 
 test('production entry forces Hostinger port 3000 and stays online with runtime disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
