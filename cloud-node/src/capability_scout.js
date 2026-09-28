@@ -263,7 +263,7 @@ export function scoutQuery(theme, index = 0) {
   const selected = theme || SCOUT_THEMES[0];
   const base = selected.queries[index % selected.queries.length];
   const pushed = new Date(Date.now() - 540 * 86_400_000).toISOString().slice(0, 10);
-  return `${base} stars:>25 archived:false fork:false pushed:>${pushed}`;
+  return `${base} stars:>25 archived:false pushed:>${pushed}`;
 }
 
 function decodeReadme(payload) {
