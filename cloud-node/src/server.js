@@ -631,6 +631,9 @@ app.get('/api/voice/status', async (request) => {
       enabled: Boolean(cloudVoice.enabled),
       engine: cloudVoice.enabled ? 'gemini-cloud-tts' : 'unavailable',
       voice: 'Aoede',
+      blocked_reason: cloudVoice.enabled ? '' : cloudVoice.blockedReason,
+      zero_cost_mode: Boolean(config.zeroCostMode),
+      gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
     },
   };
 });
@@ -691,6 +694,7 @@ app.post('/api/voice/speak', async (request, reply) => {
     code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
     fabric: voiceStudio.diagnostic({ publicView: true }),
     direct_gemini_ready: Boolean(cloudVoice.enabled),
+    direct_gemini_reason: cloudVoice.enabled ? '' : cloudVoice.blockedReason,
     fallback_blocked: true,
     expected_engine_voice: 'aoede',
     expected_language: 'fr-fr',
@@ -775,6 +779,9 @@ app.get('/api/capabilities', async (request) => {
               : (voiceDiscovery?.reason || voiceDiscovery?.capabilities?.reason || '')
           ).slice(0, 300),
       cloud_ready: Boolean(cloudVoice.enabled),
+      cloud_reason: cloudVoice.enabled ? '' : cloudVoice.blockedReason,
+      cloud_zero_cost_mode: Boolean(config.zeroCostMode),
+      cloud_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
       runtime_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
       strict_identity: Boolean(config.voiceFabricStrictIdentity),
       fabric: voiceStudio.diagnostic({ publicView: !privateView }),

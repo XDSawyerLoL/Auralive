@@ -22,6 +22,7 @@ test('voice playback no longer requires a manual dashboard token', () => {
   assert.match(route, /AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE/);
   assert.match(route, /expected_engine_voice:\s*'aoede'/);
   assert.match(route, /cloudVoice\.synthesize\(text/);
+  assert.match(route, /direct_gemini_reason:\s*cloudVoice\.enabled \? '' : cloudVoice\.blockedReason/);
   assert.match(route, /String\(audio\?\.engine_voice \|\| ''\)\.toLowerCase\(\) !== 'aoede'/);
   assert.doesNotMatch(route, /bridge\.synthesize\(text/);
   assert.doesNotMatch(route, /const attempts = preferLocal/);

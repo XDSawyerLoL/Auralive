@@ -80,3 +80,25 @@ test('confirmed Gemini free tier can render historical Aoede while zero-cost mod
   assert.equal(payload.engine_voice,'aoede');
   assert.equal(payload.diag.gemini_free_tier_confirmed,true);
 });
+
+
+test('zero-cost Cloud voice reports why Aoede is blocked before confirmation', () => {
+  const script = `
+    process.env.AURA_ZERO_COST_MODE='true';
+    process.env.AURA_GEMINI_FREE_TIER_CONFIRMED='false';
+    process.env.TTS_API_KEY='present-but-guarded';
+    const { CloudVoice }=await import('./src/voice.js');
+    const voice=new CloudVoice();
+    console.log(JSON.stringify({enabled:voice.enabled,reason:voice.blockedReason,diag:voice.diagnostic()}));
+  `;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',script],{
+    cwd:new URL('..',import.meta.url).pathname,
+    encoding:'utf8',
+    env:{...process.env},
+  });
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(payload.enabled,false);
+  assert.equal(payload.reason,'free-tier-unconfirmed');
+  assert.equal(payload.diag.blocked_reason,'free-tier-unconfirmed');
+});
