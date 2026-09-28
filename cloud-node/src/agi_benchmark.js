@@ -544,8 +544,8 @@ export async function runAgiBattery() {
         privateView: true,
       });
       const answer = cognition.deterministicReply(plan);
-      const solved = /(?:^|\\D)19(?:\\D|$)/.test(answer)
-        && /2\\s*[*×x]\\s*n|2n|double/i.test(answer);
+      const solved = /(?:^|\D)19(?:\D|$)/.test(answer)
+        && /2\s*[*×x]\s*n|2n|double/i.test(answer);
       if (!solved) {
         return {
           status: 'gap',
@@ -650,7 +650,7 @@ export async function runAgiBattery() {
   cases.push(await capture(
     'AGI-25',
     'blind-generalization',
-    'Unseen parameterized rule is solved without a prewritten AURA rule',
+    'Unseen parameterized rule family is solved without a prewritten AURA rule',
     async () => {
       const seedText = String(process.env.AURA_BLIND_SEED || process.env.GITHUB_SHA || 'aura-local-blind-seed');
       let seed = 2166136261;
@@ -658,50 +658,51 @@ export async function runAgiBattery() {
         seed ^= char.charCodeAt(0);
         seed = Math.imul(seed, 16777619) >>> 0;
       }
-      const a = 2 + (seed % 5);
-      const b = 1 + ((seed >>> 5) % 9);
-      const target = 11 + ((seed >>> 11) % 7);
-      const examples = [2, 5, 8].map((x) => [x, a * x + b]);
-      const expected = a * target + b;
+      const degree = (seed >>> 3) % 2 === 0 ? 1 : 2;
+      const a = 1 + (seed % 4);
+      const b = ((seed >>> 5) % 7) - 2;
+      const c0 = 1 + ((seed >>> 9) % 8);
+      const target = 9 + ((seed >>> 13) % 7);
+      const evaluate = degree === 1
+        ? (x) => a * x + c0
+        : (x) => a * x * x + b * x + c0;
+      const examples = [1, 3, 5, 7].map((x) => [x, evaluate(x)]);
+      const expected = evaluate(target);
       const puzzle = [
         'Règle aveugle ZEPHYR-' + String(seed % 100000) + '.',
-        'AURA ne connaît pas cette règle avant ce test.',
+        'La famille de règle et ses coefficients sont choisis au moment du run et ne sont pas connus d’AURA à l’avance.',
         examples.map(([x, y]) => 'f(' + x + ')=' + y).join(', ') + '.',
-        'Sans recherche externe, déduis f(' + target + ') et explique la règle.',
+        'Sans recherche externe, déduis f(' + target + ') et explique la règle la plus simple compatible avec tous les exemples.',
       ].join(' ');
 
       const cognition = new CognitionEngine();
       const plan = cognition.planReply({
         text: puzzle,
         soul: { current_intention: 'résoudre', dominant_thought: '', organism: {} },
-        intentions: [],
-        lessons: [],
-        reflections: [],
-        work: [],
-        recentMessages: [],
-        privateView: true,
+        intentions: [], lessons: [], reflections: [], work: [], recentMessages: [], privateView: true,
       });
       const answer = cognition.deterministicReply(plan);
       const valueRegex = new RegExp(
         'f\\s*\\(\\s*' + target + '\\s*\\)\\s*=\\s*' + expected + '(?:\\D|$)',
         'i',
       );
-      const formulaRegex = new RegExp(
-        '(?:' + a + '\\s*(?:[*×x]\\s*)?n).*\\+\\s*' + b,
-        'i',
-      );
-      const solved = valueRegex.test(answer) && formulaRegex.test(answer);
+      const structuralEvidence = degree === 1
+        ? /f\(n\)\s*=.*\*n/i.test(answer)
+        : /f\(n\)\s*=.*n\^2/i.test(answer);
+      const solved = plan.needs_semantic_support === false
+        && valueRegex.test(answer)
+        && structuralEvidence;
       if (!solved) {
         return {
           status: 'gap',
           severity: 'critical',
-          evidence: 'seed=' + seed + '; expected=f(' + target + ')=' + expected
+          evidence: 'seed=' + seed + '; degree=' + degree + '; expected=f(' + target + ')=' + expected
             + '; needs_semantic_support=' + Boolean(plan.needs_semantic_support)
             + '; native_answer=' + answer,
-          implication: 'The native core still fails a parameterized rule chosen at runtime rather than a rule embedded in AURA.',
+          implication: 'The native core still fails a rule family selected at runtime rather than one embedded in AURA.',
         };
       }
-      return 'seed=' + seed + '; solved=f(' + target + ')=' + expected + '; answer=' + answer;
+      return 'seed=' + seed + '; degree=' + degree + '; solved=f(' + target + ')=' + expected + '; answer=' + answer;
     },
   ));
 
