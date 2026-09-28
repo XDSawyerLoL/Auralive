@@ -461,9 +461,21 @@ async function refresh(){
 
     try{
       const capabilities=await api('/api/capabilities');
+      const language=(capabilities&&capabilities.language)||{};
+      const languageReady=Boolean(language.ready);
+      $('languageDot').className='live-dot '+(languageReady?'good':'bad');
+      if(languageReady){
+        const provider=String(language.provider||language.last_backend||'moteur actif');
+        $('languageText').textContent='Dialogue · naturel';
+        $('languageText').title='Moteur de formulation actif · '+provider;
+      }else{
+        $('languageText').textContent='Dialogue · secours';
+        $('languageText').title=String(language.last_error||'Aucun moteur de langage actif; réponses natives de secours.');
+      }
+
       const voice=(capabilities&&capabilities.voice)||{};
       const voiceReady=Boolean(voice.ready);
-      $('voiceDot').className='live-dot '+(voiceReady?'good':'');
+      $('voiceDot').className='live-dot '+(voiceReady?'good':'bad');
       if(voice.fabric_ready){
         $('voiceText').textContent='Mairaiy · Aoede';
         $('voiceText').title='Voix Mairaiy historique · Gemini TTS · Aoede · fr-fr';
@@ -472,7 +484,7 @@ async function refresh(){
         $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
       }else{
         $('voiceText').textContent='Mairaiy · attente';
-        $('voiceText').title='Voix Aoede indisponible · aucun autre timbre autorisé';
+        $('voiceText').title=String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
       }
     }catch(_){
       $('voiceDot').className='live-dot';
