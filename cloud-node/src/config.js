@@ -155,11 +155,7 @@ export const config = Object.freeze({
   // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
   voiceFabricEnabled: true,
   voiceFabricPinQuanticEndpoint: true,
-  voiceFabricBaseUrl: String(
-    bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true)
-      ? 'https://mediumorchid-badger-314305.hostingersite.com/voice'
-      : (process.env.AURA_VOICE_FABRIC_BASE_URL || 'https://mediumorchid-badger-314305.hostingersite.com/voice')
-  ).replace(/\/$/, ''),
+  voiceFabricBaseUrl: 'https://mediumorchid-badger-314305.hostingersite.com/voice',
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
   voiceFabricModel: 'kokoro',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
@@ -174,7 +170,7 @@ export const config = Object.freeze({
   voiceFabricChunkChars: int('AURA_VOICE_FABRIC_CHUNK_CHARS', 3200, 800, 3900),
   voiceFabricMaxAudioBytes: int('AURA_VOICE_FABRIC_MAX_AUDIO_BYTES', 20 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
   voiceFabricZeroCostConfirmed: bool('AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED', false),
-  voiceFabricTrustedZeroCostOrigins: csv('AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS', 'https://mediumorchid-badger-314305.hostingersite.com/voice'),
+  voiceFabricTrustedZeroCostOrigins: ['https://mediumorchid-badger-314305.hostingersite.com/voice'],
   voiceFabricStrictIdentity: true,
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
