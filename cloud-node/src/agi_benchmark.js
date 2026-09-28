@@ -877,19 +877,26 @@ export async function runAgiBattery() {
       ]);
       assert(evidence.epistemic_status === 'contested', 'semantic contradiction was not surfaced');
 
+      const semanticFeedback = await fabric.applyVerificationFeedback(first.id, {
+        target: 'capability-output',
+        ...evidence,
+        verifier_confidence: 0.98,
+        reason: 'Independent evidence outweighs the primary tool output.',
+      });
+      assert(semanticFeedback?.applied === true, 'semantic contradiction was not learned');
+      assert(Number(semanticFeedback.after) < Number(semanticFeedback.before),
+        'semantic reliability did not decrease');
+
       const second = fabric.select({ requiredTags: ['blind-semantic'] });
-      if (second?.id === first.id) {
-        return {
-          status: 'gap',
-          severity: 'critical',
-          evidence: 'attempt1=' + first.id + ':plausible-but-wrong; contradiction='
-            + evidence.epistemic_status + '; attempt2=' + second.id
-            + '; routing still rewards execution-ok rather than verified truth',
-          implication: 'AURA learns from explicit execution failure, but a semantically wrong result marked ok is not yet automatically converted into negative tool feedback.',
-        };
-      }
-      return 'attempt1=' + first.id + '; contradiction=' + evidence.epistemic_status
-        + '; attempt2=' + second.id;
+      assert(second?.id === 'blind.semantic.backup',
+        'AURA did not avoid the semantically contradicted tool on attempt 2');
+      const secondOutcome = await fabric.execute(second.id, { attempt: 2 });
+      assert(secondOutcome?.result?.answer === 'BLUE', 'attempt 2 did not recover the verified answer');
+
+      return 'attempt1=' + first.id + ':plausible-but-wrong; contradiction='
+        + evidence.epistemic_status + '; semantic_reliability='
+        + semanticFeedback.before + '->' + semanticFeedback.after
+        + '; attempt2=' + second.id + ':success';
     },
   ));
 
