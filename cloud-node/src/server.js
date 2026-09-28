@@ -125,7 +125,7 @@ function ensureChatSession(request, reply) {
   const created = createChatSession();
   reply.header(
     'Set-Cookie',
-    `aura_chat_session=${encodeURIComponent(created.value)}; Path=/; Max-Age=${created.maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`,
+    `aura_chat_session=${encodeURIComponent(created.value)}; Path=/; Max-Age=${created.maxAgeSeconds}; HttpOnly; Secure; SameSite=None`,
   );
   return created.id;
 }
@@ -236,6 +236,12 @@ const app = Fastify({
   bodyLimit: 1_048_576,
   trustProxy: config.trustProxyHops > 0 ? config.trustProxyHops : false,
 });
+const corsOrigins = new Set(
+  String(process.env.AURA_CORS_ORIGINS || 'https://xdsawyerlol.github.io')
+    .split(',')
+    .map((value) => value.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
 const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
 const voiceStudio = new VoiceStudioProvider();
@@ -391,7 +397,21 @@ function publicFallbackSoul(privateView) {
   return safe;
 }
 
-app.addHook('onRequest', async (request) => {
+app.addHook('onRequest', async (request, reply) => {
+  const origin = String(request.headers.origin || '').trim().replace(/\/$/, '');
+  if (origin && corsOrigins.has(origin)) {
+    reply.header('Access-Control-Allow-Origin', origin);
+    reply.header('Vary', 'Origin');
+    reply.header('Access-Control-Allow-Credentials', 'true');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  if (request.method === 'OPTIONS') {
+    if (origin && !corsOrigins.has(origin)) {
+      return reply.code(403).send({ error: 'Origin CORS non autorisée' });
+    }
+    return reply.code(204).send();
+  }
   metrics.begin(request);
 });
 
@@ -472,7 +492,7 @@ app.post('/api/auth/session', async (request, reply) => {
   const session = createPrivateSession(maxAge);
   reply.header(
     'Set-Cookie',
-    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`,
+    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=None`,
   );
   return {
     authenticated: true,
@@ -484,7 +504,7 @@ app.post('/api/auth/session', async (request, reply) => {
 app.delete('/api/auth/session', async (_request, reply) => {
   reply.header(
     'Set-Cookie',
-    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict',
+    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None',
   );
   return { authenticated: false };
 });
