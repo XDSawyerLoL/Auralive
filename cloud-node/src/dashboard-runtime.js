@@ -517,6 +517,17 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
+function primeVoice(){
+  if(voicePrimed)return;
+  voicePrimed=true;
+  try{
+    if(!voicePlayer)voicePlayer=new Audio();
+    voicePlayer.preload='auto';
+    voicePlayer.muted=false;
+  }catch(_){
+    voicePlayer=null;
+  }
+}
 function playVoiceSegment(payload){
   return new Promise(function(resolve,reject){
     if(!payload||!payload.audio_base64){reject(new Error('Segment audio absent'));return;}
@@ -568,7 +579,7 @@ async function speakAura(text,ticket){
   }
 }
 async function sendMessage(text){
-  primeVoice();
+  try{primeVoice();}catch(_){}
   text=(text||'').trim();if(!text)return;
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';
