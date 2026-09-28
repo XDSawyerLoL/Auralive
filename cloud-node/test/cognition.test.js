@@ -63,3 +63,26 @@ test('AURA identity facts are expressed in first person', () => {
   const joined = plan.facts.join(' ');
   assert.doesNotMatch(joined, /AURA est/i);
 });
+
+
+test('cognition distinguishes user requests from internally supplied context', () => {
+  const engine = new CognitionEngine();
+  const soul = { organism: { stabilite: 1, clarte: 1 } };
+
+  const user = engine.reflect(
+    { stimuli: [{ type: 'aura.cloud.chat', source: 'cloud' }], intentions: [], lessons: [], outcomes: [] },
+    soul,
+    { text: 'Peux-tu vérifier ce point ?' },
+  );
+  assert.match(user.summary, /Mon interlocuteur vient de m’écrire/);
+  assert.doesNotMatch(user.summary, /signal direct/i);
+
+  const internal = engine.reflect(
+    { stimuli: [{ type: 'aura.command.reflection', source: 'command-center' }], intentions: [], lessons: [], outcomes: [] },
+    soul,
+    { trigger: 'command-center', text: 'Évaluer mes options Cloud.' },
+  );
+  assert.match(internal.summary, /nouveau contexte a été intégré à mon cycle de réflexion/i);
+  assert.match(internal.summary, /avant de décider s’il devient une intention/i);
+  assert.doesNotMatch(internal.summary, /mon interlocuteur/i);
+});
