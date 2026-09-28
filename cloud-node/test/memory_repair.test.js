@@ -77,12 +77,12 @@ test('software repair keeps only a test-passing patch and confirms it twice', as
   try {
     await writeFile(
       path.join(root, 'subject.mjs'),
-      'export function clampFloor(x) { return x > 5; }\n',
+      'export function adjust(x) { return x - 3; }\n',
       'utf8',
     );
     await writeFile(
       path.join(root, 'subject.test.mjs'),
-      "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { clampFloor } from './subject.mjs';\ntest('boundary',()=>{ assert.equal(clampFloor(5),true); assert.equal(clampFloor(4),false); });\n",
+      "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { adjust } from './subject.mjs';\ntest('adjust',()=>{ assert.equal(adjust(1),4); assert.equal(adjust(8),11); });\n",
       'utf8',
     );
 
