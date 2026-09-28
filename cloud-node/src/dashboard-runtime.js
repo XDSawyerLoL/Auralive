@@ -465,14 +465,14 @@ async function refresh(){
       const voiceReady=Boolean(voice.ready);
       $('voiceDot').className='live-dot '+(voiceReady?'good':'');
       if(voice.fabric_ready){
-        $('voiceText').textContent='Mairaiy · ff_siwis';
-        $('voiceText').title='Voix Mairaiy verrouillée · Kokoro ff_siwis · fr-fr';
+        $('voiceText').textContent='Mairaiy · Aoede';
+        $('voiceText').title='Voix Mairaiy historique · Gemini TTS Aoede · fr-fr';
       }else if(voice.runtime_ready){
         $('voiceText').textContent='Mairaiy · Studio';
-        $('voiceText').title='Voix Mairaiy locale via Quantic Studio · ff_siwis';
+        $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
       }else{
         $('voiceText').textContent='Mairaiy · attente';
-        $('voiceText').title='Voix ff_siwis indisponible · aucun TTS générique autorisé';
+        $('voiceText').title='Voix Aoede indisponible · aucun autre timbre autorisé';
       }
     }catch(_){
       $('voiceDot').className='live-dot';
@@ -596,9 +596,9 @@ async function speakAura(text,ticket){
   }catch(error){
     document.body.classList.remove('aura-speaking');
     $('voiceText').textContent='Mairaiy · indisponible';
-    $('voiceText').title='Voix ff_siwis indisponible · aucun TTS générique utilisé';
-    $('chatState').textContent='Réponse texte prête · voix Mairaiy ff_siwis indisponible';
-    console.error('Mairaiy ff_siwis indisponible; repli TTS générique interdit',error);
+    $('voiceText').title='Voix Aoede indisponible · aucun autre timbre utilisé';
+    $('chatState').textContent='Réponse texte prête · voix Mairaiy Aoede indisponible';
+    console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
 async function sendMessage(text){
