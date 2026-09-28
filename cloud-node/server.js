@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 
 const host = '0.0.0.0';
-const port = Number.parseInt(process.env.AURA_GATEWAY_PORT || '3000', 10) || 3000;
+const port = Number.parseInt(process.env.AURA_GATEWAY_PORT || process.env.PORT || '3000', 10) || 3000;
 const MAX_BODY = 1_048_576;
 const MAX_BRIDGE_MEDIA_BODY = 24 * 1024 * 1024;
 
@@ -64,12 +64,12 @@ h1{margin:0;font-size:24px;letter-spacing:.08em}.muted{color:var(--muted)}.ok{co
 </head>
 <body><main>
 <div class="top"><div class="orb"></div><div><h1>AURA CLOUD</h1><div class="muted">Hostinger · processus unique</div></div></div>
-<p class="ok">Le serveur Node répond sur le port 3000.</p>
+<p class="ok">Le serveur Node répond sur le port ${port}.</p>
 <p class="muted">Fastify ne dépend plus d’un second port interne : l’interface et le noyau vivent dans le même processus.</p>
 <div class="grid">
   <div class="card"><b>Gateway</b><span class="ok">ACTIF</span></div>
   <div class="card"><b>Application AURA</b><span class="${appState === 'failed' ? 'bad' : 'warn'}">${safeHtml(appState.toUpperCase())}</span></div>
-  <div class="card"><b>Port public</b><span>3000</span></div>
+  <div class="card"><b>Port public</b><span>${port}</span></div>
   <div class="card"><b>Port interne</b><span>SUPPRIMÉ</span></div>
 </div>
 <div class="box">${detail}</div>
