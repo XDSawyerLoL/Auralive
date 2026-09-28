@@ -1217,28 +1217,11 @@ async def twitch_auth_v3(role: str, request: Request) -> HTMLResponse:
 _original_v3_lifespan = app.router.lifespan_context
 
 
-async def _prewarm_kokoro() -> None:
-    voice = getattr(aura, "local_kokoro_voice", None)
-    if voice is None or not getattr(voice, "enabled", False):
-        return
-    try:
-        ready = await voice.ensure_ready()
-        if ready:
-            logger.info("Voix Kokoro locale prete: %s", voice.voice_name)
-        else:
-            logger.warning("Voix Kokoro locale indisponible: %s", voice.last_error)
-    except asyncio.CancelledError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Prechargement Kokoro non bloquant impossible: %s", exc)
-
-
 @asynccontextmanager
 async def _v3_lifespan(application):
     async with _original_v3_lifespan(application):
         aura.overlay.subscribe(_native_overlay_audio_listener)
         await cloud_worker.start()
-        kokoro_warmup = asyncio.create_task(_prewarm_kokoro(), name="kokoro-voice-warmup")
         if settings.broadcast_engine == "native" and settings.native_engine_autostart:
             try:
                 await asyncio.to_thread(native_broadcast.start)
@@ -1247,12 +1230,6 @@ async def _v3_lifespan(application):
         try:
             yield
         finally:
-            if not kokoro_warmup.done():
-                kokoro_warmup.cancel()
-                try:
-                    await kokoro_warmup
-                except asyncio.CancelledError:
-                    pass
             aura.overlay.unsubscribe(_native_overlay_audio_listener)
             await cloud_worker.close()
             await voice_realtime.close()
