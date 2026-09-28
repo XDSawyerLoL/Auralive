@@ -1049,6 +1049,68 @@ function inferSelfTemplateStencil(training) {
   return [{ name: 'self-template-stencil', complexity: 7.1, params }];
 }
 
+
+function diagonalOrientation(grid, r, c, sourceColor) {
+  const backslash = [
+    [r - 1, c - 1],
+    [r + 1, c + 1],
+  ].some(([rr, cc]) => grid[rr]?.[cc] === sourceColor);
+  const slash = [
+    [r - 1, c + 1],
+    [r + 1, c - 1],
+  ].some(([rr, cc]) => grid[rr]?.[cc] === sourceColor);
+  if (backslash === slash) return '';
+  return backslash ? 'backslash' : 'slash';
+}
+
+function applyDiagonalOrientationMass(grid, params) {
+  const cells = { backslash: [], slash: [] };
+  for (let r = 0; r < grid.length; r += 1) {
+    for (let c = 0; c < grid[r].length; c += 1) {
+      if (grid[r][c] !== params.source_color) continue;
+      const orientation = diagonalOrientation(grid, r, c, params.source_color);
+      if (!orientation) return cloneGrid(grid);
+      cells[orientation].push([r, c]);
+    }
+  }
+  if (!cells.backslash.length || !cells.slash.length
+    || cells.backslash.length === cells.slash.length) return cloneGrid(grid);
+  const dominant = cells.backslash.length > cells.slash.length ? 'backslash' : 'slash';
+  const out = cloneGrid(grid);
+  for (const orientation of ['backslash', 'slash']) {
+    const color = orientation === dominant ? params.dominant_color : params.minority_color;
+    paintCells(out, cells[orientation], color);
+  }
+  return out;
+}
+
+function inferDiagonalOrientationMass(training) {
+  const firstDiffs = changedCells(training[0].input, training[0].output);
+  if (!firstDiffs.length) return [];
+  const sourceColors = [...new Set(firstDiffs.map(([, , from]) => from))];
+  const targetColors = [...new Set(firstDiffs.map(([, , , to]) => to))];
+  if (sourceColors.length !== 1 || targetColors.length !== 2) return [];
+  const sourceColor = sourceColors[0];
+
+  for (const dominantColor of targetColors) {
+    const minorityColor = targetColors.find((color) => color !== dominantColor);
+    const params = {
+      source_color: sourceColor,
+      dominant_color: dominantColor,
+      minority_color: minorityColor,
+    };
+    if (training.every((pair) =>
+      equalGrid(applyDiagonalOrientationMass(pair.input, params), pair.output))) {
+      return [{
+        name: 'recolor-diagonal-orientations-by-mass',
+        complexity: 6.5,
+        params,
+      }];
+    }
+  }
+  return [];
+}
+
 export function applyAdvancedProgram(name, grid, params = {}) {
   if (!rectangular(grid)) throw new Error('grid invalide');
   if (name === 'connect-anchors-l') return applyConnectAnchors(grid, params);
@@ -1062,6 +1124,7 @@ export function applyAdvancedProgram(name, grid, params = {}) {
   if (name === 'diagonal-extrusion') return applyDiagonalExtrusion(grid, params);
   if (name === 'marker-palette-cycle') return applyMarkerPaletteCycle(grid, params);
   if (name === 'self-template-stencil') return applySelfTemplateStencil(grid, params);
+  if (name === 'recolor-diagonal-orientations-by-mass') return applyDiagonalOrientationMass(grid, params);
   return null;
 }
 
@@ -1081,6 +1144,7 @@ export function inferAdvancedPrograms(training = []) {
     inferDiagonalExtrusion,
     inferMarkerPaletteCycle,
     inferSelfTemplateStencil,
+    inferDiagonalOrientationMass,
   ];
   const candidates = [];
   for (const inferer of inferers) {
