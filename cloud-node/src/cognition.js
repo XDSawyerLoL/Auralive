@@ -24,6 +24,128 @@ function compactLesson(lessons = []) {
   return normalize(lessons?.[0]?.content || '');
 }
 
+function nearlyEqual(a, b, epsilon = 1e-8) {
+  return Math.abs(Number(a) - Number(b)) <= epsilon * Math.max(1, Math.abs(Number(a)), Math.abs(Number(b)));
+}
+
+function cleanNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (nearlyEqual(n, Math.round(n), 1e-10)) return Math.round(n);
+  return Number(n.toFixed(8));
+}
+
+function solveLinearSystem(matrix, vector) {
+  const n = matrix.length;
+  if (!n || vector.length !== n) return null;
+  const a = matrix.map((row, i) => [...row.map(Number), Number(vector[i])]);
+  for (let col = 0; col < n; col += 1) {
+    let pivot = col;
+    for (let row = col + 1; row < n; row += 1) {
+      if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) pivot = row;
+    }
+    if (Math.abs(a[pivot][col]) < 1e-12) return null;
+    if (pivot !== col) [a[col], a[pivot]] = [a[pivot], a[col]];
+    const divisor = a[col][col];
+    for (let j = col; j <= n; j += 1) a[col][j] /= divisor;
+    for (let row = 0; row < n; row += 1) {
+      if (row === col) continue;
+      const factor = a[row][col];
+      if (Math.abs(factor) < 1e-15) continue;
+      for (let j = col; j <= n; j += 1) a[row][j] -= factor * a[col][j];
+    }
+  }
+  return a.map((row) => cleanNumber(row[n]));
+}
+
+function polynomialCoefficients(points, degree) {
+  if (points.length < degree + 1) return null;
+  const basis = points.slice(0, degree + 1);
+  const matrix = basis.map(([x]) => Array.from({ length: degree + 1 }, (_, power) => Number(x) ** power));
+  const vector = basis.map(([, y]) => Number(y));
+  const coefficients = solveLinearSystem(matrix, vector);
+  if (!coefficients || coefficients.some((value) => value === null)) return null;
+  const evaluate = (x) => coefficients.reduce((sum, coefficient, power) => sum + Number(coefficient) * Number(x) ** power, 0);
+  if (!points.every(([x, y]) => nearlyEqual(evaluate(x), y, 1e-7))) return null;
+  return { coefficients, evaluate };
+}
+
+function formatPolynomial(coefficients) {
+  const parts = [];
+  for (let power = coefficients.length - 1; power >= 0; power -= 1) {
+    const raw = cleanNumber(coefficients[power]);
+    if (raw === null || nearlyEqual(raw, 0)) continue;
+    const sign = raw < 0 ? '-' : '+';
+    const abs = Math.abs(raw);
+    let body;
+    if (power === 0) body = String(abs);
+    else if (power === 1) body = nearlyEqual(abs, 1) ? 'n' : String(abs) + '*n';
+    else body = nearlyEqual(abs, 1) ? 'n^' + power : String(abs) + '*n^' + power;
+    if (!parts.length) parts.push(sign === '-' ? '-' + body : body);
+    else parts.push(' ' + sign + ' ' + body);
+  }
+  return parts.join('') || '0';
+}
+
+function extractSymbolicFunctionProblem(text) {
+  const raw = normalize(text);
+  const exampleRegex = /f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)\s*=\s*(-?\d+(?:[.,]\d+)?)/gi;
+  const points = [];
+  const seen = new Set();
+  let match;
+  while ((match = exampleRegex.exec(raw)) !== null) {
+    const x = Number(match[1].replace(',', '.'));
+    const y = Number(match[2].replace(',', '.'));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const key = String(x);
+    if (seen.has(key)) {
+      const previous = points.find(([px]) => String(px) === key);
+      if (previous && !nearlyEqual(previous[1], y)) return null;
+      continue;
+    }
+    seen.add(key);
+    points.push([x, y]);
+  }
+  if (points.length < 2) return null;
+  const targetPatterns = [
+    /(?:déduis|deduis|calcule|trouve|détermine|determine|prédit|predit|predict|infer)[^.!?]{0,120}?f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)/i,
+    /(?:donne|quelle est|quel est)[^.!?]{0,120}?f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)/i,
+  ];
+  let target = null;
+  for (const pattern of targetPatterns) {
+    const found = raw.match(pattern);
+    if (found) { target = Number(found[1].replace(',', '.')); break; }
+  }
+  if (!Number.isFinite(target)) {
+    const calls = [...raw.matchAll(/f\s*\(\s*(-?\d+(?:[.,]\d+)?)\s*\)(?!\s*=)/gi)]
+      .map((item) => Number(item[1].replace(',', '.'))).filter(Number.isFinite);
+    target = calls.at(-1);
+  }
+  if (!Number.isFinite(target)) return null;
+  return { points, target };
+}
+
+function inferSymbolicFunction(text) {
+  const problem = extractSymbolicFunctionProblem(text);
+  if (!problem) return null;
+  const { points, target } = problem;
+  const sorted = [...points].sort((a, b) => a[0] - b[0]);
+  const maxDegree = Math.min(3, sorted.length - 1);
+  for (let degree = 0; degree <= maxDegree; degree += 1) {
+    const model = polynomialCoefficients(sorted, degree);
+    if (!model) continue;
+    const predicted = cleanNumber(model.evaluate(target));
+    if (predicted === null) continue;
+    return {
+      kind: 'polynomial', degree, points: sorted, target, predicted,
+      formula: formatPolynomial(model.coefficients),
+      coefficients: model.coefficients.map(cleanNumber),
+      verified_examples: sorted.length,
+    };
+  }
+  return null;
+}
+
 export class CognitionEngine {
   static VERSION = 'aura-cognition-native-v1.1';
 
@@ -180,8 +302,17 @@ export class CognitionEngine {
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
     let needsSemanticSupport = true;
     const facts = [];
+    const symbolic = inferSymbolicFunction(raw);
 
-    if (hasAny(q, ['salut', 'bonjour', 'bonsoir', 'coucou', 'hello'])) {
+    if (symbolic) {
+      act = 'solve_symbolic_rule';
+      goal = 'Inférer nativement la règle algébrique la plus simple compatible avec tous les exemples et calculer la valeur cible.';
+      needsSemanticSupport = false;
+      facts.push(
+        'Règle inférée et vérifiée sur ' + symbolic.verified_examples + ' exemples : f(n) = ' + symbolic.formula + '.',
+        'Donc f(' + symbolic.target + ') = ' + symbolic.predicted + '.',
+      );
+    } else if (hasAny(q, ['salut', 'bonjour', 'bonsoir', 'coucou', 'hello'])) {
       act = 'greet';
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
@@ -304,6 +435,7 @@ export class CognitionEngine {
 
   deterministicReply(plan) {
     const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean) : [];
+    if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
     if (plan?.act === 'greet') return 'Salut. Je suis en ligne et disponible.';
     if (['report_current_activity','report_internal_state','report_dream'].includes(plan?.act)) {
       return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';
