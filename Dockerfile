@@ -1,9 +1,9 @@
-FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+FROM node:22-slim
+ENV NODE_ENV=production \
+    AURA_HOST=0.0.0.0
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-RUN mkdir -p /app/data/media
-EXPOSE 8787
-CMD ["python", "-m", "app.main_v3"]
+COPY cloud-node/package.json cloud-node/package-lock.json ./
+RUN npm ci --omit=dev
+COPY cloud-node ./
+EXPOSE 10000
+CMD ["node", "server.js"]
