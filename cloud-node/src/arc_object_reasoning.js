@@ -744,13 +744,228 @@ function inferMarkerPaletteCycle(training) {
   return candidates;
 }
 
+
+function lFrameInterior(comp) {
+  const set = new Set(comp.cells.map(([r, c]) => r + ',' + c));
+  const variants = [
+    {
+      orientation: 'bottom-right',
+      border: [
+        ...Array.from({ length: comp.width }, (_, i) => [comp.maxR, comp.minC + i]),
+        ...Array.from({ length: comp.height }, (_, i) => [comp.minR + i, comp.maxC]),
+      ],
+      interior: [comp.minR, comp.maxR - 1, comp.minC, comp.maxC - 1],
+    },
+    {
+      orientation: 'bottom-left',
+      border: [
+        ...Array.from({ length: comp.width }, (_, i) => [comp.maxR, comp.minC + i]),
+        ...Array.from({ length: comp.height }, (_, i) => [comp.minR + i, comp.minC]),
+      ],
+      interior: [comp.minR, comp.maxR - 1, comp.minC + 1, comp.maxC],
+    },
+    {
+      orientation: 'top-right',
+      border: [
+        ...Array.from({ length: comp.width }, (_, i) => [comp.minR, comp.minC + i]),
+        ...Array.from({ length: comp.height }, (_, i) => [comp.minR + i, comp.maxC]),
+      ],
+      interior: [comp.minR + 1, comp.maxR, comp.minC, comp.maxC - 1],
+    },
+    {
+      orientation: 'top-left',
+      border: [
+        ...Array.from({ length: comp.width }, (_, i) => [comp.minR, comp.minC + i]),
+        ...Array.from({ length: comp.height }, (_, i) => [comp.minR + i, comp.minC]),
+      ],
+      interior: [comp.minR + 1, comp.maxR, comp.minC + 1, comp.maxC],
+    },
+  ];
+
+  for (const variant of variants) {
+    const expected = new Set(variant.border.map(([r, c]) => r + ',' + c));
+    if (expected.size !== set.size) continue;
+    if (![...expected].every((key) => set.has(key))) continue;
+    const [r0, r1, c0, c1] = variant.interior;
+    if (r0 > r1 || c0 > c1) continue;
+    return {
+      orientation: variant.orientation,
+      r0,
+      r1,
+      c0,
+      c1,
+    };
+  }
+  return null;
+}
+
+function insideBox(comp, box) {
+  return comp.cells.every(([r, c]) =>
+    r >= box.r0 && r <= box.r1 && c >= box.c0 && c <= box.c1);
+}
+
+function applyRecolorMarkerMatched(grid, params) {
+  const background = dominantColor(grid);
+  const comps = components(grid, { background });
+  const marker = comps
+    .filter((item) => item.color === params.marker_color)
+    .map((item) => ({ item, frame: lFrameInterior(item) }))
+    .find((entry) => entry.frame);
+  if (!marker) return cloneGrid(grid);
+
+  const references = comps.filter((item) =>
+    item.color !== params.marker_color && insideBox(item, marker.frame));
+  if (!references.length) return cloneGrid(grid);
+
+  const out = cloneGrid(grid);
+  for (const comp of comps) {
+    if (comp.color === params.marker_color || insideBox(comp, marker.frame)) continue;
+    if (references.some((ref) => sameShape(ref, comp))) {
+      paintCells(out, comp.cells, params.marker_color);
+    }
+  }
+  return out;
+}
+
+function inferRecolorMarkerMatched(training) {
+  const targetColors = new Set();
+  for (const pair of training) {
+    const diffs = changedCells(pair.input, pair.output);
+    if (!diffs.length) return [];
+    const to = new Set(diffs.map(([, , , color]) => color));
+    if (to.size !== 1) return [];
+    targetColors.add([...to][0]);
+  }
+  if (targetColors.size !== 1) return [];
+  const markerColor = [...targetColors][0];
+  const params = { marker_color: markerColor };
+  if (!training.every((pair) =>
+    equalGrid(applyRecolorMarkerMatched(pair.input, params), pair.output))) return [];
+  return [{ name: 'recolor-marker-matched-object', complexity: 6.3, params }];
+}
+
+function crossRegions(grid, separatorColor) {
+  const rows = [];
+  const cols = [];
+  for (let r = 0; r < grid.length; r += 1) {
+    if (grid[r].every((value) => value === separatorColor)) rows.push(r);
+  }
+  for (let c = 0; c < grid[0].length; c += 1) {
+    let full = true;
+    for (let r = 0; r < grid.length; r += 1) {
+      if (grid[r][c] !== separatorColor) {
+        full = false;
+        break;
+      }
+    }
+    if (full) cols.push(c);
+  }
+  if (rows.length !== 1 || cols.length !== 1) return null;
+  const sr = rows[0];
+  const sc = cols[0];
+  const defs = [
+    [0, sr - 1, 0, sc - 1],
+    [0, sr - 1, sc + 1, grid[0].length - 1],
+    [sr + 1, grid.length - 1, 0, sc - 1],
+    [sr + 1, grid.length - 1, sc + 1, grid[0].length - 1],
+  ];
+  const regions = defs.map(([r0, r1, c0, c1], index) => ({
+    index,
+    r0,
+    r1,
+    c0,
+    c1,
+    grid: r0 <= r1 && c0 <= c1 ? extractRegion(grid, r0, r1, c0, c1) : [],
+  }));
+  return { sr, sc, regions };
+}
+
+function regionStats(region, background) {
+  if (!region?.grid?.length || !region.grid[0]?.length) {
+    return { area: 0, content: 0, full: false, colors: [] };
+  }
+  const flat = region.grid.flat();
+  const content = flat.filter((value) => value !== background).length;
+  return {
+    area: flat.length,
+    content,
+    full: content === flat.length,
+    colors: [...new Set(flat.filter((value) => value !== background))],
+  };
+}
+
+function detectKeyPatternRegions(grid, separatorColor, background) {
+  const cross = crossRegions(grid, separatorColor);
+  if (!cross) return null;
+  const rows = cross.regions.map((region) => ({
+    ...region,
+    stats: regionStats(region, background),
+  }));
+  const contentRegions = rows.filter((region) => region.stats.content > 0);
+  if (contentRegions.length !== 2) return null;
+
+  const key = contentRegions
+    .filter((region) => region.stats.full)
+    .sort((a, b) => a.stats.area - b.stats.area)[0];
+  if (!key) return null;
+
+  const pattern = contentRegions.find((region) => region.index !== key.index);
+  if (!pattern?.grid?.length || !pattern.grid[0]?.length) return null;
+  if (pattern.grid.length % key.grid.length !== 0
+    || pattern.grid[0].length % key.grid[0].length !== 0) return null;
+  return { key, pattern };
+}
+
+function applyKeyedRegionRecolor(grid, params) {
+  const background = params.background_color;
+  const detected = detectKeyPatternRegions(grid, params.separator_color, background);
+  if (!detected) return cloneGrid(grid);
+
+  const key = detected.key.grid;
+  const pattern = detected.pattern.grid;
+  const blockH = pattern.length / key.length;
+  const blockW = pattern[0].length / key[0].length;
+  const out = Array.from({ length: pattern.length }, () =>
+    Array(pattern[0].length).fill(background));
+
+  for (let r = 0; r < pattern.length; r += 1) {
+    for (let c = 0; c < pattern[r].length; c += 1) {
+      if (pattern[r][c] === background) continue;
+      const kr = Math.min(key.length - 1, Math.floor(r / blockH));
+      const kc = Math.min(key[0].length - 1, Math.floor(c / blockW));
+      out[r][c] = key[kr][kc];
+    }
+  }
+  return out;
+}
+
+function inferKeyedRegionRecolor(training) {
+  const first = training[0];
+  const candidates = [];
+  for (const separatorColor of colors(first.input)) {
+    if (!crossRegions(first.input, separatorColor)) continue;
+    const background = dominantColorExcluding(first.input, new Set([separatorColor]));
+    const params = {
+      separator_color: separatorColor,
+      background_color: background,
+    };
+    if (training.every((pair) =>
+      equalGrid(applyKeyedRegionRecolor(pair.input, params), pair.output))) {
+      candidates.push({ name: 'keyed-region-recolor', complexity: 6.7, params });
+    }
+  }
+  return candidates;
+}
+
 export function applyAdvancedProgram(name, grid, params = {}) {
   if (!rectangular(grid)) throw new Error('grid invalide');
   if (name === 'connect-anchors-l') return applyConnectAnchors(grid, params);
   if (name === 'recolor-congruent-object') return applyRecolorCongruent(grid, params);
+  if (name === 'recolor-marker-matched-object') return applyRecolorMarkerMatched(grid, params);
   if (name === 'copy-around-pivot') return applyCopyAroundPivot(grid, params);
   if (name === 'tile-grid-modulo') return applyTileGridModulo(grid, params);
   if (name === 'overlay-quadrants') return applyOverlayQuadrants(grid, params);
+  if (name === 'keyed-region-recolor') return applyKeyedRegionRecolor(grid, params);
   if (name === 'repeat-periodic-recolor') return applyRepeatPeriodic(grid, params);
   if (name === 'diagonal-extrusion') return applyDiagonalExtrusion(grid, params);
   if (name === 'marker-palette-cycle') return applyMarkerPaletteCycle(grid, params);
@@ -764,9 +979,11 @@ export function inferAdvancedPrograms(training = []) {
   const inferers = [
     inferConnectAnchors,
     inferRecolorCongruent,
+    inferRecolorMarkerMatched,
     inferCopyAroundPivot,
     inferTileGridModulo,
     inferOverlayQuadrants,
+    inferKeyedRegionRecolor,
     inferRepeatPeriodic,
     inferDiagonalExtrusion,
     inferMarkerPaletteCycle,
