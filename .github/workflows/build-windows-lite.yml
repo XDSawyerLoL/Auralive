@@ -98,7 +98,7 @@ jobs:
             throw "Le pack de voix Kokoro ne doit pas etre embarque dans le build Lite."
           }
 
-      - name: Smoke test first-run Kokoro download without OBS
+      - name: Smoke test Lite startup and locked Aoede identity without bundled voice assets
         shell: pwsh
         env:
           AURA_PORT: "18787"
@@ -107,13 +107,14 @@ jobs:
           AI_MODE: "off"
           OBS_AUTO_CONNECT: "false"
           OBS_ENABLED: "false"
-          MAIRAIY_KOKORO_PRIMARY: "true"
-          MAIRAIY_KOKORO_ENABLED: "true"
-          MAIRAIY_KOKORO_AUTO_DOWNLOAD: "true"
-          MAIRAIY_KOKORO_VOICE: "ff_siwis"
-          MAIRAIY_KOKORO_LANGUAGE: "fr-fr"
+          TTS_API_KEY: ""
+          AI_API_KEY: ""
+          GEMINI_API_KEY: ""
+          GOOGLE_API_KEY: ""
+          MAIRAIY_KOKORO_PRIMARY: "false"
+          MAIRAIY_KOKORO_AUTO_DOWNLOAD: "false"
         run: |
-          $tempKokoro = Join-Path $env:RUNNER_TEMP "QuanticStudio-Kokoro-FirstRun"
+          $tempKokoro = Join-Path $env:RUNNER_TEMP "QuanticStudio-Kokoro-NotCanonical"
           if (Test-Path $tempKokoro) { Remove-Item $tempKokoro -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $tempKokoro | Out-Null
           $env:MAIRAIY_KOKORO_DIR = $tempKokoro
@@ -132,50 +133,41 @@ jobs:
             }
             if (-not $ready) { throw "QuanticStudio Lite n'a pas demarre." }
 
-            $nativeDeadline = (Get-Date).AddSeconds(15)
-            $nativeReady = $false
-            while ((Get-Date) -lt $nativeDeadline) {
-              try {
-                $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 3
-                if ($nativeStatus.mode -eq "native" -and
-                    $nativeStatus.responsive -eq $true -and
-                    $nativeStatus.engine.version -eq "0.4.1" -and
-                    $nativeStatus.engine.ffmpeg_ok -eq $true -and
-                    $nativeStatus.engine.capture_backend -eq "Windows Graphics Capture" -and
-                    $nativeStatus.system_audio.backend_present -eq $true) {
-                  $nativeReady = $true
-                  break
-                }
-              } catch {}
-              Start-Sleep -Milliseconds 400
-            }
-            if (-not $nativeReady) {
-              try { $nativeStatus | ConvertTo-Json -Depth 10 | Write-Host } catch {}
-              throw "Quantic Studio Core 0.4.1 n'est pas operationnel dans le build Lite."
-            }
-
-            $voice = Invoke-RestMethod "http://127.0.0.1:18787/api/avatar/test" `
-              -Method Post `
-              -ContentType "application/json" `
-              -Body '{"text":"Test de la voix locale Mairaiy sans OBS."}' `
-              -TimeoutSec 180
-
-            if ($voice.engine -ne "kokoro-local") {
-              $voice | ConvertTo-Json -Depth 8 | Write-Host
-              throw "Le premier test vocal n'a pas utilise Kokoro local."
-            }
-            if (-not $voice.audio_url) { throw "Aucune URL audio generee." }
-
             $status = Invoke-RestMethod "http://127.0.0.1:18787/api/voice/status" -TimeoutSec 10
-            $kokoro = $status.audio.kokoro_voice
-            if ($kokoro.download_attempted -ne $true -or $kokoro.assets_present -ne $true -or $kokoro.ready -ne $true) {
-              $kokoro | ConvertTo-Json -Depth 8 | Write-Host
-              throw "Le premier lancement n'a pas telecharge et charge Kokoro correctement."
+            $identity = $status.audio.voice_identity
+            if ($status.gemini_required -ne $true -or
+                $status.gemini_configured -ne $false -or
+                $identity.primary_engine -ne "gemini-tts" -or
+                $identity.primary_model -ne "gemini-3.1-flash-tts-preview" -or
+                $identity.primary_voice -ne "Aoede" -or
+                $identity.generic_fallback_allowed -ne $false) {
+              $status | ConvertTo-Json -Depth 10 | Write-Host
+              throw "Le build Lite n'est pas verrouille sur Mairaiy Aoede."
             }
 
-            $audio = Invoke-WebRequest ("http://127.0.0.1:18787" + $voice.audio_url) -UseBasicParsing -TimeoutSec 15
-            if ($audio.RawContentLength -le 44) { throw "WAV Kokoro vide." }
-            Write-Host "Valide: build Lite, auto-download Kokoro, WAV genere sans OBS."
+            $body = @{ text = "Test Mairaiy sans cle Gemini." } | ConvertTo-Json
+            $fallbackBlocked = $false
+            try {
+              $unexpected = Invoke-RestMethod -Uri "http://127.0.0.1:18787/api/avatar/test" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 20
+              $unexpected | ConvertTo-Json -Depth 8 | Write-Host
+            } catch {
+              $statusCode = [int]$_.Exception.Response.StatusCode
+              if ($statusCode -eq 503) { $fallbackBlocked = $true } else { throw }
+            }
+            if (-not $fallbackBlocked) {
+              throw "Le build Lite a substitue une autre voix a Mairaiy."
+            }
+
+            if (Test-Path (Join-Path $tempKokoro "kokoro-v1.0.onnx")) {
+              throw "Le build Lite a telecharge Kokoro alors qu'il n'est plus la voix canonique."
+            }
+
+            $nativeStatus = Invoke-RestMethod "http://127.0.0.1:18787/api/broadcast/status" -TimeoutSec 5
+            if ($nativeStatus.mode -ne "native" -or $nativeStatus.engine_available -ne $true) {
+              throw "Quantic Studio Core n'est pas disponible dans le build Lite."
+            }
+
+            Write-Host "Valide: build Lite stable, Aoede verrouillee, aucun fallback de timbre."
           } finally {
             if (-not $process.HasExited) {
               try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
