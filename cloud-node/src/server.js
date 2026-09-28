@@ -600,10 +600,11 @@ app.get('/api/voice/status', async (request) => {
   return {
     profile: 'mairaiy',
     ready: Boolean(voiceStudio.enabled),
-    primary: voiceStudio.enabled ? 'aura-voice-fabric-exact-ff_siwis' : 'offline',
+    primary: voiceStudio.enabled ? 'aura-voice-fabric-historical-aoede' : 'offline',
     strict_identity: true,
-    expected_engine_voice: 'ff_siwis',
+    expected_engine_voice: 'aoede',
     expected_language: 'fr-fr',
+    historical_profile: 'aura-live-2.0.7-natural',
     generic_fallback_allowed: false,
     fabric: voiceStudio.diagnostic({ publicView: !privateView }),
   };
@@ -620,11 +621,11 @@ app.post('/api/voice/speak', async (request, reply) => {
 
   if (!voiceStudio.enabled) {
     return reply.code(503).send({
-      error: 'La voix exacte Mairaiy ff_siwis est indisponible. Aucun TTS générique ne sera utilisé.',
+      error: 'La voix historique Mairaiy Aoede est indisponible. Aucun autre timbre ne sera utilisé.',
       code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
       fabric: voiceStudio.diagnostic({ publicView: true }),
       fallback_blocked: true,
-      expected_engine_voice: 'ff_siwis',
+      expected_engine_voice: 'aoede',
       expected_language: 'fr-fr',
     });
   }
@@ -632,19 +633,19 @@ app.post('/api/voice/speak', async (request, reply) => {
   try {
     const audio = await voiceStudio.synthesize(text, request.body || {});
     if (
-      String(audio?.engine_voice || '').toLowerCase() !== 'ff_siwis'
+      String(audio?.engine_voice || '').toLowerCase() !== 'aoede'
       || String(audio?.language || '').toLowerCase() !== 'fr-fr'
     ) {
-      throw new Error('Identité vocale Mairaiy non certifiée');
+      throw new Error('Identité vocale Mairaiy Aoede non certifiée');
     }
     return audio;
   } catch (error) {
     return reply.code(503).send({
-      error: `Mairaiy ff_siwis indisponible: ${String(error?.message || error)}`,
+      error: `Mairaiy Aoede indisponible: ${String(error?.message || error)}`,
       code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
       fabric: voiceStudio.diagnostic({ publicView: true }),
       fallback_blocked: true,
-      expected_engine_voice: 'ff_siwis',
+      expected_engine_voice: 'aoede',
       expected_language: 'fr-fr',
     });
   }
