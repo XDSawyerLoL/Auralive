@@ -1,9 +1,9 @@
 import { config } from './config.js';
 
 const MAX_INPUT_CHARS = 3900;
-const DEFAULT_MODEL = 'kokoro';
+const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
 const DEFAULT_PROFILE_NAME = 'Mairaiy';
-const EXPECTED_ENGINE_VOICE = 'ff_siwis';
+const EXPECTED_ENGINE_VOICE = 'aoede';
 const EXPECTED_LANGUAGE = 'fr-fr';
 
 function clean(value, limit = 16000) {
@@ -303,7 +303,7 @@ export class VoiceStudioProvider {
 
     if (!this.profileCache.id) {
       throw new Error(
-        `Mairaiy exact profile ${EXPECTED_ENGINE_VOICE}/${EXPECTED_LANGUAGE} not found in VoiceStudio. Generic TTS is forbidden.`,
+        `Mairaiy exact profile ${EXPECTED_ENGINE_VOICE}/${EXPECTED_LANGUAGE} not found in VoiceStudio. A different Mairaiy timbre is forbidden.`,
       );
     }
 
