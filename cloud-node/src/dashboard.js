@@ -98,7 +98,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .quick{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}.quick button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b9c3d7;border-radius:999px;padding:7px 9px;font-size:9px}
 .composer{margin-top:auto;display:flex;gap:8px;align-items:flex-end}.composer textarea{resize:none;min-height:46px;max-height:112px;flex:1;border-radius:13px;border:1px solid var(--line);background:rgba(2,5,10,.45);color:var(--text);padding:11px 12px;outline:none;font-size:11px}.composer textarea:focus{border-color:rgba(154,108,255,.5);box-shadow:0 0 0 3px rgba(154,108,255,.08)}
 .send,.voice{width:43px;height:43px;border-radius:13px;border:1px solid var(--line);display:grid;place-items:center;color:white}.send{background:linear-gradient(135deg,#8a60ff,#5d4ae9);border:0}.voice{background:rgba(255,255,255,.04)}
-.map-panel{grid-area:map;position:relative;min-height:0;display:flex;flex-direction:column}.map-wrap{position:relative;isolation:isolate;flex:1;min-height:470px;overflow:hidden;background:radial-gradient(circle at 52% 47%,rgba(112,65,211,.26),transparent 25%),radial-gradient(circle at 50% 50%,rgba(40,104,184,.12),transparent 57%),linear-gradient(180deg,rgba(8,12,24,.12),rgba(4,7,13,.28))}
+.map-panel{grid-area:map;position:relative;min-height:0;display:flex;flex-direction:column}.map-wrap{position:relative;isolation:isolate;flex:1;min-height:470px;overflow:hidden;background:radial-gradient(circle at 50% 50%,rgba(112,65,211,.18),transparent 24%),radial-gradient(circle at 50% 50%,rgba(40,104,184,.08),transparent 60%),linear-gradient(180deg,rgba(8,12,24,.10),rgba(4,7,13,.30))}
 .map-wrap::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background-image:radial-gradient(circle,rgba(255,255,255,.44) 0 1px,transparent 1.4px);background-size:47px 47px;opacity:.13;mask-image:radial-gradient(circle at center,#000 12%,transparent 78%)}
 #nebulaFx,#particleFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #nebulaFx{z-index:0;filter:saturate(1.35) contrast(1.04)}
@@ -106,10 +106,16 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .aurora-vignette{position:absolute;inset:-12%;z-index:2;pointer-events:none;mix-blend-mode:screen;background:radial-gradient(circle at 50% 49%,rgba(185,140,255,.12),transparent 19%),radial-gradient(circle at 47% 52%,rgba(74,224,255,.075),transparent 32%),radial-gradient(circle at 57% 42%,rgba(255,171,91,.045),transparent 35%);animation:auraVignette 7.5s ease-in-out infinite}
 #attentionMap{position:absolute;inset:0;z-index:3;width:100%;height:100%;overflow:visible}
 #core{transform-box:fill-box;transform-origin:center;will-change:transform}
-.core-link{filter:drop-shadow(0 0 5px currentColor)}
+.neural-synapse{pointer-events:none;stroke-linecap:round}
 .energy-pulse{fill:none;pointer-events:none;stroke-linecap:round;filter:url(#glow);animation:energyFlow 4.6s linear infinite}
-.web-link{animation:webDrift 9s linear infinite}
-.aura-node{transform-box:fill-box;transform-origin:center;will-change:transform}
+.neural-neuron{cursor:crosshair;transition:filter .18s ease}
+.neural-neuron:hover{filter:brightness(1.28)}
+.dominant-neural-label{pointer-events:none;paint-order:stroke;stroke:rgba(4,7,14,.92);stroke-width:3px;stroke-linejoin:round}
+.neural-tooltip{position:absolute;z-index:8;display:none;transform:translate(10px,-50%);min-width:120px;max-width:220px;padding:8px 10px;border:1px solid rgba(175,150,255,.22);border-radius:10px;background:rgba(7,10,18,.90);backdrop-filter:blur(14px);box-shadow:0 8px 30px rgba(0,0,0,.28);pointer-events:none}
+.neural-tooltip.show{display:grid;gap:2px}
+.neural-tooltip strong{font-size:10px;color:#f3efff}
+.neural-tooltip span{font-size:8px;color:#96a2b8}
+.map-stats{font-size:8px;color:#7f8ba4;white-space:nowrap}
 @keyframes auraVignette{0%,100%{opacity:.72;transform:scale(.98) rotate(-1deg)}50%{opacity:1;transform:scale(1.055) rotate(1deg)}}
 @keyframes energyFlow{from{stroke-dashoffset:0}to{stroke-dashoffset:-170}}
 @keyframes webDrift{from{stroke-dashoffset:0}to{stroke-dashoffset:-90}}
@@ -118,7 +124,7 @@ body.aura-speaking .aurora-vignette{animation:auraSpeakingLight .58s ease-in-out
 body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 22px rgba(177,128,255,.85)) drop-shadow(0 0 42px rgba(78,222,255,.34))}
 body.aura-speaking .energy-pulse{animation-duration:1.6s}
 @media(prefers-reduced-motion:reduce){.aurora-vignette,.energy-pulse,.web-link{animation:none!important}}
-.map-toolbar{display:flex;gap:6px}.map-toolbar button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b8c1d5;border-radius:999px;padding:6px 9px;font-size:9px}
+.map-toolbar{display:flex;gap:8px;align-items:center}.map-toolbar button{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#b8c1d5;border-radius:999px;padding:6px 9px;font-size:9px}
 .legend{position:absolute;right:14px;bottom:13px;background:rgba(7,10,18,.78);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:8px;color:#aab5ca;backdrop-filter:blur(12px);display:grid;gap:5px}.legend-row{display:flex;align-items:center;gap:7px}.legend-line{width:22px;height:2px;border-radius:4px;background:linear-gradient(90deg,var(--violet),#fff)}.legend-line.rise{background:linear-gradient(90deg,var(--cyan),#fff)}.legend-line.stable{background:rgba(255,255,255,.3)}
 .map-foot{position:absolute;left:15px;bottom:14px;max-width:55%;font-size:9px;color:var(--muted);line-height:1.45;padding:8px 10px;border-radius:10px;background:rgba(7,10,18,.6);border:1px solid rgba(255,255,255,.05)}
 .right-stack{grid-area:side;display:grid;gap:12px;grid-template-rows:auto minmax(178px,1fr) auto}.thought-card{padding:13px;border:1px solid rgba(255,201,106,.17);border-radius:14px;background:linear-gradient(135deg,rgba(255,201,106,.08),rgba(154,108,255,.07));font-size:12px;line-height:1.48;color:#f2e0b9;min-height:74px}
@@ -265,7 +271,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     </section>
 
     <section class="panel map-panel">
-      <div class="panel-head"><span>◉</span><div class="panel-title">Carte d’intérêt</div><div class="spacer"></div><div class="map-toolbar"><button id="refreshMap">Vue dynamique</button></div></div>
+      <div class="panel-head"><span>◉</span><div class="panel-title">Carte d’intérêt · champ neuronal</div><div class="spacer"></div><div class="map-toolbar"><span class="map-stats" id="mapStats">réseau en formation</span><button id="refreshMap">Recalculer</button></div></div>
       <div class="map-wrap" id="livingMap">
         <canvas id="nebulaFx" aria-hidden="true"></canvas>
         <canvas id="particleFx" aria-hidden="true"></canvas>
@@ -278,30 +284,24 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
             <filter id="coreBloom" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="13" result="blur1"/><feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur2"/><feMerge><feMergeNode in="blur1"/><feMergeNode in="blur2"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
             <radialGradient id="coreAura"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".14" stop-color="#e6d9ff" stop-opacity=".92"/><stop offset=".34" stop-color="#a16fff" stop-opacity=".92"/><stop offset=".62" stop-color="#5e36d6" stop-opacity=".75"/><stop offset="1" stop-color="#17112d" stop-opacity=".1"/></radialGradient>
           </defs>
-          <g opacity=".28" stroke="#8b7fd0" fill="none">
-            <ellipse cx="450" cy="325" rx="330" ry="198" stroke-dasharray="3 9"/>
-            <ellipse cx="450" cy="325" rx="270" ry="250" transform="rotate(-22 450 325)" stroke-dasharray="2 11"/>
-            <ellipse cx="450" cy="325" rx="360" ry="118" transform="rotate(18 450 325)" stroke-dasharray="3 12"/>
-          </g>
           <g id="flowLinks"></g>
           <g id="energyPulses"></g>
           <g id="interestNodes"></g>
           <g id="core" filter="url(#coreBloom)">
-            <circle cx="450" cy="325" r="118" fill="#8f6bff" opacity=".055"/>
-            <circle cx="450" cy="325" r="101" fill="none" stroke="#8f6bff" opacity=".22" stroke-width="1.2" stroke-dasharray="2 11"/>
-            <circle cx="450" cy="325" r="86" fill="none" stroke="#68dff1" opacity=".16" stroke-width=".9" stroke-dasharray="1 13"/>
-            <circle cx="450" cy="325" r="74" fill="url(#coreAura)" stroke="rgba(255,255,255,.48)" stroke-width="1.7"/>
-            <circle cx="450" cy="325" r="54" fill="none" stroke="rgba(225,211,255,.34)" stroke-width="1"/>
-            <circle cx="429" cy="302" r="8" fill="#ffffff" opacity=".48" filter="url(#soft)"/>
-            <text x="450" y="331" fill="#f8f4ff" font-size="22" text-anchor="middle" letter-spacing="5">AURA</text>
+            <circle cx="450" cy="325" r="62" fill="#8f6bff" opacity=".045"/>
+            <circle cx="450" cy="325" r="48" fill="url(#coreAura)" stroke="rgba(255,255,255,.44)" stroke-width="1.3"/>
+            <circle cx="450" cy="325" r="31" fill="none" stroke="rgba(225,211,255,.28)" stroke-width=".9"/>
+            <circle cx="437" cy="311" r="5" fill="#ffffff" opacity=".42" filter="url(#soft)"/>
+            <text x="450" y="330" fill="#f8f4ff" font-size="15" text-anchor="middle" letter-spacing="4">AURA</text>
           </g>
         </svg>
+        <div class="neural-tooltip" id="neuralTooltip"></div>
         <div class="organism-hud"><i id="organismDot"></i><span id="organismMood">organisme en réveil</span></div>
         <div class="map-foot"><strong id="focusLabel" style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">chargement de l’état</span></div>
         <div class="legend">
-          <div class="legend-row"><span class="legend-line"></span>Flux d’attention actuel</div>
-          <div class="legend-row"><span class="legend-line rise"></span>Intérêt croissant</div>
-          <div class="legend-row"><span class="legend-line stable"></span>Intérêt stable</div>
+          <div class="legend-row"><span class="legend-line"></span>Synapse fonctionnelle</div>
+          <div class="legend-row"><span class="legend-line rise"></span>Flux actif</div>
+          <div class="legend-row"><span class="legend-line stable"></span>Survol : détail du neurone</div>
         </div>
       </div>
     </section>

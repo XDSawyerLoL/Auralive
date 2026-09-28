@@ -961,118 +961,179 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status] = await Promise.all([
-      this.intentions(8),
-      this.activity(18),
+    const [intentions, traces, status, services, lessons] = await Promise.all([
+      this.intentions(12),
+      this.activity(28),
       this.status(),
+      query(
+        `SELECT id,name,kind,objective,criticality,state,state_detail
+         FROM aura_command_services
+         WHERE enabled=1
+         ORDER BY criticality DESC,name ASC LIMIT 14`,
+      ).catch(() => []),
+      this.lessons(10),
     ]);
 
+    const organism = this.organism.migrate(soul);
+    const fabricCaps = Array.isArray(this.fabric?.list?.()) ? this.fabric.list() : [];
     const text = [
       soul.current_intention,
       soul.dominant_thought,
       ...intentions.map((row) => row.statement),
       ...traces.map((row) => `${row.title || ''} ${row.content || ''}`),
+      ...lessons.map((row) => row.content || ''),
     ].join(' ').toLowerCase();
 
-    const keywordBoost = (words) => words.reduce(
-      (score, word) => score + (text.includes(word) ? 0.12 : 0),
-      0,
-    );
-
+    const boost = (words, each = 0.08) =>
+      words.reduce((score, word) => score + (text.includes(word) ? each : 0), 0);
     const count = status.counts || {};
-    const nodes = [
-      {
-        id: 'stability',
-        label: 'Stabilité',
-        subtitle: 'Équilibre du système',
-        score: clamp(
-          0.18
-          + Number(soul.pressure || 0) * 0.58
-          + keywordBoost(['stabil', 'erreur', 'incident', 'fiabil', 'risque']),
-        ),
-      },
-      {
-        id: 'learning',
-        label: 'Apprentissage',
-        subtitle: 'Exploration active',
-        score: clamp(
-          0.12
-          + Number(soul.curiosity || 0) * 0.46
-          + Number(soul.introspection || 0) * 0.25
-          + keywordBoost(['appren', 'comprendre', 'analyse', 'recherche']),
-        ),
-      },
-      {
-        id: 'studio',
-        label: 'Quantic Studio',
-        subtitle: 'Création · Tests',
-        score: clamp(
-          0.14
-          + Math.min(Number(count.outcomes || 0) / 20, 0.24)
-          + keywordBoost(['studio', 'stream', 'obs', 'automation', 'quantic']),
-        ),
-      },
-      {
-        id: 'horizon',
-        label: 'HORIZON',
-        subtitle: 'Anticipation',
-        score: clamp(
-          0.08
-          + (this.horizon?.enabled ? 0.24 : 0)
-          + keywordBoost(['horizon', 'prévision', 'prediction', 'signal']),
-        ),
-      },
-      {
-        id: 'automation',
-        label: 'Automatisation',
-        subtitle: 'Optimisation',
-        score: clamp(
-          0.12
-          + Math.min(Number(count.routines || 0) / 12, 0.22)
-          + Math.min(Number(count.improvements || 0) / 12, 0.18)
-          + keywordBoost(['automat', 'routine', 'opérateur', 'action']),
-        ),
-      },
-      {
-        id: 'memory',
-        label: 'Mémoire',
-        subtitle: 'Consolidation',
-        score: clamp(
-          0.1
-          + Number(soul.continuity || 0) * 0.33
-          + Math.min(Number(count.lessons || 0) / 25, 0.22)
-          + keywordBoost(['mémoire', 'leçon', 'souvenir', 'consolid']),
-        ),
-      },
-      {
-        id: 'evolution',
-        label: 'Évolution',
-        subtitle: 'Amélioration',
-        score: clamp(
-          0.1
-          + Math.min(Number(count.improvements || 0) / 10, 0.28)
-          + keywordBoost(['évolution', 'amélioration', 'corriger', 'version']),
-        ),
-      },
-      {
-        id: 'watch',
-        label: 'Veille',
-        subtitle: 'Collecte d’informations',
-        score: clamp(
-          0.1
-          + Number(soul.openness || 0) * 0.24
-          + Number(soul.curiosity || 0) * 0.24
-          + keywordBoost(['veille', 'article', 'nouveau', 'information']),
-        ),
-      },
-    ].map((node) => ({
-      ...node,
-      score: Number(node.score.toFixed(4)),
-    }));
+    const nodes = [];
+    const add = (id, label, domain, score, role = 'capability', extra = {}) => {
+      nodes.push({
+        id,
+        label,
+        domain,
+        role,
+        score: Number(clamp(score).toFixed(4)),
+        ...extra,
+      });
+    };
 
-    const ranked = [...nodes].sort((a, b) => b.score - a.score);
-    const top = ranked[0];
-    const second = ranked[1];
+    add('aura', 'AURA', 'core', 1, 'core');
+
+    add('stability', 'Stabilité', 'regulation',
+      0.18 + Number(soul.pressure || 0) * 0.45
+      + (1 - Number(organism.stabilite ?? 1)) * 0.28
+      + boost(['erreur','incident','stabil','fiabil','risque']));
+    add('clarity', 'Clarté', 'regulation',
+      0.16 + Number(soul.introspection || 0) * 0.24
+      + (1 - Number(organism.clarte ?? 1)) * 0.26
+      + boost(['clarif','contradic','cohér','comprendre']));
+    add('curiosity', 'Curiosité', 'perception',
+      0.15 + Number(soul.curiosity || organism.curiosite || 0) * 0.48
+      + boost(['nouveau','github','explor','découvr','crow']));
+    add('web', 'Web', 'perception',
+      0.11 + (this.webSubstrate?.enabled ? 0.20 : 0.03)
+      + boost(['web','internet','source','github','recherche']));
+    add('evidence', 'Evidence', 'perception',
+      0.12 + (this.webSubstrate?.enabled ? 0.14 : 0.02)
+      + boost(['preuve','source','vérif','evidence','contradic']));
+    add('memory', 'Mémoire', 'memory',
+      0.14 + Number(soul.continuity || 0) * 0.28
+      + Math.min(Number(count.lessons || 0) / 28, 0.22)
+      + boost(['mémoire','leçon','souvenir','consolid']));
+    add('learning', 'Apprentissage', 'memory',
+      0.14 + Number(soul.curiosity || 0) * 0.28
+      + Math.min(Number(count.outcomes || 0) / 30, 0.20)
+      + boost(['appren','adapter','amélior','deuxième essai']));
+    add('reasoning', 'Raisonnement', 'cognition',
+      0.18 + Number(organism.clarte || 0) * 0.20
+      + Math.min(Number(count.reflections || 0) / 18, 0.18)
+      + boost(['raison','analyse','diagnostic','hypoth']));
+    add('planning', 'Planification', 'cognition',
+      0.13 + Math.min(Number(count.initiatives || 0) / 12, 0.24)
+      + boost(['plan','dag','mission','objectif','étape']));
+    add('automation', 'Automatisation', 'agency',
+      0.13 + Math.min(Number(count.routines || 0) / 12, 0.20)
+      + Math.min(Number(count.outcomes || 0) / 24, 0.14)
+      + boost(['automat','routine','command-center','action']));
+    add('evolution', 'Évolution', 'agency',
+      0.12 + Math.min(Number(count.improvements || 0) / 10, 0.24)
+      + boost(['évolution','corriger','sandbox','version']));
+    add('fabric', 'Capability Fabric', 'infrastructure',
+      0.11 + (this.fabric?.enabled !== false ? 0.18 : 0.03)
+      + Math.min(fabricCaps.length / 30, 0.22)
+      + boost(['fabric','outil','capability','route']));
+    add('mesh', 'Mesh', 'infrastructure',
+      0.09 + Math.min(fabricCaps.filter((row) => /peer|mesh|worker/i.test(String(row.transport || '') + ' ' + String(row.provider || ''))).length / 10, 0.24)
+      + boost(['mesh','peer','essaim','worker']));
+
+    for (const service of services) {
+      if (['aura','horizon'].includes(String(service.id || ''))) continue;
+      const state = String(service.state || '').toLowerCase();
+      const attention = ['error','offline','degraded','unhealthy'].includes(state) ? 0.28
+        : ['standby','waiting'].includes(state) ? 0.17 : 0.08;
+      add(
+        'product:' + String(service.id || '').slice(0, 70),
+        String(service.name || service.id || 'Produit').slice(0, 30),
+        'ecosystem',
+        0.08 + Number(service.criticality || 0.5) * 0.20 + attention
+          + boost([String(service.id || '').toLowerCase(), String(service.name || '').toLowerCase()], 0.06),
+        'product',
+        { status: state || 'unknown' },
+      );
+    }
+
+    // Keep only real fabric capabilities with enough relevance; they remain unlabeled by default.
+    fabricCaps
+      .filter((row) => row?.id || row?.name)
+      .slice(0, 8)
+      .forEach((row, index) => {
+        const id = String(row.id || row.name || index).slice(0, 90);
+        const reliability = Number(row.observed_reliability ?? row.trust ?? 0.45);
+        add(
+          'cap:' + id,
+          String(row.name || row.id || 'Capacité').slice(0, 30),
+          'fabric',
+          0.07 + reliability * 0.22,
+          'fabric-capability',
+          { provider: String(row.provider || row.transport || '').slice(0, 40) },
+        );
+      });
+
+    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const edges = [];
+    const link = (source, target, weight, kind = 'functional') => {
+      if (!nodeMap.has(source) || !nodeMap.has(target)) return;
+      edges.push({
+        source,
+        target,
+        weight: Number(clamp(weight).toFixed(3)),
+        kind,
+      });
+    };
+
+    [
+      ['aura','stability',.72,'regulation'],
+      ['aura','clarity',.74,'regulation'],
+      ['aura','reasoning',.92,'cognition'],
+      ['aura','memory',.88,'memory'],
+      ['aura','curiosity',.76,'perception'],
+      ['aura','planning',.86,'cognition'],
+      ['aura','automation',.78,'agency'],
+      ['aura','fabric',.72,'infrastructure'],
+      ['stability','clarity',.76,'regulation'],
+      ['clarity','reasoning',.82,'cognition'],
+      ['reasoning','planning',.90,'cognition'],
+      ['planning','automation',.82,'action'],
+      ['automation','evolution',.72,'learning'],
+      ['evolution','learning',.74,'learning'],
+      ['learning','memory',.92,'memory'],
+      ['memory','reasoning',.72,'recall'],
+      ['curiosity','web',.92,'exploration'],
+      ['web','evidence',.90,'verification'],
+      ['evidence','reasoning',.86,'verification'],
+      ['fabric','mesh',.76,'infrastructure'],
+      ['fabric','automation',.78,'execution'],
+    ].forEach((row) => link(...row));
+
+    for (const node of nodes.filter((item) => item.role === 'product')) {
+      if (/studio/i.test(node.id)) link(node.id,'automation',.72,'product');
+      else if (/glide|browser/i.test(node.id)) link(node.id,'web',.76,'product');
+      else if (/news/i.test(node.id)) link(node.id,'evidence',.66,'product');
+      else if (/mail/i.test(node.id)) link(node.id,'memory',.54,'product');
+      else if (/zoon|pulse/i.test(node.id)) link(node.id,'curiosity',.56,'product');
+      else if (/providence/i.test(node.id)) link(node.id,'memory',.72,'product');
+      else if (/os/i.test(node.id)) link(node.id,'fabric',.70,'product');
+      else link(node.id,'fabric',.48,'product');
+    }
+    for (const node of nodes.filter((item) => item.role === 'fabric-capability')) {
+      link(node.id,'fabric',.60,'capability');
+    }
+
+    const ranked = nodes
+      .filter((node) => node.id !== 'aura')
+      .sort((a, b) => b.score - a.score);
     const prior = this._lastAttention || {};
     const enriched = nodes.map((node) => {
       const previous = Number(prior[node.id] ?? node.score);
@@ -1081,17 +1142,24 @@ export class CognitiveKernel {
         ...node,
         trend: delta > 0.025 ? 'rising' : delta < -0.025 ? 'falling' : 'stable',
         delta,
-        dominant: node.id === top?.id,
+        dominant: node.id === ranked[0]?.id,
       };
     });
-    this._lastAttention = Object.fromEntries(nodes.map((node) => [node.id, node.score]));
+    this._lastAttention = Object.fromEntries(enriched.map((node) => [node.id, node.score]));
 
     return {
+      version: 'aura-functional-neural-field-v2',
       updated_at: now(),
-      dominant: top?.id || '',
-      secondary: second?.id || '',
+      dominant: ranked[0]?.id || '',
+      secondary: ranked[1]?.id || '',
       focus_statement: String(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
       nodes: enriched,
+      links: edges,
+      stats: {
+        nodes: enriched.length,
+        synapses: edges.length,
+        domains: [...new Set(enriched.map((node) => node.domain))].length,
+      },
     };
   }
 

@@ -3,6 +3,7 @@ const $ = function(id){ return document.getElementById(id); };
 let lastSoul = null;
 let lastAttention = null;
 let livingScene = null;
+let neuralField = null;
 let voicePlayer = null;
 let voicePrimed = false;
 let browserSpeechToken = 0;
@@ -187,92 +188,268 @@ function renderActivity(rows){
     return '<div class="activity-row"><div class="activity-time">'+escapeHtml(fmtTime(r.created_at))+'</div><div class="activity-title">'+escapeHtml(r.title||r.content||r.kind)+'</div><div class="activity-kind">'+escapeHtml(r.kind||'activité')+'</div></div>';
   }).join('');
 }
-const nodeLayout={
-  stability:{x:205,y:190,color:'#60e6ad'},
-  learning:{x:455,y:112,color:'#a478ff'},
-  studio:{x:700,y:190,color:'#6da7ff'},
-  horizon:{x:755,y:355,color:'#ffc96a'},
-  automation:{x:650,y:500,color:'#59e0ef'},
-  memory:{x:450,y:535,color:'#ffc96a'},
-  evolution:{x:250,y:500,color:'#f178d6'},
-  watch:{x:145,y:355,color:'#6da7ff'}
+const neuralPalette={
+  core:'#b490ff',
+  regulation:'#62e1b2',
+  perception:'#5ee4f0',
+  memory:'#ffc96a',
+  cognition:'#a883ff',
+  agency:'#f178d6',
+  infrastructure:'#6da7ff',
+  ecosystem:'#9a86ff',
+  fabric:'#7fc7ff'
 };
+function hash01(value){
+  let h=2166136261;
+  const s=String(value||'');
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}
+  return (h>>>0)/4294967295;
+}
+function selfText(value){
+  return String(value||'')
+    .replace(/Je viens de recevoir un signal direct\s*:/gi,'J’ai intégré un nouveau contexte interne :')
+    .replace(/Je le rattache à mon état et à mes intentions avant de répondre\.?/gi,'Je l’évalue avant de décider s’il devient une intention.')
+    .replace(/ce qu’AURA peut/gi,'ce que je peux')
+    .replace(/AURA doit/gi,'je dois')
+    .replace(/AURA peut/gi,'je peux')
+    .replace(/AURA veut/gi,'je veux')
+    .replace(/AURA est/gi,'je suis')
+    .replace(/pour AURA/gi,'pour moi')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function initNeuralField(data){
+  const old=neuralField&&neuralField.nodes?neuralField:null;
+  const oldById={};
+  if(old) old.nodes.forEach(function(n){oldById[n.id]=n;});
+  const nodes=(data.nodes||[]).map(function(source,index){
+    if(source.id==='aura'){
+      return Object.assign({},source,{x:450,y:325,vx:0,vy:0,fixed:true});
+    }
+    const prior=oldById[source.id];
+    if(prior){
+      return Object.assign({},source,{x:prior.x,y:prior.y,vx:prior.vx||0,vy:prior.vy||0,fixed:false});
+    }
+    const role=String(source.role||'capability');
+    const seed=hash01(source.id);
+    const seed2=hash01(source.id+':y');
+    let radius=125+seed*85;
+    if(role==='product') radius=250+seed*42;
+    if(role==='fabric-capability') radius=205+seed*32;
+    const angle=seed*Math.PI*2+index*.31;
+    return Object.assign({},source,{
+      x:450+Math.cos(angle)*radius+(seed2-.5)*22,
+      y:325+Math.sin(angle)*radius*.72+(seed-.5)*14,
+      vx:0,vy:0,fixed:false
+    });
+  });
+  const byId={};nodes.forEach(function(n){byId[n.id]=n;});
+  const links=(data.links||[]).map(function(edge){
+    return Object.assign({},edge,{a:byId[edge.source],b:byId[edge.target]});
+  }).filter(function(edge){return edge.a&&edge.b;});
+  neuralField={nodes:nodes,links:links,byId:byId};
+  return neuralField;
+}
+function neuralStep(field){
+  const nodes=field.nodes,links=field.links;
+  // Repulsion: prevents visual clumps and lets functional assemblies form naturally.
+  for(let i=0;i<nodes.length;i++){
+    const a=nodes[i]; if(a.fixed) continue;
+    for(let j=i+1;j<nodes.length;j++){
+      const b=nodes[j]; if(a===b) continue;
+      let dx=a.x-b.x,dy=a.y-b.y;
+      let d2=dx*dx+dy*dy;
+      if(d2<25){dx+=(hash01(a.id+b.id)-.5)*7;dy+=(hash01(b.id+a.id)-.5)*7;d2=dx*dx+dy*dy;}
+      const d=Math.sqrt(d2)||1;
+      const min=(a.role==='product'||b.role==='product')?54:46;
+      const strength=d<min?1.7:Math.min(.34,550/d2);
+      const fx=(dx/d)*strength,fy=(dy/d)*strength;
+      if(!a.fixed){a.vx+=fx;a.vy+=fy;}
+      if(!b.fixed){b.vx-=fx;b.vy-=fy;}
+    }
+  }
+  // Functional synapses attract related capabilities.
+  links.forEach(function(edge){
+    const a=edge.a,b=edge.b;
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+    const weight=Math.max(.1,Math.min(1,Number(edge.weight)||.5));
+    let target=92;
+    if(a.role==='product'||b.role==='product') target=145;
+    if(a.role==='fabric-capability'||b.role==='fabric-capability') target=118;
+    if(a.id==='aura'||b.id==='aura') target=112;
+    const force=(d-target)*(.0018+.0042*weight);
+    const fx=(dx/d)*force,fy=(dy/d)*force;
+    if(!a.fixed){a.vx+=fx;a.vy+=fy;}
+    if(!b.fixed){b.vx-=fx;b.vy-=fy;}
+  });
+  nodes.forEach(function(n){
+    if(n.fixed){n.x=450;n.y=325;n.vx=0;n.vy=0;return;}
+    // Soft orbital constraints by role: products remain peripheral, cognition remains closer.
+    const dx=n.x-450,dy=n.y-325,d=Math.sqrt(dx*dx+dy*dy)||1;
+    let targetRadius=155;
+    if(n.role==='product') targetRadius=285;
+    else if(n.role==='fabric-capability') targetRadius=220;
+    else if(n.domain==='infrastructure') targetRadius=205;
+    const radial=(targetRadius-d)*.0013;
+    n.vx+=(dx/d)*-radial;
+    n.vy+=(dy/d)*-radial*.8;
+    // Very mild gravity towards the living core.
+    n.vx+=(450-n.x)*.00018;
+    n.vy+=(325-n.y)*.00018;
+    n.vx*=.83;n.vy*=.83;
+    n.x+=n.vx;n.y+=n.vy;
+    n.x=Math.max(45,Math.min(855,n.x));
+    n.y=Math.max(50,Math.min(600,n.y));
+  });
+}
+function settleNeuralField(field,iterations){
+  for(let i=0;i<iterations;i++) neuralStep(field);
+}
 function renderMap(data){
   if(!data || !Array.isArray(data.nodes)) return;
   lastAttention=data;
-  $('focusStatement').textContent=data.focus_statement||'Aucune intention dominante.';
-  const svgNS='http://www.w3.org/2000/svg';
-  const links=$('flowLinks'); const nodes=$('interestNodes'); const pulses=$('energyPulses');
-  links.innerHTML=''; nodes.innerHTML=''; pulses.innerHTML='';
+  $('focusStatement').textContent=selfText(data.focus_statement)||'Aucune intention dominante.';
+  const stats=$('mapStats');
+  if(stats){
+    const s=data.stats||{};
+    stats.textContent=(s.nodes||data.nodes.length)+' neurones · '+(s.synapses||(data.links||[]).length)+' synapses';
+  }
+  const field=initNeuralField(data);
+  settleNeuralField(field,90);
 
-  const visibleNodes=data.nodes.filter(function(n){return Boolean(nodeLayout[n.id]);});
-  visibleNodes.forEach(function(n,i){
-    [1,2].forEach(function(offset){
-      const other=visibleNodes[(i+offset)%visibleNodes.length];
-      if(!other || other===n) return;
-      if(offset===2 && i%2) return;
-      const a=nodeLayout[n.id]; const b=nodeLayout[other.id];
-      const web=document.createElementNS(svgNS,'path');
-      const bend=(i%2===0?1:-1)*(18+offset*8);
-      const mx=(a.x+b.x)/2+(b.y-a.y)*.035*bend/8;
-      const my=(a.y+b.y)/2-(b.x-a.x)*.035*bend/8;
-      web.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
-      web.setAttribute('class','web-link');
-      web.setAttribute('fill','none');
-      web.setAttribute('stroke',offset===1?a.color:'#7b78c8');
-      web.setAttribute('stroke-width',offset===1?'1.15':'.75');
-      web.setAttribute('opacity',offset===1?'.16':'.085');
-      web.setAttribute('stroke-dasharray',offset===1?'2 8':'1 12');
-      links.appendChild(web);
-    });
+  const svgNS='http://www.w3.org/2000/svg';
+  const links=$('flowLinks'),nodesLayer=$('interestNodes'),pulses=$('energyPulses');
+  links.innerHTML='';nodesLayer.innerHTML='';pulses.innerHTML='';
+
+  field.links.forEach(function(edge,index){
+    const a=edge.a,b=edge.b;
+    const weight=Math.max(.1,Math.min(1,Number(edge.weight)||.5));
+    const line=document.createElementNS(svgNS,'line');
+    line.setAttribute('x1',a.x);line.setAttribute('y1',a.y);
+    line.setAttribute('x2',b.x);line.setAttribute('y2',b.y);
+    line.setAttribute('class','neural-synapse');
+    line.setAttribute('stroke',neuralPalette[a.domain]||'#8b7fd0');
+    line.setAttribute('stroke-width',String(.45+weight*1.6));
+    line.setAttribute('opacity',String(.07+weight*.25));
+    links.appendChild(line);
+    if(weight>.68 || a.dominant || b.dominant){
+      const pulse=document.createElementNS(svgNS,'line');
+      pulse.setAttribute('x1',a.x);pulse.setAttribute('y1',a.y);
+      pulse.setAttribute('x2',b.x);pulse.setAttribute('y2',b.y);
+      pulse.setAttribute('class','energy-pulse');
+      pulse.setAttribute('stroke',neuralPalette[b.domain]||'#b490ff');
+      pulse.setAttribute('stroke-width',String(.8+weight));
+      pulse.setAttribute('stroke-dasharray','2 22');
+      pulse.setAttribute('opacity',String(.24+weight*.44));
+      pulse.style.animationDuration=String(6.2-weight*2.8)+'s';
+      pulse.style.animationDelay=String(-index*.23)+'s';
+      pulses.appendChild(pulse);
+    }
   });
 
-  data.nodes.forEach(function(n){
-    const pos=nodeLayout[n.id]; if(!pos) return;
-    const intensity=Math.max(.18,Math.min(1,Number(n.score)||0));
-    const line=document.createElementNS(svgNS,'path');
-    const midX=(450+pos.x)/2+(pos.y-325)*.09;
-    const midY=(325+pos.y)/2-(pos.x-450)*.07;
-    line.setAttribute('d','M 450 325 Q '+midX+' '+midY+' '+pos.x+' '+pos.y);
-    line.setAttribute('class','core-link');
-    line.setAttribute('fill','none'); line.setAttribute('stroke',pos.color);
-    line.setAttribute('stroke-width',String(1.2+intensity*3.8));
-    line.setAttribute('opacity',String(.16+intensity*.54));
-    line.setAttribute('stroke-dasharray',n.dominant?'0':(n.trend==='rising'?'7 8':'3 11'));
-    if(n.dominant) line.setAttribute('filter','url(#glow)');
-    links.appendChild(line);
-
-    const pulse=document.createElementNS(svgNS,'path');
-    pulse.setAttribute('class','energy-pulse');
-    pulse.setAttribute('d',line.getAttribute('d'));
-    pulse.setAttribute('stroke',pos.color);
-    pulse.setAttribute('stroke-width',String(1.1+intensity*1.5));
-    pulse.setAttribute('stroke-dasharray',n.dominant?'3 17':'2 22');
-    pulse.setAttribute('opacity',String(.40+intensity*.46));
-    pulse.style.animationDuration=String(5.8-intensity*2.2)+'s';
-    pulse.style.animationDelay=String(-intensity*2.7)+'s';
-    $('energyPulses').appendChild(pulse);
+  field.nodes.forEach(function(n){
+    const intensity=Math.max(.08,Math.min(1,Number(n.score)||0));
+    const color=neuralPalette[n.domain]||neuralPalette.fabric;
+    const role=String(n.role||'capability');
+    const radius=n.id==='aura'?34:(role==='product'?5.4:role==='fabric-capability'?4.8:7+intensity*5.5);
 
     const g=document.createElementNS(svgNS,'g');
-    const scale=.78+intensity*.58;
-    g.setAttribute('class','aura-node');
+    g.setAttribute('class','neural-neuron'+(n.dominant?' dominant':''));
+    g.setAttribute('transform','translate('+n.x+' '+n.y+')');
     g.setAttribute('data-node-id',n.id);
-    g.setAttribute('data-base-x',String(pos.x));
-    g.setAttribute('data-base-y',String(pos.y));
-    g.setAttribute('data-scale',String(scale));
-    g.setAttribute('data-phase',String((n.id.length*0.73)+(intensity*2.4)));
-    g.setAttribute('transform','translate('+pos.x+' '+pos.y+') scale('+scale+')');
-    const halo=document.createElementNS(svgNS,'circle'); halo.setAttribute('r',String(35+intensity*16)); halo.setAttribute('fill',pos.color); halo.setAttribute('opacity',String(.035+intensity*.07)); halo.setAttribute('filter','url(#soft)');
-    const orbit=document.createElementNS(svgNS,'ellipse'); orbit.setAttribute('rx','43'); orbit.setAttribute('ry','18'); orbit.setAttribute('fill','none'); orbit.setAttribute('stroke',pos.color); orbit.setAttribute('opacity',String(.18+intensity*.34)); orbit.setAttribute('transform','rotate('+(n.id.length*13%60-30)+')');
-    const circle=document.createElementNS(svgNS,'circle'); circle.setAttribute('r','24'); circle.setAttribute('fill',pos.color); circle.setAttribute('fill-opacity',String(.17+intensity*.25)); circle.setAttribute('stroke',pos.color); circle.setAttribute('stroke-width',n.dominant?'2.2':'1.2'); circle.setAttribute('filter','url(#glow)');
-    const core=document.createElementNS(svgNS,'circle'); core.setAttribute('r','8'); core.setAttribute('fill',pos.color); core.setAttribute('opacity',String(.55+intensity*.45));
-    g.appendChild(halo);g.appendChild(orbit);g.appendChild(circle);g.appendChild(core);
-    nodes.appendChild(g);
 
-    const label=document.createElementNS(svgNS,'text'); label.setAttribute('x',String(pos.x+38)); label.setAttribute('y',String(pos.y-3)); label.setAttribute('fill','#eef2ff'); label.setAttribute('font-size','13'); label.setAttribute('font-weight','600'); label.textContent=n.label; nodes.appendChild(label);
-    const sub=document.createElementNS(svgNS,'text'); sub.setAttribute('x',String(pos.x+38)); sub.setAttribute('y',String(pos.y+13)); sub.setAttribute('fill','#77849d'); sub.setAttribute('font-size','9'); sub.textContent=n.subtitle+' · '+Math.round(intensity*100)+'%'; nodes.appendChild(sub);
+    const title=document.createElementNS(svgNS,'title');
+    title.textContent=n.label+' · '+Math.round(intensity*100)+'%'+(n.status?' · '+n.status:'');
+    g.appendChild(title);
+
+    if(n.id!=='aura'){
+      // Visual micro-neurons: decorative substrate attached to a real capability.
+      // They add biological density without pretending to be extra semantic capabilities.
+      const microCount=role==='product'?1:(2+Math.round(intensity*3));
+      for(let m=0;m<microCount;m++){
+        const angle=hash01(n.id+':micro:'+m)*Math.PI*2;
+        const dist=radius+11+hash01(n.id+':dist:'+m)*18;
+        const mx=Math.cos(angle)*dist,my=Math.sin(angle)*dist*.78;
+        const dendrite=document.createElementNS(svgNS,'line');
+        dendrite.setAttribute('x1','0');dendrite.setAttribute('y1','0');
+        dendrite.setAttribute('x2',String(mx));dendrite.setAttribute('y2',String(my));
+        dendrite.setAttribute('stroke',color);dendrite.setAttribute('stroke-width','.55');
+        dendrite.setAttribute('opacity',String(.08+intensity*.14));
+        g.appendChild(dendrite);
+        const micro=document.createElementNS(svgNS,'circle');
+        micro.setAttribute('cx',String(mx));micro.setAttribute('cy',String(my));
+        micro.setAttribute('r',String(1.2+intensity*1.2));
+        micro.setAttribute('fill',color);micro.setAttribute('opacity',String(.24+intensity*.36));
+        g.appendChild(micro);
+      }
+
+      const glow=document.createElementNS(svgNS,'circle');
+      glow.setAttribute('r',String(radius+10+intensity*8));
+      glow.setAttribute('fill',color);
+      glow.setAttribute('opacity',String(.018+intensity*.05));
+      glow.setAttribute('filter','url(#soft)');
+      g.appendChild(glow);
+
+      const shell=document.createElementNS(svgNS,'circle');
+      shell.setAttribute('r',String(radius));
+      shell.setAttribute('fill',color);
+      shell.setAttribute('fill-opacity',role==='product'?'.22':String(.18+intensity*.28));
+      shell.setAttribute('stroke',color);
+      shell.setAttribute('stroke-opacity',String(.28+intensity*.42));
+      shell.setAttribute('stroke-width',n.dominant?'2':'1');
+      if(n.dominant) shell.setAttribute('filter','url(#glow)');
+      g.appendChild(shell);
+
+      const core=document.createElementNS(svgNS,'circle');
+      core.setAttribute('r',String(Math.max(1.7,radius*.3)));
+      core.setAttribute('fill','#fff');
+      core.setAttribute('opacity',String(.36+intensity*.5));
+      g.appendChild(core);
+    }
+
+    g.addEventListener('mouseenter',function(){
+      const tooltip=$('neuralTooltip');
+      if(tooltip){
+        tooltip.classList.add('show');
+        tooltip.innerHTML='<strong>'+escapeHtml(n.label)+'</strong><span>'+escapeHtml(n.domain)+' · '+Math.round(intensity*100)+'%'+(n.status?' · '+escapeHtml(n.status):'')+'</span>';
+        const px=Math.max(10,Math.min(76,(n.x/900)*100));
+        const py=Math.max(8,Math.min(82,(n.y/650)*100));
+        tooltip.style.left=px+'%';tooltip.style.top=py+'%';
+      }
+      if(n.id!=='aura') $('focusStatement').textContent=n.label+' · '+Math.round(intensity*100)+'%';
+    });
+    g.addEventListener('mouseleave',function(){
+      const tooltip=$('neuralTooltip');if(tooltip)tooltip.classList.remove('show');
+      $('focusStatement').textContent=selfText(lastAttention?.focus_statement)||'Aucune intention dominante.';
+    });
+    nodesLayer.appendChild(g);
+
+    // Only the active assembly is named in the field. Everything else stays visual.
+    if(n.dominant && n.id!=='aura'){
+      const label=document.createElementNS(svgNS,'text');
+      const ldx=n.x-450,ldy=n.y-325,ld=Math.sqrt(ldx*ldx+ldy*ldy)||1;
+      const lx=n.x+(ldx/ld)*(radius+13);
+      const ly=n.y+(ldy/ld)*(radius+10);
+      label.setAttribute('x',String(lx));
+      label.setAttribute('y',String(ly));
+      label.setAttribute('text-anchor',ldx<0?'end':'start');
+      label.setAttribute('class','dominant-neural-label');
+      label.setAttribute('fill','#eef2ff');
+      label.setAttribute('font-size','10');
+      label.setAttribute('font-weight','700');
+      label.textContent=n.label;
+      nodesLayer.appendChild(label);
+    }
   });
+
+  // AURA is the living center of the same network, not a separate object below it.
+  const aura=field.byId.aura;
+  if(aura){
+    const core=$('core');
+    if(core) core.setAttribute('transform','translate('+(aura.x-450)+' '+(aura.y-325)+')');
+  }
 }
+
 function initLivingAuraScene(){
   if(livingScene) return livingScene;
   const wrap=$('livingMap');
