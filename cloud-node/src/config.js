@@ -130,7 +130,7 @@ export const config = Object.freeze({
   voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
   voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
   voiceModel: process.env.TTS_MODEL || 'gemini-3.1-flash-tts-preview',
-  voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Leda',
+  voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Aoede',
   voiceTimeoutMs: int('TTS_TIMEOUT_MS', 35000, 5000, 120000),
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
