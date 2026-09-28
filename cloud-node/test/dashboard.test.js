@@ -7,7 +7,7 @@ test('AURA operational consciousness interface exposes core product surfaces', (
   for (const label of [
     'Interface de conscience opérationnelle',
     'Dialogue',
-    'Carte d’intérêt',
+    'Carte neuronale d’intérêt',
     'Pensée dominante',
     'Travail en cours',
     'Intentions actives',
