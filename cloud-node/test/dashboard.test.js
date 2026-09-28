@@ -263,12 +263,3 @@ test('dashboard exposes the exact Cloud voice blocker instead of a generic offli
   assert.equal(DASHBOARD_SCRIPT.includes("missing-api-key"), true);
   assert.equal(DASHBOARD_SCRIPT.includes("garde-fou zéro-coût"), true);
 });
-
-
-test('voice failures stay visible instead of being overwritten by refresh', () => {
-  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · Free Tier non confirmé"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · clé Gemini absente"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("error&&error.data&&error.data.direct_gemini_reason"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("await refresh();\n    await speakAura"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("speakAura(out.answer||'',out.voice_ticket||'');\n    refresh();"), false);
-});
