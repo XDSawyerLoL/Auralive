@@ -22,11 +22,12 @@ test('bridge stores media results above the former 12 MB truncation threshold', 
 });
 
 
-test('single-process gateway keeps ordinary requests small but accepts bridge media completion', () => {
-  assert.match(gatewaySource, /MAX_BRIDGE_MEDIA_BODY\s*=\s*24\s*\*\s*1024\s*\*\s*1024/);
-  assert.match(gatewaySource, /const limit =/);
-  assert.match(gatewaySource, /api\\\/bridge\\\/jobs/);
-  assert.match(gatewaySource, /complete/);
+test('Hostinger entry delegates request sizing to Fastify route limits', () => {
+  assert.match(gatewaySource, /from '\.\/src\/server\.js'/);
+  assert.match(gatewaySource, /app\.listen\(\{ host, port \}\)/);
+  assert.match(gatewaySource, /framework: 'fastify'/);
+  assert.doesNotMatch(gatewaySource, /createServer/);
+  assert.match(serverSource, /bodyLimit:\s*24\s*\*\s*1024\s*\*\s*1024/);
 });
 
 test('Hostinger runtime resets the MySQL pool and retries quickly after startup failure', () => {

@@ -43,27 +43,33 @@ function launch(extraEnv = {}) {
   });
 }
 
-test('native gateway stays online even when full runtime is disabled', async (t) => {
+test('direct Fastify entry stays online even when full runtime is disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  const healthText = await waitFor('/healthz', (text) => text.includes('"gateway_ready":true'));
+  const gatewayText = await waitFor('/__aura_gateway', (text) => text.includes('"gateway_ready":true'));
+  const gateway = JSON.parse(gatewayText);
+  assert.equal(gateway.ok, true);
+  assert.equal(gateway.gateway_ready, true);
+  assert.equal(gateway.runtime_ready, false);
+  assert.equal(gateway.framework, 'fastify');
+
+  const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const health = JSON.parse(healthText);
   assert.equal(health.ok, true);
-  assert.equal(health.gateway_ready, true);
-  assert.equal(health.runtime_ready, false);
+  assert.equal(health.ready, false);
 
   const root = await fetch(base + '/');
   assert.equal(root.status, 200);
   const html = await root.text();
-  assert.match(html, /AURA CLOUD/);
-  assert.match(html, /Hostinger · processus unique/);
+  assert.match(html, /AURA/);
+  assert.match(html, /Interface de conscience opérationnelle/);
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('single-process gateway serves AURA dashboard without MySQL', async (t) => {
+test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
   const child = launch();
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
