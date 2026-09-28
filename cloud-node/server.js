@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 
 const publicHost = '0.0.0.0';
-const publicPort = Number.parseInt(process.env.AURA_PORT || '3000', 10) || 3000;
+const publicPort = Number.parseInt(process.env.AURA_PORT || process.env.PORT || '3000', 10) || 3000;
 const gatewayOnly = process.env.AURA_GATEWAY_ONLY === 'true';
 
 let app = null;
