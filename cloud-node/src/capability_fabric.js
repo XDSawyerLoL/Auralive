@@ -316,7 +316,7 @@ export class CapabilityFabric {
       return { applied: false, reason: 'verification-missing' };
     }
     const target = clean(verification.target || verification.feedback_target || '', 80).toLowerCase();
-    if (target && !['capability-output', 'tool-output', 'answer'].includes(target)) {
+    if (!['capability-output', 'tool-output', 'answer'].includes(target)) {
       return { applied: false, reason: 'verification-target-not-capability-output' };
     }
     return this.recordSemanticFeedback(capabilityOrId, verification);
