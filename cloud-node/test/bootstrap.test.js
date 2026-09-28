@@ -53,6 +53,7 @@ test('direct Fastify entry honors Hostinger PORT and stays online with runtime d
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.ok, true);
   assert.equal(gateway.gateway_ready, true);
+  assert.equal(gateway.gateway_port, HOSTINGER_PORT);
   assert.equal(gateway.runtime_ready, false);
   assert.equal(gateway.framework, 'fastify');
 
