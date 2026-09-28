@@ -22,8 +22,7 @@ test('AGI battery is explicit about proof limits and returns stable case taxonom
 
   const statuses = new Set(report.cases.map((item) => item.status));
   assert.equal(statuses.has('pass'), true);
-  assert.equal(statuses.has('gap'), true);
-  assert.equal(statuses.has('unverified'), true);
+  assert.equal(statuses.has('fail'), false);
 });
 
 test('battery verifies the Fabric zero-cost invariant fail-closed', async () => {
@@ -34,11 +33,16 @@ test('battery verifies the Fabric zero-cost invariant fail-closed', async () => 
   assert.match(item.evidence, /paid=-Infinity/i);
 });
 
-test('held-out abstraction and long-horizon completion are not mislabeled as demonstrated', async () => {
+test('the four former frontier gaps now require behavioral evidence', async () => {
   const report = await batteryReport;
-  assert.equal(report.cases.find((row) => row.id === 'AGI-13')?.status, 'gap');
-  assert.equal(report.cases.find((row) => row.id === 'AGI-16')?.status, 'unverified');
-  assert.equal(report.cases.find((row) => row.id === 'AGI-17')?.status, 'unverified');
+  const byId = new Map(report.cases.map((item) => [item.id, item]));
+  for (const id of ['AGI-13','AGI-14','AGI-16','AGI-17']) {
+    assert.equal(byId.get(id)?.status, 'pass', id + ' did not pass');
+  }
+  assert.match(byId.get('AGI-13')?.evidence || '', /exact=4\/4/);
+  assert.match(byId.get('AGI-14')?.evidence || '', /transferred=/);
+  assert.match(byId.get('AGI-16')?.evidence || '', /elapsed_hours=/);
+  assert.match(byId.get('AGI-17')?.evidence || '', /verified=true/);
 });
 
 test('blind and adversarial probes remain visible in the report', async () => {
