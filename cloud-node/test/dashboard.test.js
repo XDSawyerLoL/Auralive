@@ -246,3 +246,20 @@ test('dashboard exposes the verifiable 2.2.1 living build identity', () => {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
 });
+
+
+test('browser audio is unlocked through Web Audio before the asynchronous TTS request', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes('window.AudioContext||window.webkitAudioContext'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('voiceAudioContext.resume()'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('decodeAudioData(copy)'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('createBufferSource()'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("error.name==='NotAllowedError'"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('Le navigateur bloque le son'), true);
+});
+
+test('dashboard exposes the exact Cloud voice blocker instead of a generic offline label', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes("voice.cloud_reason"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("free-tier-unconfirmed"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("missing-api-key"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("garde-fou zéro-coût"), true);
+});
