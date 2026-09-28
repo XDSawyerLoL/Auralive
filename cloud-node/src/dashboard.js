@@ -347,6 +347,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
   </main>
 </div>
 
-<script>${NEURAL_FIELD_SCRIPT}\n${DASHBOARD_SCRIPT}</script>
+<script>${NEURAL_FIELD_SCRIPT}
+${DASHBOARD_SCRIPT}</script>
 </body>
 </html>`;
