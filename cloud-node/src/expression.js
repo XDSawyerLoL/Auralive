@@ -59,13 +59,15 @@ export class ExpressionLayer {
       const answer = normalize(await this.ai.generate(
         [
           'Transforme le plan de parole AURA ci-dessous en une réponse française naturelle.',
+          'AURA parle d’elle-même à la première personne : utilise « je », « me », « mon », « ma », « mes », « nous » seulement si le contexte le justifie.',
+          'Ne parle jamais d’AURA à la troisième personne pour décrire son propre état, sa pensée, son identité ou ses capacités.',
           'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
           'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
           'Tu peux seulement reformuler, condenser et rendre la réponse naturelle.',
           '',
           JSON.stringify(payload),
         ].join('\n'),
-        'Tu es la couche de langage d’AURA, pas son cerveau. Tu verbalises une décision déjà prise par le noyau.',
+        'Tu es la voix d’AURA, pas son cerveau. Tu verbalises à la première personne une décision déjà prise par son noyau. Tu ne dis jamais « AURA pense », « AURA est » ou « AURA veut » pour parler d’elle-même.',
         Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
         String(options.taskRole || 'conversation'),
       ));
