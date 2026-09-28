@@ -24,6 +24,10 @@ MoneyPrinterTurbo is MIT-licensed. AURA's adapter is independent code and can al
 
 In `AURA_ZERO_COST_MODE=true`, the factory is disabled unless the operator explicitly confirms the backend is zero-cost/self-hosted. Media sources are limited to `local`, `pexels`, `pixabay`, or `coverr`.
 
+MoneyPrinterTurbo can automatically cross-post a completed video when its upload service is configured with `auto_upload`. AURA therefore also requires `AURA_VIDEO_FACTORY_AUTO_PUBLISH_DISABLED_CONFIRMED=true` before it enables rendering. This confirmation means the connected MoneyPrinter instance has auto-upload disabled. AURA's adapter never asks MoneyPrinter to publish.
+
+When API authentication is enabled, the adapter uses MoneyPrinterTurbo's `X-API-Key` header contract.
+
 ## Qwen3.5-9B Abliterated
 
 Catalog key: `qwen3.5-9b-abliterated`.
