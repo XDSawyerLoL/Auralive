@@ -775,10 +775,45 @@ export class CognitiveKernel {
 
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
+    // Le contexte est strictement scindé : une conversation ordinaire ne reçoit
+    // jamais le journal opérationnel complet d'AURA.
     if (plan.needs_semantic_support) {
+      let semanticContext = '';
+      if (externalResearch) {
+        semanticContext = [
+          'VERIFICATION EXTERNE DE LA QUESTION COURANTE',
+          JSON.stringify({
+            conclusion: externalResearch?.conclusion || '',
+            epistemic_status: externalResearch?.epistemic_status || 'unverified',
+            confidence: Number(externalResearch?.confidence || 0),
+            evidence_count: Number(externalResearch?.evidence_count || 0),
+            evidence: Array.isArray(externalResearch?.evidence)
+              ? externalResearch.evidence.slice(0, 6)
+              : [],
+          }).slice(0, 12000),
+        ].join('\n');
+      } else {
+        const historyLimit = plan.context_scope === 'relationship' ? 12 : 5;
+        const recentUserMessages = await query(
+          `SELECT author,content,created_at
+           FROM aura_cloud_messages
+           WHERE role='user'
+           ORDER BY id DESC LIMIT ?`,
+          [historyLimit],
+        );
+        semanticContext = [
+          plan.context_scope === 'relationship'
+            ? 'CONTEXTE RELATIONNEL: uniquement ce que l’interlocuteur a réellement dit.'
+            : 'CONTEXTE CONVERSATIONNEL RECENT: messages de l’interlocuteur uniquement.',
+          ...recentUserMessages.reverse().map((row) =>
+            `[${String(row.created_at || '')}] ${String(row.author || 'Utilisateur')}: ${String(row.content || '').slice(0, 1200)}`
+          ),
+        ].join('\n');
+      }
+
       const support = await this.expression.semanticSupport(
         plan,
-        await this.contextForAi(privateView),
+        semanticContext,
         {
           maxTokens: Math.max(180, Number(inference.token_budget || 700)),
           taskRole: inference.model_role || 'research',
