@@ -200,6 +200,60 @@ test('recolors the larger diagonal orientation differently from the smaller one'
   assert.equal(gridEquals(result.output, outputA), true);
 });
 
+
+test('composes crop then rotation then recoloring from examples', () => {
+  const input = [
+    [0,0,0,0],
+    [0,2,3,0],
+    [0,0,2,0],
+    [0,0,0,0],
+  ];
+  const cropped = [
+    [2,3],
+    [0,2],
+  ];
+  const output = [
+    [0,7],
+    [7,4],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'compose-grid');
+  assert.equal(gridEquals(result.output, output), true);
+  assert.ok(result.inferred.program.params.steps.includes('crop-nonzero'));
+});
+
+test('infers cell scaling independently of colors', () => {
+  const input = [
+    [1,2],
+    [3,4],
+  ];
+  const output = [
+    [1,1,2,2],
+    [1,1,2,2],
+    [3,3,4,4],
+    [3,3,4,4],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'scale-cells');
+  assert.equal(gridEquals(result.output, output), true);
+});
+
+test('infers whole-grid tiling independently of colors', () => {
+  const input = [
+    [1,2],
+    [3,4],
+  ];
+  const output = [
+    [1,2,1,2],
+    [3,4,3,4],
+    [1,2,1,2],
+    [3,4,3,4],
+  ];
+  const result = solve([{ input, output }], input);
+  assert.equal(result.inferred.program.name, 'tile-grid');
+  assert.equal(gridEquals(result.output, output), true);
+});
+
 test('extends a periodic pattern and learns recoloring', () => {
   const input = [
     [0,1,0],
