@@ -9,6 +9,7 @@ function text(value, limit = 8000) {
 function trustedEndpoint(value) {
   try {
     const url = new URL(String(value || ''));
+    if (url.username || url.password) return null;
     const host = url.hostname.toLowerCase();
     const loopback = ['localhost', '127.0.0.1', '::1'].includes(host);
     if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) return null;
@@ -23,7 +24,7 @@ function trustedEndpoint(value) {
 
 function authorization() {
   return config.videoFactoryApiKey
-    ? { Authorization: `Bearer ${config.videoFactoryApiKey}` }
+    ? { 'X-API-Key': config.videoFactoryApiKey }
     : {};
 }
 
@@ -37,6 +38,7 @@ export class VideoFactoryClient {
   get enabled() {
     if (!config.videoFactoryEnabled || !this.baseUrl) return false;
     if (config.zeroCostMode && !config.videoFactoryZeroCostConfirmed) return false;
+    if (!config.videoFactoryAutoPublishDisabledConfirmed) return false;
     return true;
   }
 
@@ -47,6 +49,9 @@ export class VideoFactoryClient {
       configured: Boolean(this.baseUrl),
       zero_cost_mode: Boolean(config.zeroCostMode),
       zero_cost_confirmed: Boolean(config.videoFactoryZeroCostConfirmed),
+      auto_publish_disabled_confirmed: Boolean(
+        config.videoFactoryAutoPublishDisabledConfirmed
+      ),
       contract: 'moneyprinterturbo-compatible-v1',
       public_base_url: this.baseUrl ? new URL(this.baseUrl).origin : '',
       free_sources: [...FREE_SOURCES],
@@ -91,7 +96,9 @@ export class VideoFactoryClient {
 
   async create(input = {}) {
     if (!this.enabled) {
-      throw new Error('Video Factory indisponible ou non confirmé zéro coût');
+      throw new Error(
+        'Video Factory indisponible: endpoint/0 € ou auto-publication non confirmé'
+      );
     }
     const plan = this.plan(input);
     const payload = {
