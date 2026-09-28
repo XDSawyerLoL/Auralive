@@ -157,7 +157,7 @@ test('old Providence Kokoro endpoint is no longer trusted as canonical Mairaiy',
     process.env.AURA_ZERO_COST_MODE='true';
     process.env.AURA_VOICE_FABRIC_ENABLED='true';
     process.env.AURA_VOICE_FABRIC_BASE_URL='https://mediumorchid-badger-314305.hostingersite.com/voice';
-    process.env.AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS='';
+    process.env.AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS='https://mediumorchid-badger-314305.hostingersite.com/voice';
     delete process.env.AURA_VOICE_FABRIC_API_KEY;
     delete process.env.AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED;
     const { VoiceStudioProvider }=await import('./src/voice_fabric.js');
@@ -181,7 +181,8 @@ test('old Providence Kokoro endpoint is no longer trusted as canonical Mairaiy',
   const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
   assert.equal(payload.enabled,false);
   assert.equal(payload.endpoint,'https://mediumorchid-badger-314305.hostingersite.com/voice');
-  assert.equal(payload.trusted,false);
+  assert.equal(payload.trusted,true);
+  // Even a stale allowlist cannot resurrect the incompatible Kokoro endpoint.
   assert.equal(payload.strict,true);
   assert.equal(payload.expected,'aoede');
   assert.equal(payload.language,'fr-fr');
