@@ -485,7 +485,13 @@ async function refresh(){
         $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
       }else{
         $('voiceText').textContent='Mairaiy · attente';
-        $('voiceText').title=String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
+        const cloudReason=String(voice.cloud_reason||'');
+        const reasonLabel=cloudReason==='free-tier-unconfirmed'
+          ? 'Aoede bloquée par le garde-fou zéro-coût : niveau gratuit Gemini non confirmé.'
+          : cloudReason==='missing-api-key'
+            ? 'Clé Gemini TTS absente sur AURA Cloud.'
+            : String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
+        $('voiceText').title=reasonLabel;
       }
     }catch(_){
       $('voiceDot').className='live-dot';
@@ -644,7 +650,12 @@ async function speakAura(text,ticket){
     document.body.classList.remove('aura-speaking');
     $('voiceText').textContent='Mairaiy · indisponible';
     $('voiceText').title='Voix Aoede indisponible · aucun autre timbre utilisé';
-    $('chatState').textContent='Réponse texte prête · voix Mairaiy Aoede indisponible';
+    const reason=String(error&&error.message||'');
+    $('chatState').textContent=reason.includes('free-tier-unconfirmed')
+      ? 'Réponse texte prête · Aoede bloquée par le garde-fou zéro-coût'
+      : (reason.includes('bloque le son')
+        ? reason
+        : 'Réponse texte prête · voix Mairaiy Aoede indisponible');
     console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
