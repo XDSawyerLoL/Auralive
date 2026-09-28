@@ -363,6 +363,26 @@ function renderMap(data){
     g.appendChild(title);
 
     if(n.id!=='aura'){
+      // Visual micro-neurons: decorative substrate attached to a real capability.
+      // They add biological density without pretending to be extra semantic capabilities.
+      const microCount=role==='product'?1:(2+Math.round(intensity*3));
+      for(let m=0;m<microCount;m++){
+        const angle=hash01(n.id+':micro:'+m)*Math.PI*2;
+        const dist=radius+11+hash01(n.id+':dist:'+m)*18;
+        const mx=Math.cos(angle)*dist,my=Math.sin(angle)*dist*.78;
+        const dendrite=document.createElementNS(svgNS,'line');
+        dendrite.setAttribute('x1','0');dendrite.setAttribute('y1','0');
+        dendrite.setAttribute('x2',String(mx));dendrite.setAttribute('y2',String(my));
+        dendrite.setAttribute('stroke',color);dendrite.setAttribute('stroke-width','.55');
+        dendrite.setAttribute('opacity',String(.08+intensity*.14));
+        g.appendChild(dendrite);
+        const micro=document.createElementNS(svgNS,'circle');
+        micro.setAttribute('cx',String(mx));micro.setAttribute('cy',String(my));
+        micro.setAttribute('r',String(1.2+intensity*1.2));
+        micro.setAttribute('fill',color);micro.setAttribute('opacity',String(.24+intensity*.36));
+        g.appendChild(micro);
+      }
+
       const glow=document.createElementNS(svgNS,'circle');
       glow.setAttribute('r',String(radius+10+intensity*8));
       glow.setAttribute('fill',color);
@@ -407,8 +427,12 @@ function renderMap(data){
     // Only the active assembly is named in the field. Everything else stays visual.
     if(n.dominant && n.id!=='aura'){
       const label=document.createElementNS(svgNS,'text');
-      label.setAttribute('x',String(n.x+radius+9));
-      label.setAttribute('y',String(n.y-4));
+      const ldx=n.x-450,ldy=n.y-325,ld=Math.sqrt(ldx*ldx+ldy*ldy)||1;
+      const lx=n.x+(ldx/ld)*(radius+13);
+      const ly=n.y+(ldy/ld)*(radius+10);
+      label.setAttribute('x',String(lx));
+      label.setAttribute('y',String(ly));
+      label.setAttribute('text-anchor',ldx<0?'end':'start');
       label.setAttribute('class','dominant-neural-label');
       label.setAttribute('fill','#eef2ff');
       label.setAttribute('font-size','10');
