@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
-const HOSTINGER_PORT = 34567;
+const HOSTINGER_PORT = 3000;
 const base = `http://127.0.0.1:${HOSTINGER_PORT}`;
 
 async function waitFor(path, matcher, timeoutMs = 15000) {
@@ -26,8 +26,8 @@ function launch(extraEnv = {}) {
       ...process.env,
       NODE_ENV: 'production',
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
-      PORT: String(HOSTINGER_PORT),
-      AURA_GATEWAY_PORT: '49999',
+      PORT: '49999',
+      AURA_GATEWAY_PORT: '3987',
       DB_HOST: '',
       DB_USER: '',
       DB_PASSWORD: '',
@@ -43,7 +43,7 @@ function launch(extraEnv = {}) {
   });
 }
 
-test('direct Fastify entry honors Hostinger PORT and stays online with runtime disabled', async (t) => {
+test('production entry forces Hostinger port 3000 and stays online with runtime disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -53,7 +53,7 @@ test('direct Fastify entry honors Hostinger PORT and stays online with runtime d
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.ok, true);
   assert.equal(gateway.gateway_ready, true);
-  assert.equal(gateway.gateway_port, HOSTINGER_PORT);
+  assert.equal(gateway.gateway_port, 3000);
   assert.equal(gateway.runtime_ready, false);
   assert.equal(gateway.framework, 'fastify');
 
