@@ -215,7 +215,7 @@ test('dashboard exposes operational command-center state instead of decorative a
     'id="commandFleet"',
     'id="commandMode"',
     'id="commandCount"',
-    "api('/api/command/status')",
+    'const commandStatus=publicState.command||null',
     'renderCommandCenter(commandStatus',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
