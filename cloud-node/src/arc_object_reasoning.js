@@ -33,6 +33,13 @@ function dominantColor(grid) {
   return counts[0]?.[0] ?? 0;
 }
 
+function dominantColorExcluding(grid, excluded = new Set()) {
+  const counts = [...colorCounts(grid).entries()]
+    .filter(([color]) => !excluded.has(color))
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+  return counts[0]?.[0] ?? 0;
+}
+
 function colors(grid) {
   return [...colorCounts(grid).keys()].sort((a, b) => a - b);
 }
@@ -431,10 +438,10 @@ function applyTileGridModulo(grid, params) {
 
 function inferTileGridModulo(training) {
   const first = training[0];
-  const background = dominantColor(first.input);
   const candidates = [];
-  for (const separatorColor of colors(first.input).filter((color) => color !== background)) {
+  for (const separatorColor of colors(first.input)) {
     if (!separatorInfo(first.input, separatorColor)) continue;
+    const background = dominantColorExcluding(first.input, new Set([separatorColor]));
     for (let rowModulo = 1; rowModulo <= 4; rowModulo += 1) {
       for (let colModulo = 1; colModulo <= 4; colModulo += 1) {
         const params = {
@@ -516,10 +523,10 @@ function applyOverlayQuadrants(grid, params) {
 
 function inferOverlayQuadrants(training) {
   const first = training[0];
-  const background = dominantColor(first.input);
   const candidates = [];
-  for (const separatorColor of colors(first.input).filter((color) => color !== background)) {
+  for (const separatorColor of colors(first.input)) {
     if (!singleCrossSeparator(first.input, separatorColor)) continue;
+    const background = dominantColorExcluding(first.input, new Set([separatorColor]));
     for (const priority of permutation([0, 1, 2, 3])) {
       const params = {
         separator_color: separatorColor,
