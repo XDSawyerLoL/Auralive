@@ -38,11 +38,11 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     return 'rgba('+((v>>16)&255)+','+((v>>8)&255)+','+(v&255)+','+a+')';
   }
   function seedSpace(){
-    state.stars=Array.from({length:state.reduced?55:170},(_,i)=>({
+    state.stars=Array.from({length:state.reduced?70:230},(_,i)=>({
       x:hash01('sx'+i),y:hash01('sy'+i),r:.35+hash01('sr'+i)*1.35,
       a:.10+hash01('sa'+i)*.55,phase:hash01('sp'+i)*Math.PI*2
     }));
-    state.dust=Array.from({length:state.reduced?18:64},(_,i)=>({
+    state.dust=Array.from({length:state.reduced?22:82},(_,i)=>({
       x:hash01('dx'+i),y:hash01('dy'+i),r:10+hash01('dr'+i)*42,
       a:.008+hash01('da'+i)*.026,phase:hash01('dp'+i)*Math.PI*2
     }));
@@ -157,6 +157,54 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     ctx.restore();
   }
 
+  function drawGlialMesh(t){
+    if(!state.field)return;
+    const ctx=state.ctx;
+    const groups={};
+    for(const node of state.field.nodes){
+      if(node.id==='aura')continue;
+      const key=String(node.cluster||'fabric');
+      (groups[key]||(groups[key]=[])).push(node);
+    }
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(const key of Object.keys(groups)){
+      const rows=groups[key];
+      const c=color(key,'active');
+      for(let i=0;i<rows.length;i++){
+        const a=rows[i],ap=px(a);
+        const candidates=rows
+          .filter(function(b){return b!==a;})
+          .map(function(b){
+            const bp=px(b);
+            return {b:b,bp:bp,d:Math.hypot(bp.x-ap.x,bp.y-ap.y)};
+          })
+          .sort(function(x,y){return x.d-y.d;})
+          .slice(0,2);
+        for(const item of candidates){
+          if(item.d>state.width*.34)continue;
+          const b=item.b,bp=item.bp;
+          const activity=Math.max(.05,Math.min(1,(Number(a.activity||0)+Number(b.activity||0))/2));
+          const bend=(hash01(a.id+'~'+b.id)-.5)*26;
+          const mx=(ap.x+bp.x)/2+(bp.y-ap.y)*.035+bend;
+          const my=(ap.y+bp.y)/2-(bp.x-ap.x)*.035-bend*.32;
+          ctx.strokeStyle=rgba(c,.018+activity*.05);
+          ctx.lineWidth=.28+activity*.28;
+          ctx.beginPath();ctx.moveTo(ap.x,ap.y);ctx.quadraticCurveTo(mx,my,bp.x,bp.y);ctx.stroke();
+          if(activity>.52&&!state.reduced){
+            const phase=(t*.00008+hash01(a.id+b.id))%1;
+            const q=1-phase;
+            const x=q*q*ap.x+2*q*phase*mx+phase*phase*bp.x;
+            const y=q*q*ap.y+2*q*phase*my+phase*phase*bp.y;
+            ctx.fillStyle=rgba(c,.08+activity*.12);
+            ctx.beginPath();ctx.arc(x,y,.7+activity*1.2,0,Math.PI*2);ctx.fill();
+          }
+        }
+      }
+    }
+    ctx.restore();
+  }
+
   function drawSynapses(t){
     const ctx=state.ctx;
     for(const edge of state.field?.links||[]){
@@ -170,9 +218,9 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       grad.addColorStop(0,rgba(c,.08+activity*.27));
       grad.addColorStop(.55,rgba(c,.06+activity*.18));
       grad.addColorStop(1,rgba(targetColor,.08+activity*.27));
-      ctx.lineWidth=.45+weight*1.55;
+      ctx.lineWidth=.72+weight*2.15;
       ctx.strokeStyle=grad;
-      ctx.shadowBlur=activity>0.55?7:0;ctx.shadowColor=rgba(c,.42);
+      ctx.shadowBlur=activity>0.42?9:2;ctx.shadowColor=rgba(c,.48);
       ctx.beginPath();ctx.moveTo(a.x,a.y);
       const bend=(hash01(edge.source+'>'+edge.target)-.5)*34;
       const mx=(a.x+b.x)/2+(b.y-a.y)*.04+bend;
@@ -191,11 +239,11 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
         const q=1-phase;
         const sx=q*q*a.x+2*q*phase*mx+phase*phase*b.x;
         const sy=q*q*a.y+2*q*phase*my+phase*phase*b.y;
-        const glow=ctx.createRadialGradient(sx,sy,0,sx,sy,3+activity*7);
+        const glow=ctx.createRadialGradient(sx,sy,0,sx,sy,4+activity*10);
         glow.addColorStop(0,'rgba(255,255,255,'+(.55+activity*.35)+')');
         glow.addColorStop(.3,rgba(color(edge.b.cluster,edge.b.status),.52));
         glow.addColorStop(1,'rgba(0,0,0,0)');
-        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy,4+activity*7,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy,5+activity*10,0,Math.PI*2);ctx.fill();
       }
     }
   }
@@ -253,7 +301,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     const intensity=Math.max(.06,Math.min(1,Number(node.activity)||0));
     if(node.id==='aura'){
       const breath=.94+.06*Math.sin(t*.0012);
-      const r=31*breath;
+      const r=38*breath;
       const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.9);
       halo.addColorStop(0,'rgba(255,255,255,.95)');
       halo.addColorStop(.10,'rgba(220,199,255,.82)');
@@ -261,8 +309,10 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       halo.addColorStop(.70,'rgba(81,64,180,.16)');
       halo.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*2.9,0,Math.PI*2);ctx.fill();
-      ctx.strokeStyle='rgba(215,198,255,.48)';ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.stroke();
-      ctx.fillStyle='rgba(249,247,255,.95)';ctx.font='600 14px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
+      ctx.strokeStyle='rgba(215,198,255,.58)';ctx.lineWidth=1.25;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle='rgba(130,198,255,.16)';ctx.lineWidth=.8;ctx.beginPath();ctx.arc(p.x,p.y,r*1.38,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle='rgba(241,120,214,.11)';ctx.beginPath();ctx.arc(p.x,p.y,r*1.72,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='rgba(249,247,255,.97)';ctx.font='650 15px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
       return;
     }
     drawDendrites(node,p,t);
@@ -284,11 +334,12 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       ctx.stroke();ctx.restore();
     }
     const role=String(node.role||'capability');
-    const base=role==='product'?4.5:role==='fabric-capability'?4:6.5;
-    const r=base+intensity*5.5;
-    const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.3);
+    const base=role==='product'?5.5:role==='fabric-capability'?5.2:9.0;
+    const centralBoost=(Number(node.centrality)||0)*3.2;
+    const r=base+intensity*7.4+centralBoost;
+    const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*4.1);
     halo.addColorStop(0,rgba(c,.45+intensity*.26));halo.addColorStop(.28,rgba(c,.16+intensity*.16));halo.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*3.3,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*4.1,0,Math.PI*2);ctx.fill();
     ctx.save();
     ctx.translate(p.x,p.y);
     ctx.rotate((hash01(node.id+':rot')-.5)*.8);
@@ -325,6 +376,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     if(state.field){
       if(!state.reduced&&dt) stepNeuralField(state.field);
       drawClusterNebula(t);
+      drawGlialMesh(t);
       drawSynapses(t);
       const ordered=[...state.field.nodes].sort((a,b)=>(a.id==='aura'?1:0)-(b.id==='aura'?1:0));
       ordered.forEach(node=>drawNeuron(node,t));
