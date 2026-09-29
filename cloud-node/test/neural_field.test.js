@@ -177,3 +177,13 @@ test('V3.3 renderer exposes dense living-network primitives', async () => {
     assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
   }
 });
+
+
+test('renderer declares node role before any conditional use', async () => {
+  const { NEURAL_FIELD_SCRIPT } = await import('../src/neural-field-renderer.js');
+  const declaration = NEURAL_FIELD_SCRIPT.indexOf("const role=String(node.role||'capability')");
+  const firstUse = NEURAL_FIELD_SCRIPT.indexOf("if(intensity>.42&&role!=='product')");
+  assert.ok(declaration >= 0, 'role declaration missing');
+  assert.ok(firstUse >= 0, 'role use missing');
+  assert.ok(declaration < firstUse, 'role must be initialized before conditional use');
+});

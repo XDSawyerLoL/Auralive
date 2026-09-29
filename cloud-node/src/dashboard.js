@@ -544,6 +544,234 @@ body::after{
   .right-stack{order:3;display:grid;grid-template-columns:1fr}
   .bottom-dock{min-width:0;width:calc(100% - 20px)}
 }
+
+/* AURA UX V6 — immersive neural environment, not a dashboard */
+.shell{max-width:none;width:100%;padding:14px 18px 84px;min-height:100vh}
+.topbar{
+  position:relative;z-index:20;
+  min-height:58px;margin:0 0 8px;
+  padding:0 12px;
+}
+.logo{font-size:34px}
+.title{font-size:19px}
+.subtitle{opacity:.72}
+.workspace{
+  position:relative!important;
+  display:block!important;
+  min-height:calc(100vh - 92px)!important;
+  height:calc(100vh - 92px);
+  overflow:hidden;
+  border-radius:26px;
+  isolation:isolate;
+}
+
+/* Neural field becomes the whole environment */
+.map-panel{
+  position:absolute!important;
+  inset:0!important;
+  z-index:0!important;
+  min-height:0!important;
+  border:0!important;
+  border-radius:26px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:hidden!important;
+}
+.map-panel::before,.map-panel::after{display:none!important}
+.map-panel>.panel-head{
+  position:absolute!important;
+  z-index:8!important;
+  left:50%!important;
+  top:14px!important;
+  transform:translateX(-50%)!important;
+  width:auto!important;
+  min-width:430px!important;
+  max-width:56vw!important;
+  min-height:42px!important;
+  padding:8px 10px 8px 14px!important;
+  border:1px solid rgba(150,175,255,.12)!important;
+  border-radius:999px!important;
+  background:rgba(5,9,20,.48)!important;
+  backdrop-filter:blur(22px) saturate(130%)!important;
+  box-shadow:0 10px 36px rgba(0,0,0,.18)!important;
+}
+.map-panel>.panel-head::after{display:none!important}
+.map-panel .panel-title{font-size:10px!important;color:#cdd6e9!important;font-weight:560!important}
+.map-panel .map-stats{font-size:7px!important;opacity:.75}
+.map-panel .map-toolbar button{padding:5px 8px!important}
+.map-wrap{
+  position:absolute!important;
+  inset:0!important;
+  min-height:0!important;
+  width:100%!important;
+  height:100%!important;
+  background:#02040a!important;
+}
+.map-wrap::before{
+  background:
+    radial-gradient(circle at 50% 50%,rgba(167,111,255,.14),transparent 22%),
+    radial-gradient(circle at 44% 42%,rgba(58,191,255,.08),transparent 30%),
+    radial-gradient(circle at 62% 56%,rgba(241,120,214,.06),transparent 29%),
+    radial-gradient(circle at 70% 34%,rgba(255,199,99,.05),transparent 22%),
+    linear-gradient(180deg,rgba(5,8,19,.04),rgba(0,2,7,.18))!important;
+}
+#neuralFieldCanvas{filter:saturate(1.16) contrast(1.04)}
+.organism-hud{
+  left:50%!important;top:68px!important;
+  transform:translateX(-50%)!important;
+  background:rgba(3,8,18,.42)!important;
+  border-color:rgba(101,233,255,.12)!important;
+  font-size:8px!important;
+}
+.map-foot{
+  left:50%!important;bottom:20px!important;transform:translateX(-50%)!important;
+  max-width:min(620px,52vw)!important;width:max-content!important;
+  text-align:center!important;
+  padding:7px 11px!important;
+  background:rgba(3,6,15,.40)!important;
+  border-color:rgba(145,170,255,.07)!important;
+  backdrop-filter:blur(16px)!important;
+}
+.legend{display:none!important}
+
+/* Floating conversation glass */
+.chat-panel{
+  position:absolute!important;
+  z-index:5!important;
+  left:18px!important;
+  top:64px!important;
+  bottom:22px!important;
+  width:min(292px,23vw)!important;
+  min-height:0!important;
+  border:1px solid rgba(153,178,255,.12)!important;
+  border-radius:22px!important;
+  background:
+    linear-gradient(180deg,rgba(9,15,30,.76),rgba(5,9,19,.48) 72%,rgba(5,9,18,.32))!important;
+  backdrop-filter:blur(28px) saturate(125%)!important;
+  box-shadow:0 22px 70px rgba(0,0,0,.26),inset 0 1px rgba(255,255,255,.045)!important;
+}
+.chat-panel::before{
+  left:18px!important;right:18px!important;
+  background:linear-gradient(90deg,transparent,rgba(132,110,255,.22),transparent)!important;
+}
+.chat-panel .panel-head{
+  background:transparent!important;border-bottom-color:rgba(255,255,255,.035)!important;
+}
+.chat-body{padding:10px!important}
+.messages{
+  min-height:0!important;
+  flex:1 1 auto!important;
+  padding:10px 6px 16px!important;
+}
+.msg{
+  font-size:10px!important;line-height:1.52!important;
+  background:rgba(14,23,43,.54)!important;
+  border-color:rgba(138,164,237,.10)!important;
+}
+.quick button{
+  border-color:rgba(145,170,255,.08)!important;
+  background:rgba(8,14,27,.34)!important;
+  backdrop-filter:blur(10px)!important;
+}
+.composer{
+  background:rgba(2,6,15,.44)!important;
+  border-color:rgba(145,170,255,.09)!important;
+}
+
+/* Floating right-side thought cockpit */
+.right-stack{
+  position:absolute!important;
+  z-index:5!important;
+  right:18px!important;
+  top:64px!important;
+  bottom:22px!important;
+  width:min(318px,25vw)!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:10px!important;
+  min-height:0!important;
+}
+.right-stack>.panel{
+  flex:0 0 auto;
+  border:1px solid rgba(150,175,255,.11)!important;
+  border-radius:20px!important;
+  background:linear-gradient(180deg,rgba(10,16,31,.72),rgba(5,9,19,.48))!important;
+  backdrop-filter:blur(28px) saturate(124%)!important;
+  box-shadow:0 18px 56px rgba(0,0,0,.23),inset 0 1px rgba(255,255,255,.035)!important;
+}
+.right-stack>.panel.work-panel{flex:1 1 auto!important;min-height:210px!important;overflow:hidden!important}
+.right-stack .panel-head{
+  min-height:40px!important;padding:10px 12px!important;
+  background:transparent!important;border-bottom-color:rgba(255,255,255,.035)!important;
+}
+.right-stack .panel-title{font-size:10px!important}
+.right-stack .panel-body{padding:10px!important}
+.cognitive-hero{padding:12px!important;min-height:0!important}
+.cognitive-top{grid-template-columns:82px 1fr!important;gap:9px!important}
+.cognitive-orb-wrap{width:76px!important;height:76px!important}
+.cognitive-orb{width:48px!important;height:48px!important}
+.cognitive-state-value{font-size:18px!important}
+.cognitive-state-sub{font-size:8px!important}
+.cognitive-metrics{gap:7px!important;margin-top:10px!important}
+.cog-metric{gap:6px!important}
+.cog-icon{width:20px!important;height:20px!important}
+.thought-card{
+  border:0!important;
+  background:
+    radial-gradient(circle at 22% 20%,rgba(255,194,91,.08),transparent 40%),
+    rgba(255,255,255,.012)!important;
+  padding:11px!important;
+}
+.thought-title{font-size:10px!important}
+#dominantThought{font-size:9px!important;line-height:1.48!important}
+.thought-wave{height:28px!important;margin-top:7px!important}
+.work-list{gap:6px!important}
+.work-row{padding:8px 9px!important;background:rgba(255,255,255,.012)!important;border-color:rgba(255,255,255,.045)!important}
+
+/* Dock floats in the environment */
+.bottom-dock{
+  z-index:30!important;bottom:16px!important;
+  background:rgba(6,10,21,.72)!important;
+  border-color:rgba(154,176,255,.14)!important;
+  box-shadow:0 14px 46px rgba(0,0,0,.34),0 0 26px rgba(112,76,220,.10)!important;
+  backdrop-filter:blur(24px) saturate(130%)!important;
+}
+.dock-btn{min-width:80px!important;padding:9px 11px!important;font-size:8px!important}
+
+/* The drawer also becomes floating glass */
+.detail-drawer{
+  border-color:rgba(154,176,255,.14)!important;
+  background:rgba(6,10,21,.90)!important;
+  backdrop-filter:blur(32px) saturate(128%)!important;
+}
+
+/* Full neural mode simply removes the floating surfaces */
+body.map-focus .workspace{display:block!important;height:calc(100vh - 92px)!important}
+body.map-focus .map-panel{display:block!important}
+body.map-focus .chat-panel,body.map-focus .right-stack{display:none!important}
+body.map-focus .map-wrap{height:100%!important;min-height:0!important}
+
+/* Responsive fallback */
+@media(max-width:1180px){
+  .chat-panel{width:270px!important}
+  .right-stack{width:290px!important}
+}
+@media(max-width:860px){
+  .workspace{
+    height:auto!important;min-height:0!important;overflow:visible!important;
+    display:flex!important;flex-direction:column!important;border-radius:0!important;
+  }
+  .map-panel,.chat-panel,.right-stack{
+    position:relative!important;inset:auto!important;width:100%!important;right:auto!important;left:auto!important;top:auto!important;bottom:auto!important;
+  }
+  .map-panel{order:1!important;height:64svh!important;min-height:520px!important}
+  .map-panel>.panel-head{top:10px!important;min-width:0!important;width:calc(100% - 20px)!important;max-width:none!important}
+  .map-wrap{position:absolute!important}
+  .chat-panel{order:2!important;min-height:560px!important;margin-top:10px!important}
+  .right-stack{order:3!important;margin-top:10px!important}
+  .organism-hud{top:62px!important}
+  .map-foot{max-width:80%!important}
+}
 </style>
 </head>
 <body>
