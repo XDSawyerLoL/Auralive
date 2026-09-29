@@ -22,7 +22,9 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     height:650,
     dpr:1,
     reduced:false,
-    focus:null
+    focus:null,
+    filaments:[],
+    constellation:[]
   };
 
   function hash01(value){ return neuralHash(value); }
@@ -43,6 +45,18 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     state.dust=Array.from({length:state.reduced?18:64},(_,i)=>({
       x:hash01('dx'+i),y:hash01('dy'+i),r:10+hash01('dr'+i)*42,
       a:.008+hash01('da'+i)*.026,phase:hash01('dp'+i)*Math.PI*2
+    }));
+    state.filaments=Array.from({length:state.reduced?6:18},(_,i)=>({
+      x1:hash01('fx1'+i),y1:hash01('fy1'+i),
+      x2:hash01('fx2'+i),y2:hash01('fy2'+i),
+      bend:(hash01('fb'+i)-.5)*.22,
+      a:.018+hash01('fa'+i)*.035,
+      hue:i%4
+    }));
+    state.constellation=Array.from({length:state.reduced?9:24},(_,i)=>({
+      x:hash01('cx'+i),y:hash01('cy'+i),
+      a:.12+hash01('ca'+i)*.35,
+      r:.55+hash01('cr'+i)*1.45
     }));
   }
   function resize(){
@@ -70,11 +84,37 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       rg.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=rg;ctx.beginPath();ctx.arc(x,y,cloud.r*3.2,0,Math.PI*2);ctx.fill();
     }
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    const filamentColors=['92,205,255','142,106,255','241,120,214','255,201,106'];
+    for(const f of state.filaments){
+      const x1=f.x1*w,y1=f.y1*h,x2=f.x2*w,y2=f.y2*h;
+      const mx=(x1+x2)/2+(y2-y1)*f.bend;
+      const my=(y1+y2)/2-(x2-x1)*f.bend*.55;
+      ctx.strokeStyle='rgba('+filamentColors[f.hue]+','+f.a+')';
+      ctx.lineWidth=.45;
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(mx,my,x2,y2);ctx.stroke();
+    }
+    ctx.restore();
     for(const star of state.stars){
       const tw=.55+.45*Math.sin(t*.0007+star.phase);
       ctx.fillStyle='rgba(210,232,255,'+(star.a*tw)+')';
       ctx.beginPath();ctx.arc(star.x*w,star.y*h,star.r,0,Math.PI*2);ctx.fill();
     }
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<state.constellation.length-1;i++){
+      const a=state.constellation[i],b=state.constellation[i+1];
+      if(i%3===2)continue;
+      ctx.strokeStyle='rgba(132,181,255,'+(.020+Math.min(a.a,b.a)*.06)+')';
+      ctx.lineWidth=.35;
+      ctx.beginPath();ctx.moveTo(a.x*w,a.y*h);ctx.lineTo(b.x*w,b.y*h);ctx.stroke();
+    }
+    for(const star of state.constellation){
+      ctx.fillStyle='rgba(225,239,255,'+star.a+')';
+      ctx.beginPath();ctx.arc(star.x*w,star.y*h,star.r,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
   }
   function drawClusterNebula(t){
     const ctx=state.ctx;
@@ -90,12 +130,29 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       const breathe=.84+.16*Math.sin(t*.00045+hash01(node.id)*Math.PI*2);
       const radius=(42+activity*78)*breathe;
       const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
-      g.addColorStop(0,rgba(c,.025+activity*.035));
-      g.addColorStop(.26,rgba(c,.018+activity*.025));
-      g.addColorStop(.64,rgba(c,.006+activity*.012));
+      g.addColorStop(0,rgba(c,.028+activity*.042));
+      g.addColorStop(.24,rgba(c,.020+activity*.030));
+      g.addColorStop(.60,rgba(c,.007+activity*.014));
       g.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=g;
-      ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.ellipse(p.x,p.y,radius,radius*.58,hash01(node.id+':neb')*Math.PI,0,Math.PI*2);ctx.fill();
+      if(activity>.48&&!state.reduced){
+        ctx.strokeStyle=rgba(c,.025+activity*.055);
+        ctx.lineWidth=.55;
+        for(let arm=0;arm<2;arm++){
+          ctx.beginPath();
+          const offset=arm*Math.PI;
+          for(let s=0;s<=24;s++){
+            const q=s/24;
+            const a=offset+q*Math.PI*2.1;
+            const rr=8+q*radius*.82;
+            const x=p.x+Math.cos(a)*rr;
+            const y=p.y+Math.sin(a)*rr*.48;
+            if(s===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+          }
+          ctx.stroke();
+        }
+      }
     }
     ctx.restore();
   }
@@ -108,14 +165,26 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       const weight=Math.max(.08,Math.min(1,Number(edge.weight)||.5));
       const c=color(edge.a.cluster,edge.a.status);
       ctx.save();
+      const targetColor=color(edge.b.cluster,edge.b.status);
+      const grad=ctx.createLinearGradient(a.x,a.y,b.x,b.y);
+      grad.addColorStop(0,rgba(c,.08+activity*.27));
+      grad.addColorStop(.55,rgba(c,.06+activity*.18));
+      grad.addColorStop(1,rgba(targetColor,.08+activity*.27));
       ctx.lineWidth=.45+weight*1.55;
-      ctx.strokeStyle=rgba(c,.07+activity*.25);
-      ctx.shadowBlur=activity>0.55?6:0;ctx.shadowColor=rgba(c,.38);
+      ctx.strokeStyle=grad;
+      ctx.shadowBlur=activity>0.55?7:0;ctx.shadowColor=rgba(c,.42);
       ctx.beginPath();ctx.moveTo(a.x,a.y);
       const bend=(hash01(edge.source+'>'+edge.target)-.5)*34;
       const mx=(a.x+b.x)/2+(b.y-a.y)*.04+bend;
       const my=(a.y+b.y)/2-(b.x-a.x)*.04-bend*.35;
-      ctx.quadraticCurveTo(mx,my,b.x,b.y);ctx.stroke();ctx.restore();
+      ctx.quadraticCurveTo(mx,my,b.x,b.y);ctx.stroke();
+      if(activity>.60){
+        ctx.lineWidth=.35;
+        ctx.strokeStyle=rgba('#ffffff',.04+activity*.08);
+        ctx.beginPath();ctx.moveTo(a.x,a.y);
+        ctx.quadraticCurveTo(mx+2,my-2,b.x,b.y);ctx.stroke();
+      }
+      ctx.restore();
 
       if(activity>.38&&!state.reduced){
         const phase=(t*.00018*(.7+activity)+hash01(edge.source+edge.target))%1;
@@ -197,16 +266,49 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       return;
     }
     drawDendrites(node,p,t);
+    const strongest=(state.field?.links||[])
+      .filter(function(edge){return edge.a.id===node.id||edge.b.id===node.id;})
+      .sort(function(a,b){return (Number(b.activity)||0)-(Number(a.activity)||0);})[0];
+    if(strongest){
+      const other=strongest.a.id===node.id?strongest.b:strongest.a;
+      const op=px(other);
+      const dx=op.x-p.x,dy=op.y-p.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+      const reach=Math.min(44,d*.30);
+      const ax=p.x+(dx/d)*reach,ay=p.y+(dy/d)*reach;
+      ctx.save();
+      ctx.strokeStyle=rgba(c,.10+intensity*.20);
+      ctx.lineWidth=.75+intensity*.55;
+      ctx.shadowBlur=4;ctx.shadowColor=rgba(c,.35);
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      ctx.quadraticCurveTo(p.x+dx*.10-dy*.05,p.y+dy*.10+dx*.05,ax,ay);
+      ctx.stroke();ctx.restore();
+    }
     const role=String(node.role||'capability');
     const base=role==='product'?4.5:role==='fabric-capability'?4:6.5;
     const r=base+intensity*5.5;
     const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.3);
     halo.addColorStop(0,rgba(c,.45+intensity*.26));halo.addColorStop(.28,rgba(c,.16+intensity*.16));halo.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*3.3,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=rgba(c,.26+intensity*.42);ctx.strokeStyle=rgba(c,.48+intensity*.42);
-    ctx.lineWidth=node.dominant?2:1;ctx.shadowBlur=node.dominant?12:4;ctx.shadowColor=rgba(c,.65);
-    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.shadowBlur=0;
-    ctx.fillStyle='rgba(255,255,255,'+(.38+intensity*.5)+')';ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1.5,r*.26),0,Math.PI*2);ctx.fill();
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.rotate((hash01(node.id+':rot')-.5)*.8);
+    ctx.fillStyle=rgba(c,.24+intensity*.44);ctx.strokeStyle=rgba(c,.50+intensity*.40);
+    ctx.lineWidth=node.dominant?2:1;ctx.shadowBlur=node.dominant?14:5;ctx.shadowColor=rgba(c,.68);
+    ctx.beginPath();
+    const points=14;
+    for(let i=0;i<=points;i++){
+      const a=(i/points)*Math.PI*2;
+      const wobble=1+(hash01(node.id+':soma:'+i)-.5)*.15+Math.sin(t*.001+a*3)*.025*intensity;
+      const rx=Math.cos(a)*r*wobble;
+      const ry=Math.sin(a)*r*(.86+.08*hash01(node.id+':oval'));
+      if(i===0)ctx.moveTo(rx,ry);else ctx.lineTo(rx,ry);
+    }
+    ctx.closePath();ctx.fill();ctx.stroke();ctx.shadowBlur=0;
+    ctx.strokeStyle=rgba('#ffffff',.08+intensity*.10);ctx.lineWidth=.55;
+    ctx.beginPath();ctx.ellipse(0,0,r*.72,r*.56,0,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,'+(.42+intensity*.48)+')';
+    ctx.beginPath();ctx.arc(-r*.08,-r*.05,Math.max(1.6,r*.24),0,Math.PI*2);ctx.fill();
+    ctx.restore();
 
     const show=node.dominant||state.hovered===node.id;
     if(show){
