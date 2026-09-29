@@ -321,6 +321,9 @@ async function refresh(){
     try{commandStatus=await api('/api/command/status');}catch(_){commandStatus=null;}
     try{curiosityStatus=await api('/api/curiosity/status');}catch(_){curiosityStatus=null;}
     metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
+    $('cogEnergyBar').style.width=pct(soul.energy)+'%';
+    $('cogCuriosityBar').style.width=pct(soul.curiosity)+'%';
+    $('cogContinuityBar').style.width=pct(soul.continuity)+'%';
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     renderEmotion(organism);
     if(livingScene)livingScene.organism=organism;
