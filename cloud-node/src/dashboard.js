@@ -277,6 +277,273 @@ body.map-focus .shell{max-width:none;padding-bottom:16px}
   .detail-grid{grid-template-columns:1fr}.detail-drawer{bottom:72px}
   body.map-focus .map-panel{min-height:620px} body.map-focus .map-wrap{min-height:570px}
 }
+
+/* AURA UX V5 — cinematic living cockpit */
+:root{
+  --v5-panel:rgba(9,14,28,.72);
+  --v5-panel-strong:rgba(10,15,29,.88);
+  --v5-line:rgba(152,175,255,.18);
+  --v5-violet:#9e71ff;
+  --v5-cyan:#65e9ff;
+  --v5-blue:#66a8ff;
+  --v5-pink:#f07ddb;
+  --v5-gold:#ffc967;
+}
+html,body{background:#03050b}
+body{
+  background:
+    radial-gradient(900px 620px at 50% 16%,rgba(111,75,245,.17),transparent 62%),
+    radial-gradient(820px 560px at 8% 26%,rgba(31,118,219,.13),transparent 67%),
+    radial-gradient(760px 520px at 92% 34%,rgba(201,67,223,.09),transparent 68%),
+    linear-gradient(180deg,#050811 0%,#02040a 100%);
+}
+body::before{
+  opacity:.22;
+  animation:v5StarDrift 42s linear infinite;
+}
+body::after{
+  content:"";
+  position:fixed;inset:-18% -12%;pointer-events:none;z-index:-1;
+  background:
+    radial-gradient(ellipse at 42% 32%,rgba(111,74,255,.14),transparent 23%),
+    radial-gradient(ellipse at 58% 36%,rgba(69,187,255,.12),transparent 22%),
+    radial-gradient(ellipse at 62% 67%,rgba(242,108,214,.08),transparent 24%),
+    radial-gradient(ellipse at 33% 73%,rgba(71,105,255,.08),transparent 20%);
+  filter:blur(46px) saturate(130%);
+  animation:v5Nebula 24s ease-in-out infinite alternate;
+}
+@keyframes v5Nebula{from{transform:translate3d(-2%,-1%,0) scale(1)}to{transform:translate3d(2%,1.6%,0) scale(1.05)}}
+@keyframes v5StarDrift{to{background-position:190px 250px,270px 350px,340px 440px}}
+
+.shell{
+  max-width:1760px;
+  padding:18px 22px 92px;
+}
+.topbar{
+  min-height:64px;margin-bottom:14px;
+  padding:0 4px;
+}
+.identity{gap:16px}
+.logo{
+  position:relative;
+  font-size:38px;letter-spacing:.30em;font-weight:260;
+  padding-left:54px;
+}
+.logo::before{
+  content:"";
+  position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:38px;height:38px;border-radius:50%;
+  background:
+    radial-gradient(circle at 48% 42%,#fff 0 5%,#d8ccff 11%,#9b73ff 25%,rgba(114,79,255,.58) 48%,rgba(114,79,255,.08) 72%,transparent 74%);
+  box-shadow:0 0 22px rgba(142,104,255,.55),0 0 52px rgba(79,104,255,.24);
+}
+.title{font-size:22px;font-weight:520}
+.subtitle{font-size:10px;color:#8796b2}
+.top-actions .pill{background:rgba(8,14,27,.56);border-color:rgba(145,170,255,.14);box-shadow:inset 0 1px rgba(255,255,255,.025)}
+.clock{border-color:rgba(145,170,255,.14)}
+.clock .time{font-size:17px}
+
+/* V5 removes the KPI band from the main surface */
+.overview{display:none!important}
+
+.workspace{
+  grid-template-columns:minmax(260px,.72fr) minmax(720px,2.30fr) minmax(290px,.82fr);
+  grid-template-areas:"chat map side";
+  grid-template-rows:minmax(720px,calc(100vh - 120px));
+  gap:12px;
+}
+.panel{
+  border-radius:20px;
+  border:1px solid var(--v5-line);
+  background:
+    linear-gradient(180deg,rgba(16,23,43,.78),rgba(7,11,22,.82));
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.055),
+    0 24px 70px rgba(0,0,0,.28),
+    0 0 0 1px rgba(84,110,210,.025);
+  backdrop-filter:blur(28px) saturate(118%);
+}
+.panel::after{
+  content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(135deg,rgba(255,255,255,.028),transparent 34%,rgba(125,81,255,.02) 72%,transparent);
+}
+.panel-head{
+  min-height:52px;padding:14px 16px;
+  background:linear-gradient(180deg,rgba(20,29,52,.42),rgba(12,18,33,.08));
+}
+.panel-title{font-size:13px}
+.panel-head>span:first-child{color:#c9bdff;text-shadow:0 0 12px rgba(151,112,255,.44)}
+
+/* Chat */
+.chat-panel{min-height:720px}
+.chat-body{padding:12px 12px 14px}
+.chat-tabs{margin:0 2px 12px;background:rgba(2,5,13,.46)}
+.messages{padding:6px 6px 16px;gap:14px;max-height:none}
+.msg{
+  max-width:90%;
+  padding:13px 14px;
+  border-color:rgba(132,158,237,.13);
+  background:linear-gradient(145deg,rgba(22,31,56,.82),rgba(10,16,30,.72));
+  box-shadow:inset 0 1px rgba(255,255,255,.035),0 10px 24px rgba(0,0,0,.13);
+}
+.msg.aura::before,.msg.user::before{
+  width:30px;height:30px;top:7px;
+  box-shadow:0 0 18px rgba(137,99,255,.44);
+}
+.msg.aura::before{left:-40px}
+.msg.user::before{right:-40px}
+.msg.aura{margin-left:40px}.msg.user{margin-right:40px}
+.quick{gap:8px}
+.quick button{
+  padding:11px 12px;border-radius:13px;
+  background:linear-gradient(90deg,rgba(81,59,169,.10),rgba(255,255,255,.018));
+}
+.composer{
+  padding:9px;border-radius:16px;
+  background:rgba(2,5,12,.48);
+  border:1px solid rgba(145,170,255,.10);
+}
+.composer textarea{background:transparent;border:0;padding:10px 8px}
+.composer textarea:focus{box-shadow:none}
+.send{
+  border-radius:13px;
+  background:linear-gradient(135deg,#a16cff,#654cff);
+  box-shadow:0 0 22px rgba(130,85,255,.30);
+}
+
+/* Hero neural map */
+.map-panel{
+  min-height:720px;
+  overflow:hidden;
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.055),
+    0 26px 86px rgba(0,0,0,.32),
+    0 0 44px rgba(80,63,190,.07);
+}
+.map-wrap{min-height:660px;background:#02040a}
+.map-wrap::before{
+  background:
+    radial-gradient(circle at 50% 50%,rgba(185,135,255,.12),transparent 26%),
+    radial-gradient(circle at 34% 26%,rgba(66,200,255,.08),transparent 22%),
+    radial-gradient(circle at 72% 38%,rgba(255,190,94,.06),transparent 22%),
+    radial-gradient(circle at 77% 76%,rgba(240,87,211,.055),transparent 20%),
+    linear-gradient(180deg,rgba(12,16,34,.04),rgba(1,3,8,.12));
+}
+.map-wrap::after{
+  background:
+    radial-gradient(ellipse at center,transparent 54%,rgba(1,3,9,.34) 88%,rgba(1,3,9,.58) 100%);
+}
+.map-toolbar button{
+  background:rgba(8,14,27,.54);
+  border-color:rgba(145,170,255,.13);
+}
+.map-stats{color:#71829e}
+.organism-hud{
+  top:15px;left:15px;
+  border-color:rgba(91,224,239,.15);
+  background:rgba(5,11,22,.62);
+}
+.organism-hud i{background:#58e4ff;box-shadow:0 0 12px #58e4ff}
+.map-foot{
+  bottom:14px;left:15px;
+  border-color:rgba(145,170,255,.08);
+  background:rgba(3,7,16,.60);
+}
+.legend{
+  right:15px;bottom:14px;
+  background:rgba(3,7,16,.58);
+  border-color:rgba(145,170,255,.09);
+}
+
+/* Right column now owns cognition + thought + work */
+.right-stack{
+  display:grid;
+  grid-template-rows:auto auto minmax(240px,1fr);
+  gap:12px;
+}
+.cognitive-hero{
+  padding:16px;
+  min-height:220px;
+}
+.cognitive-top{
+  display:grid;grid-template-columns:112px 1fr;gap:14px;align-items:center;
+}
+.cognitive-orb-wrap{
+  position:relative;width:104px;height:104px;display:grid;place-items:center;
+}
+.cognitive-orb-wrap::before,.cognitive-orb-wrap::after{
+  content:"";position:absolute;border-radius:50%;border:1px solid rgba(146,113,255,.22);
+}
+.cognitive-orb-wrap::before{inset:3px;box-shadow:0 0 24px rgba(120,86,255,.18)}
+.cognitive-orb-wrap::after{inset:18px;border-color:rgba(98,224,239,.15)}
+.cognitive-orb{
+  width:62px;height:62px;border-radius:50%;
+  background:radial-gradient(circle at 42% 35%,#fff 0 5%,#dce5ff 12%,#9e7bff 26%,#4569e9 52%,#0a1024 76%);
+  box-shadow:0 0 22px rgba(143,98,255,.55),0 0 48px rgba(67,160,255,.22);
+  animation:v5OrbPulse 4.8s ease-in-out infinite;
+}
+@keyframes v5OrbPulse{50%{transform:scale(1.055);filter:brightness(1.12)}}
+.cognitive-state-kicker{font-size:8px;color:#7f8da8;text-transform:uppercase;letter-spacing:.12em}
+.cognitive-state-value{font-size:22px;font-weight:740;margin-top:4px;text-transform:capitalize}
+.cognitive-state-sub{font-size:9px;color:#8b9ab4;margin-top:4px}
+.cognitive-metrics{display:grid;gap:10px;margin-top:15px}
+.cog-metric{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center}
+.cog-icon{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);font-size:9px}
+.cog-copy{min-width:0}.cog-name{font-size:9px;color:#dfe6f5}.cog-bar{height:4px;background:rgba(255,255,255,.055);border-radius:999px;margin-top:4px;overflow:hidden}
+.cog-bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--v5-violet),var(--v5-cyan))}
+.cog-value{font-size:9px;font-weight:700}
+.cognitive-spark{width:52px;height:16px;opacity:.68}
+.cognitive-spark path{fill:none;stroke:currentColor;stroke-width:1.2;stroke-dasharray:1.5 2.5;animation:v5Spark 7s linear infinite}
+@keyframes v5Spark{to{stroke-dashoffset:-22}}
+
+.thought-card{
+  padding:14px;
+  background:
+    radial-gradient(circle at 15% 18%,rgba(255,193,86,.10),transparent 36%),
+    linear-gradient(135deg,rgba(255,201,106,.06),rgba(154,108,255,.055));
+}
+.thought-wave{
+  width:100%;height:40px;margin-top:12px;opacity:.52;
+}
+.thought-wave path{fill:none;stroke:#ffc967;stroke-width:1.15;filter:drop-shadow(0 0 5px rgba(255,201,103,.28))}
+.work-list{gap:9px}
+.work-row{padding:11px;border-radius:13px;background:rgba(255,255,255,.018)}
+.work-row:nth-child(n+4){display:none}
+
+/* Bottom dock gets the premium floating treatment */
+.bottom-dock{
+  bottom:16px;
+  min-width:520px;
+  padding:7px 8px;
+  border-radius:20px;
+  border-color:rgba(157,179,255,.18);
+  background:linear-gradient(180deg,rgba(15,21,39,.92),rgba(7,10,20,.88));
+  box-shadow:0 18px 58px rgba(0,0,0,.44),0 0 28px rgba(104,72,210,.12);
+}
+.dock-btn{min-width:92px;padding:11px 13px}
+.dock-btn.active{
+  background:linear-gradient(180deg,rgba(122,81,255,.26),rgba(73,53,145,.22));
+  box-shadow:inset 0 0 0 1px rgba(161,126,255,.18),0 0 18px rgba(113,82,218,.12);
+}
+
+/* mobile / narrow */
+@media(max-width:1260px){
+  .workspace{
+    grid-template-columns:minmax(240px,.74fr) minmax(560px,1.76fr);
+    grid-template-areas:"chat map" "side side";
+    grid-template-rows:minmax(600px,1fr) auto;
+  }
+  .right-stack{grid-template-columns:1fr 1fr 1fr;grid-template-rows:none}
+}
+@media(max-width:880px){
+  .shell{padding:12px 12px 84px}
+  .logo{padding-left:42px;font-size:30px}.logo::before{width:31px;height:31px}
+  .workspace{display:flex;flex-direction:column}
+  .map-panel{order:1;min-height:560px}.map-wrap{min-height:510px}
+  .chat-panel{order:2;min-height:560px}
+  .right-stack{order:3;display:grid;grid-template-columns:1fr}
+  .bottom-dock{min-width:0;width:calc(100% - 20px)}
+}
 </style>
 </head>
 <body>
@@ -300,35 +567,9 @@ body.map-focus .shell{max-width:none;padding-bottom:16px}
 
   <section class="setup-banner" id="setupBanner"><div class="setup-title">Configuration AURA requise</div><div id="setupSummary">Le serveur web fonctionne, mais le noyau persistant n’est pas encore actif.</div><ul class="setup-list" id="setupIssues"></ul></section>
 
-  <section class="overview" aria-label="Résumé AURA">
-    <article class="overview-card emotion">
-      <div class="overview-orb" id="emotionOrb" aria-hidden="true"></div>
-      <div style="min-width:0">
-        <div class="overview-kicker">État émotionnel</div>
-        <div class="overview-value" id="emotionMood">En réveil</div>
-        <div class="overview-sub" id="emotionReason">Lecture de l’état interne…</div>
-      </div>
-    </article>
-    <article class="overview-card overview-metric" style="--card-glow:rgba(96,230,173,.15);--metric-color:#60e6ad">
-      <div class="ring" id="ring-energy"><span>⚡</span></div>
-      <div class="metric-copy"><div class="metric-label">Énergie</div><div class="metric-value" id="metric-energy">—</div><div class="metric-trend" id="trend-energy">état interne</div></div>
-      <svg class="overview-wave" viewBox="0 0 120 34" aria-hidden="true"><path d="M1 24 C18 24 24 9 39 12 S58 28 72 18 S93 5 119 10"/></svg>
-    </article>
-    <article class="overview-card overview-metric" style="--card-glow:rgba(154,108,255,.16);--metric-color:#9a6cff">
-      <div class="ring" id="ring-curiosity"><span>∞</span></div>
-      <div class="metric-copy"><div class="metric-label">Curiosité</div><div class="metric-value" id="metric-curiosity">—</div><div class="metric-trend" id="trend-curiosity">état interne</div></div>
-      <svg class="overview-wave" viewBox="0 0 120 34" aria-hidden="true"><path d="M1 22 C12 5 29 7 39 19 S62 32 76 16 S99 5 119 17"/></svg>
-    </article>
-    <article class="overview-card overview-metric" style="--card-glow:rgba(109,167,255,.15);--metric-color:#6da7ff">
-      <div class="ring" id="ring-continuity"><span>◫</span></div>
-      <div class="metric-copy"><div class="metric-label">Continuité</div><div class="metric-value" id="metric-continuity">—</div><div class="metric-trend" id="trend-continuity">mémoire temporelle</div></div>
-      <svg class="overview-wave" viewBox="0 0 120 34" aria-hidden="true"><path d="M1 25 C15 20 22 12 34 13 S55 26 68 20 S89 9 119 9"/></svg>
-    </article>
-  </section>
-
   <main class="workspace" id="workspace">
     <section class="panel chat-panel">
-      <div class="panel-head"><span>◱</span><div class="panel-title">Dialogue</div><div class="spacer"></div><div class="panel-meta" id="chatState">AURA</div></div>
+      <div class="panel-head"><span>▣</span><div class="panel-title">Dialogue</div><div class="spacer"></div><div class="panel-meta" id="chatState">AURA</div></div>
       <div class="chat-body">
         <div class="chat-tabs" role="tablist" aria-label="Dialogue AURA">
           <button class="chat-tab active" id="conversationTab" type="button">Conversation</button>
@@ -338,12 +579,12 @@ body.map-focus .shell{max-width:none;padding-bottom:16px}
           <div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div>
         </div>
         <div class="quick">
-          <button data-prompt="Fais-moi un point bref sur ce que tu fais maintenant.">Que fais-tu maintenant ?</button>
           <button data-prompt="Quelle piste nouvelle veux-tu explorer maintenant ?">Explorer une nouvelle idée</button>
           <button data-prompt="Quelles sont tes trois priorités actuelles ?">Voir mes priorités</button>
+          <button data-prompt="Analyse ton blocage principal et propose un prochain test.">Analyser un blocage</button>
         </div>
         <div class="composer">
-          <button class="voice" id="voiceBtn" title="Parler">⌁</button>
+          <button class="voice" id="voiceBtn" title="Parler">◉</button>
           <textarea id="message" placeholder="Parler à AURA…"></textarea>
           <button class="send" id="send" title="Envoyer">➜</button>
         </div>
@@ -357,7 +598,7 @@ body.map-focus .shell{max-width:none;padding-bottom:16px}
         <div class="spacer"></div>
         <div class="map-toolbar">
           <span class="map-stats" id="mapStats">réseau vivant</span>
-          <button id="refreshMap" type="button">Recalculer</button>
+          <button id="refreshMap" type="button">Temps réel</button>
           <button id="mapFocusBtn" class="focus-map-btn" type="button" title="Agrandir la carte">↗</button>
         </div>
       </div>
@@ -365,16 +606,47 @@ body.map-focus .shell{max-width:none;padding-bottom:16px}
         <canvas id="neuralFieldCanvas" width="900" height="650" aria-label="Champ neuronal cosmique d’AURA"></canvas>
         <div class="neural-tooltip" id="neuralTooltip"></div>
         <div class="organism-hud"><i id="organismDot"></i><span id="organismMood">organisme en éveil</span></div>
-        <div class="map-foot"><strong style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">chargement de l’état</span></div>
+        <div class="map-foot"><strong style="color:#e2d8ff">Focus :</strong> <span id="focusStatement">chargement de l’état</span></div>
         <div class="legend">
           <div class="legend-row"><span class="legend-line"></span>Synapses</div>
-          <div class="legend-row"><span class="legend-line rise"></span>Flux actif</div>
-          <div class="legend-row"><span class="legend-line stable"></span>Survol : détail</div>
+          <div class="legend-row"><span class="legend-line rise"></span>Flux</div>
+          <div class="legend-row"><span class="legend-line stable"></span>Auréole</div>
         </div>
       </div>
     </section>
 
     <aside class="right-stack">
+      <section class="panel">
+        <div class="panel-head"><span>◎</span><div class="panel-title">État émotionnel & cognitif</div><div class="spacer"></div><span class="panel-meta">vivant</span></div>
+        <div class="cognitive-hero">
+          <div class="cognitive-top">
+            <div class="cognitive-orb-wrap"><div class="cognitive-orb" id="emotionOrb"></div></div>
+            <div>
+              <div class="cognitive-state-kicker">État actuel</div>
+              <div class="cognitive-state-value" id="emotionMood">En réveil</div>
+              <div class="cognitive-state-sub" id="emotionReason">Lecture de l’état interne…</div>
+            </div>
+          </div>
+          <div class="cognitive-metrics">
+            <div class="cog-metric">
+              <div class="cog-icon" style="color:#66e7b2">◉</div>
+              <div class="cog-copy"><div class="cog-name">Énergie</div><div class="cog-bar"><span id="cogEnergyBar" style="width:0%"></span></div></div>
+              <div class="cog-value" id="metric-energy">—</div>
+            </div>
+            <div class="cog-metric">
+              <div class="cog-icon" style="color:#a06cff">∞</div>
+              <div class="cog-copy"><div class="cog-name">Curiosité</div><div class="cog-bar"><span id="cogCuriosityBar" style="width:0%"></span></div></div>
+              <div class="cog-value" id="metric-curiosity">—</div>
+            </div>
+            <div class="cog-metric">
+              <div class="cog-icon" style="color:#65a7ff">◫</div>
+              <div class="cog-copy"><div class="cog-name">Continuité</div><div class="cog-bar"><span id="cogContinuityBar" style="width:0%"></span></div></div>
+              <div class="cog-value" id="metric-continuity">—</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel">
         <div class="panel-head"><span>◉</span><div class="panel-title">Pensée dominante</div><div class="spacer"></div><span class="panel-meta">maintenant</span></div>
         <div class="panel-body">
@@ -382,23 +654,33 @@ body.map-focus .shell{max-width:none;padding-bottom:16px}
             <div class="thought-title">Focus actuel</div>
             <div id="dominantThought">Chargement de la pensée dominante…</div>
             <div class="thought-tags"><span class="context-tag" id="dominantMoodTag">État · —</span><span class="context-tag" id="dominantIntentTag">Intention · —</span></div>
+            <svg class="thought-wave" viewBox="0 0 240 40" aria-hidden="true"><path d="M1 30 C22 30 26 10 47 13 S76 37 98 21 S128 5 150 18 S184 34 239 10"/></svg>
           </div>
         </div>
       </section>
+
       <section class="panel work-panel">
         <div class="panel-head"><span>▣</span><div class="panel-title">Travail en cours</div><div class="spacer"></div><div class="panel-meta" id="workMeta">—</div></div>
         <div class="panel-body"><div class="work-list" id="workList"><div class="empty">Chargement…</div></div></div>
       </section>
-      <section class="panel">
-        <div class="panel-head"><span>◎</span><div class="panel-title">État cognitif</div></div>
-        <div class="panel-body cognitive-list">
-          <div class="cognitive-row"><div><div class="cognitive-name">Stabilité</div><div class="cognitive-sub">État global</div></div><div class="cognitive-value" id="cognitiveStability">—</div></div>
-          <div class="cognitive-row"><div><div class="cognitive-name">Focus</div><div class="cognitive-sub">Introspection</div></div><div class="cognitive-value" id="cognitiveFocus">—</div></div>
-          <div class="cognitive-row"><div><div class="cognitive-name">Réactivité</div><div class="cognitive-sub">Adaptation</div></div><div class="cognitive-value" id="cognitiveReactivity">—</div></div>
-        </div>
-      </section>
     </aside>
   </main>
+
+  <div class="data-sinks" aria-hidden="true">
+    <div id="ring-energy"></div><div id="trend-energy"></div>
+    <div id="ring-curiosity"></div><div id="trend-curiosity"></div>
+    <div id="ring-continuity"></div><div id="trend-continuity"></div>
+    <div id="metric-pressure"></div><div id="trend-pressure"></div><div id="ring-pressure"></div>
+    <div id="metric-introspection"></div><div id="trend-introspection"></div><div id="ring-introspection"></div>
+    <div id="metric-reactivity"></div><div id="trend-reactivity"></div><div id="ring-reactivity"></div>
+    <div id="emotion-stability-value"></div><div id="emotion-stability"></div>
+    <div id="emotion-clarity-value"></div><div id="emotion-clarity"></div>
+    <div id="emotion-attachment-value"></div><div id="emotion-attachment"></div>
+    <div id="emotion-curiosity-value"></div><div id="emotion-curiosity"></div>
+    <div id="emotion-dream-value"></div><div id="emotion-dream"></div>
+    <div id="emotion-silence-value"></div><div id="emotion-silence"></div>
+    <div id="cognitiveStability"></div><div id="cognitiveFocus"></div><div id="cognitiveReactivity"></div>
+  </div>
 
   <section class="detail-drawer" id="detailDrawer" aria-label="Détails AURA">
     <div class="detail-head"><div class="detail-title" id="detailTitle">Détails</div><button class="detail-close" id="detailClose" type="button" aria-label="Fermer">×</button></div>
