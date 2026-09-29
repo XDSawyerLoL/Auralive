@@ -4,20 +4,22 @@ import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 import { NEURAL_FIELD_SCRIPT } from '../src/neural-field-renderer.js';
 
-test('AURA operational consciousness interface exposes core product surfaces', () => {
+test('AURA V4 exposes a focused primary workspace and secondary detail surfaces', () => {
   for (const label of [
     'Interface de conscience opérationnelle',
     'Dialogue',
-    'Carte d’intérêt',
+    'Carte d’intérêt · champ neuronal cosmique',
     'Pensée dominante',
     'Travail en cours',
+    'État cognitif',
     'Intentions actives',
-    'Ce qu’elle fait maintenant',
     'Centre de commande',
     'Mémoire et leçons',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
+  assert.equal(DASHBOARD_HTML.includes('class="bottom-dock"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="detail-drawer"'), true);
 });
 
 test('dashboard is wired to live AURA APIs', () => {
@@ -44,14 +46,12 @@ test('dashboard includes dynamic cosmic neural field without a manual token gate
 });
 
 
-test('desktop dashboard keeps the reference composition', () => {
-  assert.equal(DASHBOARD_HTML.includes('grid-template-areas:'), true);
-  assert.equal(DASHBOARD_HTML.includes('"chat map side"'), true);
-  assert.equal(DASHBOARD_HTML.includes('"chat bottom bottom"'), true);
+test('desktop dashboard keeps a focused three-column composition', () => {
+  assert.equal(DASHBOARD_HTML.includes('grid-template-areas:"chat map side"'), true);
   assert.equal(DASHBOARD_HTML.includes('grid-area:chat'), true);
   assert.equal(DASHBOARD_HTML.includes('grid-area:map'), true);
   assert.equal(DASHBOARD_HTML.includes('grid-area:side'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:bottom'), true);
+  assert.equal(DASHBOARD_HTML.includes('body.map-focus .chat-panel'), true);
   assert.equal(DASHBOARD_HTML.includes("setLive(true,boot.runtime_ready?'En ligne · '+mood"), true);
 });
 
@@ -206,15 +206,15 @@ test('dashboard exposes operational command-center state instead of decorative a
 });
 
 
-test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
+test('dashboard keeps Quantic Glide downloads available inside the secondary system surface', () => {
   for (const token of [
-    'Télécharger Quantic Glide',
+    'Quantic Glide',
     'Windows x64',
     'Android',
     'href="/downloads/glide/windows"',
     'href="/downloads/glide/android"',
-    'Télécharger .exe',
-    'Télécharger .apk',
+    '>.exe<',
+    '>.apk<',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
@@ -229,5 +229,27 @@ test('cosmic neural renderer is independently parseable browser JavaScript', () 
 
 test('cosmic neural field avoids permanent text clutter', () => {
   assert.match(NEURAL_FIELD_SCRIPT, /const show=node\.dominant\|\|state\.hovered===node\.id/);
-  assert.match(DASHBOARD_HTML, /Survol : activité du neurone/);
+  assert.match(DASHBOARD_HTML, /Survol : détail/);
+});
+
+
+test('UX V4 keeps the main surface intentionally sparse', () => {
+  assert.equal((DASHBOARD_HTML.match(/class="overview-card/g)||[]).length, 4);
+  assert.match(DASHBOARD_HTML, /data-detail="intentions"/);
+  assert.match(DASHBOARD_HTML, /data-detail="memory"/);
+  assert.match(DASHBOARD_HTML, /data-detail="explore"/);
+  assert.match(DASHBOARD_HTML, /data-detail="system"/);
+  assert.match(DASHBOARD_SCRIPT, /rows\.slice\(0,3\)/);
+  assert.match(DASHBOARD_SCRIPT, /function toggleMapFocus\(/);
+  assert.match(DASHBOARD_SCRIPT, /function setDetailView\(/);
+});
+
+test('UX V4 renders condensed cognitive state instead of extra primary panels', () => {
+  for (const id of ['cognitiveStability','cognitiveFocus','cognitiveReactivity','dominantMoodTag','dominantIntentTag']) {
+    assert.equal(DASHBOARD_HTML.includes('id="'+id+'"'), true, id);
+  }
+  assert.match(DASHBOARD_SCRIPT, /thoughtRaw\.length>230/);
+  assert.match(DASHBOARD_SCRIPT, /cognitiveStability/);
+  assert.match(DASHBOARD_SCRIPT, /cognitiveFocus/);
+  assert.match(DASHBOARD_SCRIPT, /cognitiveReactivity/);
 });
