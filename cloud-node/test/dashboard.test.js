@@ -206,15 +206,15 @@ test('dashboard exposes operational command-center state instead of decorative a
 });
 
 
-test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
+test('dashboard keeps Quantic Glide downloads available inside the secondary system surface', () => {
   for (const token of [
-    'Télécharger Quantic Glide',
+    'Quantic Glide',
     'Windows x64',
     'Android',
     'href="/downloads/glide/windows"',
     'href="/downloads/glide/android"',
-    'Télécharger .exe',
-    'Télécharger .apk',
+    '>.exe<',
+    '>.apk<',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
@@ -229,7 +229,7 @@ test('cosmic neural renderer is independently parseable browser JavaScript', () 
 
 test('cosmic neural field avoids permanent text clutter', () => {
   assert.match(NEURAL_FIELD_SCRIPT, /const show=node\.dominant\|\|state\.hovered===node\.id/);
-  assert.match(DASHBOARD_HTML, /Survol : activité du neurone/);
+  assert.match(DASHBOARD_HTML, /Survol : détail/);
 });
 
 
