@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
+import { NEURAL_FIELD_SCRIPT } from '../src/neural-field-renderer.js';
 
 test('AURA operational consciousness interface exposes core product surfaces', () => {
   for (const label of [
@@ -34,8 +35,9 @@ test('dashboard is wired to live AURA APIs', () => {
   }
 });
 
-test('dashboard includes dynamic attention map without a manual token gate', () => {
-  assert.equal(DASHBOARD_HTML.includes('id="attentionMap"'), true);
+test('dashboard includes dynamic cosmic neural field without a manual token gate', () => {
+  assert.equal(DASHBOARD_HTML.includes('id="neuralFieldCanvas"'), true);
+  assert.equal(DASHBOARD_HTML.includes('Carte d’intérêt · champ neuronal cosmique'), true);
   assert.equal(DASHBOARD_HTML.includes('AURA_CLOUD_TOKEN'), false);
   assert.equal(DASHBOARD_HTML.includes('id="authBtn"'), false);
   assert.equal(DASHBOARD_HTML.includes('id="authDrawer"'), false);
@@ -54,18 +56,20 @@ test('desktop dashboard keeps the reference composition', () => {
 });
 
 
-test('living AURA map includes animated visual layers', () => {
+test('living AURA field is Canvas-rendered with cosmic and neural layers', () => {
   for (const token of [
-    'id="nebulaFx"',
-    'id="particleFx"',
-    'class="aurora-vignette"',
-    'id="energyPulses"',
-    'initLivingAuraScene()',
+    'id="neuralFieldCanvas"',
+    'id="neuralTooltip"',
+    'id="mapStats"',
     'requestAnimationFrame(frame)',
-    "pulse.setAttribute('class','energy-pulse')",
+    'drawBackground(t)',
+    'drawSynapses(t)',
+    'drawNeuron(node,t)',
+    'drawDendrites(node,p,t)',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
+  assert.equal(DASHBOARD_HTML.includes('id="attentionMap"'), false);
 });
 
 
@@ -79,15 +83,12 @@ test('dashboard speaks through the tokenless Mairaiy voice ticket bridge', () =>
 });
 
 
-test('living AURA visuals are driven by the organism state', () => {
+test('living AURA visuals remain connected to live organism and neural state', () => {
   for (const token of [
     'id="organismMood"',
     'id="organismDot"',
-    'scene.organism',
     'const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}',
-    'const tension=Number(o.tension||0)',
-    'const dream=Number(o.pression_de_reve||0)',
-    'const fatigue=Number(o.fatigue_cognitive||0)',
+    "window.AURANeuralField.render(data)",
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
@@ -100,9 +101,9 @@ test('dashboard direct mode clears obsolete browser token state', () => {
   assert.equal(DASHBOARD_HTML.includes('ensurePrivateSession'), false);
 });
 
-test('dashboard live metrics survive optional mobile visual failures', () => {
-  assert.equal(DASHBOARD_HTML.includes("if(!nctx||!pctx)"), true);
+test('dashboard live metrics survive optional neural visual failures', () => {
   assert.equal(DASHBOARD_HTML.includes("refresh();try{initLivingAuraScene();}catch(error)"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("if(window.AURANeuralField&&typeof window.AURANeuralField.render==='function')"), true);
   const metricsIndex = DASHBOARD_HTML.indexOf("metric('energy',soul.energy,boot.runtime_ready)");
   const organismIndex = DASHBOARD_HTML.indexOf("const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}");
   assert.ok(metricsIndex >= 0);
@@ -172,10 +173,11 @@ test('long Mairaiy responses play every generated segment in sequence', () => {
   assert.equal(DASHBOARD_SCRIPT.includes("splitBrowserSpeech(text,220)"), true);
 });
 
-test('living visualization uses calmer motion and a 30fps stability cap', () => {
-  assert.equal(DASHBOARD_SCRIPT.includes("mobile?44:108"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("t-scene.lastFrame<30"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Math.sin(t*.00042+phase)*1.6"), true);
+test('cosmic neural renderer uses bounded motion and reduced-motion support', () => {
+  assert.match(NEURAL_FIELD_SCRIPT, /prefers-reduced-motion/);
+  assert.match(NEURAL_FIELD_SCRIPT, /stepNeuralField\(state\.field\)/);
+  assert.match(NEURAL_FIELD_SCRIPT, /settleNeuralField\(state\.field/);
+  assert.match(NEURAL_FIELD_SCRIPT, /Math\.min\(window\.devicePixelRatio\|\|1,1\.7\)/);
 });
 
 
@@ -216,4 +218,16 @@ test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
+});
+
+
+test('cosmic neural renderer is independently parseable browser JavaScript', () => {
+  assert.ok(NEURAL_FIELD_SCRIPT.length > 3000);
+  assert.doesNotThrow(() => new Function(NEURAL_FIELD_SCRIPT));
+  assert.equal(DASHBOARD_HTML.includes(NEURAL_FIELD_SCRIPT), true);
+});
+
+test('cosmic neural field avoids permanent text clutter', () => {
+  assert.match(NEURAL_FIELD_SCRIPT, /const show=node\.dominant\|\|state\.hovered===node\.id/);
+  assert.match(DASHBOARD_HTML, /Survol : activité du neurone/);
 });
