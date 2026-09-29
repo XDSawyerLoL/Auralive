@@ -806,23 +806,64 @@ app.get('/api/kernel/public/work', async (request) => {
 
 app.get('/api/kernel/public/attention', async () => {
   if (!bootstrap.runtimeReady) {
-    return { updated_at: '', dominant: '', secondary: '', focus_statement: '', nodes: [] };
+    return {
+      version: '',
+      updated_at: '',
+      dominant: '',
+      secondary: '',
+      focus_statement: '',
+      nodes: [],
+      links: [],
+      stats: { nodes: 0, synapses: 0, clusters: 0, active: 0 },
+    };
   }
+
+  // This endpoint intentionally exposes only bounded, read-only topology.
+  // It contains no secrets, prompts, private memory bodies or write authority.
+  // The public dashboard needs these structural fields to render the real
+  // cognitive graph instead of degrading into disconnected decorative dots.
   const map = await kernel.attentionMap();
+  const safeNodes = Array.isArray(map.nodes) ? map.nodes.map((node) => ({
+    id: String(node.id || '').slice(0, 80),
+    label: String(node.label || '').slice(0, 120),
+    cluster: String(node.cluster || 'fabric').slice(0, 40),
+    role: String(node.role || 'capability').slice(0, 40),
+    score: Math.max(0, Math.min(1, Number(node.score || 0))),
+    activity: Math.max(0, Math.min(1, Number(node.activity || 0))),
+    centrality: Math.max(0, Math.min(1, Number(node.centrality || 0))),
+    pulse: Math.max(0, Math.min(1, Number(node.pulse || 0))),
+    status: String(node.status || 'active').slice(0, 40),
+    trend: String(node.trend || 'stable').slice(0, 24),
+    delta: Number(node.delta || 0),
+    dominant: Boolean(node.dominant),
+    secondary: Boolean(node.secondary),
+  })) : [];
+  const safeIds = new Set(safeNodes.map((node) => node.id));
+  const safeLinks = Array.isArray(map.links) ? map.links
+    .filter((edge) => safeIds.has(String(edge.source || '')) && safeIds.has(String(edge.target || '')))
+    .slice(0, 160)
+    .map((edge) => ({
+      source: String(edge.source || '').slice(0, 80),
+      target: String(edge.target || '').slice(0, 80),
+      weight: Math.max(0, Math.min(1, Number(edge.weight || 0))),
+      activity: Math.max(0, Math.min(1, Number(edge.activity || 0))),
+      kind: String(edge.kind || 'functional').slice(0, 40),
+    })) : [];
+
   return {
+    version: String(map.version || '').slice(0, 80),
     updated_at: map.updated_at || '',
     dominant: String(map.dominant || ''),
     secondary: String(map.secondary || ''),
     focus_statement: String(map.focus_statement || '').slice(0, 500),
-    nodes: Array.isArray(map.nodes) ? map.nodes.map((node) => ({
-      id: String(node.id || '').slice(0, 80),
-      label: String(node.label || '').slice(0, 120),
-      subtitle: String(node.subtitle || '').slice(0, 160),
-      score: Number(node.score || 0),
-      trend: String(node.trend || 'stable').slice(0, 24),
-      delta: Number(node.delta || 0),
-      dominant: Boolean(node.dominant),
-    })) : [],
+    nodes: safeNodes,
+    links: safeLinks,
+    stats: {
+      nodes: safeNodes.length,
+      synapses: safeLinks.length,
+      clusters: new Set(safeNodes.map((node) => node.cluster)).size,
+      active: safeNodes.filter((node) => node.activity >= 0.48).length,
+    },
   };
 });
 
