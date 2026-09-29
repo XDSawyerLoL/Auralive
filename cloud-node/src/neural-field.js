@@ -365,7 +365,7 @@ export function buildNeuralFieldModel(input = {}) {
   }
 
   return {
-    version: 'aura-cosmic-neural-v3.1',
+    version: 'aura-cosmic-neural-v3.2',
     dominant: ranked[0]?.id || '',
     secondary: ranked[1]?.id || '',
     nodes,
