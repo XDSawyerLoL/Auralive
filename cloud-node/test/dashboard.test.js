@@ -4,14 +4,14 @@ import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 import { NEURAL_FIELD_SCRIPT } from '../src/neural-field-renderer.js';
 
-test('AURA V4 exposes a focused primary workspace and secondary detail surfaces', () => {
+test('AURA V5 exposes a cinematic primary workspace and secondary detail surfaces', () => {
   for (const label of [
     'Interface de conscience opérationnelle',
     'Dialogue',
     'Carte d’intérêt · champ neuronal cosmique',
     'Pensée dominante',
     'Travail en cours',
-    'État cognitif',
+    'État émotionnel & cognitif',
     'Intentions actives',
     'Centre de commande',
     'Mémoire et leçons',
@@ -227,14 +227,17 @@ test('cosmic neural renderer is independently parseable browser JavaScript', () 
   assert.equal(DASHBOARD_HTML.includes(NEURAL_FIELD_SCRIPT), true);
 });
 
-test('cosmic neural field avoids permanent text clutter', () => {
-  assert.match(NEURAL_FIELD_SCRIPT, /const show=node\.dominant\|\|state\.hovered===node\.id/);
-  assert.match(DASHBOARD_HTML, /Survol : détail/);
+test('cosmic neural field uses a curated set of semantic labels instead of a text wall', () => {
+  assert.match(NEURAL_FIELD_SCRIPT, /visibleLabels\.includes\(node\.id\)/);
+  assert.match(NEURAL_FIELD_SCRIPT, /slice\(0,8\)/);
+  assert.match(DASHBOARD_HTML, /Auréole/);
 });
 
 
-test('UX V4 keeps the main surface intentionally sparse', () => {
-  assert.equal((DASHBOARD_HTML.match(/class="overview-card/g)||[]).length, 4);
+test('UX V5 removes the KPI strip and gives the neural field the dominant surface', () => {
+  assert.equal((DASHBOARD_HTML.match(/class="overview-card/g)||[]).length, 0);
+  assert.match(DASHBOARD_HTML, /grid-template-columns:minmax\(260px,.72fr\) minmax\(720px,2.30fr\) minmax\(290px,.82fr\)/);
+  assert.match(DASHBOARD_HTML, /État émotionnel & cognitif/);
   assert.match(DASHBOARD_HTML, /data-detail="intentions"/);
   assert.match(DASHBOARD_HTML, /data-detail="memory"/);
   assert.match(DASHBOARD_HTML, /data-detail="explore"/);
@@ -244,12 +247,23 @@ test('UX V4 keeps the main surface intentionally sparse', () => {
   assert.match(DASHBOARD_SCRIPT, /function setDetailView\(/);
 });
 
-test('UX V4 renders condensed cognitive state instead of extra primary panels', () => {
-  for (const id of ['cognitiveStability','cognitiveFocus','cognitiveReactivity','dominantMoodTag','dominantIntentTag']) {
+test('UX V5 renders live cognitive metrics inside the right cockpit panel', () => {
+  for (const id of ['cogEnergyBar','cogCuriosityBar','cogContinuityBar','emotionMood','emotionReason','dominantMoodTag','dominantIntentTag']) {
     assert.equal(DASHBOARD_HTML.includes('id="'+id+'"'), true, id);
   }
+  assert.match(DASHBOARD_SCRIPT, /cogEnergyBar/);
+  assert.match(DASHBOARD_SCRIPT, /cogCuriosityBar/);
+  assert.match(DASHBOARD_SCRIPT, /cogContinuityBar/);
   assert.match(DASHBOARD_SCRIPT, /thoughtRaw\.length>230/);
-  assert.match(DASHBOARD_SCRIPT, /cognitiveStability/);
-  assert.match(DASHBOARD_SCRIPT, /cognitiveFocus/);
-  assert.match(DASHBOARD_SCRIPT, /cognitiveReactivity/);
+});
+
+test('UX V5 neural field includes cinematic hub and galaxy primitives', () => {
+  for (const token of [
+    'drawAuraCosmicArms(t)',
+    'visibleLabels',
+    'ctx.ellipse(p.x,p.y',
+    'globalCompositeOperation=\'lighter\'',
+  ]) {
+    assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
+  }
 });
