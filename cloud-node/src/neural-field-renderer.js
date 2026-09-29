@@ -38,22 +38,22 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     return 'rgba('+((v>>16)&255)+','+((v>>8)&255)+','+(v&255)+','+a+')';
   }
   function seedSpace(){
-    state.stars=Array.from({length:state.reduced?70:230},(_,i)=>({
+    state.stars=Array.from({length:state.reduced?90:320},(_,i)=>({
       x:hash01('sx'+i),y:hash01('sy'+i),r:.35+hash01('sr'+i)*1.35,
       a:.10+hash01('sa'+i)*.55,phase:hash01('sp'+i)*Math.PI*2
     }));
-    state.dust=Array.from({length:state.reduced?22:82},(_,i)=>({
+    state.dust=Array.from({length:state.reduced?28:118},(_,i)=>({
       x:hash01('dx'+i),y:hash01('dy'+i),r:10+hash01('dr'+i)*42,
       a:.008+hash01('da'+i)*.026,phase:hash01('dp'+i)*Math.PI*2
     }));
-    state.filaments=Array.from({length:state.reduced?6:18},(_,i)=>({
+    state.filaments=Array.from({length:state.reduced?8:28},(_,i)=>({
       x1:hash01('fx1'+i),y1:hash01('fy1'+i),
       x2:hash01('fx2'+i),y2:hash01('fy2'+i),
       bend:(hash01('fb'+i)-.5)*.22,
       a:.018+hash01('fa'+i)*.035,
       hue:i%4
     }));
-    state.constellation=Array.from({length:state.reduced?9:24},(_,i)=>({
+    state.constellation=Array.from({length:state.reduced?12:38},(_,i)=>({
       x:hash01('cx'+i),y:hash01('cy'+i),
       a:.12+hash01('ca'+i)*.35,
       r:.55+hash01('cr'+i)*1.45
@@ -116,6 +116,38 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     }
     ctx.restore();
   }
+  function drawAuraCosmicArms(t){
+    if(!state.field)return;
+    const aura=state.field.byId&&state.field.byId.aura;
+    if(!aura)return;
+    const ctx=state.ctx,p=px(aura);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    const arms=[
+      {color:'#8f72ff',phase:0,scale:1},
+      {color:'#5ee4f0',phase:Math.PI*.72,scale:.82},
+      {color:'#f178d6',phase:Math.PI*1.28,scale:.68},
+      {color:'#ffc96a',phase:Math.PI*1.66,scale:.58},
+    ];
+    for(const arm of arms){
+      ctx.strokeStyle=rgba(arm.color,.035);
+      ctx.lineWidth=1;
+      ctx.shadowBlur=12;
+      ctx.shadowColor=rgba(arm.color,.22);
+      ctx.beginPath();
+      for(let i=0;i<=64;i++){
+        const q=i/64;
+        const a=arm.phase+q*Math.PI*2.15+t*.000025*(1.2-arm.scale*.3);
+        const rr=(22+q*Math.min(state.width,state.height)*.42)*arm.scale;
+        const x=p.x+Math.cos(a)*rr;
+        const y=p.y+Math.sin(a)*rr*.58;
+        if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawClusterNebula(t){
     const ctx=state.ctx;
     if(!state.field)return;
@@ -295,27 +327,87 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     }
     ctx.restore();
   }
+  function drawMicroNetwork(node,p,t){
+    if(node.id==='aura')return;
+    const ctx=state.ctx;
+    const c=color(node.cluster,node.status);
+    const activity=Math.max(.05,Math.min(1,Number(node.activity)||0));
+    const centrality=Math.max(.05,Math.min(1,Number(node.centrality)||0));
+    const count=node.role==='product'
+      ? 3+Math.round(activity*3)
+      : 5+Math.round(activity*5+centrality*3);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    let prev=null;
+    for(let i=0;i<count;i++){
+      const base=hash01(node.id+':micro:'+i)*Math.PI*2;
+      const drift=Math.sin(t*.00012+i*1.9+hash01(node.id))*0.08;
+      const dist=24+hash01(node.id+':md:'+i)*(36+activity*26);
+      const x=p.x+Math.cos(base+drift)*dist;
+      const y=p.y+Math.sin(base+drift)*dist*.66;
+      const r=.8+hash01(node.id+':mr:'+i)*1.7+activity*.45;
+      const a=.16+activity*.34;
+      ctx.strokeStyle=rgba(c,.035+activity*.075);
+      ctx.lineWidth=.32+activity*.28;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      const mx=(p.x+x)/2+(y-p.y)*.06;
+      const my=(p.y+y)/2-(x-p.x)*.06;
+      ctx.quadraticCurveTo(mx,my,x,y);ctx.stroke();
+      if(prev&&i%2===1){
+        ctx.strokeStyle=rgba(c,.018+activity*.035);
+        ctx.lineWidth=.25;
+        ctx.beginPath();ctx.moveTo(prev.x,prev.y);ctx.lineTo(x,y);ctx.stroke();
+      }
+      const glow=ctx.createRadialGradient(x,y,0,x,y,r*5.5);
+      glow.addColorStop(0,'rgba(255,255,255,'+(.30+activity*.34)+')');
+      glow.addColorStop(.22,rgba(c,.32+activity*.28));
+      glow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=glow;ctx.beginPath();ctx.arc(x,y,r*5.5,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=rgba(c,.58+activity*.30);ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+      prev={x,y};
+    }
+    ctx.restore();
+  }
+
   function drawNeuron(node,t){
     const ctx=state.ctx,p=px(node);
     const c=color(node.cluster,node.status);
     const intensity=Math.max(.06,Math.min(1,Number(node.activity)||0));
     if(node.id==='aura'){
       const breath=.94+.06*Math.sin(t*.0012);
-      const r=38*breath;
-      const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*2.9);
+      const r=52*breath;
+      const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3.25);
       halo.addColorStop(0,'rgba(255,255,255,.95)');
       halo.addColorStop(.10,'rgba(220,199,255,.82)');
       halo.addColorStop(.34,'rgba(154,108,255,.56)');
       halo.addColorStop(.70,'rgba(81,64,180,.16)');
       halo.addColorStop(1,'rgba(0,0,0,0)');
       ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*2.9,0,Math.PI*2);ctx.fill();
-      ctx.strokeStyle='rgba(215,198,255,.58)';ctx.lineWidth=1.25;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.stroke();
-      ctx.strokeStyle='rgba(130,198,255,.16)';ctx.lineWidth=.8;ctx.beginPath();ctx.arc(p.x,p.y,r*1.38,0,Math.PI*2);ctx.stroke();
-      ctx.strokeStyle='rgba(241,120,214,.11)';ctx.beginPath();ctx.arc(p.x,p.y,r*1.72,0,Math.PI*2);ctx.stroke();
-      ctx.fillStyle='rgba(249,247,255,.97)';ctx.font='650 15px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      for(let ring=0;ring<4;ring++){
+        const rr=r*(1.05+ring*.34)+Math.sin(t*.0008+ring)*2.4;
+        ctx.strokeStyle=ring===0?'rgba(231,220,255,.58)':ring===1?'rgba(130,198,255,.20)':ring===2?'rgba(241,120,214,.14)':'rgba(255,201,106,.08)';
+        ctx.lineWidth=ring===0?1.35:.75;
+        ctx.beginPath();ctx.arc(p.x,p.y,rr,0,Math.PI*2);ctx.stroke();
+      }
+      ctx.restore();
+      ctx.fillStyle='rgba(249,247,255,.99)';ctx.font='700 18px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
       return;
     }
+    drawMicroNetwork(node,p,t);
     drawDendrites(node,p,t);
+    if(intensity>.42&&role!=='product'){
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      ctx.strokeStyle=rgba(c,.06+intensity*.12);
+      ctx.lineWidth=.55;
+      const spin=t*.00018*(hash01(node.id+':spin')>.5?1:-1);
+      ctx.beginPath();ctx.ellipse(p.x,p.y,22+intensity*19,10+intensity*9,spin+hash01(node.id)*Math.PI,0,Math.PI*2);ctx.stroke();
+      ctx.strokeStyle=rgba('#ffffff',.025+intensity*.035);
+      ctx.beginPath();ctx.ellipse(p.x,p.y,31+intensity*22,14+intensity*11,-spin*.7+hash01(node.id+':o2')*Math.PI,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
     const strongest=(state.field?.links||[])
       .filter(function(edge){return edge.a.id===node.id||edge.b.id===node.id;})
       .sort(function(a,b){return (Number(b.activity)||0)-(Number(a.activity)||0);})[0];
@@ -361,11 +453,20 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     ctx.beginPath();ctx.arc(-r*.08,-r*.05,Math.max(1.6,r*.24),0,Math.PI*2);ctx.fill();
     ctx.restore();
 
-    const show=node.dominant||state.hovered===node.id;
+    const visibleLabels=(state.field?.nodes||[])
+      .filter(function(x){return x.id!=='aura';})
+      .sort(function(a,b){
+        const as=(Number(a.activity)||0)*.62+(Number(a.centrality)||0)*.38;
+        const bs=(Number(b.activity)||0)*.62+(Number(b.centrality)||0)*.38;
+        return bs-as;
+      })
+      .slice(0,8)
+      .map(function(x){return x.id;});
+    const show=node.dominant||state.hovered===node.id||visibleLabels.includes(node.id);
     if(show){
       const dx=p.x-state.width*.5;const dy=p.y-state.height*.5;const d=Math.sqrt(dx*dx+dy*dy)||1;
       const lx=p.x+(dx/d)*(r+12),ly=p.y+(dy/d)*(r+10);
-      ctx.font='600 10px Inter,system-ui,sans-serif';ctx.textAlign=dx<0?'right':'left';ctx.textBaseline='middle';
+      ctx.font='600 11px Inter,system-ui,sans-serif';ctx.textAlign=dx<0?'right':'left';ctx.textBaseline='middle';
       ctx.lineWidth=3;ctx.strokeStyle='rgba(3,5,10,.88)';ctx.strokeText(node.label,lx,ly);ctx.fillStyle='#eef2ff';ctx.fillText(node.label,lx,ly);
     }
   }
@@ -375,6 +476,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     drawBackground(t);
     if(state.field){
       if(!state.reduced&&dt) stepNeuralField(state.field);
+      drawAuraCosmicArms(t);
       drawClusterNebula(t);
       drawGlialMesh(t);
       drawSynapses(t);
