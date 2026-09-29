@@ -20,9 +20,9 @@ export function initializeNeuralField(data, previous = null) {
     }
     const seed = neuralHash(source.id);
     const seedY = neuralHash(source.id + ':y');
-    let radius = 0.21 + seed * 0.12;
-    if (source.role === 'product') radius = 0.40 + seed * 0.055;
-    else if (source.role === 'fabric-capability') radius = 0.33 + seed * 0.045;
+    let radius = 0.17 + seed * 0.095;
+    if (source.role === 'product') radius = 0.34 + seed * 0.045;
+    else if (source.role === 'fabric-capability') radius = 0.275 + seed * 0.038;
     const angle = seed * Math.PI * 2 + index * 0.31;
     return {
       ...source,
@@ -95,10 +95,10 @@ export function stepNeuralField(field) {
     const dx = node.x - 0.5;
     const dy = node.y - 0.5;
     const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
-    let targetRadius = 0.24;
-    if (node.role === 'product') targetRadius = 0.43;
-    else if (node.role === 'fabric-capability') targetRadius = 0.34;
-    else if (node.cluster === 'infrastructure') targetRadius = 0.31;
+    let targetRadius = 0.19;
+    if (node.role === 'product') targetRadius = 0.35;
+    else if (node.role === 'fabric-capability') targetRadius = 0.285;
+    else if (node.cluster === 'infrastructure') targetRadius = 0.255;
     const radial = (targetRadius - d) * 0.0019;
     node.vx += (dx / d) * -radial;
     node.vy += (dy / d) * -radial * 0.78;
