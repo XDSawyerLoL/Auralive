@@ -169,7 +169,7 @@ function renderIntentions(rows){
 function renderWork(rows){
   if(!rows || !rows.length){$('workList').innerHTML='<div class="empty">Aucun travail déclaré.</div>';return;}
   $('workMeta').textContent=rows.length+' actifs';
-  $('workList').innerHTML=rows.slice(0,5).map(function(r){
+  $('workList').innerHTML=rows.slice(0,3).map(function(r){
     const p=pct(r.priority);
     return '<div class="work-row"><div class="work-top"><div class="work-title">'+escapeHtml(r.title)+'</div><span class="badge">'+escapeHtml(r.kind)+'</span></div><div class="progress"><span style="width:'+p+'%"></span></div></div>';
   }).join('');
@@ -331,7 +331,13 @@ async function refresh(){
     $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
     $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
-    $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    const thoughtRaw=String(soul.dominant_thought||'Aucune pensée dominante.').replace(/\s+/g,' ').trim();
+    $('dominantThought').textContent=thoughtRaw.length>230?thoughtRaw.slice(0,227)+'…':thoughtRaw;
+    $('dominantMoodTag').textContent='État · '+String(organism.mood||'calme');
+    $('dominantIntentTag').textContent='Intention · '+String(organism.active_intention||'observer').replace(/^repondre_/,'').replace(/_/g,' ');
+    $('cognitiveStability').textContent=pct(organism.stabilite)+'%';
+    $('cognitiveFocus').textContent=pct(soul.introspection)+'%';
+    $('cognitiveReactivity').textContent=pct(soul.reactivity)+'%';
     lastSoul=Object.assign({},soul);
     if(boot.runtime_ready){
       const results=await Promise.all([
@@ -426,6 +432,62 @@ async function sendMessage(text){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
   }
 }
+function setDetailView(name){
+  const drawer=$('detailDrawer');
+  const title=$('detailTitle');
+  const labels={intentions:'Intentions actives',memory:'Mémoire et leçons',explore:'Explorer AURA',system:'Système et capacités'};
+  document.querySelectorAll('[data-detail-pane]').forEach(function(pane){
+    pane.classList.toggle('active',pane.getAttribute('data-detail-pane')===name);
+  });
+  document.querySelectorAll('.dock-btn').forEach(function(btn){
+    btn.classList.toggle('active',btn.getAttribute('data-detail')===name);
+  });
+  if(name==='map'){
+    drawer.classList.remove('open');
+    document.querySelectorAll('.dock-btn').forEach(function(btn){
+      btn.classList.toggle('active',btn.getAttribute('data-detail')==='map');
+    });
+    return;
+  }
+  title.textContent=labels[name]||'Détails AURA';
+  drawer.classList.add('open');
+}
+function closeDetail(){
+  $('detailDrawer').classList.remove('open');
+  document.querySelectorAll('.dock-btn').forEach(function(btn){
+    btn.classList.toggle('active',btn.getAttribute('data-detail')==='map');
+  });
+  $('conversationTab').classList.add('active');
+  $('memoryTab').classList.remove('active');
+}
+function toggleMapFocus(){
+  const active=document.body.classList.toggle('map-focus');
+  $('mapFocusBtn').textContent=active?'↙':'↗';
+  $('mapFocusBtn').title=active?'Réduire la carte':'Agrandir la carte';
+  setTimeout(function(){
+    try{window.dispatchEvent(new Event('resize'));}catch(_){}
+    if(lastAttention&&window.AURANeuralField&&typeof window.AURANeuralField.render==='function'){
+      window.AURANeuralField.render(lastAttention);
+    }
+  },80);
+}
+document.querySelectorAll('.dock-btn').forEach(function(btn){
+  btn.addEventListener('click',function(){setDetailView(btn.getAttribute('data-detail'));});
+});
+$('detailClose').onclick=closeDetail;
+$('conversationTab').onclick=function(){closeDetail();};
+$('memoryTab').onclick=function(){
+  $('conversationTab').classList.remove('active');
+  $('memoryTab').classList.add('active');
+  setDetailView('memory');
+};
+$('mapFocusBtn').onclick=toggleMapFocus;
+document.addEventListener('keydown',function(event){
+  if(event.key!=='Escape')return;
+  if(document.body.classList.contains('map-focus')){toggleMapFocus();return;}
+  closeDetail();
+});
+
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
 document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
