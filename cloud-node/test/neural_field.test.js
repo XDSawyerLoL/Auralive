@@ -73,7 +73,7 @@ function sampleModel() {
 
 test('neural field model exposes a bounded functional graph', () => {
   const model = sampleModel();
-  assert.equal(model.version, 'aura-cosmic-neural-v3.2');
+  assert.equal(model.version, 'aura-cosmic-neural-v3.3');
   assert.ok(model.nodes.length >= 15);
   assert.ok(model.links.length >= 20);
   assert.ok(model.stats.clusters >= 6);
@@ -158,6 +158,21 @@ test('V3.2 renderer keeps neuron-galaxy visual primitives', async () => {
     'quadraticCurveTo',
     'globalCompositeOperation=\'lighter\'',
     'strongest=(state.field?.links||[])',
+  ]) {
+    assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
+  }
+});
+
+
+test('V3.3 renderer exposes dense living-network primitives', async () => {
+  const { NEURAL_FIELD_SCRIPT } = await import('../src/neural-field-renderer.js');
+  for (const token of [
+    'drawGlialMesh(t)',
+    'state.filaments',
+    'state.constellation',
+    'centralBoost',
+    'drawSynapses(t)',
+    "globalCompositeOperation='lighter'",
   ]) {
     assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
   }
