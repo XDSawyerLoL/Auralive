@@ -327,6 +327,48 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     }
     ctx.restore();
   }
+  function drawMicroNetwork(node,p,t){
+    if(node.id==='aura')return;
+    const ctx=state.ctx;
+    const c=color(node.cluster,node.status);
+    const activity=Math.max(.05,Math.min(1,Number(node.activity)||0));
+    const centrality=Math.max(.05,Math.min(1,Number(node.centrality)||0));
+    const count=node.role==='product'
+      ? 3+Math.round(activity*3)
+      : 5+Math.round(activity*5+centrality*3);
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    let prev=null;
+    for(let i=0;i<count;i++){
+      const base=hash01(node.id+':micro:'+i)*Math.PI*2;
+      const drift=Math.sin(t*.00012+i*1.9+hash01(node.id))*0.08;
+      const dist=24+hash01(node.id+':md:'+i)*(36+activity*26);
+      const x=p.x+Math.cos(base+drift)*dist;
+      const y=p.y+Math.sin(base+drift)*dist*.66;
+      const r=.8+hash01(node.id+':mr:'+i)*1.7+activity*.45;
+      const a=.16+activity*.34;
+      ctx.strokeStyle=rgba(c,.035+activity*.075);
+      ctx.lineWidth=.32+activity*.28;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      const mx=(p.x+x)/2+(y-p.y)*.06;
+      const my=(p.y+y)/2-(x-p.x)*.06;
+      ctx.quadraticCurveTo(mx,my,x,y);ctx.stroke();
+      if(prev&&i%2===1){
+        ctx.strokeStyle=rgba(c,.018+activity*.035);
+        ctx.lineWidth=.25;
+        ctx.beginPath();ctx.moveTo(prev.x,prev.y);ctx.lineTo(x,y);ctx.stroke();
+      }
+      const glow=ctx.createRadialGradient(x,y,0,x,y,r*5.5);
+      glow.addColorStop(0,'rgba(255,255,255,'+(.30+activity*.34)+')');
+      glow.addColorStop(.22,rgba(c,.32+activity*.28));
+      glow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=glow;ctx.beginPath();ctx.arc(x,y,r*5.5,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=rgba(c,.58+activity*.30);ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+      prev={x,y};
+    }
+    ctx.restore();
+  }
+
   function drawNeuron(node,t){
     const ctx=state.ctx,p=px(node);
     const c=color(node.cluster,node.status);
@@ -353,6 +395,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       ctx.fillStyle='rgba(249,247,255,.99)';ctx.font='700 18px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
       return;
     }
+    drawMicroNetwork(node,p,t);
     drawDendrites(node,p,t);
     if(intensity>.42&&role!=='product'){
       ctx.save();
