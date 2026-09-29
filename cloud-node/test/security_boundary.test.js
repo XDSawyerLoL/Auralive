@@ -48,3 +48,24 @@ test('client IP rate limits trust only a bounded reverse-proxy chain', () => {
   assert.match(serverSource, /trustProxy: config\.trustProxyHops > 0 \? config\.trustProxyHops : false/);
   assert.doesNotMatch(serverSource, /trustProxy:\s*true/);
 });
+
+
+test('public neural topology exposes bounded structural fields required by the map', () => {
+  const index = serverSource.indexOf("app.get('/api/kernel/public/attention'");
+  assert.notEqual(index, -1);
+  const excerpt = serverSource.slice(index, index + 5000);
+  for (const token of [
+    'cluster:',
+    'role:',
+    'activity:',
+    'centrality:',
+    'pulse:',
+    'status:',
+    'links: safeLinks',
+    'synapses: safeLinks.length',
+    'active: safeNodes.filter',
+  ]) {
+    assert.equal(excerpt.includes(token), true, token);
+  }
+  assert.equal(excerpt.includes('metadata:'), false);
+});
