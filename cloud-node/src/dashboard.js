@@ -191,6 +191,92 @@ button:disabled{opacity:.5;cursor:not-allowed}
   .metrics{grid-template-columns:1fr}.metric{min-height:74px}
   .emotion-grid{grid-template-columns:1fr}.emotion-cell{padding:2px 0}
 }
+
+/* AURA UX V4 — primary workspace first, detail on demand */
+.shell{max-width:1680px;padding:16px 22px 88px}
+.topbar{margin-bottom:16px;min-height:54px}
+.logo{font-size:34px;letter-spacing:.30em}
+.title{font-size:20px}.subtitle{font-size:11px}
+.top-actions{gap:8px}.pill{padding:8px 11px;font-size:10px;background:rgba(10,15,28,.64)}
+.mode-btn{display:none}
+.overview{display:grid;grid-template-columns:1.18fr repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.overview-card{position:relative;min-height:92px;border:1px solid rgba(151,174,244,.14);border-radius:18px;background:linear-gradient(145deg,rgba(18,25,43,.90),rgba(8,13,24,.92));overflow:hidden;padding:14px 16px;display:flex;align-items:center;gap:13px;box-shadow:inset 0 1px rgba(255,255,255,.035)}
+.overview-card::after{content:"";position:absolute;inset:auto -15% -55% 34%;height:100px;background:radial-gradient(circle,var(--card-glow,rgba(154,108,255,.15)),transparent 72%);pointer-events:none}
+.overview-card.emotion{background:linear-gradient(135deg,rgba(67,45,120,.22),rgba(13,19,34,.94) 54%,rgba(8,13,24,.94))}
+.overview-orb{width:56px;height:56px;border-radius:50%;flex:0 0 auto;background:radial-gradient(circle at 38% 32%,#fff 0 6%,#bca8ff 17%,#744ee6 46%,#151125 72%);box-shadow:0 0 34px rgba(154,108,255,.30)}
+.overview-kicker{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:#9ea9c0}
+.overview-value{font-size:25px;line-height:1.05;font-weight:720;margin-top:4px}
+.overview-sub{font-size:10px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.overview-metric .ring{width:50px;height:50px}
+.overview-metric .metric-value{font-size:23px}.overview-metric .metric-label{font-size:10px}
+.overview-wave{position:absolute;right:8px;bottom:8px;width:44%;height:34px;opacity:.42;pointer-events:none}
+.overview-wave path{fill:none;stroke:var(--metric-color,var(--violet));stroke-width:1.5;stroke-linecap:round;stroke-dasharray:2 2;animation:waveShift 9s linear infinite}
+@keyframes waveShift{to{stroke-dashoffset:-36}}
+.workspace{display:grid;grid-template-columns:minmax(250px,.72fr) minmax(620px,2.2fr) minmax(280px,.84fr);grid-template-areas:"chat map side";grid-template-rows:minmax(640px,calc(100vh - 250px));gap:13px;align-items:stretch}
+.chat-panel{grid-area:chat;min-height:640px}
+.map-panel{grid-area:map;min-height:640px}
+.map-wrap{min-height:580px}
+.right-stack{grid-area:side;display:flex;flex-direction:column;gap:12px;min-height:0}
+.right-stack .panel{flex:0 0 auto}
+.right-stack .work-panel{flex:1 1 auto;min-height:230px}
+.panel{border-radius:18px;background:linear-gradient(180deg,rgba(12,18,31,.93),rgba(7,11,20,.94));box-shadow:inset 0 1px rgba(255,255,255,.03),0 14px 36px rgba(0,0,0,.18)}
+.panel-head{min-height:47px;padding:13px 14px}
+.chat-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:0 6px 12px;padding:4px;border:1px solid rgba(255,255,255,.05);border-radius:999px;background:rgba(2,5,11,.34)}
+.chat-tab{border:0;border-radius:999px;background:transparent;color:#7f8ca5;padding:8px 10px;font-size:10px}
+.chat-tab.active{color:#f5f1ff;background:linear-gradient(180deg,rgba(112,74,220,.33),rgba(57,47,115,.28));box-shadow:inset 0 0 0 1px rgba(154,108,255,.26)}
+.messages{min-height:300px;max-height:440px;padding-top:2px}
+.msg{font-size:11px;max-width:92%}
+.quick{display:grid;gap:7px;margin:12px 2px}
+.quick button{width:100%;text-align:left;border-radius:12px;padding:10px 11px;font-size:9px;background:linear-gradient(90deg,rgba(154,108,255,.07),rgba(255,255,255,.018));position:relative}
+.quick button::after{content:"›";position:absolute;right:11px;color:#8e9bb3}
+.composer{padding-top:4px}
+.map-toolbar .focus-map-btn{border-color:rgba(154,108,255,.20);font-size:11px;min-width:30px}
+.map-wrap::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(180deg,rgba(0,0,0,0) 74%,rgba(3,5,11,.20))}
+.map-foot{max-width:64%;font-size:8px}
+.legend{grid-auto-flow:column;grid-template-columns:auto auto auto;gap:10px;padding:8px 10px}
+.thought-card{font-size:11px;line-height:1.48;min-height:0;padding:14px}
+.thought-title{font-size:12px;font-weight:720;color:#ffd68a;margin-bottom:8px}
+.thought-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
+.context-tag{font-size:8px;padding:4px 7px;border-radius:999px;border:1px solid rgba(255,201,106,.18);color:#d7c69f;background:rgba(255,201,106,.05)}
+.work-list{gap:7px}.work-row{padding:9px 10px}.work-title{font-size:9px}.work-row:nth-child(n+4){display:none}
+.cognitive-list{display:grid;gap:2px}
+.cognitive-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:9px 2px;border-bottom:1px solid rgba(255,255,255,.045)}
+.cognitive-row:last-child{border-bottom:0}
+.cognitive-name{font-size:9px;color:#dce4f5}.cognitive-sub{font-size:8px;color:var(--muted);margin-top:2px}
+.cognitive-value{font-size:10px;font-weight:700;color:#eaf0ff}
+.detail-drawer{position:fixed;z-index:40;left:50%;bottom:76px;transform:translate(-50%,18px);width:min(980px,calc(100% - 34px));max-height:min(62vh,660px);opacity:0;pointer-events:none;transition:opacity .2s ease,transform .25s cubic-bezier(.2,.7,.2,1);border:1px solid rgba(160,181,245,.17);border-radius:20px;background:rgba(8,13,23,.96);backdrop-filter:blur(28px);box-shadow:0 28px 80px rgba(0,0,0,.46);overflow:hidden}
+.detail-drawer.open{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.detail-head{display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.detail-title{font-size:12px;font-weight:700}.detail-close{margin-left:auto;width:32px;height:32px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:#cbd4e7}
+.detail-body{padding:14px;max-height:calc(min(62vh,660px) - 58px);overflow:auto}
+.detail-pane{display:none}.detail-pane.active{display:block}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.detail-section{border:1px solid rgba(255,255,255,.055);border-radius:14px;padding:12px;background:rgba(255,255,255,.018)}
+.detail-section h3{font-size:10px;margin:0 0 10px;color:#e9eefb}
+.bottom-dock{position:fixed;z-index:35;left:50%;bottom:14px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px;border:1px solid rgba(159,180,242,.16);border-radius:18px;background:rgba(7,11,20,.86);backdrop-filter:blur(22px);box-shadow:0 16px 46px rgba(0,0,0,.34)}
+.dock-btn{min-width:94px;border:0;border-radius:12px;background:transparent;color:#8190aa;padding:10px 12px;font-size:9px;display:flex;align-items:center;justify-content:center;gap:7px}
+.dock-btn:hover,.dock-btn.active{color:#f1ecff;background:rgba(114,79,220,.17)}
+.dock-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+.data-sinks{display:none!important}
+body.map-focus .chat-panel,body.map-focus .right-stack,body.map-focus .overview{display:none}
+body.map-focus .workspace{grid-template-columns:1fr;grid-template-areas:"map";grid-template-rows:calc(100vh - 105px)}
+body.map-focus .map-panel{min-height:calc(100vh - 105px)}
+body.map-focus .map-wrap{min-height:calc(100vh - 155px)}
+body.map-focus .shell{max-width:none;padding-bottom:16px}
+@media(max-width:1260px){
+  .overview{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .workspace{grid-template-columns:minmax(240px,.72fr) minmax(520px,1.7fr);grid-template-areas:"chat map" "side side";grid-template-rows:minmax(560px,1fr) auto}
+  .right-stack{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-area:side}
+}
+@media(max-width:880px){
+  .shell{padding:12px 12px 82px}
+  .overview{grid-template-columns:1fr 1fr}.overview-card{min-height:86px;padding:12px}
+  .workspace{display:flex;flex-direction:column}.map-panel{order:1;min-height:520px}.chat-panel{order:2;min-height:520px}.right-stack{order:3;display:grid;grid-template-columns:1fr}
+  .map-wrap{min-height:470px}.legend{display:none}.map-foot{max-width:78%}
+  .bottom-dock{width:calc(100% - 20px);justify-content:space-between}.dock-btn{min-width:0;flex:1;padding:10px 5px;font-size:8px}
+  .detail-grid{grid-template-columns:1fr}.detail-drawer{bottom:72px}
+  body.map-focus .map-panel{min-height:620px} body.map-focus .map-wrap{min-height:570px}
+}
 </style>
 </head>
 <body>
@@ -214,45 +300,47 @@ button:disabled{opacity:.5;cursor:not-allowed}
 
   <section class="setup-banner" id="setupBanner"><div class="setup-title">Configuration AURA requise</div><div id="setupSummary">Le serveur web fonctionne, mais le noyau persistant n’est pas encore actif.</div><ul class="setup-list" id="setupIssues"></ul></section>
 
-  <section class="emotion-strip" aria-label="État émotionnel AURA">
-    <div class="emotion-main">
-      <div class="emotion-orb" id="emotionOrb" aria-hidden="true"></div>
-      <div>
-        <div class="emotion-kicker">État émotionnel</div>
-        <div class="emotion-mood" id="emotionMood">En réveil</div>
-        <div class="emotion-reason" id="emotionReason">Lecture de l’état interne…</div>
+  <section class="overview" aria-label="Résumé AURA">
+    <article class="overview-card emotion">
+      <div class="overview-orb" id="emotionOrb" aria-hidden="true"></div>
+      <div style="min-width:0">
+        <div class="overview-kicker">État émotionnel</div>
+        <div class="overview-value" id="emotionMood">En réveil</div>
+        <div class="overview-sub" id="emotionReason">Lecture de l’état interne…</div>
       </div>
-    </div>
-    <div class="emotion-grid">
-      <div class="emotion-cell"><div class="emotion-label"><span>Stabilité</span><strong id="emotion-stability-value">—</strong></div><div class="emotion-bar"><span id="emotion-stability"></span></div></div>
-      <div class="emotion-cell"><div class="emotion-label"><span>Clarté</span><strong id="emotion-clarity-value">—</strong></div><div class="emotion-bar"><span id="emotion-clarity"></span></div></div>
-      <div class="emotion-cell"><div class="emotion-label"><span>Attachement</span><strong id="emotion-attachment-value">—</strong></div><div class="emotion-bar"><span id="emotion-attachment"></span></div></div>
-      <div class="emotion-cell"><div class="emotion-label"><span>Curiosité</span><strong id="emotion-curiosity-value">—</strong></div><div class="emotion-bar"><span id="emotion-curiosity"></span></div></div>
-      <div class="emotion-cell"><div class="emotion-label"><span>Rêve</span><strong id="emotion-dream-value">—</strong></div><div class="emotion-bar"><span id="emotion-dream"></span></div></div>
-      <div class="emotion-cell"><div class="emotion-label"><span>Silence</span><strong id="emotion-silence-value">—</strong></div><div class="emotion-bar"><span id="emotion-silence"></span></div></div>
-    </div>
+    </article>
+    <article class="overview-card overview-metric" style="--card-glow:rgba(96,230,173,.15);--metric-color:#60e6ad">
+      <div class="ring" id="ring-energy"><span>⚡</span></div>
+      <div class="metric-copy"><div class="metric-label">Énergie</div><div class="metric-value" id="metric-energy">—</div><div class="metric-trend" id="trend-energy">état interne</div></div>
+      <svg class="overview-wave" viewBox="0 0 120 34" aria-hidden="true"><path d="M1 24 C18 24 24 9 39 12 S58 28 72 18 S93 5 119 10"/></svg>
+    </article>
+    <article class="overview-card overview-metric" style="--card-glow:rgba(154,108,255,.16);--metric-color:#9a6cff">
+      <div class="ring" id="ring-curiosity"><span>∞</span></div>
+      <div class="metric-copy"><div class="metric-label">Curiosité</div><div class="metric-value" id="metric-curiosity">—</div><div class="metric-trend" id="trend-curiosity">état interne</div></div>
+      <svg class="overview-wave" viewBox="0 0 120 34" aria-hidden="true"><path d="M1 22 C12 5 29 7 39 19 S62 32 76 16 S99 5 119 17"/></svg>
+    </article>
+    <article class="overview-card overview-metric" style="--card-glow:rgba(109,167,255,.15);--metric-color:#6da7ff">
+      <div class="ring" id="ring-continuity"><span>◫</span></div>
+      <div class="metric-copy"><div class="metric-label">Continuité</div><div class="metric-value" id="metric-continuity">—</div><div class="metric-trend" id="trend-continuity">mémoire temporelle</div></div>
+      <svg class="overview-wave" viewBox="0 0 120 34" aria-hidden="true"><path d="M1 25 C15 20 22 12 34 13 S55 26 68 20 S89 9 119 9"/></svg>
+    </article>
   </section>
 
-  <section class="metrics">
-    <div class="metric" style="--metric-color:#60e6ad;--metric-glow:rgba(96,230,173,.16)"><div class="ring" id="ring-energy"><span>⚡</span></div><div class="metric-copy"><div class="metric-label">Énergie</div><div class="metric-value" id="metric-energy">—</div><div class="metric-trend" id="trend-energy">état interne</div></div></div>
-    <div class="metric" style="--metric-color:#9a6cff;--metric-glow:rgba(154,108,255,.18)"><div class="ring" id="ring-curiosity"><span>∞</span></div><div class="metric-copy"><div class="metric-label">Curiosité</div><div class="metric-value" id="metric-curiosity">—</div><div class="metric-trend" id="trend-curiosity">état interne</div></div></div>
-    <div class="metric" style="--metric-color:#ff758d;--metric-glow:rgba(255,117,141,.15)"><div class="ring" id="ring-pressure"><span>↗</span></div><div class="metric-copy"><div class="metric-label">Pression</div><div class="metric-value" id="metric-pressure">—</div><div class="metric-trend" id="trend-pressure">état interne</div></div></div>
-    <div class="metric" style="--metric-color:#6da7ff;--metric-glow:rgba(109,167,255,.16)"><div class="ring" id="ring-continuity"><span>◫</span></div><div class="metric-copy"><div class="metric-label">Continuité</div><div class="metric-value" id="metric-continuity">—</div><div class="metric-trend" id="trend-continuity">mémoire temporelle</div></div></div>
-    <div class="metric" style="--metric-color:#ffc96a;--metric-glow:rgba(255,201,106,.15)"><div class="ring" id="ring-introspection"><span>◉</span></div><div class="metric-copy"><div class="metric-label">Introspection</div><div class="metric-value" id="metric-introspection">—</div><div class="metric-trend" id="trend-introspection">réflexion</div></div></div>
-    <div class="metric" style="--metric-color:#59e0ef;--metric-glow:rgba(89,224,239,.15)"><div class="ring" id="ring-reactivity"><span>⌁</span></div><div class="metric-copy"><div class="metric-label">Réactivité</div><div class="metric-value" id="metric-reactivity">—</div><div class="metric-trend" id="trend-reactivity">réponse</div></div></div>
-  </section>
-
-  <main class="workspace">
+  <main class="workspace" id="workspace">
     <section class="panel chat-panel">
       <div class="panel-head"><span>◱</span><div class="panel-title">Dialogue</div><div class="spacer"></div><div class="panel-meta" id="chatState">AURA</div></div>
       <div class="chat-body">
+        <div class="chat-tabs" role="tablist" aria-label="Dialogue AURA">
+          <button class="chat-tab active" id="conversationTab" type="button">Conversation</button>
+          <button class="chat-tab" id="memoryTab" type="button">Mémoire</button>
+        </div>
         <div class="messages" id="messages">
           <div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div>
         </div>
         <div class="quick">
-          <button data-prompt="Fais-moi un point sur ce que tu fais maintenant.">Que fais-tu maintenant ?</button>
-          <button data-prompt="Quel est ton prochain objectif prioritaire ?">Quel est le prochain jalon ?</button>
-          <button data-prompt="Quels sont les risques ou tensions que tu détectes actuellement ?">Quels sont les risques ?</button>
+          <button data-prompt="Fais-moi un point bref sur ce que tu fais maintenant.">Que fais-tu maintenant ?</button>
+          <button data-prompt="Quelle piste nouvelle veux-tu explorer maintenant ?">Explorer une nouvelle idée</button>
+          <button data-prompt="Quelles sont tes trois priorités actuelles ?">Voir mes priorités</button>
         </div>
         <div class="composer">
           <button class="voice" id="voiceBtn" title="Parler">⌁</button>
@@ -269,7 +357,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
         <div class="spacer"></div>
         <div class="map-toolbar">
           <span class="map-stats" id="mapStats">réseau vivant</span>
-          <button id="refreshMap">Recalculer</button>
+          <button id="refreshMap" type="button">Recalculer</button>
+          <button id="mapFocusBtn" class="focus-map-btn" type="button" title="Agrandir la carte">↗</button>
         </div>
       </div>
       <div class="map-wrap" id="livingMap">
@@ -278,73 +367,85 @@ button:disabled{opacity:.5;cursor:not-allowed}
         <div class="organism-hud"><i id="organismDot"></i><span id="organismMood">organisme en éveil</span></div>
         <div class="map-foot"><strong style="color:#dcd4ff">Focus :</strong> <span id="focusStatement">chargement de l’état</span></div>
         <div class="legend">
-          <div class="legend-row"><span class="legend-line"></span>Synapses fonctionnelles</div>
-          <div class="legend-row"><span class="legend-line rise"></span>Flux cognitif actif</div>
-          <div class="legend-row"><span class="legend-line stable"></span>Survol : activité du neurone</div>
+          <div class="legend-row"><span class="legend-line"></span>Synapses</div>
+          <div class="legend-row"><span class="legend-line rise"></span>Flux actif</div>
+          <div class="legend-row"><span class="legend-line stable"></span>Survol : détail</div>
         </div>
       </div>
     </section>
 
     <aside class="right-stack">
       <section class="panel">
-        <div class="panel-head"><span>◉</span><div class="panel-title">Pensée dominante</div></div>
-        <div class="panel-body"><div class="thought-card" id="dominantThought">Chargement de la pensée dominante…</div></div>
+        <div class="panel-head"><span>◉</span><div class="panel-title">Pensée dominante</div><div class="spacer"></div><span class="panel-meta">maintenant</span></div>
+        <div class="panel-body">
+          <div class="thought-card">
+            <div class="thought-title">Focus actuel</div>
+            <div id="dominantThought">Chargement de la pensée dominante…</div>
+            <div class="thought-tags"><span class="context-tag" id="dominantMoodTag">État · —</span><span class="context-tag" id="dominantIntentTag">Intention · —</span></div>
+          </div>
+        </div>
       </section>
-      <section class="panel">
+      <section class="panel work-panel">
         <div class="panel-head"><span>▣</span><div class="panel-title">Travail en cours</div><div class="spacer"></div><div class="panel-meta" id="workMeta">—</div></div>
         <div class="panel-body"><div class="work-list" id="workList"><div class="empty">Chargement…</div></div></div>
       </section>
       <section class="panel">
-        <div class="panel-head"><span>◎</span><div class="panel-title">Intentions actives</div></div>
-        <div class="panel-body"><div class="intent-list" id="intentList"><div class="empty">Chargement…</div></div></div>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><span>?</span><div class="panel-title">Curiosité active</div><div class="spacer"></div><div class="panel-meta" id="curiosityMeta">—</div></div>
-        <div class="panel-body"><div class="intent-list" id="curiosityList"><div class="empty">Aucune question récente.</div></div></div>
+        <div class="panel-head"><span>◎</span><div class="panel-title">État cognitif</div></div>
+        <div class="panel-body cognitive-list">
+          <div class="cognitive-row"><div><div class="cognitive-name">Stabilité</div><div class="cognitive-sub">État global</div></div><div class="cognitive-value" id="cognitiveStability">—</div></div>
+          <div class="cognitive-row"><div><div class="cognitive-name">Focus</div><div class="cognitive-sub">Introspection</div></div><div class="cognitive-value" id="cognitiveFocus">—</div></div>
+          <div class="cognitive-row"><div><div class="cognitive-name">Réactivité</div><div class="cognitive-sub">Adaptation</div></div><div class="cognitive-value" id="cognitiveReactivity">—</div></div>
+        </div>
       </section>
     </aside>
-
-    <section class="bottom-grid">
-    <section class="panel">
-      <div class="panel-head"><span>◴</span><div class="panel-title">Ce qu’elle fait maintenant</div><div class="spacer"></div><div class="panel-meta" id="activityLive">En temps réel</div></div>
-      <div class="panel-body"><div class="activity-list" id="activityList"><div class="empty">Chargement…</div></div></div>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><span>⌘</span><div class="panel-title">Centre de commande</div><div class="spacer"></div><div class="panel-meta" id="commandState">Initialisation</div></div>
-      <div class="panel-body">
-        <div class="command-stats">
-          <div class="command-stat"><span>Flotte</span><strong id="commandFleet">—</strong></div>
-          <div class="command-stat"><span>Autonomie</span><strong id="commandMode">—</strong></div>
-          <div class="command-stat"><span>Initiatives</span><strong id="commandCount">—</strong></div>
-        </div>
-        <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune initiative calculée.</div></div>
-        <div class="confidence">Priorité / confiance : <span id="confidenceValue">—</span></div>
-        <div class="progress"><span id="confidenceBar" style="width:0%"></span></div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-head"><span>◫</span><div class="panel-title">Mémoire et leçons</div><div class="spacer"></div><div class="panel-meta" id="memoryMeta">—</div></div>
-      <div class="panel-body"><div class="memory-list" id="memoryList"><div class="empty">Chargement…</div></div></div>
-    </section>
-    <section class="panel download-panel">
-      <div class="panel-head"><span>⇩</span><div class="panel-title">Télécharger Quantic Glide</div><div class="spacer"></div><div class="panel-meta">Applications officielles</div></div>
-      <div class="panel-body">
-        <div class="download-grid">
-          <div class="download-card">
-            <div class="download-icon">▣</div>
-            <div class="download-copy"><strong>Windows x64</strong><span>Version stable 1.3.0 · installateur EXE avec AURA 2.0, MoA et Mesh intégrés.</span></div>
-            <a class="download-btn" href="/downloads/glide/windows">Télécharger .exe</a>
-          </div>
-          <div class="download-card">
-            <div class="download-icon">◈</div>
-            <div class="download-copy"><strong>Android</strong><span>Glide 1.3.0 beta · APK direct. WebView sécurisé, cookies tiers bloqués, géolocalisation refusée.</span></div>
-            <a class="download-btn" href="/downloads/glide/android">Télécharger .apk</a>
-          </div>
-        </div>
-      </div>
-    </section>
-  </section>
   </main>
+
+  <section class="detail-drawer" id="detailDrawer" aria-label="Détails AURA">
+    <div class="detail-head"><div class="detail-title" id="detailTitle">Détails</div><button class="detail-close" id="detailClose" type="button" aria-label="Fermer">×</button></div>
+    <div class="detail-body">
+      <div class="detail-pane" data-detail-pane="intentions"><div class="detail-section"><h3>Intentions actives</h3><div class="intent-list" id="intentList"><div class="empty">Chargement…</div></div></div></div>
+      <div class="detail-pane" data-detail-pane="memory"><div class="detail-section"><h3>Mémoire et leçons <span class="panel-meta" id="memoryMeta">—</span></h3><div class="memory-list" id="memoryList"><div class="empty">Chargement…</div></div></div></div>
+      <div class="detail-pane" data-detail-pane="explore"><div class="detail-grid"><div class="detail-section"><h3>Curiosité active <span class="panel-meta" id="curiosityMeta">—</span></h3><div class="intent-list" id="curiosityList"><div class="empty">Aucune question récente.</div></div></div><div class="detail-section"><h3>Activité récente</h3><div class="activity-list" id="activityList"><div class="empty">Chargement…</div></div><span id="activityLive" class="panel-meta">En temps réel</span></div></div></div>
+      <div class="detail-pane" data-detail-pane="system">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h3>Centre de commande <span class="panel-meta" id="commandState">Initialisation</span></h3>
+            <div class="command-stats"><div class="command-stat"><span>Flotte</span><strong id="commandFleet">—</strong></div><div class="command-stat"><span>Autonomie</span><strong id="commandMode">—</strong></div><div class="command-stat"><span>Initiatives</span><strong id="commandCount">—</strong></div></div>
+            <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune initiative calculée.</div></div>
+            <div class="confidence">Priorité / confiance : <span id="confidenceValue">—</span></div><div class="progress"><span id="confidenceBar" style="width:0%"></span></div>
+          </div>
+          <div class="detail-section">
+            <h3>Quantic Glide</h3>
+            <div class="download-grid">
+              <div class="download-card"><div class="download-icon">▣</div><div class="download-copy"><strong>Windows x64</strong><span>Version officielle</span></div><a class="download-btn" href="/downloads/glide/windows">.exe</a></div>
+              <div class="download-card"><div class="download-icon">◈</div><div class="download-copy"><strong>Android</strong><span>APK direct</span></div><a class="download-btn" href="/downloads/glide/android">.apk</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="bottom-dock" aria-label="Navigation AURA">
+    <button class="dock-btn active" type="button" data-detail="map"><span class="dock-dot"></span>Carte</button>
+    <button class="dock-btn" type="button" data-detail="intentions"><span class="dock-dot"></span>Intentions</button>
+    <button class="dock-btn" type="button" data-detail="memory"><span class="dock-dot"></span>Mémoire</button>
+    <button class="dock-btn" type="button" data-detail="explore"><span class="dock-dot"></span>Explorer</button>
+    <button class="dock-btn" type="button" data-detail="system"><span class="dock-dot"></span>Système</button>
+  </nav>
+
+  <div class="data-sinks" aria-hidden="true">
+    <div id="metric-pressure"></div><div id="trend-pressure"></div><div id="ring-pressure"></div>
+    <div id="metric-introspection"></div><div id="trend-introspection"></div><div id="ring-introspection"></div>
+    <div id="metric-reactivity"></div><div id="trend-reactivity"></div><div id="ring-reactivity"></div>
+    <div id="emotion-stability-value"></div><div id="emotion-stability"></div>
+    <div id="emotion-clarity-value"></div><div id="emotion-clarity"></div>
+    <div id="emotion-attachment-value"></div><div id="emotion-attachment"></div>
+    <div id="emotion-curiosity-value"></div><div id="emotion-curiosity"></div>
+    <div id="emotion-dream-value"></div><div id="emotion-dream"></div>
+    <div id="emotion-silence-value"></div><div id="emotion-silence"></div>
+  </div>
+
 </div>
 
 <script>${NEURAL_FIELD_SCRIPT}
