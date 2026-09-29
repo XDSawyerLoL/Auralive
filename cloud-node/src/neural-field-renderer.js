@@ -415,6 +415,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       ctx.fillStyle='rgba(249,247,255,.99)';ctx.font='760 22px Inter,system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('AURA',p.x,p.y);
       return;
     }
+    const role=String(node.role||'capability');
     drawMicroNetwork(node,p,t);
     drawDendrites(node,p,t);
     if(intensity>.42&&role!=='product'){
@@ -445,7 +446,6 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       ctx.quadraticCurveTo(p.x+dx*.10-dy*.05,p.y+dy*.10+dx*.05,ax,ay);
       ctx.stroke();ctx.restore();
     }
-    const role=String(node.role||'capability');
     const base=role==='product'?5.5:role==='fabric-capability'?5.2:9.0;
     const centralBoost=(Number(node.centrality)||0)*5.0;
     const r=base+intensity*7.4+centralBoost;
