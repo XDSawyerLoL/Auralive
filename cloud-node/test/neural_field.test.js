@@ -201,3 +201,34 @@ test('V7 renderer builds local neural constellations around major capabilities',
     assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
   }
 });
+
+
+test('V8 renderer uses semantic cognitive galaxies instead of a force-graph presentation', async () => {
+  const { NEURAL_FIELD_SCRIPT } = await import('../src/neural-field-renderer.js');
+  for (const token of [
+    'function layoutCognitiveGalaxies',
+    'function drawGalaxyV8',
+    'function drawAuraCoreV8',
+    'function drawFunctionalRibbonsV8',
+    'function drawCognitiveDust',
+    "perception:{x:.28,y:.24}",
+    "memory:{x:.69,y:.27}",
+    "cognition:{x:.70,y:.56}",
+    "agency:{x:.67,y:.79}",
+  ]) {
+    assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
+  }
+  assert.match(NEURAL_FIELD_SCRIPT, /layoutCognitiveGalaxies\(state\.field\)/);
+  assert.doesNotMatch(
+    NEURAL_FIELD_SCRIPT.slice(NEURAL_FIELD_SCRIPT.indexOf('function frame(t){'), NEURAL_FIELD_SCRIPT.indexOf('function init(){')),
+    /stepNeuralField\(state\.field\)/,
+  );
+});
+
+test('V8 galaxy renderer creates dense local neural matter', async () => {
+  const { NEURAL_FIELD_SCRIPT } = await import('../src/neural-field-renderer.js');
+  assert.match(NEURAL_FIELD_SCRIPT, /microCount=state\.reduced\?34:Math\.min\(120,54\+galaxy\.nodes\.length\*10/);
+  assert.match(NEURAL_FIELD_SCRIPT, /for\(let arm=0;arm<5;arm\+\+\)/);
+  assert.match(NEURAL_FIELD_SCRIPT, /EN ÉVOLUTION/);
+  assert.match(NEURAL_FIELD_SCRIPT, /companions\.join\(' · '\)/);
+});
