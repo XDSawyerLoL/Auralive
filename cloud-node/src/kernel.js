@@ -8,6 +8,7 @@ import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { buildNeuralFieldModel, normalizeAuraSelfReference } from './neural-field.js';
+import { composeUnifiedSelfState, UNIFIED_SELF_STATE_VERSION } from './self_state.js';
 
 const now = () => new Date().toISOString();
 
@@ -57,6 +58,7 @@ export class CognitiveKernel {
     this.lastReflectionAt = '';
     this.neuralSignalSeq = 0;
     this.neuralSignals = [];
+    this.unifiedStateCache = null;
   }
 
   attachExpertRelay(expertRelay) {
@@ -409,6 +411,124 @@ export class CognitiveKernel {
       'SELECT id,target,diagnosis,proposal,validation_plan,risk,status,evidence_count,created_at,updated_at FROM aura_improvement_proposals ORDER BY updated_at DESC LIMIT ?',
       [Math.max(1, Math.min(Number(limit) || 30, 100))],
     );
+  }
+
+  async unifiedState({ persist = false } = {}) {
+    const [
+      intentions,
+      work,
+      curiosity,
+      failures,
+      traces,
+      reflections,
+      initiatives,
+      bridgeStatus,
+    ] = await Promise.all([
+      this.intentions(20),
+      this.workItems(14),
+      query(
+        `SELECT id,title,content,context,created_at
+         FROM aura_cognitive_traces
+         WHERE kind='curiosity-question'
+         ORDER BY id DESC LIMIT 20`,
+      ).catch(() => []),
+      query(
+        `SELECT automation_id,event_type,signature,created_at
+         FROM aura_outcomes
+         WHERE ok=0
+         ORDER BY id DESC LIMIT 20`,
+      ).catch(() => []),
+      query(
+        `SELECT kind,title,content,created_at
+         FROM aura_cognitive_traces
+         ORDER BY id DESC LIMIT 20`,
+      ).catch(() => []),
+      this.reflections(8),
+      query(
+        `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at DESC LIMIT 20`,
+      ).catch(() => []),
+      this.bridge?.status
+        ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
+        : Promise.resolve({ enabled: false, worker_online: false }),
+    ]);
+
+    const curiosityRows = curiosity.map((row) => ({
+      ...row,
+      context: parseJsonObject(row.context || '{}', {}),
+    }));
+    const state = composeUnifiedSelfState({
+      soul: this.soulCache || {},
+      organism: this.organism.migrate(this.soulCache || {}),
+      intentions,
+      initiatives,
+      work,
+      curiosity: curiosityRows,
+      failures,
+      traces,
+      reflections,
+      bridge: bridgeStatus,
+    });
+
+    this.unifiedStateCache = state;
+    if (persist && this.soulCache) {
+      this.soulCache.unified_state = state;
+      if (state.primary_goal?.statement) {
+        this.soulCache.current_intention = String(state.primary_goal.statement).slice(0, 500);
+      }
+      if (state.dominant_thought) {
+        this.soulCache.dominant_thought = String(state.dominant_thought).slice(0, 1000);
+      }
+      await this.saveSoul();
+    }
+    return state;
+  }
+
+  async ensureAutonomousContinuity() {
+    const state = await this.unifiedState({ persist: true });
+    if (!state.autonomy?.idle) return { created: false, state };
+
+    const existing = await this.intentions(20);
+    const hasAutonomyGoal = existing.some((row) => String(row.source || '') === 'autonomy-v9');
+    if (hasAutonomyGoal) return { created: false, state };
+
+    let statement = '';
+    let priority = 0.52;
+    let reason = 'idle-exploration';
+
+    if (state.open_loops?.[0]?.title) {
+      statement = `Réexaminer le problème ouvert « ${state.open_loops[0].title} » et déterminer la prochaine expérience utile sans répéter une stratégie déjà en échec.`;
+      priority = 0.78;
+      reason = 'open-loop';
+    } else if (state.interests?.[0]?.question) {
+      statement = `Explorer de façon bornée cette question de curiosité : ${state.interests[0].question}`;
+      priority = Math.max(0.56, Number(state.interests[0].priority || 0));
+      reason = 'curiosity';
+    } else {
+      const curiosity = Number(this.soulCache?.curiosity || this.soulCache?.organism?.curiosite || 0);
+      if (curiosity < 0.52) return { created: false, state };
+      statement = 'Examiner un angle nouveau de mon propre fonctionnement, identifier une incertitude vérifiable et proposer un test réversible.';
+      priority = 0.54;
+      reason = 'self-inspection';
+    }
+
+    const created = await this.addIntention(statement, {
+      priority,
+      source: 'autonomy-v9',
+      context: { reason, self_generated: true },
+    });
+    const refreshed = await this.unifiedState({ persist: true });
+    this.emitNeuralSignal({
+      kind: 'self-generated-goal',
+      source: 'curiosity',
+      target: 'planning',
+      intensity: Math.max(0.55, priority),
+      label: statement.slice(0, 180),
+      origin: 'autonomy-v9',
+    });
+    return { created: true, intention: created, state: refreshed };
   }
 
   async contextBundle(extraText = '') {
