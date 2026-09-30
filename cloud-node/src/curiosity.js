@@ -190,7 +190,7 @@ export class CuriosityEngine {
   }
 
   async buildCandidates() {
-    const [services, intentions, recentMessages, surprises] = await Promise.all([
+    const [services, intentions, recentMessages, surprises, cognitiveState] = await Promise.all([
       this.commandCenter.services(),
       this.kernel.intentions(10),
       query(
@@ -201,6 +201,7 @@ export class CuriosityEngine {
         `SELECT kind,content,surprise,created_at FROM aura_surprise_memory
          ORDER BY id DESC LIMIT 8`,
       ).catch(() => []),
+      this.kernel.cognitiveState({ publicView: false }).catch(() => null),
     ]);
 
     const candidates = [];
@@ -234,6 +235,30 @@ export class CuriosityEngine {
           reason: 'Recherche d’intégration inter-produit.',
         });
       }
+    }
+
+    if (cognitiveState?.dominant_focus?.title) {
+      candidates.push({
+        question:
+          'Quelle observation pourrait falsifier ou renforcer mon focus dominant actuel : '
+          + String(cognitiveState.dominant_focus.title).slice(0, 700),
+        target: 'system',
+        domain: 'aura',
+        priority: Math.min(0.91, Math.max(0.66, Number(cognitiveState.dominant_focus.priority || 0.6) + 0.05)),
+        reason: 'Ma curiosité doit servir le même focus que mon état cognitif unifié.',
+      });
+    }
+
+    for (const problem of (Array.isArray(cognitiveState?.unresolved_problems) ? cognitiveState.unresolved_problems : []).slice(0, 2)) {
+      candidates.push({
+        question:
+          'Quelle cause unique explique le mieux ce problème ouvert et quel test réversible permet de la distinguer des alternatives : '
+          + String(problem.title || '').slice(0, 700),
+        target: 'system',
+        domain: 'aura',
+        priority: Math.min(0.96, Math.max(0.72, Number(problem.priority || 0.7))),
+        reason: 'Un problème non résolu doit rester dans le champ de curiosité jusqu’à résolution ou réfutation.',
+      });
     }
 
     const topIntention = intentions[0];
