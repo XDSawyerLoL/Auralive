@@ -10,6 +10,23 @@ function naturalize(value) {
     .trim();
 }
 
+function hasGenericAiDisclaimer(value) {
+  const text = normalize(value).toLocaleLowerCase('fr-FR');
+  return [
+    'en tant qu’intelligence artificielle',
+    "en tant qu'intelligence artificielle",
+    'en tant qu ia',
+    'en tant qu’ia',
+    "en tant qu'ia",
+    'je n’ai pas de sentiments',
+    "je n'ai pas de sentiments",
+    'je n’ai pas de ressenti',
+    "je n'ai pas de ressenti",
+    'je ne ressens pas comme un humain',
+    'je ne peux pas ressentir',
+  ].some((fragment) => text.includes(fragment));
+}
+
 export class ExpressionLayer {
   static VERSION = 'aura-expression-v1.2';
 
@@ -91,6 +108,9 @@ export class ExpressionLayer {
         Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
         String(options.taskRole || 'conversation'),
       ));
+      if (answer && plan?.act !== 'identity' && hasGenericAiDisclaimer(answer)) {
+        return fallback;
+      }
       return answer || fallback;
     } catch (error) {
       this.lastError = normalize(error?.message || error).slice(0, 500);
