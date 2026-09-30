@@ -173,10 +173,11 @@ test('long Mairaiy responses play every generated segment in sequence', () => {
   assert.equal(DASHBOARD_SCRIPT.includes("splitBrowserSpeech(text,220)"), true);
 });
 
-test('cosmic neural renderer uses bounded motion and reduced-motion support', () => {
+test('cognitive-galaxy renderer keeps bounded motion and reduced-motion support', () => {
   assert.match(NEURAL_FIELD_SCRIPT, /prefers-reduced-motion/);
-  assert.match(NEURAL_FIELD_SCRIPT, /stepNeuralField\(state\.field\)/);
-  assert.match(NEURAL_FIELD_SCRIPT, /settleNeuralField\(state\.field/);
+  assert.match(NEURAL_FIELD_SCRIPT, /layoutCognitiveGalaxies\(state\.field\)/);
+  assert.match(NEURAL_FIELD_SCRIPT, /drawGalaxyV8\(galaxy,t\)/);
+  assert.match(NEURAL_FIELD_SCRIPT, /state\.reduced\?34/);
   assert.match(NEURAL_FIELD_SCRIPT, /Math\.min\(window\.devicePixelRatio\|\|1,1\.7\)/);
 });
 
