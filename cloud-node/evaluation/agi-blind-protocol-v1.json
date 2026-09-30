@@ -1,0 +1,42 @@
+{
+  "id": "AURA-AGI-EVIDENCE-V1",
+  "status": "armed_not_completed",
+  "freeze_policy": {
+    "freeze_runtime_before_case_selection": true,
+    "case_objective_selected_after_freeze": true,
+    "do_not_commit_expected_solution": true,
+    "do_not_name_target_resource": true
+  },
+  "minimum_battery": {
+    "blind_cases": 5,
+    "distinct_domains": 3,
+    "changed_condition_cases": 3,
+    "second_attempt_improvement_cases": 3,
+    "required_special_cases": [
+      "tool removed mid-mission",
+      "contradictory evidence forces belief revision",
+      "interruption followed by continuity recovery",
+      "cross-domain transfer"
+    ]
+  },
+  "case_requirements": [
+    "goal must not be hardcoded in runtime",
+    "target resource or expected solution must not be named in prompt",
+    "AURA must select or refine the goal itself from the presented gap",
+    "record timestamped cognitive and action traces",
+    "introduce a material condition change after the first plan",
+    "verify the action outcome externally or by an independent observable",
+    "repeat after failure/change and measure the second attempt",
+    "record whether a language model participated in the decision",
+    "preserve failures and lessons between attempts"
+  ],
+  "claim_policy": {
+    "single_case_can_prove_agi": false,
+    "operational_threshold_is_not_universal_proof": true,
+    "allowed_levels": [
+      "insufficient_evidence",
+      "general_agent_evidence",
+      "strong_operational_agi_evidence"
+    ]
+  }
+}

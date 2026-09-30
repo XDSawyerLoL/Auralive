@@ -64,11 +64,14 @@ test('Web substrate is wired as external memory into AURA', () => {
 });
 
 
-test('live chat routes changing external questions through Web evidence first', () => {
+test('live chat routes changing external questions through Web evidence while AURA keeps native expression', () => {
   assert.match(kernelSource, /requiresExternalKnowledge/);
   assert.match(kernelSource, /this\.webSubstrate\.research/);
   assert.match(kernelSource, /external_evidence_required/);
   assert.match(kernelSource, /external_epistemic_status/);
-  assert.match(expressionSource, /MÉMOIRE EXTERNE/);
-  assert.match(expressionSource, /contested, unverified ou unavailable/);
+  assert.match(kernelSource, /MÉMOIRE EXTERNE/);
+  assert.match(expressionSource, /Fournis uniquement des faits candidats vérifiables/);
+  assert.match(expressionSource, /Ne formule aucune réponse au nom d’AURA/);
+  assert.match(expressionSource, /return naturalize\(this\.cognition\.deterministicReply\(plan\)\)/);
+  assert.match(expressionSource, /provider\.includes\('gemini'\)/);
 });

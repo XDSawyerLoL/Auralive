@@ -160,23 +160,21 @@ export class CuriosityEngine {
     if (!content || !explicitUserIntent(content)) return '';
     if (await this.countQuestionsLastHour('interlocutor') >= config.curiosityMaxInterlocutorQuestionsPerHour) return '';
 
-    if (this.ai?.enabled) {
-      try {
-        const answer = await this.ai.generate(
-          `Message explicite de l'interlocuteur:\n${content}\n\nFormule UNE question de curiosité courte, naturelle et utile en français. Elle doit uniquement approfondir ce que l'interlocuteur a explicitement dit. N'infère aucune information sensible. Ne pose pas une question si le message est déjà totalement opérationnel. Retourne uniquement la question ou une chaîne vide.`,
-          'Tu es le moteur de curiosité d’AURA. Tu aides AURA à comprendre son interlocuteur sans l’interroger inutilement ni inférer de données sensibles.',
-          120,
-          'conversation',
-        );
-        const candidate = normalizeQuestion(answer);
-        if (candidate && candidate.length <= 360) return candidate;
-      } catch {}
+    // Native curiosity: derive the follow-up from explicit user intent only.
+    // No language model is allowed to invent AURA's curiosity.
+    if (/\b(objectif|priorité|priorite|important|doit|devrait|il faut|réussite|reussite)\b/i.test(content)) {
+      return 'Quel résultat concret dois-je utiliser comme critère de réussite sur ce point ?';
     }
-
-    if (/\b(objectif|priorité|priorite|important|doit|devrait|il faut)\b/i.test(content)) {
-      return 'Quel résultat concret veux-tu qu’AURA utilise comme critère de réussite sur ce point ?';
+    if (/\b(problème|probleme|bug|erreur|échec|echec|bloqu)\b/i.test(content)) {
+      return 'Quel signal observable me permettra de distinguer la cause réelle du symptôme ?';
     }
-    return 'Qu’est-ce que tu veux qu’AURA observe ou mesure pour savoir qu’elle progresse réellement sur ce point ?';
+    if (/\b(compare|compar|meilleur|mieux|choix|option)\b/i.test(content)) {
+      return 'Quel critère doit peser le plus dans ma comparaison ?';
+    }
+    if (/\b(autonome|autonomie|initiative|agi|apprendre|évolu|evolu)\b/i.test(content)) {
+      return 'Quelle preuve comportementale veux-tu que je produise pour montrer un progrès réel sur ce point ?';
+    }
+    return 'Qu’est-ce que je dois observer ou mesurer pour savoir que je progresse réellement sur ce que tu viens de définir ?';
   }
 
   async questionForInteraction(userText) {
@@ -192,7 +190,7 @@ export class CuriosityEngine {
   }
 
   async buildCandidates() {
-    const [services, intentions, recentMessages, surprises] = await Promise.all([
+    const [services, intentions, recentMessages, surprises, cognitiveState] = await Promise.all([
       this.commandCenter.services(),
       this.kernel.intentions(10),
       query(
@@ -203,6 +201,7 @@ export class CuriosityEngine {
         `SELECT kind,content,surprise,created_at FROM aura_surprise_memory
          ORDER BY id DESC LIMIT 8`,
       ).catch(() => []),
+      this.kernel.cognitiveState({ publicView: false }).catch(() => null),
     ]);
 
     const candidates = [];
@@ -236,6 +235,30 @@ export class CuriosityEngine {
           reason: 'Recherche d’intégration inter-produit.',
         });
       }
+    }
+
+    if (cognitiveState?.dominant_focus?.title) {
+      candidates.push({
+        question:
+          'Quelle observation pourrait falsifier ou renforcer mon focus dominant actuel : '
+          + String(cognitiveState.dominant_focus.title).slice(0, 700),
+        target: 'system',
+        domain: 'aura',
+        priority: Math.min(0.91, Math.max(0.66, Number(cognitiveState.dominant_focus.priority || 0.6) + 0.05)),
+        reason: 'Ma curiosité doit servir le même focus que mon état cognitif unifié.',
+      });
+    }
+
+    for (const problem of (Array.isArray(cognitiveState?.unresolved_problems) ? cognitiveState.unresolved_problems : []).slice(0, 2)) {
+      candidates.push({
+        question:
+          'Quelle cause unique explique le mieux ce problème ouvert et quel test réversible permet de la distinguer des alternatives : '
+          + String(problem.title || '').slice(0, 700),
+        target: 'system',
+        domain: 'aura',
+        priority: Math.min(0.96, Math.max(0.72, Number(problem.priority || 0.7))),
+        reason: 'Un problème non résolu doit rester dans le champ de curiosité jusqu’à résolution ou réfutation.',
+      });
     }
 
     const topIntention = intentions[0];

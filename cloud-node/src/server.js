@@ -689,6 +689,9 @@ app.get('/healthz', async () => {
     kernel_started: Boolean(kernel.started && bootstrap.runtimeReady),
     cognition_native: true,
     cognition_independent_from_language_model: true,
+    unified_cognitive_state: true,
+    gemini_text_allowed: false,
+    gemini_role: 'voice-only',
     horizon: horizon.status().enabled,
     bridge: bootstrap.dbReady
       ? await bridge.status()
@@ -759,6 +762,31 @@ app.get('/api/kernel/public', async () => {
     dominant_thought: String(privateSoul.dominant_thought || '').slice(0, 700),
     organism,
   };
+});
+
+app.get('/api/kernel/public/cognitive-state', async () => {
+  if (!bootstrap.runtimeReady) {
+    return {
+      version: 'aura-cognitive-state-v1',
+      mode: 'offline',
+      activity_score: 0,
+      dominant_focus: null,
+      secondary_focus: [],
+      interests: [],
+      blocked: [],
+      next_action: '',
+      self_summary: 'Noyau en démarrage.',
+      autonomy: { should_act: false, candidate_count: 0, executable_count: 0, blocked_count: 0 },
+      coherence: { shared_state_ready: false },
+    };
+  }
+  return kernel.cognitiveState({ publicView: true });
+});
+
+app.get('/api/kernel/cognitive-state', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  if (config.cloudToken && !requirePrivate(request, reply)) return;
+  return kernel.cognitiveState({ publicView: false });
 });
 
 app.get('/api/kernel/public/intentions', async (request) => {

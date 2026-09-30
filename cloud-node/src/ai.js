@@ -55,15 +55,15 @@ export class AiClient {
   get provider() {
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) return 'quantic-studio-local-preferred';
     if (config.aiMode === 'bridge') return 'quantic-studio-local';
-    return config.aiMode === 'gemini' ? 'google-gemini' : 'openai-compatible';
+    return config.aiMode === 'gemini' ? 'google-gemini-tts-only' : 'openai-compatible';
   }
 
   get enabled() {
     if (this.bridge?.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
-    if (config.aiMode === 'gemini') {
-      return Boolean(config.aiApiKey && geminiBaseUrl() && geminiModel());
-    }
+    // Gemini is reserved for Mairaiy TTS in V9. Text cognition must come from
+    // AURA itself or, when explicitly configured, a non-Gemini external tool.
+    if (config.aiMode === 'gemini') return false;
     return Boolean(config.aiBaseUrl && config.aiModel);
   }
 
@@ -75,6 +75,8 @@ export class AiClient {
       base_url: config.aiMode === 'gemini' ? geminiBaseUrl() : config.aiBaseUrl,
       model: config.aiMode === 'gemini' ? geminiModel() : config.aiModel,
       api_key_configured: Boolean(config.aiApiKey),
+      gemini_text_allowed: false,
+      gemini_policy: config.aiMode === 'gemini' ? 'tts-only' : 'not-selected',
       timeout_ms: config.aiTimeoutMs,
       local_bridge_configured: Boolean(this.bridge?.enabled),
       local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
@@ -154,6 +156,11 @@ export class AiClient {
   }
 
   async generate(prompt, system, maxTokens = 700, taskRole = 'auto') {
+    if (config.aiMode === 'gemini' && !(this.bridge?.enabled && this.bridge?.preferLocalAi)) {
+      this.lastBackend = 'gemini-text-blocked';
+      this.lastError = 'Gemini text generation disabled by AURA V9 TTS-only policy';
+      return '';
+    }
     if (!this.enabled) return '';
 
     const started = Date.now();
@@ -180,8 +187,9 @@ export class AiClient {
 
       let answer = '';
       if (config.aiMode === 'gemini') {
-        answer = await this.#generateGemini(prompt, system, maxTokens);
-        this.lastBackend = 'google-gemini-fallback';
+        // Explicitly no Gemini text fallback: Mairaiy TTS is handled by voice.js.
+        answer = '';
+        this.lastBackend = 'gemini-text-blocked';
       } else if (config.aiMode !== 'off') {
         answer = await this.#generateOpenAiCompatible(prompt, system, maxTokens);
         this.lastBackend = 'openai-compatible-fallback';

@@ -45,9 +45,15 @@ export function buildNeuralFieldModel(input = {}) {
     webEnabled = false,
     horizonEnabled = false,
     previous = {},
+    cognitiveState = {},
   } = input;
 
   const corpus = [
+    normalizeAuraSelfReference(cognitiveState?.dominant_focus?.title),
+    normalizeAuraSelfReference(cognitiveState?.next_action),
+    ...(Array.isArray(cognitiveState?.secondary_focus) ? cognitiveState.secondary_focus.map((row) => normalizeAuraSelfReference(row?.title)) : []),
+    ...(Array.isArray(cognitiveState?.interests) ? cognitiveState.interests.map((row) => normalizeAuraSelfReference(row?.question)) : []),
+    ...(Array.isArray(cognitiveState?.unresolved_problems) ? cognitiveState.unresolved_problems.map((row) => normalizeAuraSelfReference(row?.title)) : []),
     normalizeAuraSelfReference(soul.current_intention),
     normalizeAuraSelfReference(soul.dominant_thought),
     ...intentions.map((row) => normalizeAuraSelfReference(row?.statement)),
@@ -56,6 +62,8 @@ export function buildNeuralFieldModel(input = {}) {
   ].filter(Boolean).join(' ').toLowerCase();
 
   const boost = (terms, each = 0.07) => Math.min(0.42, includesAny(corpus, terms) * each);
+  const unifiedActivity = clamp01(cognitiveState?.activity_score ?? 0.5);
+  const dominantKind = lower(cognitiveState?.dominant_focus?.kind || '');
   const nodes = [];
 
   const add = ({
@@ -96,7 +104,7 @@ export function buildNeuralFieldModel(input = {}) {
     cluster: 'core',
     role: 'core',
     score: 1,
-    activity: Math.max(0.62, clamp01(1 - Number(soul.pressure || 0) * 0.15)),
+    activity: Math.max(0.62, clamp01(0.56 + unifiedActivity * 0.38 - Number(soul.pressure || 0) * 0.10)),
     centrality: 1,
     status: 'online',
   });
@@ -129,7 +137,8 @@ export function buildNeuralFieldModel(input = {}) {
     cluster: 'perception',
     score: 0.13
       + Number(soul.curiosity || organism.curiosite || 0) * 0.48
-      + boost(['nouveau','github','explor','découvr','veille','crow']),
+      + boost(['nouveau','github','explor','découvr','veille','crow'])
+      + (Array.isArray(cognitiveState?.interests) && cognitiveState.interests.length ? 0.12 : 0),
     centrality: 0.68,
   });
 
@@ -157,7 +166,8 @@ export function buildNeuralFieldModel(input = {}) {
     score: 0.14
       + Number(soul.continuity || 0) * 0.28
       + Math.min(Number(counts.lessons || 0) / 28, 0.22)
-      + boost(['mémoire','leçon','souvenir','consolid']),
+      + boost(['mémoire','leçon','souvenir','consolid'])
+      + (Array.isArray(cognitiveState?.unresolved_problems) && cognitiveState.unresolved_problems.length ? 0.05 : 0),
     centrality: 0.84,
   });
 
@@ -179,7 +189,8 @@ export function buildNeuralFieldModel(input = {}) {
     score: 0.18
       + Number(organism.clarte || 0) * 0.19
       + Math.min(Number(counts.reflections || 0) / 18, 0.18)
-      + boost(['raison','analyse','diagnostic','hypoth']),
+      + boost(['raison','analyse','diagnostic','hypoth'])
+      + (dominantKind === 'problem' ? 0.14 : 0.04 * unifiedActivity),
     centrality: 0.94,
   });
 
@@ -189,7 +200,8 @@ export function buildNeuralFieldModel(input = {}) {
     cluster: 'cognition',
     score: 0.13
       + Math.min(Number(counts.initiatives || 0) / 12, 0.24)
-      + boost(['plan','dag','mission','objectif','étape']),
+      + boost(['plan','dag','mission','objectif','étape'])
+      + (cognitiveState?.dominant_focus ? 0.10 : 0),
     centrality: 0.88,
   });
 
@@ -209,7 +221,8 @@ export function buildNeuralFieldModel(input = {}) {
     score: 0.13
       + Math.min(Number(counts.routines || 0) / 12, 0.20)
       + Math.min(Number(counts.outcomes || 0) / 24, 0.14)
-      + boost(['automat','routine','command-center','action']),
+      + boost(['automat','routine','command-center','action'])
+      + (dominantKind === 'initiative' ? 0.16 : 0),
     centrality: 0.80,
   });
 
@@ -375,6 +388,12 @@ export function buildNeuralFieldModel(input = {}) {
       synapses: links.length,
       clusters: [...new Set(nodes.map((node) => node.cluster))].length,
       active: nodes.filter((node) => node.activity >= 0.48).length,
+    },
+    cognitive_state: {
+      mode: String(cognitiveState?.mode || ''),
+      activity_score: unifiedActivity,
+      dominant_focus: String(cognitiveState?.dominant_focus?.title || '').slice(0, 500),
+      next_action: String(cognitiveState?.next_action || '').slice(0, 500),
     },
   };
 }

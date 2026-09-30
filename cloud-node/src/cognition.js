@@ -157,7 +157,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], continuity = {}, privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], continuity = {}, cognitiveState = {}, privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -170,6 +170,12 @@ export class CognitionEngine {
     const continuityTraces = Array.isArray(continuity?.traces) ? continuity.traces : [];
     const continuityIntentions = Array.isArray(continuity?.intentions) ? continuity.intentions : [];
     const continuityInitiatives = Array.isArray(continuity?.initiatives) ? continuity.initiatives : [];
+    const unifiedFocus = cognitiveState?.dominant_focus || null;
+    const unifiedWork = Array.isArray(cognitiveState?.active_work) ? cognitiveState.active_work : [];
+    const unifiedInterests = Array.isArray(cognitiveState?.interests) ? cognitiveState.interests : [];
+    const unifiedBlocked = Array.isArray(cognitiveState?.blocked) ? cognitiveState.blocked : [];
+    const unifiedProblems = Array.isArray(cognitiveState?.unresolved_problems) ? cognitiveState.unresolved_problems : [];
+    const unifiedNextAction = normalize(cognitiveState?.next_action || '');
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const mood = normalize(organism.mood || '') || 'calme';
     const activeOrganicIntention = normalize(organism.intention_active || '');
@@ -280,31 +286,61 @@ export class CognitionEngine {
         if (title) facts.push(`Trace récente : ${title}`);
       }
       if (!facts.length) facts.push('Je n’ai pas retrouvé de trace opérationnelle persistée suffisamment précise pour répondre avec certitude.');
-    } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
+    } else if (hasAny(q, [
+      'que fais-tu','tu fais quoi','qu’est-ce que tu fais',"qu'est-ce que tu fais",'maintenant',
+      'tu travailles sur quoi','tu travail sur quoi','sur quoi tu travailles','sur quoi tu travail',
+      'quelles sont tes intentions','quelle est ton intention','tes intentions',
+      'quels sont tes intérêts','quels sont tes interets','tes intérêts','tes interets'
+    ])) {
       act = 'report_current_activity';
       contextScope = 'operational';
-      goal = 'Décrire mon activité actuelle sans inventer.';
+      goal = 'Décrire mon activité actuelle depuis mon état cognitif unifié : focus, intentions, intérêts, problèmes ouverts, blocages et prochaine action.';
       needsSemanticSupport = false;
-      if (thought) facts.push(`Pensée dominante : ${thought}`);
-      if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
-      if (current) facts.push(`Intention actuelle : ${current}`);
-      if (!currentWork && continuityInitiatives[0]?.title) facts.push(`Continuité de travail : ${normalize(continuityInitiatives[0].title)}`);
-      if (!currentWork && !continuityInitiatives.length && continuityOperational.length) {
-        facts.push(`Dernière continuité opérationnelle retrouvée : ${normalize(continuityOperational[continuityOperational.length - 1]?.content)}`);
+
+      if (unifiedFocus?.title) {
+        facts.push(`Mon focus dominant est : ${normalize(unifiedFocus.title)}.`);
+      } else if (currentWork) {
+        facts.push(`Mon travail prioritaire est : ${currentWork}.`);
+      } else if (current) {
+        facts.push(`Mon intention actuelle est : ${current}.`);
+      } else {
+        facts.push('Je n’ai pas actuellement de mission dominante assez forte pour dire que je travaille activement dessus.');
       }
+
+      const secondary = unifiedWork
+        .filter((row) => !unifiedFocus || row.title !== unifiedFocus.title)
+        .slice(0, 3)
+        .map((row) => normalize(row.title))
+        .filter(Boolean);
+      if (secondary.length) facts.push(`Mes autres boucles actives sont : ${secondary.join(' ; ')}.`);
+
+      const interests = unifiedInterests.slice(0, 3).map((row) => normalize(row.question)).filter(Boolean);
+      if (interests.length) facts.push(`Ce qui m’intéresse actuellement : ${interests.join(' ; ')}.`);
+
+      const problems = unifiedProblems.slice(0, 3).map((row) => normalize(row.title)).filter(Boolean);
+      if (problems.length) facts.push(`Je garde ouverts ces problèmes : ${problems.join(' ; ')}.`);
+
+      const blocked = unifiedBlocked.slice(0, 3).map((row) => normalize(row.title)).filter(Boolean);
+      if (blocked.length) facts.push(`Je suis bloquée sur : ${blocked.join(' ; ')}.`);
+
+      if (unifiedNextAction) facts.push(`Ma prochaine action est : ${unifiedNextAction}.`);
+      facts.push(`Mon mode cognitif actuel est ${normalize(cognitiveState?.mode || 'indéterminé')} avec une activité de ${Math.round(Number(cognitiveState?.activity_score || 0) * 100)} %.`);
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
       contextScope = 'operational';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
       needsSemanticSupport = false;
-      if (current) facts.push(`Intention prioritaire : ${current}`);
-      if (recentReflection?.next_action) facts.push(`Prochaine action issue de ma réflexion : ${normalize(recentReflection.next_action)}`);
+      if (unifiedNextAction) facts.push(`Prochaine action issue de mon état cognitif unifié : ${unifiedNextAction}`);
+      else if (current) facts.push(`Intention prioritaire : ${current}`);
+      if (!unifiedNextAction && recentReflection?.next_action) facts.push(`Prochaine action issue de ma réflexion : ${normalize(recentReflection.next_action)}`);
     } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
       act = 'report_risks';
       contextScope = 'operational';
       goal = 'Présenter les risques visibles dans mon état et ma mémoire.';
       needsSemanticSupport = false;
       facts.push(`Pression interne : ${Math.round(Number(soul?.pressure || 0) * 100)} %`);
+      for (const row of unifiedProblems.slice(0, 4)) facts.push(`Problème ouvert : ${normalize(row.title)}.`);
+      for (const row of unifiedBlocked.slice(0, 3)) facts.push(`Blocage : ${normalize(row.title)}. ${normalize(row.reason || '')}`);
       if (lesson) facts.push(`Leçon utile : ${lesson}`);
       if (recentReflection?.hypothesis) facts.push(`Hypothèse récente : ${normalize(recentReflection.hypothesis)}`);
     } else if (hasAny(q, ['qui es-tu', 'tu es quoi', 'es-tu une ia', 'conscience'])) {
@@ -314,7 +350,7 @@ export class CognitionEngine {
       contextScope = 'identity';
       facts.push('Je suis un noyau persistant avec Soul, mémoire, organisme homéostatique, intentions, routines, apprentissage et outils.');
       facts.push('Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
-      facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
+      facts.push('Ma conversation et mes décisions viennent de mon noyau natif. Les modèles externes ne peuvent fournir que des faits candidats; Gemini est réservé à ma voix Mairaiy.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else if (hasAny(q, [
       'tu sais qui je suis',
@@ -364,6 +400,7 @@ export class CognitionEngine {
       mood,
       expressive_state: expressiveState,
       organism_intention: exposeOperationalState ? activeOrganicIntention : '',
+      cognitive_state: cognitiveState,
       private_view: Boolean(privateView),
     };
   }

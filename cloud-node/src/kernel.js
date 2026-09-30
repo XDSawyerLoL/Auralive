@@ -8,6 +8,7 @@ import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { buildNeuralFieldModel, normalizeAuraSelfReference } from './neural-field.js';
+import { CognitiveStateModel } from './cognitive_state.js';
 
 const now = () => new Date().toISOString();
 
@@ -44,6 +45,8 @@ export class CognitiveKernel {
     this.organism = new AuraOrganism();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
+    this.cognitiveStateModel = new CognitiveStateModel();
+    this.lastCognitiveState = null;
     this.expertRelay = null;
     this.lastInferenceAssessment = {};
     this.started = false;
@@ -662,6 +665,56 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
+  nativeAgentReply(name, task, state = {}) {
+    const mission = String(task || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
+    const focus = String(state?.dominant_focus?.title || state?.current_intention || '').trim();
+    const next = String(state?.next_action || '').trim();
+    const blocked = Array.isArray(state?.blocked) ? state.blocked.slice(0, 3).map((row) => row.title).filter(Boolean) : [];
+    const interests = Array.isArray(state?.interests) ? state.interests.slice(0, 3).map((row) => row.question).filter(Boolean) : [];
+
+    if (name === 'planner') {
+      return [
+        `Mission: ${mission}`,
+        focus ? `Focus cognitif actuel: ${focus}.` : '',
+        'Plan natif: 1) observer les faits disponibles; 2) formuler l’hypothèse minimale; 3) choisir une action réversible; 4) vérifier le résultat; 5) enregistrer l’issue et adapter le prochain essai.',
+        blocked.length ? `Blocages connus: ${blocked.join(' ; ')}.` : '',
+        next ? `Prochaine action déjà soutenue par mon état: ${next}` : '',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'research') {
+      return [
+        `Question de recherche: ${mission}`,
+        interests.length ? `Mes intérêts reliés: ${interests.join(' ; ')}.` : '',
+        'Je dois distinguer faits, hypothèses, contradictions et inconnues; une conclusion n’est admissible qu’après preuves indépendantes suffisantes.',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'dev') {
+      return [
+        `Diagnostic natif demandé: ${mission}`,
+        'Je privilégie le changement minimal, réversible et testable. Je dois reproduire le défaut, isoler la cause, modifier une seule couche, puis valider syntaxe, tests ciblés et régression.',
+        blocked.length ? `Contraintes actuelles: ${blocked.join(' ; ')}.` : '',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'security') {
+      return `Analyse sécurité native pour « ${mission} » : vérifier permissions, secrets, effets irréversibles, frontière privé/public, provenance des données et possibilité de rollback avant toute action.`;
+    }
+    if (name === 'operator') {
+      return [
+        `Plan opérateur natif pour « ${mission} ».`,
+        'Je commence par une vérification sans effet de bord, puis j’utilise uniquement une capacité explicitement autorisée. Toute action persistante doit avoir une preuve de succès ou rester en attente.',
+        next ? `Mon état cognitif propose actuellement: ${next}` : '',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'critic') {
+      return [
+        `Critique native de « ${mission} ».`,
+        'Je cherche d’abord ce qui pourrait rendre l’hypothèse fausse: donnée obsolète, causalité supposée, outil indisponible, contradiction, dépendance redondante ou réussite non vérifiée.',
+        blocked.length ? `Blocages à ne pas masquer: ${blocked.join(' ; ')}.` : '',
+      ].filter(Boolean).join(' ');
+    }
+    return `Je traite nativement la mission « ${mission} » depuis mon état cognitif courant, avec vérification avant action et apprentissage après résultat.`;
+  }
+
   async runAgent(name, task) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
     const taskRole = ({
@@ -672,32 +725,69 @@ export class CognitiveKernel {
       operator: 'tools',
       critic: 'critic',
     })[name] || 'general';
+
+    const state = await this.cognitiveState({ publicView: false }).catch(() => this.lastCognitiveState || {});
+    if (!this.ai?.enabled) {
+      const answer = this.nativeAgentReply(name, task, state);
+      await this.trace('agent-native', name, answer.slice(0, 4000), {
+        task: String(task).slice(0, 2000),
+        task_role: taskRole,
+        language_model_used: false,
+      });
+      return { agent: name, answer, native: true };
+    }
+
     const answer = await this.ai.generate(
       `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
       AGENT_ROLES[name],
       700,
       taskRole,
     );
-    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000), task_role: taskRole });
-    return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
+    const finalAnswer = String(answer || '').trim() || this.nativeAgentReply(name, task, state);
+    await this.trace(answer ? 'agent' : 'agent-native', name, finalAnswer.slice(0, 4000), {
+      task: String(task).slice(0, 2000),
+      task_role: taskRole,
+      language_model_used: Boolean(answer),
+    });
+    return { agent: name, answer: finalAnswer, native: !answer };
   }
 
   async swarm(task, names) {
-    const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic']).filter((name) => AGENT_ROLES[name]).slice(0, 5);
+    const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic'])
+      .filter((name) => AGENT_ROLES[name])
+      .slice(0, 5);
     if (!selected.length) throw new Error('Aucun agent valide');
+
     const outputs = [];
     for (const name of selected) {
       try { outputs.push(await this.runAgent(name, task)); }
-      catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
+      catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}`, native: true }); }
     }
-    const synthesis = await this.ai.generate(
-      `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
-      'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
-      900,
-      'critic',
-    );
-    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
-    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
+
+    let synthesis = '';
+    if (this.ai?.enabled) {
+      synthesis = await this.ai.generate(
+        `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
+        'Outil de synthèse externe. Les sorties AURA et les preuves restent souveraines.',
+        900,
+        'critic',
+      ).catch(() => '');
+    }
+    if (!String(synthesis || '').trim()) {
+      const state = await this.cognitiveState({ publicView: false }).catch(() => this.lastCognitiveState || {});
+      synthesis = [
+        `Décision native collective pour « ${String(task).slice(0, 1200)} ».`,
+        state?.dominant_focus?.title ? `Focus: ${state.dominant_focus.title}.` : '',
+        state?.next_action ? `Prochaine action: ${state.next_action}` : 'Prochaine action: réaliser le test réversible le plus informatif avant toute modification.',
+        'Critère: n’accepter l’action qu’avec résultat observable et enregistrer l’issue pour le prochain essai.',
+      ].filter(Boolean).join(' ');
+    }
+
+    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), {
+      agents: selected,
+      language_model_used: Boolean(this.ai?.enabled),
+    });
+    return { agents: outputs, synthesis, native: !this.ai?.enabled };
   }
 
   async operate(task, requestedRisks = []) {
@@ -730,6 +820,111 @@ export class CognitiveKernel {
       executed: false,
       plan: plan.answer,
       authority: 'Quantic Studio worker offline',
+    };
+  }
+
+  async cognitiveState({ publicView = false } = {}) {
+    const [soul, organism, intentions, work, curiosityRows, initiatives, failureRows, traces, bridgeStatus] = await Promise.all([
+      this.soul({ privateView: true }),
+      this.organismState({ publicView: false }),
+      this.intentions(16),
+      this.workItems(12),
+      query(
+        `SELECT id,title,content,context,created_at
+         FROM aura_cognitive_traces
+         WHERE kind='curiosity-question'
+         ORDER BY id DESC LIMIT 24`,
+      ).catch(() => []),
+      query(
+        `SELECT id,domain,kind,title,objective,priority,confidence,status,execution_mode,error,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 24`,
+      ).catch(() => []),
+      query(
+        `SELECT automation_id,event_type,signature,created_at
+         FROM aura_outcomes
+         WHERE ok=0
+         ORDER BY id DESC LIMIT 80`,
+      ).catch(() => []),
+      this.activity(24),
+      this.bridge?.status
+        ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
+        : Promise.resolve({ enabled: false, worker_online: false }),
+      this.cognitiveState({ publicView: false }).catch(() => this.lastCognitiveState || {}),
+    ]);
+
+    const failureMap = new Map();
+    for (const row of failureRows) {
+      const key = `${String(row.automation_id || '')}:${String(row.signature || '')}`;
+      const current = failureMap.get(key) || { ...row, count: 0 };
+      current.count += 1;
+      failureMap.set(key, current);
+    }
+
+    const curiosity = curiosityRows.map((row) => {
+      const context = parseJsonObject(row.context, {});
+      return {
+        ...row,
+        context,
+        target: context.target || '',
+        domain: context.domain || '',
+        priority: Number(context.priority || 0.55),
+        reason: context.reason || '',
+      };
+    });
+
+    const state = this.cognitiveStateModel.build({
+      soul,
+      organism,
+      intentions,
+      work,
+      curiosity,
+      initiatives,
+      failures: [...failureMap.values()],
+      traces,
+      neuralSignals: this.neuralSignals.slice(-80),
+      bridgeStatus,
+      generatedAt: now(),
+    });
+    this.lastCognitiveState = state;
+
+    if (!publicView) return state;
+    return {
+      version: state.version,
+      generated_at: state.generated_at,
+      mode: state.mode,
+      activity_score: state.activity_score,
+      mood: state.mood,
+      dominant_focus: state.dominant_focus ? {
+        kind: state.dominant_focus.kind,
+        title: state.dominant_focus.title,
+        priority: state.dominant_focus.priority,
+        status: state.dominant_focus.status,
+        blocked: state.dominant_focus.blocked,
+      } : null,
+      secondary_focus: state.secondary_focus.slice(0, 4).map((row) => ({
+        kind: row.kind,
+        title: row.title,
+        priority: row.priority,
+        status: row.status,
+        blocked: row.blocked,
+      })),
+      interests: state.interests.slice(0, 4).map((row) => ({
+        question: row.question,
+        domain: row.domain,
+        priority: row.priority,
+      })),
+      blocked: state.blocked.slice(0, 4).map((row) => ({
+        kind: row.kind,
+        title: row.title,
+        reason: row.reason,
+      })),
+      next_action: state.next_action,
+      self_summary: state.self_summary,
+      autonomy: state.autonomy,
+      coherence: state.coherence,
+      provenance: state.provenance,
     };
   }
 
@@ -838,13 +1033,14 @@ export class CognitiveKernel {
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
 
-    const [soul, intentions, lessons, reflections, work, continuity] = await Promise.all([
+    const [soul, intentions, lessons, reflections, work, continuity, cognitiveState] = await Promise.all([
       this.soul({ privateView: true }),
       this.intentions(6),
       this.lessons(6),
       this.reflections(4),
       this.workItems(8),
       this.continuitySnapshot(content),
+      this.cognitiveState({ publicView: false }),
     ]);
 
     let plan = this.cognition.planReply({
@@ -855,6 +1051,7 @@ export class CognitiveKernel {
       reflections,
       work,
       continuity,
+      cognitiveState,
       privateView,
     });
 
@@ -1043,6 +1240,15 @@ export class CognitiveKernel {
       } : null,
       compute: inference,
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
+      cognitive_state: {
+        version: cognitiveState.version,
+        mode: cognitiveState.mode,
+        dominant_focus: cognitiveState.dominant_focus,
+        interests: cognitiveState.interests.slice(0, 4),
+        blocked: cognitiveState.blocked.slice(0, 4),
+        next_action: cognitiveState.next_action,
+        activity_score: cognitiveState.activity_score,
+      },
     };
   }
 
@@ -1136,7 +1342,7 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status, services, lessons, bridgeStatus] = await Promise.all([
+    const [intentions, traces, status, services, lessons, bridgeStatus, cognitiveState] = await Promise.all([
       this.intentions(12),
       this.activity(30),
       this.status(),
@@ -1168,6 +1374,7 @@ export class CognitiveKernel {
       webEnabled: Boolean(this.webSubstrate?.enabled),
       horizonEnabled: Boolean(this.horizon?.enabled),
       previous: this._lastAttention || {},
+      cognitiveState,
     });
 
     this._lastAttention = Object.fromEntries(
@@ -1177,7 +1384,7 @@ export class CognitiveKernel {
     return {
       ...graph,
       updated_at: now(),
-      focus_statement: normalizeAuraSelfReference(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      focus_statement: normalizeAuraSelfReference(cognitiveState?.self_summary || cognitiveState?.dominant_focus?.title || soul.current_intention || soul.dominant_thought || '').slice(0, 700),
     };
   }
 
@@ -1215,6 +1422,15 @@ export class CognitiveKernel {
         version: ActiveInferenceEngine.VERSION,
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
+      cognitive_state: this.lastCognitiveState ? {
+        version: this.lastCognitiveState.version,
+        mode: this.lastCognitiveState.mode,
+        activity_score: this.lastCognitiveState.activity_score,
+        dominant_focus: this.lastCognitiveState.dominant_focus,
+        next_action: this.lastCognitiveState.next_action,
+        autonomy: this.lastCognitiveState.autonomy,
+        coherence: this.lastCognitiveState.coherence,
+      } : null,
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,

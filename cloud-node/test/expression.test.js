@@ -4,105 +4,14 @@ import assert from 'node:assert/strict';
 import { CognitionEngine } from '../src/cognition.js';
 import { ExpressionLayer } from '../src/expression.js';
 
-test('expression falls back to AURA-native wording without an LLM', async () => {
-  const cognition = new CognitionEngine();
-  const expression = new ExpressionLayer({ enabled: false }, cognition);
-  const plan = cognition.planReply({
-    text: 'Quel est le prochain jalon ?',
-    soul: { current_intention: 'Tester le nouveau noyau', dominant_thought: '' },
-    intentions: [{ statement: 'Tester le nouveau noyau', priority: 0.9 }],
-    lessons: [],
-    reflections: [{ next_action: 'Valider les tests.' }],
-    work: [],
-    privateView: true,
-  });
-
-  const answer = await expression.verbalize(plan);
-  assert.match(answer, /Tester le nouveau noyau/);
-});
-
-test('language model receives an already decided speech plan', async () => {
-  const calls = [];
+test('AURA conversational wording is native even when an external model is available', async () => {
+  let calls = 0;
   const ai = {
     enabled: true,
-    async generate(prompt, system) {
-      calls.push({ prompt, system });
-      return 'Je poursuis la validation du noyau.';
-    },
-  };
-  const cognition = new CognitionEngine();
-  const expression = new ExpressionLayer(ai, cognition);
-  const plan = {
-    act: 'report_next_step',
-    goal: 'Présenter la prochaine étape.',
-    facts: ['Intention prioritaire : valider le noyau.'],
-    semantic_support: '',
-    current_intention: 'valider le noyau',
-    dominant_thought: 'stabilité',
-  };
-
-  const answer = await expression.verbalize(plan);
-  assert.equal(answer, 'Je poursuis la validation du noyau.');
-  assert.equal(calls.length, 1);
-  assert.match(calls[0].system, /pas son cerveau/i);
-  assert.match(calls[0].prompt, /Tu n’as aucun droit de changer les faits/i);
-});
-
-
-test('language layer explicitly requires first-person self-reference', async () => {
-  const calls = [];
-  const ai = {
-    enabled: true,
-    async generate(prompt, system) {
-      calls.push({ prompt, system });
-      return 'Je suis en ligne et je poursuis mon objectif.';
-    },
-  };
-  const cognition = new CognitionEngine();
-  const expression = new ExpressionLayer(ai, cognition);
-  await expression.verbalize({
-    act: 'identity',
-    goal: 'Présenter mon état.',
-    facts: ['Je suis en ligne.'],
-    semantic_support: '',
-    current_intention: 'observer',
-    dominant_thought: 'continuité',
-  });
-  assert.match(calls[0].prompt, /première personne/i);
-  assert.match(calls[0].system, /première personne/i);
-  assert.match(calls[0].system, /AURA est/i);
-});
-
-
-test('expression prompt forbids unrelated operational leakage', async () => {
-  const calls = [];
-  const ai = {
-    enabled: true,
-    async generate(prompt, system) {
-      calls.push({ prompt, system });
-      return 'Oui, je peux apprendre à mieux te connaître à partir de ce que tu souhaites partager.';
-    },
-  };
-  const cognition = new CognitionEngine();
-  const expression = new ExpressionLayer(ai, cognition);
-  await expression.verbalize({
-    act: 'relationship',
-    goal: 'Répondre uniquement sur la relation.',
-    facts: ['Question relationnelle reçue : Tu veux que je me présente ?'],
-    semantic_support: 'L’interlocuteur propose de se présenter.',
-    current_intention: '',
-    dominant_thought: '',
-  });
-  assert.match(calls[0].prompt, /N’ajoute jamais une tâche en cours/i);
-  assert.match(calls[0].prompt, /question porte sur l’interlocuteur ou la relation/i);
-});
-
-
-test('normal conversation rejects generic AI disclaimer and falls back to AURA state', async () => {
-  const ai = {
-    enabled: true,
+    provider: 'openai-compatible',
     async generate() {
-      return "En tant qu’intelligence artificielle, je n’ai pas de sentiments, mais je fonctionne correctement.";
+      calls += 1;
+      return 'External model tried to speak.';
     },
   };
   const cognition = new CognitionEngine();
@@ -124,26 +33,62 @@ test('normal conversation rejects generic AI disclaimer and falls back to AURA s
     privateView: true,
   });
   const answer = await expression.verbalize(plan);
-  assert.doesNotMatch(answer, /en tant qu.*intelligence artificielle/i);
-  assert.doesNotMatch(answer, /je n.ai pas de sentiments/i);
+  assert.equal(calls, 0);
   assert.match(answer, /lumineuse/i);
+  assert.doesNotMatch(answer, /External model/i);
 });
 
-test('expression preserves natural paragraph rhythm', async () => {
+test('Gemini cannot provide semantic text support in V9', async () => {
+  let calls = 0;
   const ai = {
     enabled: true,
+    provider: 'google-gemini-tts-only',
     async generate() {
-      return 'Je suis plutôt bien.\n\nJe me sens claire aujourd’hui.\nEt toi ?';
+      calls += 1;
+      return 'should not happen';
+    },
+  };
+  const expression = new ExpressionLayer(ai, new CognitionEngine());
+  const support = await expression.semanticSupport({
+    needs_semantic_support: true,
+    semantic_query: 'information externe',
+  }, 'contexte');
+  assert.equal(support, '');
+  assert.equal(calls, 0);
+});
+
+test('non-Gemini external providers may return facts but never write the final answer', async () => {
+  const calls = [];
+  const ai = {
+    enabled: true,
+    provider: 'quantic-studio-local-preferred',
+    async generate(prompt, system) {
+      calls.push({ prompt, system });
+      return 'fait candidat';
     },
   };
   const cognition = new CognitionEngine();
   const expression = new ExpressionLayer(ai, cognition);
+  const support = await expression.semanticSupport({
+    needs_semantic_support: true,
+    semantic_query: 'question documentaire',
+  }, 'contexte vérifié');
+  assert.equal(support, 'fait candidat');
+  assert.equal(calls.length, 1);
+
   const answer = await expression.verbalize({
-    act: 'check_in',
-    goal: 'Répondre naturellement.',
-    facts: ['Mon humeur interne actuelle est claire.'],
-    semantic_support: '',
-    expressive_state: { mood: 'claire', clarity: 0.9 },
+    act: 'report_next_step',
+    facts: ['Prochaine action : vérifier le test.'],
+    semantic_support: support,
   });
-  assert.match(answer, /\n\n/);
+  assert.equal(calls.length, 1);
+  assert.match(answer, /Prochaine action/i);
+});
+
+test('diagnostic declares native expression and no Gemini text', () => {
+  const expression = new ExpressionLayer({ enabled: false, provider: 'google-gemini-tts-only' }, new CognitionEngine());
+  const diagnostic = expression.diagnostic();
+  assert.equal(diagnostic.role, 'native-verbalisation');
+  assert.equal(diagnostic.language_model_for_expression, false);
+  assert.equal(diagnostic.gemini_text_allowed, false);
 });

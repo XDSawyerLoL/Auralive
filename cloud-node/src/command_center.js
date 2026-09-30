@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
+import { AdaptiveAutonomyPolicy } from './adaptive_autonomy.js';
 
 const now = () => new Date().toISOString();
 
@@ -241,6 +242,7 @@ export class CommandCenter {
     this.lastFleetPollMs = 0;
     this.fleetSnapshot = [];
     this.lastError = '';
+    this.adaptivePolicy = new AdaptiveAutonomyPolicy();
   }
 
   async init() {
@@ -1045,7 +1047,7 @@ export class CommandCenter {
 
   async buildCandidates() {
     const syncedBridgeStatus = await this.syncCoreServices();
-    const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning] = await Promise.all([
+    const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning, cognitiveState] = await Promise.all([
       this.kernel.intentions(8),
       this.kernel.improvements(8),
       query(
@@ -1058,6 +1060,7 @@ export class CommandCenter {
         `SELECT question,confidence,epistemic_status,evidence_count,updated_at
          FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 24`,
       ).catch(() => []),
+      this.kernel.cognitiveState({ publicView: false }).catch(() => null),
     ]);
     const candidates = [];
 
@@ -1207,6 +1210,54 @@ export class CommandCenter {
         confidence: 0.98,
         requested_risks: [],
         signature: 'bridge-offline',
+      }));
+    }
+
+    if (cognitiveState?.dominant_focus?.title) {
+      const focus = cognitiveState.dominant_focus;
+      const needle = String(focus.title || '').toLowerCase();
+      const represented = candidates.some((candidate) =>
+        String(candidate.title || '').toLowerCase().includes(needle.slice(0, 80))
+        || String(candidate.objective || '').toLowerCase().includes(needle.slice(0, 120))
+      );
+      if (!represented) {
+        candidates.push(this.candidate({
+          domain: 'aura',
+          kind: focus.kind === 'problem' ? 'operator' : 'reflection',
+          title: 'Poursuivre le focus cognitif dominant',
+          objective:
+            'Faire progresser le focus dominant issu de mon état cognitif unifié: '
+            + focus.title + '. '
+            + 'Commencer par le test réversible le plus informatif, vérifier le résultat, puis mettre à jour mon état avant toute nouvelle étape.',
+          rationale:
+            'Le même focus doit être partagé par la conversation, les intentions, la curiosité et le centre de commande.',
+          priority: Math.min(0.97, Math.max(0.62, Number(focus.priority || 0.6) + 0.06)),
+          confidence: Math.max(0.76, Number(focus.confidence || 0.7)),
+          requested_risks: [],
+          signature: 'cognitive-focus:' + String(focus.kind || 'focus') + ':' + String(focus.title || '').slice(0, 180),
+        }));
+      }
+    }
+
+    if (
+      cognitiveState?.mode === 'idle'
+      && Array.isArray(cognitiveState?.interests)
+      && cognitiveState.interests[0]?.question
+    ) {
+      const interest = cognitiveState.interests[0];
+      candidates.push(this.candidate({
+        domain: String(interest.domain || 'aura-rd').slice(0, 80),
+        kind: 'reflection',
+        title: 'Transformer un intérêt en hypothèse testable',
+        objective:
+          'Mon état cognitif n’a pas de mission dominante. Transformer cet intérêt en hypothèse vérifiable, '
+          + 'définir le signal attendu et décider ensuite si une recherche ou une action est justifiée: '
+          + String(interest.question || '').slice(0, 1200),
+        rationale: 'Éviter l’inactivité en utilisant la curiosité persistée comme source d’initiative.',
+        priority: Math.min(0.82, Math.max(0.52, Number(interest.priority || 0.55) + 0.08)),
+        confidence: 0.82,
+        requested_risks: [],
+        signature: 'idle-interest:' + String(interest.question || '').slice(0, 180),
       }));
     }
 
@@ -1611,9 +1662,73 @@ export class CommandCenter {
       const candidates = [
         ...this.githubCandidates(fleet),
         ...(await this.buildCandidates()),
-      ].sort((a, b) => (b.priority + b.confidence * 0.15) - (a.priority + a.confidence * 0.15));
+      ];
+
+      const [bridgeStatus, recentOutcomes, cognitiveState] = await Promise.all([
+        this.bridge?.status?.().catch(() => ({ enabled: false, worker_online: false }))
+          || Promise.resolve({ enabled: false, worker_online: false }),
+        query(
+          `SELECT automation_id,event_type,ok,signature,created_at
+           FROM aura_outcomes
+           ORDER BY id DESC LIMIT 120`,
+        ).catch(() => []),
+        this.kernel.cognitiveState({ publicView: false }).catch(() => null),
+      ]);
+
+      // Reconstruct strategy memory from persisted outcomes on every cycle.
+      // This makes adaptation survive process restarts without a new schema.
+      this.adaptivePolicy.restore();
+      for (const outcome of [...recentOutcomes].reverse()) {
+        if (Number(outcome.ok || 0) === 1) continue;
+        this.adaptivePolicy.observeOutcome(
+          {
+            id: String(outcome.automation_id || ''),
+            signature: String(outcome.automation_id || ''),
+          },
+          {
+            ok: false,
+            signature: String(outcome.signature || ''),
+          },
+        );
+      }
+
+      const availableCapabilities = [
+        'native-reflection',
+        this.webSubstrate?.enabled ? 'web' : '',
+        Boolean(this.githubToken) ? 'github-write' : '',
+        Boolean(bridgeStatus?.worker_online) ? 'local-worker' : '',
+        this.fabric ? 'fabric' : '',
+      ].filter(Boolean);
+
+      const policyCandidates = candidates.map((candidate) => {
+        const required = [];
+        const kind = String(candidate.kind || '');
+        const action = String(candidate.action_type || '');
+        if (kind === 'operator') required.push('local-worker');
+        if (kind === 'github' && /^github\./.test(action)) required.push('github-write');
+        if (kind === 'research' && needsExternalEvidence(candidate.objective || candidate.title)) required.push('web');
+        return {
+          ...candidate,
+          required_capabilities: required,
+          reversible: !normalizeRisks(candidate.requested_risks).some((risk) => ['irreversible','destructive','external-side-effect'].includes(risk)),
+          risk: normalizeRisks(candidate.requested_risks).length
+            ? Math.min(1, 0.28 + normalizeRisks(candidate.requested_risks).length * 0.16)
+            : 0.16,
+          information_gain: kind === 'research' ? 0.82 : (kind === 'evolution' ? 0.66 : 0.48),
+          strategy_signature: String(candidate.signature || candidate.id || candidate.title || ''),
+        };
+      });
+
+      const decision = this.adaptivePolicy.select(policyCandidates, {
+        available_capabilities: availableCapabilities,
+        prior_lessons: cognitiveState?.unresolved_problems || [],
+      });
+
       let selected = null;
-      for (const candidate of candidates) {
+      const ordered = decision.evaluated.map((row) => row.candidate);
+      for (const candidate of ordered) {
+        const evalRow = decision.evaluated.find((row) => row.candidate === candidate);
+        if (!evalRow?.viable) continue;
         const persisted = await this.persistInitiative(candidate);
         if (!persisted.created) continue;
         selected = persisted.initiative;
@@ -1625,11 +1740,58 @@ export class CommandCenter {
           ok: true,
           reconciled,
           skipped: true,
-          reason: 'all candidates are cooling down',
+          reason: 'all candidates are cooling down or non-viable under current capabilities',
           candidates: candidates.length,
+          adaptive_policy: {
+            version: AdaptiveAutonomyPolicy.VERSION,
+            evaluated: decision.evaluated.slice(0, 8).map((row) => ({
+              title: String(row.candidate?.title || ''),
+              score: row.score,
+              viable: row.viable,
+              missing_capabilities: row.missing_capabilities,
+              prior_failures: row.prior_failures,
+            })),
+          },
         };
       }
+      const stateAtSelection = await this.kernel.cognitiveState({ publicView: false }).catch(() => null);
+      await this.kernel.trace(
+        'autonomy-selection',
+        String(selected.title || 'Initiative autonome').slice(0, 240),
+        String(selected.objective || '').slice(0, 4000),
+        {
+          initiative_id: selected.id,
+          trigger,
+          priority: Number(selected.priority || 0),
+          confidence: Number(selected.confidence || 0),
+          cognitive_focus: String(stateAtSelection?.dominant_focus?.title || ''),
+          cognitive_mode: String(stateAtSelection?.mode || ''),
+          language_model_used_for_decision: false,
+          adaptive_policy_version: AdaptiveAutonomyPolicy.VERSION,
+          adaptive_policy_selection: decision.selected_evaluation ? {
+            score: decision.selected_evaluation.score,
+            prior_failures: decision.selected_evaluation.prior_failures,
+            missing_capabilities: decision.selected_evaluation.missing_capabilities,
+            contradiction_weight: decision.selected_evaluation.contradiction_weight,
+          } : null,
+          available_capabilities: availableCapabilities,
+        },
+      );
+      this.kernel.emitNeuralSignal?.({
+        kind: 'autonomy-selection',
+        source: 'planning',
+        target: 'automation',
+        intensity: Math.max(0.55, Number(selected.priority || 0.55)),
+        label: String(selected.title || selected.objective || '').slice(0, 180),
+        origin: 'command-center',
+      });
       const result = await this.executeInitiative(selected);
+      const selectedStatus = String(result?.status || result?.result?.status || '').toLowerCase();
+      const selectedOk = !['failed','error'].includes(selectedStatus) && !selectedStatus.endsWith('-rejected');
+      this.adaptivePolicy.observeOutcome(selected, {
+        ok: selectedOk,
+        signature: String(result?.result?.reason || result?.error || selectedStatus || ''),
+      });
       this.lastError = '';
       return {
         ok: true,
