@@ -1678,6 +1678,29 @@ export class CommandCenter {
           candidates: candidates.length,
         };
       }
+      const stateAtSelection = await this.kernel.cognitiveState({ publicView: false }).catch(() => null);
+      await this.kernel.trace(
+        'autonomy-selection',
+        String(selected.title || 'Initiative autonome').slice(0, 240),
+        String(selected.objective || '').slice(0, 4000),
+        {
+          initiative_id: selected.id,
+          trigger,
+          priority: Number(selected.priority || 0),
+          confidence: Number(selected.confidence || 0),
+          cognitive_focus: String(stateAtSelection?.dominant_focus?.title || ''),
+          cognitive_mode: String(stateAtSelection?.mode || ''),
+          language_model_used_for_decision: false,
+        },
+      );
+      this.kernel.emitNeuralSignal?.({
+        kind: 'autonomy-selection',
+        source: 'planning',
+        target: 'automation',
+        intensity: Math.max(0.55, Number(selected.priority || 0.55)),
+        label: String(selected.title || selected.objective || '').slice(0, 180),
+        origin: 'command-center',
+      });
       const result = await this.executeInitiative(selected);
       this.lastError = '';
       return {
