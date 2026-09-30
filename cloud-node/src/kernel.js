@@ -578,7 +578,17 @@ export class CognitiveKernel {
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
       const shouldReflect = force || Boolean(String(text).trim()) || (dueByTime && this.stimuli.length > 0 && underLimit);
       await this.saveSoul();
-      if (!shouldReflect) return { ok: true, skipped: true, reason: 'aucun stimulus nécessitant une réflexion', soul: await this.soul() };
+      if (!shouldReflect) {
+        const autonomy = await this.ensureAutonomousContinuity();
+        return {
+          ok: true,
+          skipped: true,
+          reason: 'aucun stimulus nécessitant une réflexion',
+          autonomy,
+          unified_state: autonomy.state || this.unifiedStateCache,
+          soul: await this.soul(),
+        };
+      }
 
       const bundle = await this.contextBundle(text);
       // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
@@ -638,7 +648,14 @@ export class CognitiveKernel {
         origin: String(trigger || 'reflection'),
       });
       await this.trace('reflection', title, summary, reflection);
-      return { ok: true, reflection, soul: await this.soul() };
+      const autonomy = await this.ensureAutonomousContinuity();
+      return {
+        ok: true,
+        reflection,
+        autonomy,
+        unified_state: autonomy.state || this.unifiedStateCache,
+        soul: await this.soul(),
+      };
     } finally {
       this.tickRunning = false;
     }
@@ -1259,7 +1276,7 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status, services, lessons, bridgeStatus] = await Promise.all([
+    const [intentions, traces, status, services, lessons, bridgeStatus, unifiedState] = await Promise.all([
       this.intentions(12),
       this.activity(30),
       this.status(),
@@ -1273,6 +1290,7 @@ export class CognitiveKernel {
       this.bridge?.status
         ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
         : Promise.resolve({ enabled: false, worker_online: false }),
+      this.unifiedState({ persist: false }),
     ]);
 
     const organism = this.organism.migrate(soul);
@@ -1290,6 +1308,7 @@ export class CognitiveKernel {
       bridgeStatus,
       webEnabled: Boolean(this.webSubstrate?.enabled),
       horizonEnabled: Boolean(this.horizon?.enabled),
+      unifiedState,
       previous: this._lastAttention || {},
     });
 
@@ -1300,7 +1319,21 @@ export class CognitiveKernel {
     return {
       ...graph,
       updated_at: now(),
-      focus_statement: normalizeAuraSelfReference(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      focus_statement: normalizeAuraSelfReference(
+        unifiedState?.primary_goal?.statement
+        || unifiedState?.dominant_thought
+        || soul.current_intention
+        || soul.dominant_thought
+        || ''
+      ).slice(0, 500),
+      unified_state: {
+        version: unifiedState?.version || UNIFIED_SELF_STATE_VERSION,
+        primary_goal: unifiedState?.primary_goal || null,
+        secondary_goals: unifiedState?.secondary_goals || [],
+        interests: unifiedState?.interests || [],
+        open_loops: unifiedState?.open_loops || [],
+        autonomy: unifiedState?.autonomy || {},
+      },
     };
   }
 
@@ -1338,6 +1371,12 @@ export class CognitiveKernel {
         version: ActiveInferenceEngine.VERSION,
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
+      unified_self_state: {
+        version: UNIFIED_SELF_STATE_VERSION,
+        ready: Boolean(this.unifiedStateCache),
+        primary_goal: this.unifiedStateCache?.primary_goal || null,
+        autonomy: this.unifiedStateCache?.autonomy || {},
+      },
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
