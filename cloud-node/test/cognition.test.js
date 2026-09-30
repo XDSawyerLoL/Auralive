@@ -23,25 +23,44 @@ test('native cognition derives a reflection without a language model', () => {
   assert.ok(result.confidence >= 0.7);
 });
 
-test('reply plan is built from AURA state before expression', () => {
+test('reply plan is built from the unified AURA state before expression', () => {
   const engine = new CognitionEngine();
   const plan = engine.planReply({
     text: 'Que fais-tu maintenant ?',
     soul: {
-      current_intention: 'Consolider la mémoire',
-      dominant_thought: 'Vérifier la continuité',
+      current_intention: 'Ancien focus',
+      dominant_thought: 'Ancienne pensée',
     },
-    intentions: [{ statement: 'Consolider la mémoire', priority: 0.8 }],
+    intentions: [{ statement: 'Ancien focus', priority: 0.6 }],
     lessons: [],
     reflections: [],
-    work: [{ title: 'Continuité cognitive' }],
+    work: [{ title: 'Ancien travail' }],
+    cognitiveState: {
+      mode: 'active',
+      activity_score: 0.82,
+      dominant_focus: {
+        kind: 'intention',
+        title: 'Consolider la mémoire',
+        priority: 0.88,
+      },
+      active_work: [
+        { kind: 'intention', title: 'Consolider la mémoire' },
+        { kind: 'initiative', title: 'Vérifier la continuité' },
+      ],
+      interests: [{ question: 'Comment améliorer la consolidation ?' }],
+      unresolved_problems: [],
+      blocked: [],
+      next_action: 'Valider la continuité sur un nouvel échange.',
+    },
     privateView: true,
   });
 
   assert.equal(plan.act, 'report_current_activity');
   assert.equal(plan.needs_semantic_support, false);
   assert.match(plan.facts.join(' '), /Consolider la mémoire/);
-  assert.match(engine.deterministicReply(plan), /Pensée dominante|Travail prioritaire|Intention actuelle/);
+  assert.match(plan.facts.join(' '), /améliorer la consolidation/i);
+  assert.match(engine.deterministicReply(plan), /Valider la continuité/i);
+  assert.doesNotMatch(engine.deterministicReply(plan), /Ancien focus|Ancien travail/);
 });
 
 
