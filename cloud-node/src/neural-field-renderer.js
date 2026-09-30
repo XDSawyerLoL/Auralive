@@ -24,7 +24,9 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     reduced:false,
     focus:null,
     filaments:[],
-    constellation:[]
+    constellation:[],
+    liveSignals:[],
+    seenSignalIds:new Set()
   };
 
   function hash01(value){ return neuralHash(value); }
@@ -883,6 +885,73 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     ctx.fillStyle='rgba(221,212,244,.78)';ctx.font='600 8px Inter,system-ui,sans-serif';ctx.fillText('EN ÉVOLUTION',p.x,p.y+17);
   }
 
+  function ingestSignals(events){
+    if(!Array.isArray(events)||!events.length)return;
+    const stamp=performance.now();
+    for(const event of events){
+      const id=Number(event&&event.id||0);
+      if(!id||state.seenSignalIds.has(id))continue;
+      state.seenSignalIds.add(id);
+      if(state.seenSignalIds.size>500){
+        const keep=Array.from(state.seenSignalIds).slice(-320);
+        state.seenSignalIds=new Set(keep);
+      }
+      state.liveSignals.push({
+        id,
+        source:String(event.source||'aura'),
+        target:String(event.target||'reasoning'),
+        intensity:Math.max(.15,Math.min(1,Number(event.intensity)||.5)),
+        label:String(event.label||'').slice(0,180),
+        born:stamp,
+        life:1050+Math.max(.15,Math.min(1,Number(event.intensity)||.5))*950
+      });
+    }
+    if(state.liveSignals.length>96)state.liveSignals.splice(0,state.liveSignals.length-96);
+  }
+
+  function drawLiveSignalsV8(t){
+    if(!state.field||!state.liveSignals.length)return;
+    const ctx=state.ctx;
+    state.liveSignals=state.liveSignals.filter(function(signal){return t-signal.born<signal.life;});
+    for(const signal of state.liveSignals){
+      const a=state.field.byId&&state.field.byId[signal.source];
+      const b=state.field.byId&&state.field.byId[signal.target];
+      if(!a||!b)continue;
+      const ap=px(a),bp=px(b);
+      const dx=bp.x-ap.x,dy=bp.y-ap.y,len=Math.hypot(dx,dy)||1;
+      const bend=(hash01(signal.source+'>'+signal.target)-.5)*Math.min(105,len*.24);
+      const nx=-dy/len,ny=dx/len;
+      const c1x=ap.x+dx*.34+nx*bend,c1y=ap.y+dy*.34+ny*bend;
+      const c2x=ap.x+dx*.66+nx*bend,c2y=ap.y+dy*.66+ny*bend;
+      const p=Math.max(0,Math.min(1,(t-signal.born)/signal.life));
+      const q=1-p;
+      const x=q*q*q*ap.x+3*q*q*p*c1x+3*q*p*p*c2x+p*p*p*bp.x;
+      const y=q*q*q*ap.y+3*q*q*p*c1y+3*q*p*p*c2y+p*p*p*bp.y;
+      const targetColor=color(b.cluster,b.status);
+      ctx.save();
+      ctx.globalCompositeOperation='lighter';
+      const trail=ctx.createLinearGradient(ap.x,ap.y,bp.x,bp.y);
+      trail.addColorStop(0,'rgba(255,255,255,.04)');
+      trail.addColorStop(.45,rgba(targetColor,.10+signal.intensity*.16));
+      trail.addColorStop(1,rgba(targetColor,.04));
+      ctx.strokeStyle=trail;ctx.lineWidth=.65+signal.intensity*1.4;
+      ctx.shadowBlur=8+signal.intensity*10;ctx.shadowColor=rgba(targetColor,.34);
+      ctx.beginPath();ctx.moveTo(ap.x,ap.y);ctx.bezierCurveTo(c1x,c1y,c2x,c2y,bp.x,bp.y);ctx.stroke();
+
+      const glow=ctx.createRadialGradient(x,y,0,x,y,12+signal.intensity*15);
+      glow.addColorStop(0,'rgba(255,255,255,.98)');
+      glow.addColorStop(.18,rgba(targetColor,.86));
+      glow.addColorStop(.48,rgba(targetColor,.28));
+      glow.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=glow;ctx.beginPath();ctx.arc(x,y,12+signal.intensity*15,0,Math.PI*2);ctx.fill();
+
+      ctx.strokeStyle=rgba(targetColor,.24+signal.intensity*.36);
+      ctx.lineWidth=.8;
+      ctx.beginPath();ctx.arc(bp.x,bp.y,18+signal.intensity*14*(1-p),0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   function frame(t){
     if(!state.canvas||!state.ctx)return;
     state.last=t;
@@ -892,6 +961,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       drawCognitiveDust(t);
       drawFunctionalRibbonsV8(t);
       for(const galaxy of state.field.galaxies||[]) drawGalaxyV8(galaxy,t);
+      drawLiveSignalsV8(t);
       drawAuraCoreV8(t);
     }
     state.raf=requestAnimationFrame(frame);
@@ -942,6 +1012,6 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     if(state.raf)cancelAnimationFrame(state.raf);
     state.raf=0;
   }
-  window.AURANeuralField={init,render,destroy,state};
+  window.AURANeuralField={init,render,ingestSignals,destroy,state};
 })();
 `;
