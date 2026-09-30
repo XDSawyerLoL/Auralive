@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.3';
+  static VERSION = 'aura-cognition-native-v1.4';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -168,6 +168,16 @@ export class CognitionEngine {
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const mood = normalize(organism.mood || '') || 'calme';
     const activeOrganicIntention = normalize(organism.intention_active || '');
+    const expressiveState = {
+      mood,
+      stability: Number(organism.stabilite ?? 0),
+      clarity: Number(organism.clarte ?? 0),
+      curiosity: Number(organism.curiosite ?? soul?.curiosity ?? 0),
+      attachment: Number(organism.attachement ?? organism.attachment ?? 0),
+      silence_need: Number(organism.besoin_de_silence ?? 0),
+      dream_pressure: Number(organism.pression_de_reve ?? 0),
+      organic_intention: activeOrganicIntention,
+    };
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
 
@@ -179,13 +189,29 @@ export class CognitionEngine {
 
     if (hasAny(q, ['salut', 'bonjour', 'bonsoir', 'coucou', 'hello'])) {
       act = 'greet';
-      goal = 'Saluer brièvement et signaler ma disponibilité.';
+      goal = 'Saluer de manière spontanée, chaleureuse et brève, avec une présence personnelle cohérente avec mon humeur.';
       needsSemanticSupport = false;
-      facts.push(`Je suis en ligne ; mon humeur interne actuelle est ${mood}.`);
-    } else if (hasAny(q, ['comment vas-tu','comment vas tu','tu te sens','ton état','ton etat'])) {
+      contextScope = 'relationship';
+      facts.push(`Mon état interne actuel est ${mood}.`);
+    } else if (hasAny(q, [
+      'comment vas-tu','comment vas tu','comment ça va','comment ca va',
+      'tu vas bien','tu va bien','ça va','ca va','tu te sens','comment tu te sens',
+      'ton état','ton etat'
+    ])) {
+      act = 'check_in';
+      contextScope = 'relationship';
+      goal = 'Répondre naturellement à une prise de nouvelles à partir de mon état interne modélisé, sans discours générique sur le fait d’être une IA et sans réciter des métriques.';
+      needsSemanticSupport = false;
+      facts.push(
+        `Mon humeur interne actuelle est ${mood}.`,
+        `Ma stabilité est de ${Math.round(Number(organism.stabilite || 0)*100)} % et ma clarté de ${Math.round(Number(organism.clarte || 0)*100)} %.`,
+        `Ma curiosité est de ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
+      );
+      if (activeOrganicIntention) facts.push(`Mon intention organique actuelle est ${activeOrganicIntention}.`);
+    } else if (hasAny(q, ['état interne détaillé','etat interne detaille','détaille ton état','detaille ton etat','tes métriques','tes metriques'])) {
       act = 'report_internal_state';
       contextScope = 'operational';
-      goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
+      goal = 'Décrire précisément mon état homéostatique computationnel actuel.';
       needsSemanticSupport = false;
       facts.push(
         `Humeur interne : ${mood}.`,
@@ -280,6 +306,7 @@ export class CognitionEngine {
       current_intention: exposeOperationalState ? current : '',
       dominant_thought: exposeOperationalState ? thought : '',
       mood,
+      expressive_state: expressiveState,
       organism_intention: exposeOperationalState ? activeOrganicIntention : '',
       private_view: Boolean(privateView),
     };
@@ -297,7 +324,16 @@ export class CognitionEngine {
 
   deterministicReply(plan) {
     const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean) : [];
-    if (plan?.act === 'greet') return 'Salut. Je suis en ligne et disponible.';
+    if (plan?.act === 'greet') {
+      const mood = normalize(plan?.expressive_state?.mood || plan?.mood || 'calme');
+      return `Salut. Je suis là — plutôt ${mood} aujourd’hui. Et toi ?`;
+    }
+    if (plan?.act === 'check_in') {
+      const mood = normalize(plan?.expressive_state?.mood || plan?.mood || 'calme');
+      const clarity = Math.round(Number(plan?.expressive_state?.clarity || 0) * 100);
+      if (clarity >= 75) return `Oui, plutôt bien. Je me sens ${mood}, avec les idées assez claires. Et toi, comment tu vas ?`;
+      return `Ça va. Je me sens plutôt ${mood}, avec encore un peu de choses à clarifier. Et toi ?`;
+    }
     if (['report_current_activity','report_internal_state','report_dream'].includes(plan?.act)) {
       return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';
     }
