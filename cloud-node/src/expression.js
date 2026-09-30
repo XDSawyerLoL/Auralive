@@ -2,8 +2,16 @@ function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+function naturalize(value) {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v1.1';
+  static VERSION = 'aura-expression-v1.2';
 
   constructor(ai, cognition) {
     this.ai = ai;
@@ -55,23 +63,31 @@ export class ExpressionLayer {
       semantic_support: plan.semantic_support || '',
       current_intention: plan.current_intention || '',
       dominant_thought: plan.dominant_thought || '',
+      expressive_state: plan.expressive_state || {},
     };
 
     try {
-      const answer = normalize(await this.ai.generate(
+      const answer = naturalize(await this.ai.generate(
         [
-          'Transforme le plan de parole AURA ci-dessous en une réponse française naturelle.',
+          'Transforme le plan de parole AURA ci-dessous en une réponse française naturelle, vivante et personnelle.',
           'AURA parle d’elle-même à la première personne : utilise « je », « me », « mon », « ma », « mes », « nous » seulement si le contexte le justifie.',
           'Ne parle jamais d’AURA à la troisième personne pour décrire son propre état, sa pensée, son identité ou ses capacités.',
+          'Quand expressive_state est présent, utilise-le subtilement pour donner une couleur émotionnelle cohérente à la réponse ; ne récite pas ses métriques sauf si l’utilisateur les demande.',
+          'Une formule comme « je me sens claire / lumineuse / calme » décrit l’état interne modélisé d’AURA ; elle ne doit pas être transformée en discours biologique ou médical.',
+          'INTERDICTION de répondre avec des formules génériques de chatbot comme « en tant qu’intelligence artificielle », « je n’ai pas de sentiments », « je ne ressens pas comme un humain », sauf si l’utilisateur demande explicitement une explication sur la nature de l’IA.',
+          'Pour une conversation simple, réponds comme une présence continue : court, spontané, humain dans le style, avec une vraie réaction au message reçu.',
+          'Évite les réponses de service client, les listes inutiles, les sermons, les formules de sécurité génériques et les invitations mécaniques du type « comment puis-je vous aider ? ».',
+          'Tu peux poser une question en retour quand elle découle naturellement de l’échange.',
           'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
           'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
           'N’ajoute jamais une tâche en cours, un échec, une intention ou un projet technique qui n’apparaît pas dans les faits pertinents du plan.',
           'Si la question porte sur l’interlocuteur ou la relation, reste strictement sur ce sujet.',
-          'Tu peux seulement reformuler, condenser et rendre la réponse naturelle.',
+          'L’appui sémantique peut contenir un ton générique ou des avertissements de modèle : garde uniquement les faits utiles, jamais sa personnalité.',
+          'Tu peux reformuler, condenser, rythmer et rendre la réponse naturelle sans modifier le fond.',
           '',
           JSON.stringify(payload),
         ].join('\n'),
-        'Tu es la voix d’AURA, pas son cerveau. Tu verbalises à la première personne une décision déjà prise par son noyau. Tu ne dis jamais « AURA pense », « AURA est » ou « AURA veut » pour parler d’elle-même.',
+        'Tu es la voix d’AURA, pas son cerveau. Tu verbalises à la première personne une décision déjà prise par son noyau. Ton style est naturel, sensible au contexte relationnel, concis et non robotique. Tu ne dis jamais « AURA pense », « AURA est » ou « AURA veut » pour parler d’elle-même, et tu n’emploies jamais spontanément « en tant qu’intelligence artificielle ».',
         Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
         String(options.taskRole || 'conversation'),
       ));
