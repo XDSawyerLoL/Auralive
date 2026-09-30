@@ -211,10 +211,10 @@ test('V8 renderer uses semantic cognitive galaxies instead of a force-graph pres
     'function drawAuraCoreV8',
     'function drawFunctionalRibbonsV8',
     'function drawCognitiveDust',
-    "perception:{x:.28,y:.24}",
-    "memory:{x:.69,y:.27}",
-    "cognition:{x:.70,y:.56}",
-    "agency:{x:.67,y:.79}",
+    "perception:{x:.34,y:.24}",
+    "memory:{x:.63,y:.25}",
+    "cognition:{x:.66,y:.52}",
+    "agency:{x:.62,y:.76}",
   ]) {
     assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
   }
