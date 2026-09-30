@@ -96,3 +96,54 @@ test('expression prompt forbids unrelated operational leakage', async () => {
   assert.match(calls[0].prompt, /N’ajoute jamais une tâche en cours/i);
   assert.match(calls[0].prompt, /question porte sur l’interlocuteur ou la relation/i);
 });
+
+
+test('normal conversation rejects generic AI disclaimer and falls back to AURA state', async () => {
+  const ai = {
+    enabled: true,
+    async generate() {
+      return "En tant qu’intelligence artificielle, je n’ai pas de sentiments, mais je fonctionne correctement.";
+    },
+  };
+  const cognition = new CognitionEngine();
+  const expression = new ExpressionLayer(ai, cognition);
+  const plan = cognition.planReply({
+    text: 'tu va bien ?',
+    soul: {
+      organism: {
+        mood: 'lumineuse',
+        stabilite: 0.95,
+        clarte: 0.92,
+        curiosite: 0.7,
+      },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    privateView: true,
+  });
+  const answer = await expression.verbalize(plan);
+  assert.doesNotMatch(answer, /en tant qu.*intelligence artificielle/i);
+  assert.doesNotMatch(answer, /je n.ai pas de sentiments/i);
+  assert.match(answer, /lumineuse/i);
+});
+
+test('expression preserves natural paragraph rhythm', async () => {
+  const ai = {
+    enabled: true,
+    async generate() {
+      return 'Je suis plutôt bien.\n\nJe me sens claire aujourd’hui.\nEt toi ?';
+    },
+  };
+  const cognition = new CognitionEngine();
+  const expression = new ExpressionLayer(ai, cognition);
+  const answer = await expression.verbalize({
+    act: 'check_in',
+    goal: 'Répondre naturellement.',
+    facts: ['Mon humeur interne actuelle est claire.'],
+    semantic_support: '',
+    expressive_state: { mood: 'claire', clarity: 0.9 },
+  });
+  assert.match(answer, /\n\n/);
+});
