@@ -1045,7 +1045,7 @@ export class CommandCenter {
 
   async buildCandidates() {
     const syncedBridgeStatus = await this.syncCoreServices();
-    const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning] = await Promise.all([
+    const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning, cognitiveState] = await Promise.all([
       this.kernel.intentions(8),
       this.kernel.improvements(8),
       query(
@@ -1058,6 +1058,7 @@ export class CommandCenter {
         `SELECT question,confidence,epistemic_status,evidence_count,updated_at
          FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 24`,
       ).catch(() => []),
+      this.kernel.cognitiveState({ publicView: false }).catch(() => null),
     ]);
     const candidates = [];
 
@@ -1207,6 +1208,54 @@ export class CommandCenter {
         confidence: 0.98,
         requested_risks: [],
         signature: 'bridge-offline',
+      }));
+    }
+
+    if (cognitiveState?.dominant_focus?.title) {
+      const focus = cognitiveState.dominant_focus;
+      const needle = String(focus.title || '').toLowerCase();
+      const represented = candidates.some((candidate) =>
+        String(candidate.title || '').toLowerCase().includes(needle.slice(0, 80))
+        || String(candidate.objective || '').toLowerCase().includes(needle.slice(0, 120))
+      );
+      if (!represented) {
+        candidates.push(this.candidate({
+          domain: 'aura',
+          kind: focus.kind === 'problem' ? 'operator' : 'reflection',
+          title: 'Poursuivre le focus cognitif dominant',
+          objective:
+            'Faire progresser le focus dominant issu de mon état cognitif unifié: '
+            + focus.title + '. '
+            + 'Commencer par le test réversible le plus informatif, vérifier le résultat, puis mettre à jour mon état avant toute nouvelle étape.',
+          rationale:
+            'Le même focus doit être partagé par la conversation, les intentions, la curiosité et le centre de commande.',
+          priority: Math.min(0.97, Math.max(0.62, Number(focus.priority || 0.6) + 0.06)),
+          confidence: Math.max(0.76, Number(focus.confidence || 0.7)),
+          requested_risks: [],
+          signature: 'cognitive-focus:' + String(focus.kind || 'focus') + ':' + String(focus.title || '').slice(0, 180),
+        }));
+      }
+    }
+
+    if (
+      cognitiveState?.mode === 'idle'
+      && Array.isArray(cognitiveState?.interests)
+      && cognitiveState.interests[0]?.question
+    ) {
+      const interest = cognitiveState.interests[0];
+      candidates.push(this.candidate({
+        domain: String(interest.domain || 'aura-rd').slice(0, 80),
+        kind: 'reflection',
+        title: 'Transformer un intérêt en hypothèse testable',
+        objective:
+          'Mon état cognitif n’a pas de mission dominante. Transformer cet intérêt en hypothèse vérifiable, '
+          + 'définir le signal attendu et décider ensuite si une recherche ou une action est justifiée: '
+          + String(interest.question || '').slice(0, 1200),
+        rationale: 'Éviter l’inactivité en utilisant la curiosité persistée comme source d’initiative.',
+        priority: Math.min(0.82, Math.max(0.52, Number(interest.priority || 0.55) + 0.08)),
+        confidence: 0.82,
+        requested_risks: [],
+        signature: 'idle-interest:' + String(interest.question || '').slice(0, 180),
       }));
     }
 
