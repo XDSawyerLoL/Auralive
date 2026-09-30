@@ -772,6 +772,100 @@ body.map-focus .map-wrap{height:100%!important;min-height:0!important}
   .organism-hud{top:62px!important}
   .map-foot{max-width:80%!important}
 }
+
+/* AURA UX V7 — readable at desktop scale */
+@media(min-width:1181px){
+  .shell{padding:16px 20px 86px}
+  .topbar{min-height:66px;padding:0 16px}
+  .logo{font-size:40px;letter-spacing:.32em}
+  .title{font-size:22px}
+  .subtitle{font-size:11px}
+  .pill{font-size:10px;padding:9px 12px}
+  .clock .date{font-size:9px}.clock .time{font-size:18px}
+
+  .chat-panel{
+    left:22px!important;
+    top:72px!important;
+    bottom:26px!important;
+    width:min(370px,27vw)!important;
+  }
+  .right-stack{
+    right:22px!important;
+    top:72px!important;
+    bottom:26px!important;
+    width:min(390px,28vw)!important;
+    gap:12px!important;
+  }
+
+  .chat-panel .panel-head,.right-stack .panel-head{
+    min-height:48px!important;
+    padding:12px 14px!important;
+  }
+  .chat-panel .panel-title,.right-stack .panel-title{
+    font-size:12px!important;
+  }
+  .panel-meta{font-size:8.5px!important}
+
+  .chat-tabs{margin:2px 2px 14px!important}
+  .chat-tab{font-size:10.5px!important;padding:9px 12px!important}
+  .messages{gap:16px!important;padding:10px 8px 18px!important}
+  .msg{
+    font-size:13px!important;
+    line-height:1.58!important;
+    padding:14px 15px!important;
+    border-radius:15px!important;
+    max-width:90%!important;
+  }
+  .msg .who,.who{font-size:9px!important;margin-bottom:6px!important}
+  .msg.aura{margin-left:46px!important}
+  .msg.user{margin-right:46px!important}
+  .msg.aura::before,.msg.user::before{
+    width:34px!important;height:34px!important;top:8px!important;
+  }
+  .msg.aura::before{left:-46px!important}.msg.user::before{right:-46px!important}
+  .quick{gap:9px!important}
+  .quick button{font-size:10.5px!important;padding:12px 13px!important}
+  .composer{padding:10px!important;gap:8px!important}
+  .composer textarea{font-size:12px!important;min-height:44px!important}
+  .voice,.send{width:42px!important;height:42px!important;font-size:17px!important}
+
+  .right-stack .panel-body{padding:12px!important}
+  .cognitive-hero{padding:15px!important}
+  .cognitive-top{grid-template-columns:96px 1fr!important;gap:13px!important}
+  .cognitive-orb-wrap{width:90px!important;height:90px!important}
+  .cognitive-orb{width:58px!important;height:58px!important}
+  .cognitive-state-kicker{font-size:9px!important}
+  .cognitive-state-value{font-size:24px!important}
+  .cognitive-state-sub{font-size:10px!important;line-height:1.45!important}
+  .cognitive-metrics{gap:10px!important;margin-top:14px!important}
+  .cog-icon{width:24px!important;height:24px!important;font-size:10px!important}
+  .cog-name{font-size:10.5px!important}
+  .cog-value{font-size:10.5px!important}
+  .cog-bar{height:5px!important}
+
+  .thought-card{padding:14px!important}
+  .thought-title{font-size:11.5px!important}
+  #dominantThought{font-size:11px!important;line-height:1.55!important}
+  .context-tag{font-size:8.5px!important;padding:5px 8px!important}
+  .thought-wave{height:34px!important}
+
+  .work-row{padding:10px 11px!important}
+  .work-title{font-size:10.5px!important;line-height:1.4!important}
+  .work-kind{font-size:8px!important}
+  .progress{height:5px!important}
+
+  .map-panel>.panel-head{
+    min-width:520px!important;
+    padding:9px 12px 9px 16px!important;
+  }
+  .map-panel .panel-title{font-size:11.5px!important}
+  .map-panel .map-stats{font-size:8px!important}
+  .organism-hud{font-size:9px!important;padding:8px 11px!important}
+  .map-foot{font-size:9.5px!important;padding:8px 12px!important;max-width:640px!important}
+
+  .bottom-dock{padding:8px 9px!important}
+  .dock-btn{font-size:9.5px!important;min-width:94px!important;padding:11px 13px!important}
+}
 </style>
 </head>
 <body>

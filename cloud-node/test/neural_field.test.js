@@ -187,3 +187,17 @@ test('renderer declares node role before any conditional use', async () => {
   assert.ok(firstUse >= 0, 'role use missing');
   assert.ok(declaration < firstUse, 'role must be initialized before conditional use');
 });
+
+
+test('V7 renderer builds local neural constellations around major capabilities', async () => {
+  const { NEURAL_FIELD_SCRIPT } = await import('../src/neural-field-renderer.js');
+  for (const token of [
+    'function drawClusterConstellation',
+    'drawClusterConstellation(node,p,t)',
+    "node.id+':cluster:'",
+    'const count=10+Math.round(activity*8+centrality*7)',
+    "ctx.font='650 13px Inter,system-ui,sans-serif'",
+  ]) {
+    assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
+  }
+});

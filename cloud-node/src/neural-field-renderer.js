@@ -270,7 +270,9 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       grad.addColorStop(0,rgba(c,.08+activity*.27));
       grad.addColorStop(.55,rgba(c,.06+activity*.18));
       grad.addColorStop(1,rgba(targetColor,.08+activity*.27));
-      ctx.lineWidth=.82+weight*2.45;
+      const edgeDistance=Math.hypot(b.x-a.x,b.y-a.y);
+      ctx.globalAlpha=edgeDistance>state.width*.48?.62:1;
+      ctx.lineWidth=.82+weight*2.25;
       ctx.strokeStyle=grad;
       ctx.shadowBlur=activity>0.38?12:3;ctx.shadowColor=rgba(c,.48);
       ctx.beginPath();ctx.moveTo(a.x,a.y);
@@ -389,6 +391,80 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     ctx.restore();
   }
 
+  function drawClusterConstellation(node,p,t){
+    if(node.id==='aura'||node.role==='product')return;
+    const activity=Math.max(.05,Math.min(1,Number(node.activity)||0));
+    const centrality=Math.max(.05,Math.min(1,Number(node.centrality)||0));
+    if(activity<.20&&centrality<.45)return;
+    const ctx=state.ctx;
+    const c=color(node.cluster,node.status);
+    const count=10+Math.round(activity*8+centrality*7);
+    const points=[];
+    const baseRadius=34+centrality*24+activity*18;
+
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+
+    for(let i=0;i<count;i++){
+      const seed=hash01(node.id+':cluster:'+i);
+      const ring=i%3;
+      const angle=seed*Math.PI*2+t*.000035*(ring%2?1:-1)+(i/count)*Math.PI*.65;
+      const radius=baseRadius*(.52+ring*.28)+hash01(node.id+':cluster-r:'+i)*16;
+      const x=p.x+Math.cos(angle)*radius;
+      const y=p.y+Math.sin(angle)*radius*.62;
+      points.push({x,y,seed,ring});
+
+      const g=ctx.createRadialGradient(x,y,0,x,y,8+activity*8);
+      g.addColorStop(0,'rgba(255,255,255,'+(.34+activity*.36)+')');
+      g.addColorStop(.24,rgba(c,.38+activity*.30));
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath();ctx.arc(x,y,8+activity*8,0,Math.PI*2);ctx.fill();
+
+      ctx.fillStyle=rgba(c,.62+activity*.28);
+      ctx.beginPath();ctx.arc(x,y,1.2+centrality*1.5+activity*.8,0,Math.PI*2);ctx.fill();
+
+      ctx.strokeStyle=rgba(c,.06+activity*.08);
+      ctx.lineWidth=.35+activity*.28;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);
+      const mx=(p.x+x)/2+(y-p.y)*.08;
+      const my=(p.y+y)/2-(x-p.x)*.08;
+      ctx.quadraticCurveTo(mx,my,x,y);ctx.stroke();
+    }
+
+    for(let i=0;i<points.length;i++){
+      const a=points[i];
+      const b=points[(i+1)%points.length];
+      if(i%2===0){
+        ctx.strokeStyle=rgba(c,.025+activity*.055);
+        ctx.lineWidth=.28+.18*activity;
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+      }
+      if(i%5===0&&points[i+3]){
+        const d=points[i+3];
+        ctx.strokeStyle=rgba(c,.018+activity*.04);
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(d.x,d.y);ctx.stroke();
+      }
+    }
+
+    if(activity>.5&&!state.reduced){
+      const phase=(t*.00018+hash01(node.id+':cluster-pulse'))%1;
+      const idx=Math.floor(phase*Math.max(1,points.length-1));
+      const a=points[idx],b=points[(idx+1)%points.length];
+      if(a&&b){
+        const q=(phase*points.length)%1;
+        const x=a.x+(b.x-a.x)*q;
+        const y=a.y+(b.y-a.y)*q;
+        const pulse=ctx.createRadialGradient(x,y,0,x,y,9);
+        pulse.addColorStop(0,'rgba(255,255,255,.86)');
+        pulse.addColorStop(.25,rgba(c,.58));
+        pulse.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=pulse;ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
   function drawNeuron(node,t){
     const ctx=state.ctx,p=px(node);
     const c=color(node.cluster,node.status);
@@ -416,6 +492,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       return;
     }
     const role=String(node.role||'capability');
+    drawClusterConstellation(node,p,t);
     drawMicroNetwork(node,p,t);
     drawDendrites(node,p,t);
     if(intensity>.42&&role!=='product'){
@@ -446,9 +523,9 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       ctx.quadraticCurveTo(p.x+dx*.10-dy*.05,p.y+dy*.10+dx*.05,ax,ay);
       ctx.stroke();ctx.restore();
     }
-    const base=role==='product'?5.5:role==='fabric-capability'?5.2:9.0;
-    const centralBoost=(Number(node.centrality)||0)*5.0;
-    const r=base+intensity*7.4+centralBoost;
+    const base=role==='product'?6.5:role==='fabric-capability'?6.0:11.5;
+    const centralBoost=(Number(node.centrality)||0)*8.0;
+    const r=base+intensity*9.0+centralBoost;
     const halo=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*4.1);
     halo.addColorStop(0,rgba(c,.58+intensity*.30));halo.addColorStop(.24,rgba(c,.22+intensity*.18));halo.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,r*4.1,0,Math.PI*2);ctx.fill();
@@ -486,7 +563,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     if(show){
       const dx=p.x-state.width*.5;const dy=p.y-state.height*.5;const d=Math.sqrt(dx*dx+dy*dy)||1;
       const lx=p.x+(dx/d)*(r+12),ly=p.y+(dy/d)*(r+10);
-      ctx.font='600 11px Inter,system-ui,sans-serif';ctx.textAlign=dx<0?'right':'left';ctx.textBaseline='middle';
+      ctx.font='650 13px Inter,system-ui,sans-serif';ctx.textAlign=dx<0?'right':'left';ctx.textBaseline='middle';
       ctx.lineWidth=3;ctx.strokeStyle='rgba(3,5,10,.88)';ctx.strokeText(node.label,lx,ly);ctx.fillStyle='#eef2ff';ctx.fillText(node.label,lx,ly);
     }
   }

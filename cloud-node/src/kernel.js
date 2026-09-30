@@ -794,20 +794,24 @@ export class CognitiveKernel {
           }).slice(0, 12000),
         ].join('\n');
       } else {
-        const historyLimit = plan.context_scope === 'relationship' ? 12 : 5;
-        const recentUserMessages = await query(
-          `SELECT author,content,created_at
+        const historyLimit = plan.context_scope === 'relationship' ? 16 : 8;
+        const recentConversation = await query(
+          `SELECT author,role,content,created_at
            FROM aura_cloud_messages
-           WHERE role='user'
+           WHERE role IN ('user','assistant')
            ORDER BY id DESC LIMIT ?`,
           [historyLimit],
         );
+        const technicalLeak = /(dag aura vide|command-center:aura|nibor1896\/crow|intention actuelle\s*:|pensée dominante\s*:|travail prioritaire\s*:)/i;
+        const safeConversation = recentConversation
+          .reverse()
+          .filter((row) => String(row.role || '') !== 'assistant' || !technicalLeak.test(String(row.content || '')));
         semanticContext = [
           plan.context_scope === 'relationship'
-            ? 'CONTEXTE RELATIONNEL: uniquement ce que l’interlocuteur a réellement dit.'
-            : 'CONTEXTE CONVERSATIONNEL RECENT: messages de l’interlocuteur uniquement.',
-          ...recentUserMessages.reverse().map((row) =>
-            `[${String(row.created_at || '')}] ${String(row.author || 'Utilisateur')}: ${String(row.content || '').slice(0, 1200)}`
+            ? 'CONTEXTE RELATIONNEL RECENT: échange direct entre AURA et son interlocuteur. Utilise-le pour conserver le ton, les références et la continuité, sans inventer de biographie.'
+            : 'CONTEXTE CONVERSATIONNEL RECENT: échange direct uniquement, sans journal opérationnel.',
+          ...safeConversation.map((row) =>
+            `[${String(row.created_at || '')}] ${String(row.role || '') === 'assistant' ? 'AURA' : String(row.author || 'Utilisateur')}: ${String(row.content || '').slice(0, 1200)}`
           ),
         ].join('\n');
       }

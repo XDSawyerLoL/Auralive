@@ -4,7 +4,7 @@ import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 import { NEURAL_FIELD_SCRIPT } from '../src/neural-field-renderer.js';
 
-test('AURA V6 exposes an immersive neural environment and secondary detail surfaces', () => {
+test('AURA V7 exposes an immersive readable neural environment and secondary detail surfaces', () => {
   for (const label of [
     'Interface de conscience opérationnelle',
     'Dialogue',
@@ -269,5 +269,18 @@ test('UX V6 neural field includes immersive core, bloom and galaxy primitives', 
     'globalCompositeOperation=\'lighter\'',
   ]) {
     assert.ok(NEURAL_FIELD_SCRIPT.includes(token), token);
+  }
+});
+
+
+test('UX V7 deliberately increases desktop readability', () => {
+  for (const token of [
+    'width:min(370px,27vw)!important',
+    'width:min(390px,28vw)!important',
+    'font-size:13px!important',
+    'font-size:24px!important',
+    "ctx.font='650 13px Inter,system-ui,sans-serif'",
+  ]) {
+    assert.ok(DASHBOARD_HTML.includes(token) || NEURAL_FIELD_SCRIPT.includes(token), token);
   }
 });

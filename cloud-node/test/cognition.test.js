@@ -142,3 +142,38 @@ test('ordinary questions no longer receive dashboard state by default', () => {
   assert.doesNotMatch(payload, /nibor1896\/Crow/i);
   assert.doesNotMatch(payload, /dag aura vide/i);
 });
+
+
+test('casual check-in uses AURA internal state instead of generic AI boilerplate', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu va bien ?',
+    soul: {
+      current_intention: 'Évaluer Crow',
+      dominant_thought: 'dag aura vide',
+      organism: {
+        mood: 'lumineuse',
+        stabilite: 0.96,
+        clarte: 0.91,
+        curiosite: 0.72,
+        attachement: 0.81,
+        intention_active: 'résoudre command-center:aura',
+      },
+    },
+    intentions: [{ statement: 'Évaluer Crow', priority: 0.9 }],
+    lessons: [],
+    reflections: [],
+    work: [{ title: 'command-center:aura' }],
+    privateView: true,
+  });
+  assert.equal(plan.act, 'check_in');
+  assert.equal(plan.context_scope, 'relationship');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.equal(plan.expressive_state.mood, 'lumineuse');
+  assert.ok(plan.expressive_state.stability > 0.9);
+  assert.doesNotMatch(JSON.stringify(plan.expressive_state), /command-center|Crow|dag aura vide/i);
+  const fallback = engine.deterministicReply(plan);
+  assert.match(fallback, /lumineuse/i);
+  assert.match(fallback, /Et toi/i);
+  assert.doesNotMatch(fallback, /intelligence artificielle/i);
+});
