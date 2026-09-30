@@ -279,7 +279,7 @@ test('UX V7 deliberately increases desktop readability', () => {
     'width:min(390px,28vw)!important',
     'font-size:13px!important',
     'font-size:24px!important',
-    'font-size:13px Inter,system-ui,sans-serif',
+    "ctx.font='650 13px Inter,system-ui,sans-serif'",
   ]) {
     assert.ok(DASHBOARD_HTML.includes(token) || NEURAL_FIELD_SCRIPT.includes(token), token);
   }
