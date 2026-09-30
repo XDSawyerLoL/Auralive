@@ -868,6 +868,37 @@ app.get('/api/kernel/public/attention', async () => {
 });
 
 
+app.get('/api/kernel/public/self-state', async () => {
+  if (!bootstrap.runtimeReady) {
+    return {
+      version: 'aura-unified-self-state-v1',
+      ready: false,
+      primary_goal: null,
+      secondary_goals: [],
+      active_work: [],
+      interests: [],
+      open_loops: [],
+      next_action: '',
+      autonomy: { active: false, idle: true, blocked: false, drive: 'observe' },
+    };
+  }
+  const state = await kernel.unifiedState({ persist: false });
+  return {
+    version: String(state.version || ''),
+    ready: true,
+    mood: String(state.mood || '').slice(0, 80),
+    primary_goal: state.primary_goal || null,
+    secondary_goals: Array.isArray(state.secondary_goals) ? state.secondary_goals.slice(0, 4) : [],
+    active_work: Array.isArray(state.active_work) ? state.active_work.slice(0, 8) : [],
+    interests: Array.isArray(state.interests) ? state.interests.slice(0, 6) : [],
+    open_loops: Array.isArray(state.open_loops) ? state.open_loops.slice(0, 8) : [],
+    next_action: String(state.next_action || '').slice(0, 1200),
+    autonomy: state.autonomy || {},
+    attention: state.attention || {},
+    generated_at: state.generated_at || '',
+  };
+});
+
 app.get('/api/kernel/public/neural-signals', async (request) => {
   if (!bootstrap.runtimeReady) return { since: 0, last_id: 0, events: [] };
   const since = Math.max(0, Number(request.query?.since || 0));
