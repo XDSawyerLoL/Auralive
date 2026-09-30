@@ -851,6 +851,7 @@ export class CognitiveKernel {
       this.bridge?.status
         ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
         : Promise.resolve({ enabled: false, worker_online: false }),
+      this.cognitiveState({ publicView: false }).catch(() => this.lastCognitiveState || {}),
     ]);
 
     const failureMap = new Map();
@@ -1341,7 +1342,7 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status, services, lessons, bridgeStatus] = await Promise.all([
+    const [intentions, traces, status, services, lessons, bridgeStatus, cognitiveState] = await Promise.all([
       this.intentions(12),
       this.activity(30),
       this.status(),
@@ -1373,6 +1374,7 @@ export class CognitiveKernel {
       webEnabled: Boolean(this.webSubstrate?.enabled),
       horizonEnabled: Boolean(this.horizon?.enabled),
       previous: this._lastAttention || {},
+      cognitiveState,
     });
 
     this._lastAttention = Object.fromEntries(
@@ -1382,7 +1384,7 @@ export class CognitiveKernel {
     return {
       ...graph,
       updated_at: now(),
-      focus_statement: normalizeAuraSelfReference(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      focus_statement: normalizeAuraSelfReference(cognitiveState?.self_summary || cognitiveState?.dominant_focus?.title || soul.current_intention || soul.dominant_thought || '').slice(0, 700),
     };
   }
 
