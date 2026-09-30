@@ -866,6 +866,50 @@ body.map-focus .map-wrap{height:100%!important;min-height:0!important}
   .bottom-dock{padding:8px 9px!important}
   .dock-btn{font-size:9.5px!important;min-width:94px!important;padding:11px 13px!important}
 }
+
+/* V8.1 — concept-grade glass surfaces */
+@media(min-width:1181px){
+  .chat-panel,.right-stack>.panel{
+    border:1px solid transparent!important;
+    background:
+      linear-gradient(180deg,rgba(10,16,32,.78),rgba(5,9,21,.64)) padding-box,
+      linear-gradient(145deg,rgba(176,131,255,.48),rgba(97,176,255,.18) 36%,rgba(255,255,255,.045) 58%,rgba(115,80,232,.20)) border-box!important;
+    box-shadow:
+      0 24px 80px rgba(0,0,0,.34),
+      0 0 38px rgba(95,70,210,.075),
+      inset 0 1px rgba(255,255,255,.07)!important;
+  }
+  .chat-panel::after,.right-stack>.panel::after{
+    content:""!important;
+    position:absolute!important;inset:0!important;border-radius:inherit!important;pointer-events:none!important;
+    background:
+      radial-gradient(circle at 0 0,rgba(161,113,255,.065),transparent 28%),
+      radial-gradient(circle at 100% 0,rgba(91,205,255,.035),transparent 26%)!important;
+  }
+  .chat-panel .panel-head,.right-stack .panel-head{
+    border-bottom:1px solid rgba(166,182,241,.075)!important;
+  }
+  .msg{
+    background:
+      linear-gradient(145deg,rgba(27,38,70,.72),rgba(12,19,39,.62)) padding-box,
+      linear-gradient(145deg,rgba(146,114,244,.18),rgba(103,177,255,.08)) border-box!important;
+    border:1px solid transparent!important;
+    box-shadow:inset 0 1px rgba(255,255,255,.035),0 10px 30px rgba(0,0,0,.15)!important;
+  }
+  .thought-card{
+    border:1px solid transparent!important;
+    background:
+      radial-gradient(circle at 12% 12%,rgba(255,192,91,.10),transparent 34%),
+      linear-gradient(145deg,rgba(28,26,48,.78),rgba(13,18,35,.66)) padding-box,
+      linear-gradient(145deg,rgba(255,204,110,.20),rgba(162,113,255,.16),rgba(255,255,255,.035)) border-box!important;
+  }
+  .bottom-dock{
+    border:1px solid transparent!important;
+    background:
+      linear-gradient(180deg,rgba(12,18,37,.88),rgba(5,9,21,.82)) padding-box,
+      linear-gradient(90deg,rgba(166,121,255,.36),rgba(86,201,255,.12),rgba(166,121,255,.28)) border-box!important;
+  }
+}
 </style>
 </head>
 <body>
