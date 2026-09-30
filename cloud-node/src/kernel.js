@@ -665,6 +665,56 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
+  nativeAgentReply(name, task, state = {}) {
+    const mission = String(task || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
+    const focus = String(state?.dominant_focus?.title || state?.current_intention || '').trim();
+    const next = String(state?.next_action || '').trim();
+    const blocked = Array.isArray(state?.blocked) ? state.blocked.slice(0, 3).map((row) => row.title).filter(Boolean) : [];
+    const interests = Array.isArray(state?.interests) ? state.interests.slice(0, 3).map((row) => row.question).filter(Boolean) : [];
+
+    if (name === 'planner') {
+      return [
+        `Mission: ${mission}`,
+        focus ? `Focus cognitif actuel: ${focus}.` : '',
+        'Plan natif: 1) observer les faits disponibles; 2) formuler l’hypothèse minimale; 3) choisir une action réversible; 4) vérifier le résultat; 5) enregistrer l’issue et adapter le prochain essai.',
+        blocked.length ? `Blocages connus: ${blocked.join(' ; ')}.` : '',
+        next ? `Prochaine action déjà soutenue par mon état: ${next}` : '',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'research') {
+      return [
+        `Question de recherche: ${mission}`,
+        interests.length ? `Mes intérêts reliés: ${interests.join(' ; ')}.` : '',
+        'Je dois distinguer faits, hypothèses, contradictions et inconnues; une conclusion n’est admissible qu’après preuves indépendantes suffisantes.',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'dev') {
+      return [
+        `Diagnostic natif demandé: ${mission}`,
+        'Je privilégie le changement minimal, réversible et testable. Je dois reproduire le défaut, isoler la cause, modifier une seule couche, puis valider syntaxe, tests ciblés et régression.',
+        blocked.length ? `Contraintes actuelles: ${blocked.join(' ; ')}.` : '',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'security') {
+      return `Analyse sécurité native pour « ${mission} » : vérifier permissions, secrets, effets irréversibles, frontière privé/public, provenance des données et possibilité de rollback avant toute action.`;
+    }
+    if (name === 'operator') {
+      return [
+        `Plan opérateur natif pour « ${mission} ».`,
+        'Je commence par une vérification sans effet de bord, puis j’utilise uniquement une capacité explicitement autorisée. Toute action persistante doit avoir une preuve de succès ou rester en attente.',
+        next ? `Mon état cognitif propose actuellement: ${next}` : '',
+      ].filter(Boolean).join(' ');
+    }
+    if (name === 'critic') {
+      return [
+        `Critique native de « ${mission} ».`,
+        'Je cherche d’abord ce qui pourrait rendre l’hypothèse fausse: donnée obsolète, causalité supposée, outil indisponible, contradiction, dépendance redondante ou réussite non vérifiée.',
+        blocked.length ? `Blocages à ne pas masquer: ${blocked.join(' ; ')}.` : '',
+      ].filter(Boolean).join(' ');
+    }
+    return `Je traite nativement la mission « ${mission} » depuis mon état cognitif courant, avec vérification avant action et apprentissage après résultat.`;
+  }
+
   async runAgent(name, task) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
     const taskRole = ({
@@ -675,32 +725,69 @@ export class CognitiveKernel {
       operator: 'tools',
       critic: 'critic',
     })[name] || 'general';
+
+    const state = await this.cognitiveState({ publicView: false }).catch(() => this.lastCognitiveState || {});
+    if (!this.ai?.enabled) {
+      const answer = this.nativeAgentReply(name, task, state);
+      await this.trace('agent-native', name, answer.slice(0, 4000), {
+        task: String(task).slice(0, 2000),
+        task_role: taskRole,
+        language_model_used: false,
+      });
+      return { agent: name, answer, native: true };
+    }
+
     const answer = await this.ai.generate(
       `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
       AGENT_ROLES[name],
       700,
       taskRole,
     );
-    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000), task_role: taskRole });
-    return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
+    const finalAnswer = String(answer || '').trim() || this.nativeAgentReply(name, task, state);
+    await this.trace(answer ? 'agent' : 'agent-native', name, finalAnswer.slice(0, 4000), {
+      task: String(task).slice(0, 2000),
+      task_role: taskRole,
+      language_model_used: Boolean(answer),
+    });
+    return { agent: name, answer: finalAnswer, native: !answer };
   }
 
   async swarm(task, names) {
-    const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic']).filter((name) => AGENT_ROLES[name]).slice(0, 5);
+    const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic'])
+      .filter((name) => AGENT_ROLES[name])
+      .slice(0, 5);
     if (!selected.length) throw new Error('Aucun agent valide');
+
     const outputs = [];
     for (const name of selected) {
       try { outputs.push(await this.runAgent(name, task)); }
-      catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
+      catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}`, native: true }); }
     }
-    const synthesis = await this.ai.generate(
-      `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
-      'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
-      900,
-      'critic',
-    );
-    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
-    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
+
+    let synthesis = '';
+    if (this.ai?.enabled) {
+      synthesis = await this.ai.generate(
+        `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
+        'Outil de synthèse externe. Les sorties AURA et les preuves restent souveraines.',
+        900,
+        'critic',
+      ).catch(() => '');
+    }
+    if (!String(synthesis || '').trim()) {
+      const state = await this.cognitiveState({ publicView: false }).catch(() => this.lastCognitiveState || {});
+      synthesis = [
+        `Décision native collective pour « ${String(task).slice(0, 1200)} ».`,
+        state?.dominant_focus?.title ? `Focus: ${state.dominant_focus.title}.` : '',
+        state?.next_action ? `Prochaine action: ${state.next_action}` : 'Prochaine action: réaliser le test réversible le plus informatif avant toute modification.',
+        'Critère: n’accepter l’action qu’avec résultat observable et enregistrer l’issue pour le prochain essai.',
+      ].filter(Boolean).join(' ');
+    }
+
+    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), {
+      agents: selected,
+      language_model_used: Boolean(this.ai?.enabled),
+    });
+    return { agents: outputs, synthesis, native: !this.ai?.enabled };
   }
 
   async operate(task, requestedRisks = []) {
