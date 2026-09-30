@@ -160,23 +160,21 @@ export class CuriosityEngine {
     if (!content || !explicitUserIntent(content)) return '';
     if (await this.countQuestionsLastHour('interlocutor') >= config.curiosityMaxInterlocutorQuestionsPerHour) return '';
 
-    if (this.ai?.enabled) {
-      try {
-        const answer = await this.ai.generate(
-          `Message explicite de l'interlocuteur:\n${content}\n\nFormule UNE question de curiosité courte, naturelle et utile en français. Elle doit uniquement approfondir ce que l'interlocuteur a explicitement dit. N'infère aucune information sensible. Ne pose pas une question si le message est déjà totalement opérationnel. Retourne uniquement la question ou une chaîne vide.`,
-          'Tu es le moteur de curiosité d’AURA. Tu aides AURA à comprendre son interlocuteur sans l’interroger inutilement ni inférer de données sensibles.',
-          120,
-          'conversation',
-        );
-        const candidate = normalizeQuestion(answer);
-        if (candidate && candidate.length <= 360) return candidate;
-      } catch {}
+    // Native curiosity: derive the follow-up from explicit user intent only.
+    // No language model is allowed to invent AURA's curiosity.
+    if (/\b(objectif|priorité|priorite|important|doit|devrait|il faut|réussite|reussite)\b/i.test(content)) {
+      return 'Quel résultat concret dois-je utiliser comme critère de réussite sur ce point ?';
     }
-
-    if (/\b(objectif|priorité|priorite|important|doit|devrait|il faut)\b/i.test(content)) {
-      return 'Quel résultat concret veux-tu qu’AURA utilise comme critère de réussite sur ce point ?';
+    if (/\b(problème|probleme|bug|erreur|échec|echec|bloqu)\b/i.test(content)) {
+      return 'Quel signal observable me permettra de distinguer la cause réelle du symptôme ?';
     }
-    return 'Qu’est-ce que tu veux qu’AURA observe ou mesure pour savoir qu’elle progresse réellement sur ce point ?';
+    if (/\b(compare|compar|meilleur|mieux|choix|option)\b/i.test(content)) {
+      return 'Quel critère doit peser le plus dans ma comparaison ?';
+    }
+    if (/\b(autonome|autonomie|initiative|agi|apprendre|évolu|evolu)\b/i.test(content)) {
+      return 'Quelle preuve comportementale veux-tu que je produise pour montrer un progrès réel sur ce point ?';
+    }
+    return 'Qu’est-ce que je dois observer ou mesurer pour savoir que je progresse réellement sur ce que tu viens de définir ?';
   }
 
   async questionForInteraction(userText) {
