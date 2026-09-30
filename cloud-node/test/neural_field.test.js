@@ -237,9 +237,8 @@ test('V8 galaxy renderer creates dense local neural matter', async () => {
 
 
 test('V9 neural field attention follows unified self-state', () => {
-  const base = sampleModel();
-  const focused = buildNeuralFieldModel({
-    soul: { curiosity:0.5, continuity:0.7, introspection:0.6 },
+  const common = {
+    soul: { curiosity:0.5, continuity:0.7, introspection:0.6, pressure:0.2 },
     organism: { curiosite:0.5, stabilite:0.8, clarte:0.8 },
     intentions: [],
     traces: [],
@@ -250,6 +249,11 @@ test('V9 neural field attention follows unified self-state', () => {
     bridgeStatus: { worker_online:true },
     webEnabled: true,
     horizonEnabled: true,
+    previous: {},
+  };
+  const base = buildNeuralFieldModel(common);
+  const focused = buildNeuralFieldModel({
+    ...common,
     unifiedState: {
       primary_goal: { statement:'Diagnostiquer command-center:aura dag aura vide' },
       secondary_goals: [],
@@ -257,10 +261,9 @@ test('V9 neural field attention follows unified self-state', () => {
       open_loops: [{ title:'command-center:aura', detail:'dag aura vide' }],
       attention: { goal:0.95, curiosity:0.86, unresolved:0.92, workload:0.72 },
     },
-    previous: {},
   });
   const byId=(model,id)=>model.nodes.find((n)=>n.id===id);
-  assert.ok(byId(focused,'planning').activity >= byId(base,'planning').activity);
-  assert.ok(byId(focused,'automation').activity >= byId(base,'automation').activity);
-  assert.ok(byId(focused,'curiosity').activity >= byId(base,'curiosity').activity);
+  assert.ok(byId(focused,'planning').activity > byId(base,'planning').activity);
+  assert.ok(byId(focused,'automation').activity > byId(base,'automation').activity);
+  assert.ok(byId(focused,'curiosity').activity > byId(base,'curiosity').activity);
 });
