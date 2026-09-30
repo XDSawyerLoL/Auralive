@@ -8,7 +8,7 @@ test('unified self-state ranks active initiative, work, interests and open loops
     organism: { mood: 'claire', curiosite: 0.72, stabilite: 0.84 },
     intentions: [{ id:'i1', statement:'Explorer Crow', priority:0.62, status:'active', source:'curiosity' }],
     initiatives: [{ id:'x1', title:'Diagnostiquer command-center', objective:'Résoudre dag aura vide', priority:0.91, status:'running' }],
-    work: [{ kind:'activity', title:'Tester en sandbox', priority:0.66, status:'active' }],
+    work: [{ kind:'improvement', title:'Tester en sandbox', priority:0.66, status:'active' }],
     curiosity: [{ id:'q1', content:'Quelle capacité additive manque encore ?', context:{priority:0.55} }],
     failures: [{ automation_id:'command-center:aura', signature:'dag aura vide', created_at:'2026-09-30T10:00:00Z' }],
     traces: [{ kind:'reflection', title:'Diagnostic', created_at:'2026-09-30T10:01:00Z' }],
