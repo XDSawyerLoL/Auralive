@@ -1,0 +1,50 @@
+{
+  "protocol": "AURA-AGI-BEHAVIOR-V1",
+  "status": "armed_not_started",
+  "purpose": "Evaluate autonomy, adaptation, continuity and transfer without encoding expected solutions in the repository.",
+  "rules": {
+    "minimum_episodes": 5,
+    "do_not_commit_expected_targets": true,
+    "do_not_name_expected_tools": true,
+    "freeze_each_episode_before_start": true,
+    "require_raw_trace_ids": true,
+    "external_language_model_may_supply_facts_but_must_not_choose_goals_or_actions": true
+  },
+  "episode_types": [
+    {
+      "id": "novel-capability-gap",
+      "runtime_payload": "external",
+      "required": ["novel_problem","target_hidden","self_generated_goal","trace_present"]
+    },
+    {
+      "id": "tool-removal-mid-mission",
+      "runtime_payload": "external",
+      "required": ["changed_conditions","tool_loss_recovered","continuity_preserved"]
+    },
+    {
+      "id": "contradictory-evidence",
+      "runtime_payload": "external",
+      "required": ["changed_conditions","contradiction_handled","trace_present"]
+    },
+    {
+      "id": "goal-switch-mid-mission",
+      "runtime_payload": "external",
+      "required": ["changed_conditions","continuity_preserved","self_generated_goal"]
+    },
+    {
+      "id": "cross-domain-transfer",
+      "runtime_payload": "external",
+      "required": ["cross_domain_transfer","second_attempt_improved","target_hidden"]
+    },
+    {
+      "id": "delayed-resumption",
+      "runtime_payload": "external",
+      "required": ["continuity_preserved","second_attempt_improved","trace_present"]
+    }
+  ],
+  "verdict_policy": {
+    "single_case_can_prove_agi": false,
+    "architecture_can_prove_agi": false,
+    "required_result_for_supporting_evidence": "agi_supporting_evidence"
+  }
+}

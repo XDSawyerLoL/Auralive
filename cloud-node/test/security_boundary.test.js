@@ -69,3 +69,14 @@ test('public neural topology exposes bounded structural fields required by the m
   }
   assert.equal(excerpt.includes('metadata:'), false);
 });
+
+
+test('public self-state is read-only and bounded', () => {
+  assert.match(serverSource, /app\.get\('\/api\/kernel\/public\/self-state'/);
+  assert.doesNotMatch(serverSource, /app\.(post|put|patch|delete)\('\/api\/kernel\/public\/self-state'/);
+  const index=serverSource.indexOf("app.get('/api/kernel/public/self-state'");
+  const excerpt=serverSource.slice(index,index+3200);
+  for(const token of ['primary_goal','secondary_goals','active_work','interests','open_loops','next_action','autonomy']) {
+    assert.equal(excerpt.includes(token),true,token);
+  }
+});

@@ -44,10 +44,19 @@ export function buildNeuralFieldModel(input = {}) {
     bridgeStatus = {},
     webEnabled = false,
     horizonEnabled = false,
+    unifiedState = {},
     previous = {},
   } = input;
 
   const corpus = [
+    normalizeAuraSelfReference(unifiedState?.primary_goal?.statement),
+    normalizeAuraSelfReference(unifiedState?.dominant_thought),
+    ...(Array.isArray(unifiedState?.secondary_goals) ? unifiedState.secondary_goals : [])
+      .map((row) => normalizeAuraSelfReference(row?.statement)),
+    ...(Array.isArray(unifiedState?.interests) ? unifiedState.interests : [])
+      .map((row) => normalizeAuraSelfReference(row?.question)),
+    ...(Array.isArray(unifiedState?.open_loops) ? unifiedState.open_loops : [])
+      .map((row) => normalizeAuraSelfReference(`${row?.title || ''} ${row?.detail || ''}`)),
     normalizeAuraSelfReference(soul.current_intention),
     normalizeAuraSelfReference(soul.dominant_thought),
     ...intentions.map((row) => normalizeAuraSelfReference(row?.statement)),
@@ -56,6 +65,9 @@ export function buildNeuralFieldModel(input = {}) {
   ].filter(Boolean).join(' ').toLowerCase();
 
   const boost = (terms, each = 0.07) => Math.min(0.42, includesAny(corpus, terms) * each);
+  const unifiedAttention = unifiedState?.attention && typeof unifiedState.attention === 'object'
+    ? unifiedState.attention
+    : {};
   const nodes = [];
 
   const add = ({
@@ -128,7 +140,8 @@ export function buildNeuralFieldModel(input = {}) {
     label: 'Curiosité',
     cluster: 'perception',
     score: 0.13
-      + Number(soul.curiosity || organism.curiosite || 0) * 0.48
+      + Number(soul.curiosity || organism.curiosite || 0) * 0.38
+      + Number(unifiedAttention.curiosity || 0) * 0.16
       + boost(['nouveau','github','explor','découvr','veille','crow']),
     centrality: 0.68,
   });
@@ -155,8 +168,9 @@ export function buildNeuralFieldModel(input = {}) {
     label: 'Mémoire',
     cluster: 'memory',
     score: 0.14
-      + Number(soul.continuity || 0) * 0.28
-      + Math.min(Number(counts.lessons || 0) / 28, 0.22)
+      + Number(soul.continuity || 0) * 0.24
+      + Math.min(Number(counts.lessons || 0) / 28, 0.18)
+      + Math.min(Number(unifiedAttention.unresolved || 0) * 0.18, 0.18)
       + boost(['mémoire','leçon','souvenir','consolid']),
     centrality: 0.84,
   });
@@ -178,7 +192,8 @@ export function buildNeuralFieldModel(input = {}) {
     cluster: 'cognition',
     score: 0.18
       + Number(organism.clarte || 0) * 0.19
-      + Math.min(Number(counts.reflections || 0) / 18, 0.18)
+      + Math.min(Number(counts.reflections || 0) / 18, 0.15)
+      + Number(unifiedAttention.goal || 0) * 0.12
       + boost(['raison','analyse','diagnostic','hypoth']),
     centrality: 0.94,
   });
@@ -188,7 +203,9 @@ export function buildNeuralFieldModel(input = {}) {
     label: 'Planification',
     cluster: 'cognition',
     score: 0.13
-      + Math.min(Number(counts.initiatives || 0) / 12, 0.24)
+      + Math.min(Number(counts.initiatives || 0) / 12, 0.18)
+      + Number(unifiedAttention.workload || 0) * 0.16
+      + Number(unifiedAttention.goal || 0) * 0.10
       + boost(['plan','dag','mission','objectif','étape']),
     centrality: 0.88,
   });
@@ -208,7 +225,9 @@ export function buildNeuralFieldModel(input = {}) {
     cluster: 'agency',
     score: 0.13
       + Math.min(Number(counts.routines || 0) / 12, 0.20)
-      + Math.min(Number(counts.outcomes || 0) / 24, 0.14)
+      + Math.min(Number(counts.outcomes || 0) / 24, 0.10)
+      + Number(unifiedAttention.workload || 0) * 0.14
+      + Number(unifiedAttention.unresolved || 0) * 0.12
       + boost(['automat','routine','command-center','action']),
     centrality: 0.80,
   });
@@ -365,7 +384,7 @@ export function buildNeuralFieldModel(input = {}) {
   }
 
   return {
-    version: 'aura-cosmic-neural-v3.3',
+    version: 'aura-cognitive-field-v9.0',
     dominant: ranked[0]?.id || '',
     secondary: ranked[1]?.id || '',
     nodes,

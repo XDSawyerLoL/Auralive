@@ -221,3 +221,43 @@ test('operational recall preserves Crow and command-center continuity from persi
   assert.match(answer, /command-center:aura/i);
   assert.match(answer, /dag aura vide/i);
 });
+
+
+test('current activity report is driven by unified self-state', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu travailles sur quoi en ce moment ?',
+    soul: {
+      current_intention: 'Observer',
+      dominant_thought: 'ancienne pensée',
+      organism: { mood: 'claire', curiosite: 0.7 },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    continuity: {},
+    unifiedState: {
+      primary_goal: { statement: 'Évaluer une capacité additive de Crow', salience: 0.91 },
+      active_work: [
+        { title: 'Diagnostiquer command-center:aura', status: 'running', priority: 0.88 },
+      ],
+      interests: [
+        { question: 'Quelle capacité nouvelle mérite un test sandbox ?', priority: 0.7 },
+      ],
+      open_loops: [
+        { title: 'command-center:aura', detail: 'dag aura vide', priority: 0.9 },
+      ],
+      next_action: 'Tester une stratégie différente en sandbox.',
+    },
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'report_current_activity');
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /Crow/i);
+  assert.match(answer, /command-center:aura/i);
+  assert.match(answer, /dag aura vide/i);
+  assert.match(answer, /sandbox/i);
+  assert.match(answer, /Intérêt actif/i);
+});

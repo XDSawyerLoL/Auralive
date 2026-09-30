@@ -73,7 +73,7 @@ function sampleModel() {
 
 test('neural field model exposes a bounded functional graph', () => {
   const model = sampleModel();
-  assert.equal(model.version, 'aura-cosmic-neural-v3.3');
+  assert.equal(model.version, 'aura-cognitive-field-v9.0');
   assert.ok(model.nodes.length >= 15);
   assert.ok(model.links.length >= 20);
   assert.ok(model.stats.clusters >= 6);
@@ -234,3 +234,36 @@ test('V8 galaxy renderer creates dense local neural matter', async () => {
 });
 
 // V8.1 refined semantic anchors validated against the live cognitive-galaxy layout.
+
+
+test('V9 neural field attention follows unified self-state', () => {
+  const common = {
+    soul: { curiosity:0.5, continuity:0.7, introspection:0.6, pressure:0.2 },
+    organism: { curiosite:0.5, stabilite:0.8, clarte:0.8 },
+    intentions: [],
+    traces: [],
+    lessons: [],
+    counts: {},
+    services: [],
+    fabricCaps: [],
+    bridgeStatus: { worker_online:true },
+    webEnabled: true,
+    horizonEnabled: true,
+    previous: {},
+  };
+  const base = buildNeuralFieldModel(common);
+  const focused = buildNeuralFieldModel({
+    ...common,
+    unifiedState: {
+      primary_goal: { statement:'Diagnostiquer command-center:aura dag aura vide' },
+      secondary_goals: [],
+      interests: [{ question:'Explorer une capacité GitHub nouvelle' }],
+      open_loops: [{ title:'command-center:aura', detail:'dag aura vide' }],
+      attention: { goal:0.95, curiosity:0.86, unresolved:0.92, workload:0.72 },
+    },
+  });
+  const byId=(model,id)=>model.nodes.find((n)=>n.id===id);
+  assert.ok(byId(focused,'planning').activity > byId(base,'planning').activity);
+  assert.ok(byId(focused,'automation').activity > byId(base,'automation').activity);
+  assert.ok(byId(focused,'curiosity').activity > byId(base,'curiosity').activity);
+});

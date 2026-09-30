@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.4';
+  static VERSION = 'aura-cognition-native-v1.5-self-state';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -157,7 +157,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], continuity = {}, privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], continuity = {}, unifiedState = {}, privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -170,6 +170,12 @@ export class CognitionEngine {
     const continuityTraces = Array.isArray(continuity?.traces) ? continuity.traces : [];
     const continuityIntentions = Array.isArray(continuity?.intentions) ? continuity.intentions : [];
     const continuityInitiatives = Array.isArray(continuity?.initiatives) ? continuity.initiatives : [];
+    const unifiedPrimary = unifiedState?.primary_goal || null;
+    const unifiedSecondary = Array.isArray(unifiedState?.secondary_goals) ? unifiedState.secondary_goals : [];
+    const unifiedWork = Array.isArray(unifiedState?.active_work) ? unifiedState.active_work : [];
+    const unifiedInterests = Array.isArray(unifiedState?.interests) ? unifiedState.interests : [];
+    const unifiedLoops = Array.isArray(unifiedState?.open_loops) ? unifiedState.open_loops : [];
+    const unifiedNext = normalize(unifiedState?.next_action || '');
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const mood = normalize(organism.mood || '') || 'calme';
     const activeOrganicIntention = normalize(organism.intention_active || '');
@@ -280,16 +286,37 @@ export class CognitionEngine {
         if (title) facts.push(`Trace récente : ${title}`);
       }
       if (!facts.length) facts.push('Je n’ai pas retrouvé de trace opérationnelle persistée suffisamment précise pour répondre avec certitude.');
-    } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
+    } else if (hasAny(q, [
+      'que fais-tu','tu fais quoi','qu’est-ce que tu fais',"qu'est-ce que tu fais",
+      'tu travailles sur quoi','sur quoi tu travailles','sur quoi travailles-tu',
+      'en ce moment','maintenant','tes intérêts actuels','tes interets actuels'
+    ])) {
       act = 'report_current_activity';
       contextScope = 'operational';
       goal = 'Décrire mon activité actuelle sans inventer.';
       needsSemanticSupport = false;
-      if (thought) facts.push(`Pensée dominante : ${thought}`);
-      if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
-      if (current) facts.push(`Intention actuelle : ${current}`);
-      if (!currentWork && continuityInitiatives[0]?.title) facts.push(`Continuité de travail : ${normalize(continuityInitiatives[0].title)}`);
-      if (!currentWork && !continuityInitiatives.length && continuityOperational.length) {
+      if (unifiedPrimary?.statement) facts.push(`Mon objectif dominant : ${normalize(unifiedPrimary.statement)}`);
+      for (const row of unifiedWork.slice(0, 3)) {
+        const title = normalize(row?.title);
+        if (title) facts.push(`Travail actif : ${title}${row?.status ? ` · ${normalize(row.status)}` : ''}`);
+      }
+      for (const row of unifiedInterests.slice(0, 2)) {
+        const question = normalize(row?.question);
+        if (question) facts.push(`Intérêt actif : ${question}`);
+      }
+      for (const row of unifiedLoops.slice(0, 2)) {
+        const title = normalize(row?.title);
+        const detail = normalize(row?.detail);
+        if (title) facts.push(`Problème encore ouvert : ${title}${detail ? ` · ${detail}` : ''}`);
+      }
+      if (unifiedNext) facts.push(`Prochaine action : ${unifiedNext}`);
+      if (!facts.length) {
+        if (thought) facts.push(`Pensée dominante : ${thought}`);
+        if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
+        if (current) facts.push(`Intention actuelle : ${current}`);
+      }
+      if (!facts.length && continuityInitiatives[0]?.title) facts.push(`Continuité de travail : ${normalize(continuityInitiatives[0].title)}`);
+      if (!facts.length && continuityOperational.length) {
         facts.push(`Dernière continuité opérationnelle retrouvée : ${normalize(continuityOperational[continuityOperational.length - 1]?.content)}`);
       }
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
@@ -297,8 +324,10 @@ export class CognitionEngine {
       contextScope = 'operational';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
       needsSemanticSupport = false;
-      if (current) facts.push(`Intention prioritaire : ${current}`);
-      if (recentReflection?.next_action) facts.push(`Prochaine action issue de ma réflexion : ${normalize(recentReflection.next_action)}`);
+      if (unifiedPrimary?.statement) facts.push(`Objectif prioritaire : ${normalize(unifiedPrimary.statement)}`);
+      if (unifiedNext) facts.push(`Prochaine action : ${unifiedNext}`);
+      else if (current) facts.push(`Intention prioritaire : ${current}`);
+      if (!unifiedNext && recentReflection?.next_action) facts.push(`Prochaine action issue de ma réflexion : ${normalize(recentReflection.next_action)}`);
     } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
       act = 'report_risks';
       contextScope = 'operational';
@@ -364,6 +393,7 @@ export class CognitionEngine {
       mood,
       expressive_state: expressiveState,
       organism_intention: exposeOperationalState ? activeOrganicIntention : '',
+      unified_state: exposeOperationalState ? unifiedState : {},
       private_view: Boolean(privateView),
     };
   }

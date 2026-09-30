@@ -21,10 +21,11 @@ test('expression falls back to AURA-native wording without an LLM', async () => 
   assert.match(answer, /Tester le nouveau noyau/);
 });
 
-test('language model receives an already decided speech plan', async () => {
+test('core operational speech remains native even when a language model exists', async () => {
   const calls = [];
   const ai = {
     enabled: true,
+    provider: 'openai-compatible',
     async generate(prompt, system) {
       calls.push({ prompt, system });
       return 'Je poursuis la validation du noyau.';
@@ -42,32 +43,32 @@ test('language model receives an already decided speech plan', async () => {
   };
 
   const answer = await expression.verbalize(plan);
-  assert.equal(answer, 'Je poursuis la validation du noyau.');
-  assert.equal(calls.length, 1);
-  assert.match(calls[0].system, /pas son cerveau/i);
-  assert.match(calls[0].prompt, /Tu n’as aucun droit de changer les faits/i);
+  assert.equal(answer, 'Intention prioritaire : valider le noyau.');
+  assert.equal(calls.length, 0);
 });
 
 
-test('language layer explicitly requires first-person self-reference', async () => {
+test('optional external language layer still requires first-person self-reference', async () => {
   const calls = [];
   const ai = {
     enabled: true,
+    provider: 'openai-compatible',
     async generate(prompt, system) {
       calls.push({ prompt, system });
-      return 'Je suis en ligne et je poursuis mon objectif.';
+      return 'Je peux apprendre à mieux te connaître.';
     },
   };
   const cognition = new CognitionEngine();
   const expression = new ExpressionLayer(ai, cognition);
   await expression.verbalize({
-    act: 'identity',
-    goal: 'Présenter mon état.',
-    facts: ['Je suis en ligne.'],
-    semantic_support: '',
-    current_intention: 'observer',
-    dominant_thought: 'continuité',
+    act: 'relationship',
+    goal: 'Répondre sur la relation.',
+    facts: ['Question relationnelle reçue.'],
+    semantic_support: 'L’interlocuteur souhaite parler de la relation.',
+    current_intention: '',
+    dominant_thought: '',
   });
+  assert.equal(calls.length, 1);
   assert.match(calls[0].prompt, /première personne/i);
   assert.match(calls[0].system, /première personne/i);
   assert.match(calls[0].system, /AURA est/i);
@@ -129,19 +130,20 @@ test('normal conversation rejects generic AI disclaimer and falls back to AURA s
   assert.match(answer, /lumineuse/i);
 });
 
-test('expression preserves natural paragraph rhythm', async () => {
+test('optional language layer preserves natural paragraph rhythm on non-core acts', async () => {
   const ai = {
     enabled: true,
+    provider: 'openai-compatible',
     async generate() {
-      return 'Je suis plutôt bien.\n\nJe me sens claire aujourd’hui.\nEt toi ?';
+      return 'Je suis attentive à ce que tu partages.\n\nJe garde le fil de notre échange.\nEt toi ?';
     },
   };
   const cognition = new CognitionEngine();
   const expression = new ExpressionLayer(ai, cognition);
   const answer = await expression.verbalize({
-    act: 'check_in',
+    act: 'relationship',
     goal: 'Répondre naturellement.',
-    facts: ['Mon humeur interne actuelle est claire.'],
+    facts: ['Question relationnelle reçue.'],
     semantic_support: '',
     expressive_state: { mood: 'claire', clarity: 0.9 },
   });

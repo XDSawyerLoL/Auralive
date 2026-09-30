@@ -28,7 +28,7 @@ function hasGenericAiDisclaimer(value) {
 }
 
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v1.2';
+  static VERSION = 'aura-expression-v1.3-native-core';
 
   constructor(ai, cognition) {
     this.ai = ai;
@@ -38,6 +38,7 @@ export class ExpressionLayer {
 
   async semanticSupport(plan, context = '', options = {}) {
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
+    if (String(this.ai?.provider || '').includes('google-gemini')) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
       normalize(plan.semantic_query),
@@ -71,7 +72,12 @@ export class ExpressionLayer {
 
   async verbalize(plan, options = {}) {
     const fallback = this.cognition.deterministicReply(plan);
-    if (!this.ai?.enabled) return fallback;
+    const nativeActs = new Set([
+      'greet','check_in','report_current_activity','recall_operational_continuity',
+      'report_next_step','report_risks','report_internal_state','report_dream','identity',
+    ]);
+    if (!this.ai?.enabled || nativeActs.has(String(plan?.act || ''))) return fallback;
+    if (String(this.ai?.provider || '').includes('google-gemini')) return fallback;
 
     const payload = {
       act: plan.act,
@@ -123,7 +129,9 @@ export class ExpressionLayer {
       version: ExpressionLayer.VERSION,
       ai_available: Boolean(this.ai?.enabled),
       last_error: this.lastError,
-      role: 'verbalisation-only',
+      role: 'native-first-expression',
+      gemini_language_role: 'disabled',
+      external_model_role: 'optional-semantic-support-only',
     };
   }
 }

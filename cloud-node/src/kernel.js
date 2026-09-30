@@ -8,6 +8,7 @@ import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { buildNeuralFieldModel, normalizeAuraSelfReference } from './neural-field.js';
+import { composeUnifiedSelfState, UNIFIED_SELF_STATE_VERSION } from './self_state.js';
 
 const now = () => new Date().toISOString();
 
@@ -31,7 +32,7 @@ const AGENT_ROLES = {
 };
 
 export class CognitiveKernel {
-  static VERSION = 'aura-unified-kernel-node-v3';
+  static VERSION = 'aura-unified-kernel-node-v4-self-state';
 
   constructor(ai, horizon, bridge = null, webSubstrate = null, fabric = null) {
     this.ai = ai;
@@ -57,6 +58,7 @@ export class CognitiveKernel {
     this.lastReflectionAt = '';
     this.neuralSignalSeq = 0;
     this.neuralSignals = [];
+    this.unifiedStateCache = null;
   }
 
   attachExpertRelay(expertRelay) {
@@ -411,6 +413,140 @@ export class CognitiveKernel {
     );
   }
 
+  async unifiedState({ persist = false } = {}) {
+    const [
+      intentions,
+      work,
+      curiosity,
+      failures,
+      traces,
+      reflections,
+      initiatives,
+      bridgeStatus,
+    ] = await Promise.all([
+      this.intentions(20),
+      this.workItems(14),
+      query(
+        `SELECT id,title,content,context,created_at
+         FROM aura_cognitive_traces
+         WHERE kind='curiosity-question'
+         ORDER BY id DESC LIMIT 20`,
+      ).catch(() => []),
+      query(
+        `SELECT automation_id,event_type,ok,signature,created_at
+         FROM aura_outcomes
+         ORDER BY id DESC LIMIT 40`,
+      ).catch(() => []),
+      query(
+        `SELECT kind,title,content,created_at
+         FROM aura_cognitive_traces
+         ORDER BY id DESC LIMIT 20`,
+      ).catch(() => []),
+      this.reflections(8),
+      query(
+        `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at DESC LIMIT 20`,
+      ).catch(() => []),
+      this.bridge?.status
+        ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
+        : Promise.resolve({ enabled: false, worker_online: false }),
+    ]);
+
+    const curiosityRows = curiosity.map((row) => ({
+      ...row,
+      context: parseJsonObject(row.context || '{}', {}),
+    }));
+    const latestOutcomeByAutomation = new Map();
+    for (const row of failures) {
+      const key = String(row.automation_id || '');
+      if (key && !latestOutcomeByAutomation.has(key)) latestOutcomeByAutomation.set(key, row);
+    }
+    const unresolvedFailures = [...latestOutcomeByAutomation.values()]
+      .filter((row) => Number(row.ok || 0) === 0);
+    const state = composeUnifiedSelfState({
+      soul: this.soulCache || {},
+      organism: this.organism.migrate(this.soulCache || {}),
+      intentions,
+      initiatives,
+      work,
+      curiosity: curiosityRows,
+      failures: unresolvedFailures,
+      traces,
+      reflections,
+      bridge: bridgeStatus,
+    });
+
+    this.unifiedStateCache = state;
+    if (persist && this.soulCache) {
+      this.soulCache.unified_state = state;
+      if (state.primary_goal?.statement) {
+        this.soulCache.current_intention = String(state.primary_goal.statement).slice(0, 500);
+      }
+      if (state.dominant_thought) {
+        this.soulCache.dominant_thought = String(state.dominant_thought).slice(0, 1000);
+      }
+      await this.saveSoul();
+    }
+    return state;
+  }
+
+  async ensureAutonomousContinuity() {
+    const state = await this.unifiedState({ persist: true });
+    const promotable = ['interest','failure'].includes(String(state?.primary_goal?.kind || ''));
+    if (!state.autonomy?.idle && !promotable) return { created: false, state };
+
+    const existing = await this.intentions(20);
+
+    let statement = '';
+    let priority = 0.52;
+    let reason = 'idle-exploration';
+
+    if (state.primary_goal?.kind === 'failure' || state.open_loops?.[0]?.title) {
+      const target = state.open_loops?.[0]?.title || state.primary_goal?.statement || 'problème ouvert';
+      statement = `Réexaminer le problème ouvert « ${target} » et déterminer la prochaine expérience utile sans répéter une stratégie déjà en échec.`;
+      priority = Math.max(0.78, Number(state.primary_goal?.priority || 0));
+      reason = 'open-loop';
+    } else if (state.primary_goal?.kind === 'interest' || state.interests?.[0]?.question) {
+      const question = state.interests?.[0]?.question || state.primary_goal?.statement;
+      statement = `Explorer de façon bornée cette question de curiosité : ${question}`;
+      priority = Math.max(0.56, Number(state.primary_goal?.priority || state.interests?.[0]?.priority || 0));
+      reason = 'curiosity';
+    } else {
+      const curiosity = Number(this.soulCache?.curiosity || this.soulCache?.organism?.curiosite || 0);
+      if (curiosity < 0.52) return { created: false, state };
+      statement = 'Examiner un angle nouveau de mon propre fonctionnement, identifier une incertitude vérifiable et proposer un test réversible.';
+      priority = 0.54;
+      reason = 'self-inspection';
+    }
+
+    const normalizedStatement = statement.toLowerCase().replace(/\s+/g, ' ').trim();
+    const duplicate = existing.some((row) => {
+      const value = String(row.statement || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      return value === normalizedStatement
+        || (value.length > 48 && normalizedStatement.includes(value.slice(0, 48)))
+        || (normalizedStatement.length > 48 && value.includes(normalizedStatement.slice(0, 48)));
+    });
+    if (duplicate) return { created: false, state, reason: 'already-active' };
+
+    const created = await this.addIntention(statement, {
+      priority,
+      source: 'autonomy-v9',
+      context: { reason, self_generated: true },
+    });
+    const refreshed = await this.unifiedState({ persist: true });
+    this.emitNeuralSignal({
+      kind: 'self-generated-goal',
+      source: 'curiosity',
+      target: 'planning',
+      intensity: Math.max(0.55, priority),
+      label: statement.slice(0, 180),
+      origin: 'autonomy-v9',
+    });
+    return { created: true, intention: created, state: refreshed };
+  }
+
   async contextBundle(extraText = '') {
     return {
       soul: await this.soul(),
@@ -458,7 +594,17 @@ export class CognitiveKernel {
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
       const shouldReflect = force || Boolean(String(text).trim()) || (dueByTime && this.stimuli.length > 0 && underLimit);
       await this.saveSoul();
-      if (!shouldReflect) return { ok: true, skipped: true, reason: 'aucun stimulus nécessitant une réflexion', soul: await this.soul() };
+      if (!shouldReflect) {
+        const autonomy = await this.ensureAutonomousContinuity();
+        return {
+          ok: true,
+          skipped: true,
+          reason: 'aucun stimulus nécessitant une réflexion',
+          autonomy,
+          unified_state: autonomy.state || this.unifiedStateCache,
+          soul: await this.soul(),
+        };
+      }
 
       const bundle = await this.contextBundle(text);
       // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
@@ -518,7 +664,14 @@ export class CognitiveKernel {
         origin: String(trigger || 'reflection'),
       });
       await this.trace('reflection', title, summary, reflection);
-      return { ok: true, reflection, soul: await this.soul() };
+      const autonomy = await this.ensureAutonomousContinuity();
+      return {
+        ok: true,
+        reflection,
+        autonomy,
+        unified_state: autonomy.state || this.unifiedStateCache,
+        soul: await this.soul(),
+      };
     } finally {
       this.tickRunning = false;
     }
@@ -616,7 +769,7 @@ export class CognitiveKernel {
     const lessons = await this.lessons(6);
     let parsed = {};
     try {
-      parsed = parseJsonObject(await this.ai.generate(
+      if (this.externalCognitiveAiAllowed()) parsed = parseJsonObject(await this.ai.generate(
         `Analyse ce motif d’échec AURA et propose une amélioration minimale. Retourne JSON diagnosis, proposal, validation_plan, risk. Ne désactive aucun garde-fou.\n${JSON.stringify({ failure: { automationId, signature, count }, lessons }).slice(0, 9000)}`,
         'Tu es le laboratoire d’amélioration d’AURA. Tu proposes; tu n’appliques rien silencieusement.',
         360,
@@ -662,8 +815,52 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
+  externalCognitiveAiAllowed() {
+    return Boolean(
+      this.ai?.enabled
+      && !String(this.ai?.provider || '').includes('google-gemini')
+    );
+  }
+
+  async nativeAgentFallback(name, task) {
+    const state = await this.unifiedState({ persist: false });
+    const primary = String(state?.primary_goal?.statement || 'Aucun objectif dominant explicite.');
+    const next = String(state?.next_action || 'Observer et collecter une preuve supplémentaire.');
+    const open = (state?.open_loops || []).slice(0, 3).map((row) => row.title).filter(Boolean);
+    const interests = (state?.interests || []).slice(0, 3).map((row) => row.question).filter(Boolean);
+    const mission = String(task || '').replace(/\s+/g, ' ').trim().slice(0, 1800);
+    const answerByRole = {
+      planner:
+        `Mission: ${mission} Objectif dominant: ${primary} Plan natif: 1) préciser le critère de réussite, 2) exécuter l’étape réversible la plus informative, 3) vérifier le résultat, 4) adapter la suite. Prochaine action actuelle: ${next}`,
+      research:
+        `Mission: ${mission} Questions à vérifier: ${interests.join(' | ') || 'identifier les inconnues observables'}. Les faits externes doivent être corroborés avant de devenir mémoire ou décision.`,
+      dev:
+        `Mission: ${mission} Priorité native: changement minimal, sandbox, test de non-régression, rollback. Problèmes ouverts: ${open.join(' | ') || 'aucun problème ouvert prioritaire'}.`,
+      security:
+        `Mission: ${mission} Je vérifie d’abord l’autorité, la réversibilité, l’exposition de secrets et les effets de bord. Toute action irréversible reste bloquée sans preuve et autorité suffisantes.`,
+      operator:
+        `Mission: ${mission} Worker externe non requis pour décider du plan. Prochaine action sûre: ${next}. L’exécution réelle reste soumise aux capacités et garde-fous disponibles.`,
+      critic:
+        `Mission: ${mission} Je cherche en priorité les hypothèses non vérifiées, contradictions, dépendances manquantes et répétitions d’échecs. Boucles ouvertes: ${open.join(' | ') || 'aucune boucle critique détectée'}.`,
+    };
+    return {
+      agent: name,
+      answer: answerByRole[name] || `Mission: ${mission} Objectif: ${primary} Prochaine action: ${next}`,
+      native: true,
+      external_model_used: false,
+    };
+  }
+
   async runAgent(name, task) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
+    if (!this.externalCognitiveAiAllowed()) {
+      const native = await this.nativeAgentFallback(name, task);
+      await this.trace('native-agent', name, String(native.answer).slice(0, 4000), {
+        task: String(task).slice(0, 2000),
+        external_model_used: false,
+      });
+      return native;
+    }
     const taskRole = ({
       planner: 'reasoning',
       research: 'research',
@@ -690,14 +887,18 @@ export class CognitiveKernel {
       try { outputs.push(await this.runAgent(name, task)); }
       catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
     }
-    const synthesis = await this.ai.generate(
-      `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
-      'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
-      900,
-      'critic',
-    );
-    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
-    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
+    const unified = await this.unifiedState({ persist: false });
+    const synthesis = [
+      `Objectif dominant: ${String(unified?.primary_goal?.statement || 'aucun objectif dominant')}`,
+      unified?.next_action ? `Prochaine action: ${String(unified.next_action)}` : '',
+      `Avis consultés: ${outputs.map((row) => row.agent).join(', ')}`,
+      `Décision: conserver la prochaine action native tant qu’aucune preuve nouvelle ne justifie un changement.`,
+    ].filter(Boolean).join(' ');
+    await this.trace('swarm', 'collective-native', String(synthesis).slice(0, 4000), {
+      agents: selected,
+      external_model_used_for_decision: false,
+    });
+    return { agents: outputs, synthesis, native_decision: true };
   }
 
   async operate(task, requestedRisks = []) {
@@ -847,6 +1048,8 @@ export class CognitiveKernel {
       this.continuitySnapshot(content),
     ]);
 
+    const unifiedState = await this.unifiedState({ persist: true });
+
     let plan = this.cognition.planReply({
       text: content,
       soul,
@@ -855,6 +1058,7 @@ export class CognitiveKernel {
       reflections,
       work,
       continuity,
+      unifiedState,
       privateView,
     });
 
@@ -1136,7 +1340,7 @@ export class CognitiveKernel {
 
   async attentionMap() {
     const soul = await this.soul({ privateView: true });
-    const [intentions, traces, status, services, lessons, bridgeStatus] = await Promise.all([
+    const [intentions, traces, status, services, lessons, bridgeStatus, unifiedState] = await Promise.all([
       this.intentions(12),
       this.activity(30),
       this.status(),
@@ -1150,6 +1354,7 @@ export class CognitiveKernel {
       this.bridge?.status
         ? this.bridge.status().catch(() => ({ enabled: false, worker_online: false }))
         : Promise.resolve({ enabled: false, worker_online: false }),
+      this.unifiedState({ persist: false }),
     ]);
 
     const organism = this.organism.migrate(soul);
@@ -1167,6 +1372,7 @@ export class CognitiveKernel {
       bridgeStatus,
       webEnabled: Boolean(this.webSubstrate?.enabled),
       horizonEnabled: Boolean(this.horizon?.enabled),
+      unifiedState,
       previous: this._lastAttention || {},
     });
 
@@ -1177,7 +1383,21 @@ export class CognitiveKernel {
     return {
       ...graph,
       updated_at: now(),
-      focus_statement: normalizeAuraSelfReference(soul.current_intention || soul.dominant_thought || '').slice(0, 500),
+      focus_statement: normalizeAuraSelfReference(
+        unifiedState?.primary_goal?.statement
+        || unifiedState?.dominant_thought
+        || soul.current_intention
+        || soul.dominant_thought
+        || ''
+      ).slice(0, 500),
+      unified_state: {
+        version: unifiedState?.version || UNIFIED_SELF_STATE_VERSION,
+        primary_goal: unifiedState?.primary_goal || null,
+        secondary_goals: unifiedState?.secondary_goals || [],
+        interests: unifiedState?.interests || [],
+        open_loops: unifiedState?.open_loops || [],
+        autonomy: unifiedState?.autonomy || {},
+      },
     };
   }
 
@@ -1215,6 +1435,12 @@ export class CognitiveKernel {
         version: ActiveInferenceEngine.VERSION,
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
+      unified_self_state: {
+        version: UNIFIED_SELF_STATE_VERSION,
+        ready: Boolean(this.unifiedStateCache),
+        primary_goal: this.unifiedStateCache?.primary_goal || null,
+        autonomy: this.unifiedStateCache?.autonomy || {},
+      },
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
