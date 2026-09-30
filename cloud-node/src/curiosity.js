@@ -160,7 +160,7 @@ export class CuriosityEngine {
     if (!content || !explicitUserIntent(content)) return '';
     if (await this.countQuestionsLastHour('interlocutor') >= config.curiosityMaxInterlocutorQuestionsPerHour) return '';
 
-    if (this.ai?.enabled) {
+    if (this.ai?.enabled && !String(this.ai?.provider || '').includes('google-gemini')) {
       try {
         const answer = await this.ai.generate(
           `Message explicite de l'interlocuteur:\n${content}\n\nFormule UNE question de curiosité courte, naturelle et utile en français. Elle doit uniquement approfondir ce que l'interlocuteur a explicitement dit. N'infère aucune information sensible. Ne pose pas une question si le message est déjà totalement opérationnel. Retourne uniquement la question ou une chaîne vide.`,
