@@ -12,8 +12,9 @@ const ms = (value) => {
 };
 
 const recency = (value, halfLifeHours = 12) => {
-  const age = Math.max(0, Date.now() - ms(value));
-  if (!age || !ms(value)) return 0.35;
+  const stamp = ms(value);
+  if (!stamp) return 0.35;
+  const age = Math.max(0, Date.now() - stamp);
   return clamp(Math.exp(-age / (halfLifeHours * 3600_000)));
 };
 
