@@ -748,16 +748,26 @@ app.get('/api/kernel/public', async () => {
       organism: { ready: false },
     };
   }
-  const [safeSoul, privateSoul, organism] = await Promise.all([
+  const [safeSoul, privateSoul, organism, unifiedState] = await Promise.all([
     kernel.soul({ privateView: false }),
     kernel.soul({ privateView: true }),
     kernel.organismState({ publicView: true }),
+    kernel.unifiedState({ persist: false }),
   ]);
   return {
     ...safeSoul,
-    current_intention: String(privateSoul.current_intention || '').slice(0, 500),
-    dominant_thought: String(privateSoul.dominant_thought || '').slice(0, 700),
+    current_intention: String(
+      unifiedState?.primary_goal?.statement
+      || privateSoul.current_intention
+      || ''
+    ).slice(0, 500),
+    dominant_thought: String(
+      unifiedState?.dominant_thought
+      || privateSoul.dominant_thought
+      || ''
+    ).slice(0, 700),
     organism,
+    autonomy: unifiedState?.autonomy || {},
   };
 });
 
@@ -795,13 +805,38 @@ app.get('/api/kernel/public/activity', async (request) => {
 
 app.get('/api/kernel/public/work', async (request) => {
   if (!bootstrap.runtimeReady) return [];
-  const rows = await kernel.workItems(request.query?.limit);
-  return rows.slice(0, 8).map((row) => ({
-    kind: String(row.kind || 'travail').slice(0, 80),
-    title: String(row.title || '').slice(0, 500),
-    priority: Number(row.priority || 0),
-    updated_at: row.updated_at || '',
-  }));
+  const limit = Math.max(1, Math.min(Number(request.query?.limit) || 8, 12));
+  const state = await kernel.unifiedState({ persist: false });
+  const rows = [];
+  if (state?.primary_goal?.statement) {
+    rows.push({
+      kind: 'primary-goal',
+      title: String(state.primary_goal.statement).slice(0, 500),
+      priority: Number(state.primary_goal.salience || state.primary_goal.priority || 0.9),
+      updated_at: state.primary_goal.updated_at || state.generated_at || '',
+    });
+  }
+  for (const row of state?.active_work || []) {
+    rows.push({
+      kind: String(row.kind || 'travail').slice(0, 80),
+      title: String(row.title || '').slice(0, 500),
+      priority: Number(row.priority || 0),
+      updated_at: row.updated_at || '',
+    });
+  }
+  for (const row of state?.open_loops || []) {
+    rows.push({
+      kind: 'open-loop',
+      title: String(row.title || row.detail || '').slice(0, 500),
+      priority: Number(row.priority || row.urgency || 0.6),
+      updated_at: row.updated_at || '',
+    });
+  }
+  const seen = new Set();
+  return rows
+    .filter((row) => row.title && !seen.has(row.title) && seen.add(row.title))
+    .sort((a,b) => Number(b.priority || 0) - Number(a.priority || 0))
+    .slice(0, limit);
 });
 
 app.get('/api/kernel/public/attention', async () => {
