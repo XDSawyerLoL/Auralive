@@ -868,6 +868,26 @@ app.get('/api/kernel/public/attention', async () => {
 });
 
 
+app.get('/api/kernel/public/neural-signals', async (request) => {
+  if (!bootstrap.runtimeReady) return { since: 0, last_id: 0, events: [] };
+  const since = Math.max(0, Number(request.query?.since || 0));
+  const events = kernel.neuralSignalsSince(since, 100).map((event) => ({
+    id: Number(event.id || 0),
+    kind: String(event.kind || '').slice(0, 48),
+    source: String(event.source || '').slice(0, 80),
+    target: String(event.target || '').slice(0, 80),
+    intensity: Math.max(0, Math.min(1, Number(event.intensity || 0))),
+    label: String(event.label || '').slice(0, 180),
+    origin: String(event.origin || '').slice(0, 80),
+    created_at: event.created_at || '',
+  }));
+  return {
+    since,
+    last_id: events.length ? Number(events[events.length - 1].id || since) : since,
+    events,
+  };
+});
+
 app.get('/api/kernel/soul', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return publicFallbackSoul(true);
