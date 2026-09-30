@@ -494,23 +494,24 @@ export class CognitiveKernel {
 
   async ensureAutonomousContinuity() {
     const state = await this.unifiedState({ persist: true });
-    if (!state.autonomy?.idle) return { created: false, state };
+    const promotable = ['interest','failure'].includes(String(state?.primary_goal?.kind || ''));
+    if (!state.autonomy?.idle && !promotable) return { created: false, state };
 
     const existing = await this.intentions(20);
-    const hasAutonomyGoal = existing.some((row) => String(row.source || '') === 'autonomy-v9');
-    if (hasAutonomyGoal) return { created: false, state };
 
     let statement = '';
     let priority = 0.52;
     let reason = 'idle-exploration';
 
-    if (state.open_loops?.[0]?.title) {
-      statement = `Réexaminer le problème ouvert « ${state.open_loops[0].title} » et déterminer la prochaine expérience utile sans répéter une stratégie déjà en échec.`;
-      priority = 0.78;
+    if (state.primary_goal?.kind === 'failure' || state.open_loops?.[0]?.title) {
+      const target = state.open_loops?.[0]?.title || state.primary_goal?.statement || 'problème ouvert';
+      statement = `Réexaminer le problème ouvert « ${target} » et déterminer la prochaine expérience utile sans répéter une stratégie déjà en échec.`;
+      priority = Math.max(0.78, Number(state.primary_goal?.priority || 0));
       reason = 'open-loop';
-    } else if (state.interests?.[0]?.question) {
-      statement = `Explorer de façon bornée cette question de curiosité : ${state.interests[0].question}`;
-      priority = Math.max(0.56, Number(state.interests[0].priority || 0));
+    } else if (state.primary_goal?.kind === 'interest' || state.interests?.[0]?.question) {
+      const question = state.interests?.[0]?.question || state.primary_goal?.statement;
+      statement = `Explorer de façon bornée cette question de curiosité : ${question}`;
+      priority = Math.max(0.56, Number(state.primary_goal?.priority || state.interests?.[0]?.priority || 0));
       reason = 'curiosity';
     } else {
       const curiosity = Number(this.soulCache?.curiosity || this.soulCache?.organism?.curiosite || 0);
@@ -519,6 +520,15 @@ export class CognitiveKernel {
       priority = 0.54;
       reason = 'self-inspection';
     }
+
+    const normalizedStatement = statement.toLowerCase().replace(/\s+/g, ' ').trim();
+    const duplicate = existing.some((row) => {
+      const value = String(row.statement || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      return value === normalizedStatement
+        || (value.length > 48 && normalizedStatement.includes(value.slice(0, 48)))
+        || (normalizedStatement.length > 48 && value.includes(normalizedStatement.slice(0, 48)));
+    });
+    if (duplicate) return { created: false, state, reason: 'already-active' };
 
     const created = await this.addIntention(statement, {
       priority,
