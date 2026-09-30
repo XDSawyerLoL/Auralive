@@ -176,7 +176,6 @@ export class CognitionEngine {
       attachment: Number(organism.attachement ?? organism.attachment ?? 0),
       silence_need: Number(organism.besoin_de_silence ?? 0),
       dream_pressure: Number(organism.pression_de_reve ?? 0),
-      organic_intention: activeOrganicIntention,
     };
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
