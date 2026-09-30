@@ -69,5 +69,5 @@ test('kernel persists and reports native learning state', () => {
   assert.match(kernelSource, /native_learning: this\.nativeLearning\.defaultState\(\)/);
   assert.match(kernelSource, /this\.nativeLearning\.update/);
   assert.match(kernelSource, /native_learning: this\.nativeLearning\.diagnostic/);
-  assert.match(kernelSource, /aura-unified-kernel-node-v3/);
+  assert.match(kernelSource, /aura-unified-kernel-node-v4-self-state/);
 });
