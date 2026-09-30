@@ -163,14 +163,17 @@ export function composeUnifiedSelfState(input = {}) {
         blocked: text(row.status).toLowerCase() === 'waiting',
         updated_at: row.updated_at || '',
       })),
-    ...work.slice(0, 8).map((row) => ({
-      kind: text(row.kind || 'work', 60),
-      title: text(row.title, 700),
-      status: text(row.status || 'active', 40),
-      priority: clamp01(row.priority ?? 0.4),
-      blocked: /waiting|blocked/i.test(text(row.status || row.detail)),
-      updated_at: row.updated_at || '',
-    })),
+    ...work
+      .filter((row) => ['initiative','intention','improvement'].includes(text(row.kind || '').toLowerCase()))
+      .slice(0, 8)
+      .map((row) => ({
+        kind: text(row.kind || 'work', 60),
+        title: text(row.title, 700),
+        status: text(row.status || 'active', 40),
+        priority: clamp01(row.priority ?? 0.4),
+        blocked: /waiting|blocked/i.test(text(row.status || row.detail)),
+        updated_at: row.updated_at || '',
+      })),
   ], (row) => `${row.kind}:${row.title.toLowerCase()}`).slice(0, 10);
 
   const interests = uniq(curiosity.map((row) => ({
