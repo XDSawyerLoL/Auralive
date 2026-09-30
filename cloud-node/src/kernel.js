@@ -418,7 +418,7 @@ export class CognitiveKernel {
       intentions,
       work,
       curiosity,
-      failures,
+      failures: unresolvedFailures,
       traces,
       reflections,
       initiatives,
@@ -433,10 +433,9 @@ export class CognitiveKernel {
          ORDER BY id DESC LIMIT 20`,
       ).catch(() => []),
       query(
-        `SELECT automation_id,event_type,signature,created_at
+        `SELECT automation_id,event_type,ok,signature,created_at
          FROM aura_outcomes
-         WHERE ok=0
-         ORDER BY id DESC LIMIT 20`,
+         ORDER BY id DESC LIMIT 40`,
       ).catch(() => []),
       query(
         `SELECT kind,title,content,created_at
@@ -459,6 +458,13 @@ export class CognitiveKernel {
       ...row,
       context: parseJsonObject(row.context || '{}', {}),
     }));
+    const latestOutcomeByAutomation = new Map();
+    for (const row of failures) {
+      const key = String(row.automation_id || '');
+      if (key && !latestOutcomeByAutomation.has(key)) latestOutcomeByAutomation.set(key, row);
+    }
+    const unresolvedFailures = [...latestOutcomeByAutomation.values()]
+      .filter((row) => Number(row.ok || 0) === 0);
     const state = composeUnifiedSelfState({
       soul: this.soulCache || {},
       organism: this.organism.migrate(this.soulCache || {}),
