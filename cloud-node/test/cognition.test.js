@@ -221,3 +221,51 @@ test('operational recall preserves Crow and command-center continuity from persi
   assert.match(answer, /command-center:aura/i);
   assert.match(answer, /dag aura vide/i);
 });
+
+
+test('current-work answer is sourced from the unified cognitive state', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Tu travailles sur quoi en ce moment ?',
+    soul: {
+      current_intention: 'ancienne intention',
+      dominant_thought: 'ancienne pensée',
+      organism: { mood: 'claire' },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    continuity: {},
+    cognitiveState: {
+      mode: 'active',
+      activity_score: 0.84,
+      dominant_focus: {
+        kind: 'initiative',
+        title: 'Évaluer Crow en sandbox',
+        priority: 0.91,
+      },
+      active_work: [
+        { kind: 'initiative', title: 'Évaluer Crow en sandbox' },
+        { kind: 'problem', title: 'Résoudre command-center:aura' },
+      ],
+      interests: [
+        { question: 'Quelle capacité de Crow est réellement additive ?' },
+      ],
+      unresolved_problems: [
+        { title: 'command-center:aura · dag aura vide' },
+      ],
+      blocked: [],
+      next_action: 'Comparer Crow à une alternative avant intégration.',
+    },
+    privateView: true,
+  });
+
+  const answer = engine.deterministicReply(plan);
+  assert.equal(plan.act, 'report_current_activity');
+  assert.match(answer, /Crow en sandbox/i);
+  assert.match(answer, /capacité de Crow/i);
+  assert.match(answer, /command-center:aura/i);
+  assert.match(answer, /Comparer Crow/i);
+  assert.doesNotMatch(answer, /ancienne intention|ancienne pensée/i);
+});
