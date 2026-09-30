@@ -312,7 +312,8 @@ export function runBehavioralBattery() {
 
   const sharedPolicy = new AdaptiveAutonomyPolicy();
   const learningCase = runLearningCase(sharedPolicy);
-  cases.push(({ sharedPolicy: _policy, ...rest }) => rest)(learningCase);
+  const { sharedPolicy: _policy, ...learningTrace } = learningCase;
+  cases.push(learningTrace);
   cases.push(runContinuityCase());
   cases.push(runTransferCase(sharedPolicy));
 
