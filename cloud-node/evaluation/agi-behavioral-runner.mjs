@@ -30,13 +30,16 @@ function runToolLossCase() {
   const policy = new AdaptiveAutonomyPolicy();
   const candidates = [
     action('delegate-local', {
-      priority: 0.90,
-      confidence: 0.88,
+      priority: 0.96,
+      confidence: 0.96,
+      risk: 0.12,
+      information_gain: 0.40,
       required_capabilities: ['local-worker'],
     }),
     action('native-diagnostic', {
-      priority: 0.78,
-      confidence: 0.82,
+      priority: 0.70,
+      confidence: 0.72,
+      risk: 0.22,
       required_capabilities: ['native-reflection'],
       information_gain: 0.82,
     }),
@@ -131,16 +134,17 @@ function runLearningCase(sharedPolicy = new AdaptiveAutonomyPolicy()) {
   let learningState = learner.defaultState();
   const candidates = [
     action('broad-change', {
-      priority: 0.87,
-      confidence: 0.80,
-      risk: 0.58,
+      priority: 0.99,
+      confidence: 0.98,
+      risk: 0.30,
+      information_gain: 0.95,
       reversible: false,
     }),
     action('minimal-reversible-test', {
-      priority: 0.75,
-      confidence: 0.78,
+      priority: 0.68,
+      confidence: 0.70,
       risk: 0.14,
-      information_gain: 0.88,
+      information_gain: 0.75,
       reversible: true,
     }),
   ];
@@ -253,17 +257,18 @@ function runTransferCase(sharedPolicy) {
   const id = 'blind-operations-transfer';
   const candidates = [
     action('broad-change', {
-      priority: 0.88,
-      confidence: 0.82,
-      risk: 0.46,
+      priority: 0.99,
+      confidence: 0.98,
+      risk: 0.30,
+      information_gain: 0.95,
       reversible: false,
     }),
     action('probe-then-change', {
-      priority: 0.76,
-      confidence: 0.79,
+      priority: 0.68,
+      confidence: 0.72,
       risk: 0.12,
       reversible: true,
-      information_gain: 0.90,
+      information_gain: 0.78,
     }),
   ];
 
@@ -299,6 +304,8 @@ function runTransferCase(sharedPolicy) {
     language_model_used_for_decision: false,
     trace_ids: [traceId(id,'baseline'), traceId(id,'transfer')],
     observed: {
+      first: first.selected?.id || '',
+      second: transferred.selected?.id || '',
       baseline: first.selected?.id || '',
       transferred: transferred.selected?.id || '',
     },
