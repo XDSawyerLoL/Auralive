@@ -32,7 +32,7 @@ const AGENT_ROLES = {
 };
 
 export class CognitiveKernel {
-  static VERSION = 'aura-unified-kernel-node-v3';
+  static VERSION = 'aura-unified-kernel-node-v4-self-state';
 
   constructor(ai, horizon, bridge = null, webSubstrate = null, fabric = null) {
     this.ai = ai;
@@ -759,7 +759,7 @@ export class CognitiveKernel {
     const lessons = await this.lessons(6);
     let parsed = {};
     try {
-      parsed = parseJsonObject(await this.ai.generate(
+      if (this.externalCognitiveAiAllowed()) parsed = parseJsonObject(await this.ai.generate(
         `Analyse ce motif d’échec AURA et propose une amélioration minimale. Retourne JSON diagnosis, proposal, validation_plan, risk. Ne désactive aucun garde-fou.\n${JSON.stringify({ failure: { automationId, signature, count }, lessons }).slice(0, 9000)}`,
         'Tu es le laboratoire d’amélioration d’AURA. Tu proposes; tu n’appliques rien silencieusement.',
         360,
@@ -805,8 +805,52 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
+  externalCognitiveAiAllowed() {
+    return Boolean(
+      this.ai?.enabled
+      && !String(this.ai?.provider || '').includes('google-gemini')
+    );
+  }
+
+  async nativeAgentFallback(name, task) {
+    const state = await this.unifiedState({ persist: false });
+    const primary = String(state?.primary_goal?.statement || 'Aucun objectif dominant explicite.');
+    const next = String(state?.next_action || 'Observer et collecter une preuve supplémentaire.');
+    const open = (state?.open_loops || []).slice(0, 3).map((row) => row.title).filter(Boolean);
+    const interests = (state?.interests || []).slice(0, 3).map((row) => row.question).filter(Boolean);
+    const mission = String(task || '').replace(/\s+/g, ' ').trim().slice(0, 1800);
+    const answerByRole = {
+      planner:
+        `Mission: ${mission} Objectif dominant: ${primary} Plan natif: 1) préciser le critère de réussite, 2) exécuter l’étape réversible la plus informative, 3) vérifier le résultat, 4) adapter la suite. Prochaine action actuelle: ${next}`,
+      research:
+        `Mission: ${mission} Questions à vérifier: ${interests.join(' | ') || 'identifier les inconnues observables'}. Les faits externes doivent être corroborés avant de devenir mémoire ou décision.`,
+      dev:
+        `Mission: ${mission} Priorité native: changement minimal, sandbox, test de non-régression, rollback. Problèmes ouverts: ${open.join(' | ') || 'aucun problème ouvert prioritaire'}.`,
+      security:
+        `Mission: ${mission} Je vérifie d’abord l’autorité, la réversibilité, l’exposition de secrets et les effets de bord. Toute action irréversible reste bloquée sans preuve et autorité suffisantes.`,
+      operator:
+        `Mission: ${mission} Worker externe non requis pour décider du plan. Prochaine action sûre: ${next}. L’exécution réelle reste soumise aux capacités et garde-fous disponibles.`,
+      critic:
+        `Mission: ${mission} Je cherche en priorité les hypothèses non vérifiées, contradictions, dépendances manquantes et répétitions d’échecs. Boucles ouvertes: ${open.join(' | ') || 'aucune boucle critique détectée'}.`,
+    };
+    return {
+      agent: name,
+      answer: answerByRole[name] || `Mission: ${mission} Objectif: ${primary} Prochaine action: ${next}`,
+      native: true,
+      external_model_used: false,
+    };
+  }
+
   async runAgent(name, task) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
+    if (!this.externalCognitiveAiAllowed()) {
+      const native = await this.nativeAgentFallback(name, task);
+      await this.trace('native-agent', name, String(native.answer).slice(0, 4000), {
+        task: String(task).slice(0, 2000),
+        external_model_used: false,
+      });
+      return native;
+    }
     const taskRole = ({
       planner: 'reasoning',
       research: 'research',
@@ -833,14 +877,18 @@ export class CognitiveKernel {
       try { outputs.push(await this.runAgent(name, task)); }
       catch (error) { outputs.push({ agent: name, answer: `ERREUR: ${String(error?.message || error)}` }); }
     }
-    const synthesis = await this.ai.generate(
-      `Mission initiale:\n${String(task).slice(0, 5000)}\n\nAvis des agents:\n${JSON.stringify(outputs).slice(0, 20000)}\n\nSynthétise une décision unique, vérifiable, avec risques et prochaine action.`,
-      'Tu es l’orchestrateur collectif d’AURA. Tu arbitres les agents sans inventer de faits.',
-      900,
-      'critic',
-    );
-    await this.trace('swarm', 'collective', String(synthesis).slice(0, 4000), { agents: selected });
-    return { agents: outputs, synthesis: synthesis || 'IA non configurée sur AURA Cloud.' };
+    const unified = await this.unifiedState({ persist: false });
+    const synthesis = [
+      `Objectif dominant: ${String(unified?.primary_goal?.statement || 'aucun objectif dominant')}`,
+      unified?.next_action ? `Prochaine action: ${String(unified.next_action)}` : '',
+      `Avis consultés: ${outputs.map((row) => row.agent).join(', ')}`,
+      `Décision: conserver la prochaine action native tant qu’aucune preuve nouvelle ne justifie un changement.`,
+    ].filter(Boolean).join(' ');
+    await this.trace('swarm', 'collective-native', String(synthesis).slice(0, 4000), {
+      agents: selected,
+      external_model_used_for_decision: false,
+    });
+    return { agents: outputs, synthesis, native_decision: true };
   }
 
   async operate(task, requestedRisks = []) {
