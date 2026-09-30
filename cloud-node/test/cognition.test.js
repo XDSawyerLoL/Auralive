@@ -177,3 +177,47 @@ test('casual check-in uses AURA internal state instead of generic AI boilerplate
   assert.match(fallback, /Et toi/i);
   assert.doesNotMatch(fallback, /intelligence artificielle/i);
 });
+
+
+test('operational recall preserves Crow and command-center continuity from persisted memory', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'Tu te souviens de ce que tu faisais avant ?',
+    soul: {
+      current_intention: 'Observer',
+      dominant_thought: 'Nouvelle interaction',
+      organism: { mood: 'claire' },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    continuity: {
+      operational_messages: [
+        {
+          content: 'Je m’apprête à évaluer nibor1896/Crow en sandbox et je dois vérifier command-center:aura après dix échecs dag aura vide.',
+          created_at: '2026-09-30T10:00:00Z',
+        },
+      ],
+      failures: [
+        {
+          automation_id: 'command-center:aura',
+          signature: 'dag aura vide',
+          created_at: '2026-09-30T10:00:00Z',
+        },
+      ],
+      intentions: [],
+      initiatives: [],
+      traces: [],
+    },
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'recall_operational_continuity');
+  assert.equal(plan.context_scope, 'operational');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /nibor1896\/Crow/i);
+  assert.match(answer, /command-center:aura/i);
+  assert.match(answer, /dag aura vide/i);
+});
