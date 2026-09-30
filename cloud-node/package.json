@@ -18,7 +18,8 @@
     "test:neural-field": "node --test test/neural_field.test.js test/dashboard.test.js",
     "test:self-state": "node --test test/self_state.test.js test/cognition.test.js test/expression.test.js",
     "test:agi-evidence": "node --test test/agi_behavior_evaluator.test.js test/blind_discovery_case.test.js",
-    "audit:agi-evidence": "node evaluation/agi-behavior-evaluator.mjs evaluation/agi-behavior-trace.json agi-behavior-report.json"
+    "audit:agi-evidence": "node evaluation/agi-behavior-evaluator.mjs evaluation/agi-behavior-trace.json agi-behavior-report.json",
+    "test:v9-core": "node --test test/self_state.test.js test/cognition.test.js test/expression.test.js test/gemini_voice_only.test.js test/continuity_live_signals.test.js test/neural_field.test.js test/agi_behavior_evaluator.test.js"
   },
   "dependencies": {
     "dotenv": "18.0.3",
