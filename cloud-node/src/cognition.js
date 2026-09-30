@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.4';
+  static VERSION = 'aura-cognition-native-v1.5-self-state';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -286,7 +286,11 @@ export class CognitionEngine {
         if (title) facts.push(`Trace récente : ${title}`);
       }
       if (!facts.length) facts.push('Je n’ai pas retrouvé de trace opérationnelle persistée suffisamment précise pour répondre avec certitude.');
-    } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
+    } else if (hasAny(q, [
+      'que fais-tu','tu fais quoi','qu’est-ce que tu fais',"qu'est-ce que tu fais",
+      'tu travailles sur quoi','sur quoi tu travailles','sur quoi travailles-tu',
+      'en ce moment','maintenant','tes intérêts actuels','tes interets actuels'
+    ])) {
       act = 'report_current_activity';
       contextScope = 'operational';
       goal = 'Décrire mon activité actuelle sans inventer.';
