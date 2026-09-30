@@ -127,15 +127,17 @@ export function composeUnifiedSelfState(input = {}) {
     });
   }
 
-  if (text(soul.current_intention)) {
+  const soulIntention = text(soul.current_intention, 1400);
+  const genericObserver = /^(observer|observer, comprendre|maintenir une présence utile|maintenir une veille utile)/i.test(soulIntention);
+  if (soulIntention && !genericObserver) {
     goals.push({
       kind: 'soul-intention',
       id: 'soul-current',
-      statement: text(soul.current_intention, 1400),
-      priority: 0.64,
-      urgency: 0.50,
-      recency: 0.82,
-      persistence: 0.68,
+      statement: soulIntention,
+      priority: 0.60,
+      urgency: 0.44,
+      recency: 0.76,
+      persistence: 0.64,
       status: 'active',
       source: 'soul',
       blocked: false,
