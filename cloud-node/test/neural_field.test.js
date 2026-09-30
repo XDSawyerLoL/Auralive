@@ -234,3 +234,13 @@ test('V8 galaxy renderer creates dense local neural matter', async () => {
 });
 
 // V8.1 refined semantic anchors validated against the live cognitive-galaxy layout.
+
+
+test('V8.2 merges fabric capabilities into the infrastructure galaxy and adds nebula depth', async () => {
+  const { NEURAL_FIELD_SCRIPT } = await import('../src/neural-field-renderer.js');
+  assert.match(NEURAL_FIELD_SCRIPT, /sourceKey==='fabric'\?'infrastructure':sourceKey/);
+  assert.match(NEURAL_FIELD_SCRIPT, /function drawNebulaBackdropV8/);
+  assert.match(NEURAL_FIELD_SCRIPT, /drawNebulaBackdropV8\(t\)/);
+  assert.match(NEURAL_FIELD_SCRIPT, /const r=92\*breath/);
+  assert.match(NEURAL_FIELD_SCRIPT, /const dir=galaxy\.x>\.57\?-1:1/);
+});
