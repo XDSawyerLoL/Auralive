@@ -232,3 +232,5 @@ test('V8 galaxy renderer creates dense local neural matter', async () => {
   assert.match(NEURAL_FIELD_SCRIPT, /EN ÉVOLUTION/);
   assert.match(NEURAL_FIELD_SCRIPT, /companions\.join\(' · '\)/);
 });
+
+// V8.1 refined semantic anchors validated against the live cognitive-galaxy layout.
