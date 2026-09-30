@@ -967,6 +967,8 @@ export class CognitiveKernel {
       this.continuitySnapshot(content),
     ]);
 
+    const unifiedState = await this.unifiedState({ persist: true });
+
     let plan = this.cognition.planReply({
       text: content,
       soul,
@@ -975,6 +977,7 @@ export class CognitiveKernel {
       reflections,
       work,
       continuity,
+      unifiedState,
       privateView,
     });
 
