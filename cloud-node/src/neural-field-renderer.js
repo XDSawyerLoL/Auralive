@@ -576,7 +576,6 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       agency:{x:.62,y:.76},
       regulation:{x:.34,y:.60},
       infrastructure:{x:.44,y:.77},
-      fabric:{x:.52,y:.76},
       ecosystem:{x:.32,y:.43},
     };
     if(anchors[cluster])return anchors[cluster];
@@ -592,7 +591,8 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
         node.x=.5;node.y=.5;node.fixed=true;node.vx=0;node.vy=0;
         continue;
       }
-      const key=String(node.cluster||'fabric');
+      const sourceKey=String(node.cluster||'fabric');
+      const key=sourceKey==='fabric'?'infrastructure':sourceKey;
       (groups[key]||(groups[key]=[])).push(node);
     }
     const galaxies=[];
@@ -633,6 +633,29 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
       });
     }
     field.galaxies=galaxies;
+  }
+
+  function drawNebulaBackdropV8(t){
+    const ctx=state.ctx,w=state.width,h=state.height;
+    const clouds=[
+      {x:.50,y:.48,rx:.34,ry:.28,c:'#8f6cff',a:.075,p:0},
+      {x:.31,y:.24,rx:.24,ry:.22,c:'#4fe1ef',a:.045,p:1.7},
+      {x:.66,y:.25,rx:.25,ry:.22,c:'#ffc96a',a:.040,p:3.1},
+      {x:.64,y:.73,rx:.28,ry:.23,c:'#ef79d8',a:.038,p:4.6},
+    ];
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    for(const cloud of clouds){
+      const drift=Math.sin(t*.00009+cloud.p)*10;
+      const cx=cloud.x*w+drift,cy=cloud.y*h+Math.cos(t*.00007+cloud.p)*7;
+      const radius=Math.max(w*cloud.rx,h*cloud.ry);
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,radius);
+      g.addColorStop(0,rgba(cloud.c,cloud.a));
+      g.addColorStop(.38,rgba(cloud.c,cloud.a*.45));
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath();ctx.ellipse(cx,cy,w*cloud.rx,h*cloud.ry,cloud.p*.19,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawCognitiveDust(t){
@@ -791,16 +814,18 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     const hub=galaxy.hub;
     if(hub){
       const hp=px(hub);
-      ctx.textAlign='left';ctx.textBaseline='middle';
+      const dir=galaxy.x>.57?-1:1;
+      const lx=hp.x+dir*30;
+      ctx.textAlign=dir<0?'right':'left';ctx.textBaseline='middle';
       ctx.font='720 15px Inter,system-ui,sans-serif';
-      ctx.lineWidth=4;ctx.strokeStyle='rgba(2,4,10,.90)';ctx.strokeText(hub.label,hp.x+26,hp.y-3);
-      ctx.fillStyle='#f3f6ff';ctx.fillText(hub.label,hp.x+26,hp.y-3);
+      ctx.lineWidth=4;ctx.strokeStyle='rgba(2,4,10,.90)';ctx.strokeText(hub.label,lx,hp.y-3);
+      ctx.fillStyle='#f3f6ff';ctx.fillText(hub.label,lx,hp.y-3);
 
       const companions=galaxy.nodes.slice(1,4).map(function(n){return n.label;}).filter(Boolean);
       if(companions.length){
         ctx.font='520 8.5px Inter,system-ui,sans-serif';
         ctx.fillStyle='rgba(190,202,226,.76)';
-        ctx.fillText(companions.join(' · '),hp.x+26,hp.y+15);
+        ctx.fillText(companions.join(' · '),lx,hp.y+15);
       }
     }
   }
@@ -810,7 +835,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     if(!aura)return;
     const ctx=state.ctx,p=px(aura);
     const breath=.965+.035*Math.sin(t*.0012);
-    const r=78*breath;
+    const r=92*breath;
 
     ctx.save();
     ctx.globalCompositeOperation='lighter';
@@ -830,8 +855,8 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
         const rr=r*(1.15+q*1.55);
         const x=p.x+Math.cos(a)*rr;
         const y=p.y+Math.sin(a)*rr*.56;
-        const pr=.55+(1-q)*1.5;
-        ctx.fillStyle=arm%2?rgba('#77dfff',.05+(1-q)*.15):rgba('#c48cff',.06+(1-q)*.17);
+        const pr=.7+(1-q)*1.9;
+        ctx.fillStyle=arm%2?rgba('#77dfff',.07+(1-q)*.21):rgba('#c48cff',.08+(1-q)*.23);
         ctx.beginPath();ctx.arc(x,y,pr,0,Math.PI*2);ctx.fill();
       }
     }
@@ -863,6 +888,7 @@ const installNeuralInteraction=${NEURAL_FIELD_INTERACTION_SCRIPT};
     state.last=t;
     drawBackground(t);
     if(state.field){
+      drawNebulaBackdropV8(t);
       drawCognitiveDust(t);
       drawFunctionalRibbonsV8(t);
       for(const galaxy of state.field.galaxies||[]) drawGalaxyV8(galaxy,t);
