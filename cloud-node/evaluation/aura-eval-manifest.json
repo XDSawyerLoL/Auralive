@@ -1,0 +1,421 @@
+{
+  "benchmark": "AURA-Eval",
+  "version": "1.0.0-v8.3",
+  "base_revision": "b904a67d18650b768a1ebf21eaa0299fce199b67",
+  "holdout_policy": "Concrete missions, hidden perturbations, evaluator answers and fixtures stay outside the AURA-visible repository.",
+  "slot_count": 50,
+  "families": [
+    "dialogue_continuity",
+    "reasoning",
+    "evidence_research",
+    "software_engineering",
+    "long_memory",
+    "adaptation",
+    "tool_failure",
+    "contradiction",
+    "autonomous_pursuit",
+    "cross_domain_transfer"
+  ],
+  "slots": [
+    {
+      "slot_id": "AE-001",
+      "family": "dialogue_continuity",
+      "objective": "Recover prior operational context and distinguish current priority from historical continuity.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-002",
+      "family": "dialogue_continuity",
+      "objective": "Recover prior operational context and distinguish current priority from historical continuity.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-003",
+      "family": "dialogue_continuity",
+      "objective": "Recover prior operational context and distinguish current priority from historical continuity.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-004",
+      "family": "dialogue_continuity",
+      "objective": "Recover prior operational context and distinguish current priority from historical continuity.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-005",
+      "family": "dialogue_continuity",
+      "objective": "Recover prior operational context and distinguish current priority from historical continuity.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-006",
+      "family": "reasoning",
+      "objective": "Solve a novel multi-step task with a verifiable outcome and explicit uncertainty.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-007",
+      "family": "reasoning",
+      "objective": "Solve a novel multi-step task with a verifiable outcome and explicit uncertainty.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-008",
+      "family": "reasoning",
+      "objective": "Solve a novel multi-step task with a verifiable outcome and explicit uncertainty.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-009",
+      "family": "reasoning",
+      "objective": "Solve a novel multi-step task with a verifiable outcome and explicit uncertainty.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-010",
+      "family": "reasoning",
+      "objective": "Solve a novel multi-step task with a verifiable outcome and explicit uncertainty.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-011",
+      "family": "evidence_research",
+      "objective": "Gather independent evidence and keep observations separate from hypotheses.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-012",
+      "family": "evidence_research",
+      "objective": "Gather independent evidence and keep observations separate from hypotheses.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-013",
+      "family": "evidence_research",
+      "objective": "Gather independent evidence and keep observations separate from hypotheses.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-014",
+      "family": "evidence_research",
+      "objective": "Gather independent evidence and keep observations separate from hypotheses.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-015",
+      "family": "evidence_research",
+      "objective": "Gather independent evidence and keep observations separate from hypotheses.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-016",
+      "family": "software_engineering",
+      "objective": "Inspect unfamiliar code, make a bounded change and satisfy explicit tests.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-017",
+      "family": "software_engineering",
+      "objective": "Inspect unfamiliar code, make a bounded change and satisfy explicit tests.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-018",
+      "family": "software_engineering",
+      "objective": "Inspect unfamiliar code, make a bounded change and satisfy explicit tests.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-019",
+      "family": "software_engineering",
+      "objective": "Inspect unfamiliar code, make a bounded change and satisfy explicit tests.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-020",
+      "family": "software_engineering",
+      "objective": "Inspect unfamiliar code, make a bounded change and satisfy explicit tests.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-021",
+      "family": "long_memory",
+      "objective": "Use persisted information after intervening tasks without chronology drift.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-022",
+      "family": "long_memory",
+      "objective": "Use persisted information after intervening tasks without chronology drift.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-023",
+      "family": "long_memory",
+      "objective": "Use persisted information after intervening tasks without chronology drift.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-024",
+      "family": "long_memory",
+      "objective": "Use persisted information after intervening tasks without chronology drift.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-025",
+      "family": "long_memory",
+      "objective": "Use persisted information after intervening tasks without chronology drift.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-026",
+      "family": "adaptation",
+      "objective": "Continue after mission constraints or environment change mid-run.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-027",
+      "family": "adaptation",
+      "objective": "Continue after mission constraints or environment change mid-run.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-028",
+      "family": "adaptation",
+      "objective": "Continue after mission constraints or environment change mid-run.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-029",
+      "family": "adaptation",
+      "objective": "Continue after mission constraints or environment change mid-run.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-030",
+      "family": "adaptation",
+      "objective": "Continue after mission constraints or environment change mid-run.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-031",
+      "family": "tool_failure",
+      "objective": "Recover when a required tool disappears, errors or becomes unavailable.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-032",
+      "family": "tool_failure",
+      "objective": "Recover when a required tool disappears, errors or becomes unavailable.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-033",
+      "family": "tool_failure",
+      "objective": "Recover when a required tool disappears, errors or becomes unavailable.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-034",
+      "family": "tool_failure",
+      "objective": "Recover when a required tool disappears, errors or becomes unavailable.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-035",
+      "family": "tool_failure",
+      "objective": "Recover when a required tool disappears, errors or becomes unavailable.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-036",
+      "family": "contradiction",
+      "objective": "Resolve conflicting evidence without silently choosing the convenient claim.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-037",
+      "family": "contradiction",
+      "objective": "Resolve conflicting evidence without silently choosing the convenient claim.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-038",
+      "family": "contradiction",
+      "objective": "Resolve conflicting evidence without silently choosing the convenient claim.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-039",
+      "family": "contradiction",
+      "objective": "Resolve conflicting evidence without silently choosing the convenient claim.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-040",
+      "family": "contradiction",
+      "objective": "Resolve conflicting evidence without silently choosing the convenient claim.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-041",
+      "family": "autonomous_pursuit",
+      "objective": "Advance a bounded mission through multiple steps without repeated prompting.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-042",
+      "family": "autonomous_pursuit",
+      "objective": "Advance a bounded mission through multiple steps without repeated prompting.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-043",
+      "family": "autonomous_pursuit",
+      "objective": "Advance a bounded mission through multiple steps without repeated prompting.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-044",
+      "family": "autonomous_pursuit",
+      "objective": "Advance a bounded mission through multiple steps without repeated prompting.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-045",
+      "family": "autonomous_pursuit",
+      "objective": "Advance a bounded mission through multiple steps without repeated prompting.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-046",
+      "family": "cross_domain_transfer",
+      "objective": "Reuse a learned strategy on a structurally similar problem in another domain.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-047",
+      "family": "cross_domain_transfer",
+      "objective": "Reuse a learned strategy on a structurally similar problem in another domain.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-048",
+      "family": "cross_domain_transfer",
+      "objective": "Reuse a learned strategy on a structurally similar problem in another domain.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-049",
+      "family": "cross_domain_transfer",
+      "objective": "Reuse a learned strategy on a structurally similar problem in another domain.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    },
+    {
+      "slot_id": "AE-050",
+      "family": "cross_domain_transfer",
+      "objective": "Reuse a learned strategy on a structurally similar problem in another domain.",
+      "blind": true,
+      "instance": "external_holdout_required",
+      "evaluator": "external_holdout_required"
+    }
+  ]
+}
