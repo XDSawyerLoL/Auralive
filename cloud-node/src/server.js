@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
+import { buildAuraEvidenceRegistry } from './aura_evidence_registry.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
 import { CuriosityEngine } from './curiosity.js';
@@ -462,6 +463,33 @@ app.get('/api/bootstrap/status', async () => ({
   fabric_discovery_configured: Boolean(config.fabricDiscoveryUrls.length),
   peer_mesh_enabled: Boolean(config.meshP2pEnabled),
 }));
+
+app.get('/api/evidence/status', async () => {
+  const bridgeStatus = bootstrap.dbReady
+    ? await Promise.resolve(bridge.status()).catch(() => ({ enabled: bridge.enabled, worker_online: false }))
+    : { enabled: bridge.enabled, worker_online: false };
+  const commandStatus = bootstrap.runtimeReady
+    ? await Promise.resolve(commandCenter.status({ publicView: true })).catch(() => ({ enabled: config.commandCenterEnabled, started: false }))
+    : { enabled: config.commandCenterEnabled, started: false };
+  const curiosityStatus = bootstrap.runtimeReady
+    ? await Promise.resolve(curiosity.status()).catch(() => ({ enabled: false, started: false }))
+    : { enabled: false, started: false };
+  const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
+    ? bridgeStatus.worker.capabilities
+    : [];
+  return buildAuraEvidenceRegistry({
+    runtime_ready: bootstrap.runtimeReady,
+    db_ready: bootstrap.dbReady,
+    ai_enabled: ai.enabled,
+    worker_online: Boolean(bridgeStatus?.worker_online),
+    worker_actions: workerCapabilities.map((item) => String(item?.name || '')).filter(Boolean),
+    command_center: commandStatus,
+    curiosity: curiosityStatus,
+    horizon: horizon.status(),
+    fabric: fabric.status(),
+    web_substrate: webSubstrate.status(),
+  });
+});
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
 
