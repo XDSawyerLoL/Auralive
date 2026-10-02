@@ -20,9 +20,9 @@ function permutations(items) {
   return result;
 }
 
-test('stress: 20 blind AGI seeds preserve all critical behavioral capabilities', async () => {
+test('stress: 100 blind AGI seeds preserve all critical behavioral capabilities', async () => {
   const original = process.env.AURA_BLIND_SEED;
-  const seeds = Array.from({ length: 20 }, (_, i) => 'stress-seed-' + String(i + 1).padStart(2, '0'));
+  const seeds = Array.from({ length: 100 }, (_, i) => 'stress-seed-' + String(i + 1).padStart(3, '0'));
   const criticalIds = [
     'AGI-13','AGI-14','AGI-15','AGI-16','AGI-17','AGI-18',
     'AGI-19','AGI-20','AGI-21','AGI-22','AGI-23','AGI-24',
@@ -217,7 +217,7 @@ test('stress: Cloud-first operator completes repeated reversible missions with l
   kernel.runAgent = async () => ({ agent: 'operator', answer: 'capability missing' });
   kernel.trace = async () => {};
 
-  for (let i = 0; i < 40; i += 1) {
+  for (let i = 0; i < 100; i += 1) {
     const outcome = await kernel.operate(
       'Créer un fichier de test stress ' + i + ', relire son contenu, puis le supprimer.',
       ['safe'],
