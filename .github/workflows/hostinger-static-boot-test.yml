@@ -1,0 +1,67 @@
+name: AURA Hostinger Static Boot Test
+
+on:
+  push:
+    branches:
+      - fix/aura-v93-hostinger-static-boot
+
+permissions:
+  contents: read
+
+jobs:
+  boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Syntax and full tests
+        run: |
+          npm run check
+          npm test
+      - name: Simulate Hostinger entry
+        env:
+          AURA_PORT: "3999"
+          AURA_GATEWAY_ONLY: "true"
+          DATABASE_URL: ""
+          MYSQL_URL: ""
+          DB_USER: ""
+          DB_PASSWORD: ""
+          DB_NAME: ""
+        run: |
+          set -euo pipefail
+          node server.js > /tmp/aura.out 2> /tmp/aura.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3999/healthz -o /tmp/health.json; then
+              ok=1
+              break
+            fi
+            sleep 0.2
+          done
+
+          cat /tmp/aura.out || true
+          cat /tmp/aura.err || true
+          test "$ok" = "1"
+          curl -fsS http://127.0.0.1:3999/__aura_gateway -o /tmp/gateway.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const health = JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));
+          const gateway = JSON.parse(fs.readFileSync('/tmp/gateway.json','utf8'));
+          if (health.ok !== true) throw new Error('health not ok');
+          if (gateway.application_ready !== true) throw new Error('application not ready');
+          if (gateway.framework !== 'fastify-direct') throw new Error('unexpected framework: ' + gateway.framework);
+          if (gateway.entry_file !== 'server.js') throw new Error('wrong entry');
+          console.log('[boot] static Fastify entry OK');
+          NODE
+
+          grep -q "Fastify listening directly" /tmp/aura.out
+          ! grep -q "native-node-gateway" /tmp/aura.out
