@@ -709,51 +709,49 @@ export class CognitiveKernel {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
 
-    if (this.bridge?.enabled && await this.bridge.workerOnline()) {
-      const result = await this.bridge.operate(mission, requestedRisks);
-      await this.trace('operator', 'Quantic Studio execution', mission, {
-        delegated: true,
-        executed: Boolean(result?.executed),
-        job_id: result?.job_id || '',
-      });
-      return {
-        ok: true,
-        task: mission,
-        execution_mode: 'quantic-studio-real',
-        ...result,
-      };
-    }
+    const normalizedRisks = Array.isArray(requestedRisks)
+      ? requestedRisks.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+    const localRiskSet = new Set(['local-control', 'local-write', 'process', 'browser-control']);
+    const explicitlyLocal = normalizedRisks.some((risk) => localRiskSet.has(risk));
 
+    // 1) Cloud first. AURA tries its own typed Cloud capabilities before
+    // considering any local worker.
     if (this.fabric) {
       try {
-        const sandboxCapabilities = this.fabric.list()
+        const cloudCapabilities = this.fabric.list()
           .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
-        if (sandboxCapabilities.length) {
+        if (cloudCapabilities.length) {
           const compiler = new DagCompiler({ enabled: false });
-          const graph = await compiler.compile(mission, sandboxCapabilities, {
+          const graph = await compiler.compile(mission, cloudCapabilities, {
             maxNodes: 8,
             maxParallel: 2,
             budgetMicrounits: 0,
           });
-          const sandboxOnly = graph.nodes.length > 0
+          const cloudOnly = graph.nodes.length > 0
             && graph.nodes.every((node) => String(node.capability || '').startsWith('cloud.workspace.'));
-          if (sandboxOnly) {
+          if (cloudOnly) {
             const executor = new TaskGraphExecutor(this.fabric);
             const result = await executor.execute(graph, {
-              trigger: 'cloud-sandbox-operator',
+              trigger: 'cloud-first-operator',
               allowSideEffects: true,
             });
             if (result.ok) {
-              await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
+              await this.trace('operator', 'AURA Cloud execution', mission, {
                 delegated: false,
                 executed: true,
                 graph_id: result.graph_id,
                 capabilities: graph.nodes.map((node) => node.capability),
+                execution_policy: 'cloud-first-local-optional',
               });
               return {
                 ok: true,
+                status: 'completed',
                 task: mission,
-                execution_mode: 'aura-cloud-sandbox',
+                execution_mode: 'aura-cloud-first',
+                execution_policy: 'cloud-first-local-optional',
+                cloud_operator_ready: true,
+                local_worker_required: false,
                 executed: true,
                 authority: 'typed-reversible-cloud-workspace',
                 graph,
@@ -763,27 +761,62 @@ export class CognitiveKernel {
           }
         }
       } catch (error) {
-        await this.trace('operator', 'AURA Cloud sandbox refused', mission, {
+        await this.trace('operator', 'AURA Cloud capability miss', mission, {
           delegated: false,
           executed: false,
           error: String(error?.message || error).slice(0, 1000),
+          execution_policy: 'cloud-first-local-optional',
         }).catch(() => {});
       }
     }
 
+    // 2) Local execution is optional and only considered for missions that
+    // explicitly request local-machine side effects.
+    const localOnline = Boolean(
+      this.bridge?.enabled && await this.bridge.workerOnline().catch(() => false)
+    );
+    if (explicitlyLocal && localOnline) {
+      const result = await this.bridge.operate(mission, normalizedRisks);
+      await this.trace('operator', 'AURA optional local execution', mission, {
+        delegated: true,
+        executed: Boolean(result?.executed),
+        job_id: result?.job_id || '',
+        execution_policy: 'cloud-first-local-optional',
+      });
+      return {
+        ok: true,
+        task: mission,
+        execution_mode: 'aura-local-specialized',
+        execution_policy: 'cloud-first-local-optional',
+        cloud_operator_ready: false,
+        local_worker_required: true,
+        local_worker_online: true,
+        ...result,
+      };
+    }
+
+    // 3) No silent substitution. If AURA lacks the typed Cloud capability,
+    // she records the missing capability instead of pretending the local
+    // worker is her primary execution authority.
     const plan = await this.runAgent(
       'operator',
-      `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
+      `${mission}\n\nAucune capacité Cloud typée ne correspond encore à cette mission. Décris uniquement la capacité manquante, un plan réversible et un critère de réussite. Le worker local n'est pas une dépendance générale.`,
     );
     return {
-      ok: true,
+      ok: false,
+      status: 'waiting-cloud-capability',
       task: mission,
-      execution_mode: 'plan-only-fallback',
+      execution_mode: 'cloud-capability-missing',
+      execution_policy: 'cloud-first-local-optional',
+      cloud_operator_ready: false,
+      local_worker_required: explicitlyLocal,
+      local_worker_online: localOnline,
       executed: false,
       plan: plan.answer,
-      authority: 'Quantic Studio worker offline; no typed cloud capability matched',
+      authority: 'AURA Cloud first; local worker optional for explicit local side effects only',
     };
   }
+
 
   async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
     const content = String(text || '').replace(/\s+/g, ' ').trim();

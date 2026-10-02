@@ -7,6 +7,7 @@ const organismSource = fs.readFileSync(new URL('../src/organism.js', import.meta
 const curiositySource = fs.readFileSync(new URL('../src/curiosity.js', import.meta.url), 'utf8');
 const commandSource = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
 const expressionSource = fs.readFileSync(new URL('../src/expression.js', import.meta.url), 'utf8');
+const cognitionSource = fs.readFileSync(new URL('../src/cognition.js', import.meta.url), 'utf8');
 
 test('Director mode replaces passive observer defaults with operational leadership', () => {
   assert.match(kernelSource, /directrice_operationnelle_quantic_sillage/);
@@ -27,8 +28,10 @@ test('AURA carries relational continuity into language instead of isolated-turn 
   assert.match(kernelSource, /recentMessages/);
   assert.match(organismSource, /relationship/);
   assert.match(organismSource, /last_open_thread/);
-  assert.match(expressionSource, /continuité de conversation/i);
-  assert.match(expressionSource, /relationnelle/i);
+  assert.match(cognitionSource, /conversationContext/);
+  assert.match(cognitionSource, /previousUserMessage/);
+  assert.match(cognitionSource, /last_open_thread/);
+  assert.match(expressionSource, /final-language authority is native to AURA/i);
 });
 
 test('AURA Director combines proactive curiosity, open-web research and low-risk promotion', () => {

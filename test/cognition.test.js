@@ -42,7 +42,7 @@ test('reply plan is built from AURA state before expression', () => {
   assert.equal(plan.needs_semantic_support, false);
   assert.match(plan.facts.join(' '), /Consolider la mémoire/);
   assert.match(plan.facts.join(' '), /Directrice de Quantic Sillage/);
-  assert.match(engine.deterministicReply(plan), /Pensée dominante|Travail prioritaire|Intention actuelle/);
+  assert.match(engine.deterministicReply(plan), /travaille prioritairement|fais avancer/i);
 });
 
 test('reply plan carries relational and executive continuity', () => {
@@ -130,4 +130,58 @@ test('native symbolic cognition refuses inconsistent duplicate examples', () => 
 
   assert.notEqual(plan.act, 'solve_symbolic_rule');
   assert.equal(plan.needs_semantic_support, true);
+});
+
+
+test('priority questions are answered natively from active intentions', () => {
+  const engine = new CognitionEngine();
+  const intentions = [
+    { statement: 'Unifier conversation, intention et action', priority: 0.95 },
+    { statement: 'Rendre le Cloud autonome', priority: 0.90 },
+    { statement: 'Stabiliser la voix Mairaiy', priority: 0.86 },
+  ];
+  const plan = engine.planReply({
+    text: 'Quelles sont tes trois priorités actuelles ?',
+    soul: { organism: {} },
+    intentions,
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [],
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'report_priorities');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /1\).*Unifier conversation/i);
+  assert.match(answer, /2\).*Rendre le Cloud autonome/i);
+  assert.match(answer, /3\).*Stabiliser la voix Mairaiy/i);
+});
+
+test('short follow-up alors keeps the previous priorities thread', () => {
+  const engine = new CognitionEngine();
+  const intentions = [
+    { statement: 'Priorité Alpha', priority: 0.95 },
+    { statement: 'Priorité Bêta', priority: 0.90 },
+    { statement: 'Priorité Gamma', priority: 0.85 },
+  ];
+  const plan = engine.planReply({
+    text: 'alors ?',
+    soul: { organism: {} },
+    intentions,
+    lessons: [],
+    reflections: [],
+    work: [],
+    recentMessages: [
+      { role: 'user', author: 'Créateur', content: 'Quelles sont tes trois priorités actuelles ?' },
+      { role: 'assistant', author: 'AURA', content: 'Je vérifie mon état.' },
+      { role: 'user', author: 'Créateur', content: 'alors ?' },
+    ],
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'report_priorities');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(engine.deterministicReply(plan), /Priorité Alpha/);
 });

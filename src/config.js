@@ -129,7 +129,7 @@ export const config = Object.freeze({
   aiApiKey: process.env.AI_API_KEY || '',
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
-  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
+  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', false),
 
   // AURA 2.2: remote inference may run in zero-cost mode only through model IDs
   // whose endpoint is intrinsically free. No paid fallback is ever enabled here.
@@ -247,7 +247,7 @@ export const config = Object.freeze({
   commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 3, 0, 6),
 
   // Expert Bridge: second avis autonome. L'expert conseille; AURA garde tous les outils.
-  expertBridgeEnabled: bool('AURA_EXPERT_BRIDGE_ENABLED', true),
+  expertBridgeEnabled: bool('AURA_EXPERT_BRIDGE_ENABLED', false),
   expertBridgeBaseUrl: String(process.env.AURA_EXPERT_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
   expertBridgeApiKey: process.env.AURA_EXPERT_API_KEY || process.env.OPENAI_API_KEY || '',
   expertBridgeModel: process.env.AURA_EXPERT_MODEL || 'gpt-6-astra',

@@ -1329,22 +1329,6 @@ export class CommandCenter {
         }));
       }
     }
-    if (!bridgeStatus?.worker_online) {
-      candidates.push(this.candidate({
-        domain: 'aura-runtime',
-        kind: 'reflection',
-        title: 'Maintenir l’autonomie malgré AURA Runtime hors ligne',
-        objective:
-          'Évaluer ce qu’AURA peut continuer à faire côté Cloud sans AURA Runtime, '
-          + 'identifier les missions locales bloquées et préparer leur reprise dès le retour du worker.',
-        rationale: 'AURA Runtime n’est pas actuellement en ligne. Quantic Studio n’est pas requis pour la continuité du noyau.',
-        priority: 0.64,
-        confidence: 0.98,
-        requested_risks: [],
-        signature: 'bridge-offline',
-      }));
-    }
-
     if (!candidates.length) {
       candidates.push(this.candidate({
         domain: 'quantic-sillage',
@@ -1467,36 +1451,7 @@ export class CommandCenter {
       return { id, status: 'waiting', reason: 'auto execution disabled' };
     }
 
-    if (initiative.kind === 'operator' && !bridgeOnline) {
-      await this.updateInitiative(id, {
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        result: { reason: 'AURA Runtime worker offline' },
-      });
-      return { id, status: 'waiting', reason: 'worker offline' };
-    }
-
     const targetRepository = String(initiative.action_payload?.repository || '').trim();
-    const crossProductEvolution = initiative.kind === 'evolution'
-      && targetRepository
-      && targetRepository.toLowerCase() !== 'xdsawyerlol/auralive';
-    if (crossProductEvolution && !bridgeOnline) {
-      await this.updateInitiative(id, {
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        result: {
-          reason: 'AURA Runtime worker offline',
-          repository: targetRepository,
-        },
-      });
-      return {
-        id,
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        reason: 'worker offline',
-        repository: targetRepository,
-      };
-    }
 
     await query(
       "UPDATE aura_initiatives SET status='running',updated_at=? WHERE id=?",
@@ -1579,11 +1534,11 @@ export class CommandCenter {
           { repository, base_branch: baseBranch },
         );
       } else if (initiative.kind === 'operator') {
-        executionMode = 'aura-runtime-operator';
         result = await this.kernel.operate(
           initiative.objective,
           initiative.requested_risks,
         );
+        executionMode = String(result?.execution_mode || 'cloud-first-operator');
       } else {
         executionMode = 'native-reflection';
         result = await this.kernel.tick({
@@ -1594,8 +1549,8 @@ export class CommandCenter {
       }
 
       const returnedStatus = String(result?.status || '').toLowerCase();
-      if (initiative.kind === 'evolution' && returnedStatus === 'waiting-local-worker') {
-        executionMode = 'waiting-local-worker';
+      if (returnedStatus === 'waiting-cloud-capability') {
+        executionMode = 'cloud-capability-missing';
       }
       const waiting = Boolean(result?.queued)
         || ['queued', 'leased'].includes(returnedStatus)

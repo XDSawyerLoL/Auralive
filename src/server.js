@@ -691,7 +691,17 @@ app.get('/api/capabilities', async (request) => {
   const workerActionNames = new Set(
     workerCapabilities.map((item) => String(item?.name || '')),
   );
+  const cloudOperatorCapabilities = fabric.list()
+    .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
+  const cloudOperatorReady = Boolean(
+    bootstrap.runtimeReady
+    && config.fabricEnabled
+    && cloudOperatorCapabilities.length
+  );
   return {
+    execution_policy: 'cloud-first-local-optional',
+    cloud_operator_ready: cloudOperatorReady,
+    local_worker_required: false,
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
     organism: {
       ready: Boolean(bootstrap.runtimeReady),
@@ -699,8 +709,11 @@ app.get('/api/capabilities', async (request) => {
     },
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
-      ready: Boolean(ai.enabled),
-      provider: privateView ? ai.provider : (bridgeStatus?.worker_online ? 'local-or-fallback' : 'configured'),
+      ready: true,
+      final_authority: 'aura-native-cognition',
+      external_role: 'candidate-semantic-data-only',
+      provider: privateView ? ai.provider : 'replaceable-semantic-support',
+      external_provider_ready: Boolean(ai.enabled),
       local_worker: Boolean(bridgeStatus?.worker_online),
     },
     voice: {
@@ -733,16 +746,25 @@ app.get('/api/capabilities', async (request) => {
       mode: bridgeStatus?.worker_online ? 'local-worker' : 'offline',
     },
     hands: {
-      ready: Boolean(bridgeStatus?.worker_online),
-      mode: bridgeStatus?.worker_online ? 'quantic-studio-real' : 'offline',
+      ready: Boolean(cloudOperatorReady || bridgeStatus?.worker_online),
+      mode: cloudOperatorReady
+        ? 'cloud-first'
+        : (bridgeStatus?.worker_online ? 'local-specialized-only' : 'cloud-capability-missing'),
+      execution_policy: 'cloud-first-local-optional',
+      cloud_operator_ready: cloudOperatorReady,
+      cloud_capabilities: cloudOperatorCapabilities.length,
+      local_worker_required: false,
+      local_worker_online: Boolean(bridgeStatus?.worker_online),
       capabilities: privateView ? workerCapabilities : [],
     },
     horizon: { ready: Boolean(horizon.status().enabled) },
     web_substrate: webSubstrate.status(),
     evolution: {
-      ready: Boolean(bridgeStatus?.worker_online),
+      ready: Boolean(config.evolutionEnabled),
       cloud_enabled: Boolean(config.evolutionEnabled),
-      delegated_to_local: Boolean(bridgeStatus?.worker_online),
+      execution_policy: 'cloud-first-local-optional',
+      local_worker_optional: true,
+      local_worker_online: Boolean(bridgeStatus?.worker_online),
     },
     command_center: bootstrap.runtimeReady
       ? await commandCenter.status({ publicView: !privateView })
@@ -761,7 +783,7 @@ app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
   organism: 'homeostasie_v7_streamlined',
   cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
-  language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
+  language_model_role: 'replaceable specialist constellation for candidate semantic data only; never final formulation',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
   command_center: 'continuous native initiative engine with bounded autonomous execution',
@@ -771,10 +793,13 @@ app.get('/api/kernel/architecture', async () => ({
   distributed_compute: 'typed DAG -> Capability Fabric -> parallel Node/Rust swarm -> edge/API/local capabilities',
   capability_router: 'trust + observed reliability + latency + cost + task tags',
   network_action_model: 'typed authenticated capabilities; no arbitrary remote shell; remote edge side effects disabled',
-  execution_arm: 'Quantic Studio authenticated bridge for bounded side effects; edge fabric for read/compute',
+  execution_arm: 'AURA Cloud typed workspace first; authenticated local bridge only for explicit local side effects',
   autonomous_risk_envelope: [...config.commandCenterAllowedRisks],
   provider: ai.provider,
   provider_enabled: ai.enabled,
+  final_language_authority: 'AURA native cognition',
+  execution_policy: 'cloud-first-local-optional',
+  local_worker_required: false,
 }));
 
 app.get('/healthz', async () => {

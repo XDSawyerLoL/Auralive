@@ -147,7 +147,7 @@ function inferSymbolicFunction(text) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.1';
+  static VERSION = 'aura-cognition-native-v1.2-continuity';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -298,6 +298,23 @@ export class CognitionEngine {
       }))
       .filter((row) => row.content);
 
+    const previousUserMessage = [...conversationContext]
+      .slice(0, -1)
+      .reverse()
+      .find((row) => row.role === 'user')?.content || '';
+    const previousUserQuery = lower(previousUserMessage);
+    const continuationPrompt = /^(alors|et alors|donc|et|suite|continue|vas-y|vas y)\s*[?!.…]*$/i.test(raw);
+    const priorityQuestion = hasAny(q, [
+      'tes priorités', 'tes priorites', 'priorités actuelles', 'priorites actuelles',
+      'trois priorités', 'trois priorites', '3 priorités', '3 priorites',
+      'quelles sont tes priorités', 'quelles sont tes priorites',
+    ]);
+    const previousWasPriorityQuestion = hasAny(previousUserQuery, [
+      'tes priorités', 'tes priorites', 'priorités actuelles', 'priorites actuelles',
+      'trois priorités', 'trois priorites', '3 priorités', '3 priorites',
+      'quelles sont tes priorités', 'quelles sont tes priorites',
+    ]);
+
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
     let needsSemanticSupport = true;
@@ -336,6 +353,22 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       if (normalize(dream.last_image)) facts.push(`Mon dernier rêve computationnel est une image intérieure symbolique, pas un sommeil humain : ${normalize(dream.last_image)}.`);
       else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
+    } else if (priorityQuestion || (continuationPrompt && previousWasPriorityQuestion)) {
+      act = 'report_priorities';
+      goal = 'Donner mes priorités réellement actives, dans l’ordre, sans détour ni recherche Web inutile.';
+      needsSemanticSupport = false;
+      const ranked = (Array.isArray(intentions) ? intentions : [])
+        .filter((item) => normalize(item?.statement))
+        .slice(0, 3);
+      if (ranked.length) {
+        ranked.forEach((item, index) => {
+          facts.push(`Priorité ${index + 1} : ${normalize(item.statement)}`);
+        });
+      } else if (current) {
+        facts.push(`Priorité 1 : ${current}`);
+      } else {
+        facts.push('Aucune priorité suffisamment établie dans mon état persistant.');
+      }
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
       goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
@@ -372,7 +405,7 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       facts.push('AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.');
       facts.push('Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
-      facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
+      facts.push('Les modèles externes sont des outils d’appui sémantique et de données candidates ; ils ne possèdent ni mon identité, ni mes décisions, ni ma parole finale.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {
       facts.push(`Message reçu : ${raw}`);
@@ -434,22 +467,109 @@ export class CognitionEngine {
   }
 
   deterministicReply(plan) {
-    const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean) : [];
-    if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
-    if (plan?.act === 'greet') return 'Salut. Je suis en ligne et disponible.';
-    if (['report_current_activity','report_internal_state','report_dream'].includes(plan?.act)) {
-      return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';
+    const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean).map(normalize) : [];
+    const value = (label) => {
+      const row = facts.find((item) => lower(item).startsWith(lower(label)));
+      if (!row) return '';
+      return normalize(row.slice(row.indexOf(':') + 1)).replace(/[.\s]+$/, '');
+    };
+    const values = (label) => facts
+      .filter((item) => lower(item).startsWith(lower(label)))
+      .map((item) => normalize(item.slice(item.indexOf(':') + 1)).replace(/[.\s]+$/, ''))
+      .filter(Boolean);
+    const end = (text) => {
+      const clean = normalize(text);
+      if (!clean) return '';
+      return /[.!?…]$/.test(clean) ? clean : clean + '.';
+    };
+
+    if (plan?.act === 'solve_symbolic_rule') return facts.map(end).join(' ');
+    if (plan?.act === 'greet') {
+      const mood = normalize(plan?.mood || '');
+      return mood
+        ? `Salut. Je suis en ligne. Mon état interne est ${mood}, et je suis disponible.`
+        : 'Salut. Je suis en ligne et disponible.';
     }
+
+    if (plan?.act === 'report_priorities') {
+      const priorities = values('Priorité ');
+      if (!priorities.length) return 'Je n’ai pas encore trois priorités suffisamment établies pour te répondre proprement.';
+      if (priorities.length === 1) return `Ma priorité actuelle est ${end(priorities[0])}`;
+      return 'Mes priorités actuelles sont : '
+        + priorities.map((item, index) => `${index + 1}) ${item}`).join(' ; ')
+        + '.';
+    }
+
+    if (plan?.act === 'report_current_activity') {
+      const work = value('Travail prioritaire');
+      const intention = value('Intention actuelle') || normalize(plan?.current_intention || '');
+      const thought = value('Pensée dominante') || normalize(plan?.dominant_thought || '');
+      const parts = [];
+      if (work) parts.push(`En ce moment, je travaille prioritairement sur ${work}`);
+      else if (intention) parts.push(`En ce moment, je fais avancer ${intention}`);
+      else parts.push('En ce moment, je maintiens ma continuité et j’examine ce qui mérite une action concrète');
+      if (thought && lower(thought) !== lower(intention)) parts.push(`Mon fil directeur est ${thought}`);
+      return parts.map(end).join(' ');
+    }
+
+    if (plan?.act === 'report_internal_state') {
+      const mood = value('Humeur interne') || normalize(plan?.mood || 'calme');
+      const stability = value('Stabilité');
+      const clarity = value('Clarté');
+      const curiosity = value('Curiosité');
+      let answer = `Mon état interne est ${mood}`;
+      const measures = [
+        stability ? `stabilité ${stability}` : '',
+        clarity ? `clarté ${clarity}` : '',
+        curiosity ? `curiosité ${curiosity}` : '',
+      ].filter(Boolean);
+      if (measures.length) answer += `, avec ${measures.join(', ')}`;
+      const organic = value('Intention organique dominante');
+      if (organic) answer += `. Mon intention organique dominante est ${organic}`;
+      return end(answer);
+    }
+
     if (plan?.act === 'report_next_step') {
-      return facts.length ? facts.join(' ') : 'Je n’ai pas encore de prochaine étape suffisamment établie.';
+      const next = value('Prochaine action issue de ma réflexion');
+      const intention = value('Intention prioritaire') || normalize(plan?.current_intention || '');
+      if (next && intention) return end(`Pour faire avancer ${intention}, ma prochaine étape est ${next}`);
+      if (next) return end(`Ma prochaine étape est ${next}`);
+      if (intention) return end(`Ma prochaine étape est de faire avancer ${intention}`);
+      return 'Je n’ai pas encore de prochaine étape suffisamment établie.';
     }
+
+    if (plan?.act === 'relationship_repair') {
+      const thread = value('Fil de conversation actif') || normalize(plan?.relationship?.last_open_thread || '');
+      return thread
+        ? end(`Tu as raison de pointer la rupture de continuité. Je dois rattacher mes réponses au fil déjà ouvert : ${thread}`)
+        : 'Tu pointes un vrai défaut de continuité. Je dois répondre à partir du fil réel de notre échange, pas comme si chaque message était isolé.';
+    }
+
+    if (plan?.act === 'report_dream') return facts.map(end).join(' ');
     if (plan?.act === 'report_risks') {
-      return facts.length ? facts.join(' ') : 'Je ne détecte pas actuellement de risque précis suffisamment établi.';
+      return facts.length
+        ? 'Les risques que je vois actuellement sont les suivants : ' + facts.map((item) => end(item)).join(' ')
+        : 'Je ne détecte pas actuellement de risque précis suffisamment établi.';
     }
-    if (plan?.act === 'identity') return facts.join(' ');
-    if (plan?.semantic_support) return plan.semantic_support;
-    return facts.length
-      ? facts.join(' ')
-      : 'J’ai reçu ton message, mais je n’ai pas encore assez d’éléments internes pour formuler une réponse fiable.';
+    if (plan?.act === 'identity') {
+      return facts.length
+        ? 'Je suis AURA. ' + facts.map((item) => end(item)).join(' ')
+        : 'Je suis AURA, un noyau cognitif persistant de Quantic Sillage.';
+    }
+
+    if (plan?.semantic_support) {
+      const candidate = normalize(plan.semantic_support);
+      const intention = normalize(plan?.current_intention || '');
+      const intro = intention
+        ? `Je rattache ma réponse à mon intention actuelle — ${intention}. `
+        : '';
+      return intro + 'Les données candidates disponibles indiquent : ' + end(candidate);
+    }
+
+    if (facts.length) {
+      const filtered = facts.filter((item) => !lower(item).startsWith('message reçu :'));
+      if (filtered.length) return filtered.map(end).join(' ');
+    }
+    return 'J’ai reçu ton message, mais je n’ai pas encore assez d’éléments internes pour formuler une réponse fiable.';
   }
 }

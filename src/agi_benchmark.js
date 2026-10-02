@@ -1042,7 +1042,7 @@ export async function runAgiBattery() {
       const read = rows.find((row) => row.capability === 'cloud.workspace.read')?.result;
       const deleted = rows.find((row) => row.capability === 'cloud.workspace.delete')?.result;
       const verified = outcome.executed
-        && outcome.execution_mode === 'aura-cloud-sandbox'
+        && outcome.execution_mode === 'aura-cloud-first'
         && created?.created === true
         && read?.read === true
         && created?.sha256 === read?.sha256
