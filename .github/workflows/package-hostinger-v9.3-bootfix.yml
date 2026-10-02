@@ -1,0 +1,37 @@
+name: Package AURA Hostinger V9.3 Bootfix
+
+on:
+  push:
+    branches:
+      - aura/package-hostinger-v9.3-bootfix
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Validate bootfix
+        run: |
+          npm run check
+          npm test
+          grep -q "framework: 'fastify-direct'" server.js
+          ! grep -q "await import('./src/server.js')" server.js
+          grep -q "AURA-HOSTINGER-V9.3-CLOUD-FIRST" src/release.js
+      - name: Build ZIP
+        run: |
+          zip -r AURA-HOSTINGER-V9.3-CLOUD-FIRST-BOOTFIX.zip .             -x ".git/*"                ".github/*"                "node_modules/*"                "test/*"                "*.log"                ".env"                ".DS_Store"
+          unzip -l AURA-HOSTINGER-V9.3-CLOUD-FIRST-BOOTFIX.zip | grep -E "server.js|package.json|src/server.js|src/release.js"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AURA-HOSTINGER-V9.3-CLOUD-FIRST-BOOTFIX
+          path: AURA-HOSTINGER-V9.3-CLOUD-FIRST-BOOTFIX.zip
+          retention-days: 7
