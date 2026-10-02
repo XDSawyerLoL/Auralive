@@ -26,6 +26,7 @@ import { EvolutionLab } from './evolution.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
+import { releaseInfo } from './release.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';
 import { CloudVoice } from './voice.js';
@@ -627,6 +628,7 @@ app.get('/api/capabilities', async (request) => {
     workerCapabilities.map((item) => String(item?.name || '')),
   );
   return {
+    release: releaseInfo(),
     execution_policy: 'cloud-first-local-optional',
     cloud_operator_ready: cloudOperatorReady,
     local_worker_required: false,
@@ -694,6 +696,7 @@ app.get('/api/capabilities', async (request) => {
 });
 
 app.get('/api/kernel/architecture', async () => ({
+  release: releaseInfo(),
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
   organism: 'homeostasie_v7_streamlined',
   cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
@@ -728,6 +731,7 @@ app.get('/healthz', async () => {
     }
   }
   return {
+    release: releaseInfo(),
     ok: true,
     ready: bootstrap.runtimeReady && databaseAlive,
     status: bootstrap.runtimeReady && databaseAlive ? 'ready' : 'diagnostic',
