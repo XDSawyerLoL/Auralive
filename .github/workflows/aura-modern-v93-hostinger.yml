@@ -25,8 +25,6 @@ jobs:
       - run: npm ci
       - name: Syntax
         run: npm run check
-      - name: Full tests
-        run: npm test
       - name: Hostinger static boot smoke
         env:
           AURA_PORT: "3997"
@@ -69,6 +67,8 @@ jobs:
           if (health.ok !== true) throw new Error('health not ok');
           console.log('[modern] Hostinger boot + modern dashboard OK');
           NODE
+      - name: Full tests
+        run: npm test
       - name: Package modern Hostinger ZIP
         run: |
           zip -r ../AURA-MODERN-V8.3-V9.3-HOSTINGER.zip .             -x "node_modules/*"                "test/*"                "*.log"                ".env"                ".DS_Store"
