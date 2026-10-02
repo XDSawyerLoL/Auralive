@@ -37,3 +37,59 @@ jobs:
 
       - name: Test
         run: npm test
+
+
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Public Hostinger runtime smoke test
+        env:
+          AURA_URL: https://antiquewhite-dolphin-780448.hostingersite.com
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/" -o /tmp/root.html
+          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/healthz" -o /tmp/health.json
+          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/api/kernel/architecture" -o /tmp/architecture.json
+          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/api/capabilities" -o /tmp/capabilities.json
+          curl -fsS --retry 2 --retry-delay 2 --max-time 30             -H 'Content-Type: application/json'             -d '{"text":"Quelles sont tes trois priorités actuelles ?","author":"AURA-CI-SMOKE"}'             "$AURA_URL/api/chat" -o /tmp/chat.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const read = (name) => JSON.parse(fs.readFileSync(name, 'utf8'));
+          const health = read('/tmp/health.json');
+          const architecture = read('/tmp/architecture.json');
+          const capabilities = read('/tmp/capabilities.json');
+          const chat = read('/tmp/chat.json');
+
+          if (health.ok !== true) throw new Error('health.ok != true');
+          if (health.ready !== true) throw new Error('runtime not ready: ' + JSON.stringify(health));
+          if (health.db !== true) throw new Error('database not ready');
+          if (health.kernel_started !== true) throw new Error('kernel not started');
+
+          if (architecture.final_language_authority !== 'AURA native cognition') {
+            throw new Error('old language authority still deployed: ' + JSON.stringify(architecture));
+          }
+          if (architecture.execution_policy !== 'cloud-first-local-optional') {
+            throw new Error('old execution policy still deployed: ' + JSON.stringify(architecture));
+          }
+
+          if (capabilities.execution_policy !== 'cloud-first-local-optional') {
+            throw new Error('capabilities do not expose Cloud-first policy');
+          }
+          if (capabilities.local_worker_required !== false) {
+            throw new Error('local worker is still exposed as required');
+          }
+
+          const answer = String(chat.answer || '');
+          if (answer.length < 20) throw new Error('chat answer too short: ' + JSON.stringify(chat));
+          if (/Message reçu\s*:/i.test(answer)) throw new Error('generic dialogue regression: ' + answer);
+          if (!/priorit/i.test(answer) || !/1\)/.test(answer)) {
+            throw new Error('priority dialogue regression: ' + answer);
+          }
+
+          console.log('[live] health=ready; db=ready; kernel=started');
+          console.log('[live] language_authority=' + architecture.final_language_authority);
+          console.log('[live] execution_policy=' + architecture.execution_policy);
+          console.log('[live] priority_answer=' + answer.replace(/\s+/g, ' ').slice(0, 500));
+          NODE
