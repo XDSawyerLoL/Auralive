@@ -1,11 +1,14 @@
 import { app, bootstrap, startRuntimeLoop, stopAura } from './src/server.js';
 
 const host = '0.0.0.0';
+const production = process.env.NODE_ENV === 'production';
 const requestedPort = Number.parseInt(
   process.env.AURA_PORT || process.env.PORT || process.env.AURA_GATEWAY_PORT || '3000',
   10,
 );
-const port = Number.isInteger(requestedPort) && requestedPort > 0 ? requestedPort : 3000;
+const port = production
+  ? 3000
+  : (Number.isInteger(requestedPort) && requestedPort > 0 ? requestedPort : 3000);
 const gatewayOnly = process.env.AURA_GATEWAY_ONLY === 'true';
 
 let shuttingDown = false;
