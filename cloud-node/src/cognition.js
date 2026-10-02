@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.4';
+  static VERSION = 'aura-cognition-native-v1.4-v93-continuity';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -185,6 +185,26 @@ export class CognitionEngine {
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
 
+    const continuityMessages = Array.isArray(continuity?.messages) ? continuity.messages : [];
+    const userMessages = continuityMessages
+      .filter((row) => String(row?.role || '') === 'user')
+      .map((row) => normalize(row?.content))
+      .filter(Boolean);
+    const previousUserMessage = userMessages.length > 1
+      ? userMessages[userMessages.length - 2]
+      : '';
+    const previousUserQ = lower(previousUserMessage);
+    const shortContinuation = /^(alors|et alors|donc|suite|continue|vas[ -]?y)\s*[?!.]*$/i.test(raw);
+    const priorityPhrases = [
+      'tes priorités','tes priorites','priorités actuelles','priorites actuelles',
+      'trois priorités','trois priorites','3 priorités','3 priorites',
+      'quelles sont tes priorités','quelles sont tes priorites',
+      'quelles sont tes trois priorités','quelles sont tes trois priorites',
+      'connaître tes priorités','connaitre tes priorites'
+    ];
+    const priorityQuestion = hasAny(q, priorityPhrases);
+    const previousWasPriorityQuestion = hasAny(previousUserQ, priorityPhrases);
+
     let act = 'respond';
     let goal = 'Répondre directement au message sans injecter mon état opérationnel s’il n’est pas pertinent.';
     let needsSemanticSupport = true;
@@ -280,6 +300,20 @@ export class CognitionEngine {
         if (title) facts.push(`Trace récente : ${title}`);
       }
       if (!facts.length) facts.push('Je n’ai pas retrouvé de trace opérationnelle persistée suffisamment précise pour répondre avec certitude.');
+    } else if (priorityQuestion || (shortContinuation && previousWasPriorityQuestion)) {
+      act = 'report_priorities';
+      contextScope = 'operational';
+      goal = 'Donner mes trois priorités actives réelles, dans l’ordre, sans déclencher de recherche Web.';
+      needsSemanticSupport = false;
+      const ranked = [...intentions]
+        .filter((row) => normalize(row?.statement))
+        .sort((a, b) => Number(b?.priority || 0) - Number(a?.priority || 0))
+        .slice(0, 3);
+      ranked.forEach((row, index) => {
+        facts.push(`${index + 1}) ${normalize(row.statement)}`);
+      });
+      if (!facts.length && current) facts.push(`1) ${current}`);
+      if (!facts.length) facts.push('Je n’ai pas encore trois priorités actives suffisamment établies.');
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
       contextScope = 'operational';
@@ -389,6 +423,10 @@ export class CognitionEngine {
       const clarity = Math.round(Number(plan?.expressive_state?.clarity || 0) * 100);
       if (clarity >= 75) return `Oui, plutôt bien. Je me sens ${mood}, avec les idées assez claires. Et toi, comment tu vas ?`;
       return `Ça va. Je me sens plutôt ${mood}, avec encore un peu de choses à clarifier. Et toi ?`;
+    }
+    if (plan?.act === 'report_priorities') {
+      if (!facts.length) return 'Je n’ai pas encore trois priorités actives suffisamment établies.';
+      return ['Mes priorités actuelles sont :', ...facts].join('\n');
     }
     if (['report_current_activity','recall_operational_continuity','report_internal_state','report_dream'].includes(plan?.act)) {
       return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';

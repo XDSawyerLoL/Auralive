@@ -124,7 +124,7 @@ export const config = Object.freeze({
   aiApiKey: process.env.AI_API_KEY || '',
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
-  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
+  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', false),
 
   voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', true),
   voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',

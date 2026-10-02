@@ -168,9 +168,10 @@ test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
   assert.match(commandSource, /executionMode = repository[\s\S]*'evolution-fleet'/);
 });
 
-test('offline Fleet evolution remains waiting instead of recording false success', () => {
-  assert.match(commandSource, /crossProductEvolution && !bridgeOnline/);
-  assert.match(commandSource, /execution_mode: 'waiting-local-worker'/);
+test('local worker offline no longer hard-blocks Cloud operator or Fleet planning', () => {
+  assert.doesNotMatch(commandSource, /initiative\.kind === 'operator' && !bridgeOnline/);
+  assert.doesNotMatch(commandSource, /crossProductEvolution && !bridgeOnline/);
+  assert.match(commandSource, /executionMode = String\(result\?\.execution_mode \|\| 'aura-cloud-first'\)/);
   assert.match(commandSource, /returnedStatus\.startsWith\('waiting'\)/);
   assert.match(commandSource, /\['queued', 'leased'\]\.includes\(returnedStatus\)/);
   assert.match(commandSource, /const status = waiting \? 'waiting'/);

@@ -1,0 +1,79 @@
+name: AURA Modern V9.3 Hostinger Validation
+
+on:
+  push:
+    branches:
+      - fix/aura-modern-v93-hostinger
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cloud-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud-node/package-lock.json
+      - run: npm ci
+      - name: Syntax
+        run: npm run check
+      - name: Hostinger static boot smoke
+        env:
+          AURA_PORT: "3997"
+          AURA_GATEWAY_ONLY: "true"
+          DATABASE_URL: ""
+          DB_HOST: ""
+          DB_USER: ""
+          DB_PASSWORD: ""
+          DB_NAME: ""
+          AI_MODE: "off"
+          HORIZON_ENABLED: "false"
+        run: |
+          set -euo pipefail
+          node server.js > /tmp/aura-modern.out 2> /tmp/aura-modern.err &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          ok=0
+          for i in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:3997/__aura_gateway -o /tmp/gateway.json; then
+              ok=1
+              break
+            fi
+            sleep 0.2
+          done
+          cat /tmp/aura-modern.out || true
+          cat /tmp/aura-modern.err || true
+          test "$ok" = "1"
+          curl -fsS http://127.0.0.1:3997/ -o /tmp/dashboard.html
+          curl -fsS http://127.0.0.1:3997/healthz -o /tmp/health.json
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const gateway = JSON.parse(fs.readFileSync('/tmp/gateway.json','utf8'));
+          const html = fs.readFileSync('/tmp/dashboard.html','utf8');
+          const health = JSON.parse(fs.readFileSync('/tmp/health.json','utf8'));
+          if (gateway.framework !== 'fastify-direct') throw new Error('not fastify-direct');
+          if (gateway.application_ready !== true) throw new Error('app not ready');
+          if (!html.includes('Carte d’intérêt') && !html.includes("Carte d'interet") && !/galax|neural|neur/i.test(html)) {
+            throw new Error('modern cognitive interface missing');
+          }
+          if (health.ok !== true) throw new Error('health not ok');
+          console.log('[modern] Hostinger boot + modern dashboard OK');
+          NODE
+      - name: Full tests
+        run: npm test
+      - name: Package modern Hostinger ZIP
+        run: |
+          zip -r ../AURA-MODERN-V8.3-V9.3-HOSTINGER.zip .             -x "node_modules/*"                "test/*"                "*.log"                ".env"                ".DS_Store"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AURA-MODERN-V8.3-V9.3-HOSTINGER
+          path: AURA-MODERN-V8.3-V9.3-HOSTINGER.zip
+          retention-days: 7
