@@ -1,0 +1,53 @@
+name: Package AURA Hostinger V9.3 Final
+
+on:
+  push:
+    branches:
+      - aura/package-hostinger-v9.3-final
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout deploy branch
+        uses: actions/checkout@v4
+
+      - name: Verify deploy package
+        run: |
+          test -f server.js
+          test -f package.json
+          test -f package-lock.json
+          test -f src/release.js
+          test -d src
+          node --check server.js
+          node --check src/server.js
+          node --check src/release.js
+          node --input-type=module <<'NODE'
+          import { AURA_RELEASE } from './src/release.js';
+          if (AURA_RELEASE.id !== 'AURA-HOSTINGER-V9.3-CLOUD-FIRST') process.exit(1);
+          console.log(AURA_RELEASE);
+          NODE
+
+      - name: Build deploy ZIP
+        run: |
+          zip -r AURA-HOSTINGER-V9.3-CLOUD-FIRST-FINAL.zip . \
+            -x ".git/*" \
+               ".github/*" \
+               "node_modules/*" \
+               "test/*" \
+               "*.log" \
+               ".env" \
+               ".DS_Store"
+          unzip -l AURA-HOSTINGER-V9.3-CLOUD-FIRST-FINAL.zip | grep -E "server.js|package.json|src/server.js|src/release.js"
+
+      - name: Upload deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: AURA-HOSTINGER-V9.3-CLOUD-FIRST-FINAL
+          path: AURA-HOSTINGER-V9.3-CLOUD-FIRST-FINAL.zip
+          if-no-files-found: error
+          retention-days: 7
