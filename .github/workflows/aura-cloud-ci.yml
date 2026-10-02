@@ -62,34 +62,60 @@ jobs:
           const capabilities = read('/tmp/capabilities.json');
           const chat = read('/tmp/chat.json');
 
-          if (health.ok !== true) throw new Error('health.ok != true');
-          if (health.ready !== true) throw new Error('runtime not ready: ' + JSON.stringify(health));
-          if (health.db !== true) throw new Error('database not ready');
-          if (health.kernel_started !== true) throw new Error('kernel not started');
+          const failures = [];
 
-          if (architecture.final_language_authority !== 'AURA native cognition') {
-            throw new Error('old language authority still deployed: ' + JSON.stringify(architecture));
-          }
-          if (architecture.execution_policy !== 'cloud-first-local-optional') {
-            throw new Error('old execution policy still deployed: ' + JSON.stringify(architecture));
-          }
-
-          if (capabilities.execution_policy !== 'cloud-first-local-optional') {
-            throw new Error('capabilities do not expose Cloud-first policy');
-          }
-          if (capabilities.local_worker_required !== false) {
-            throw new Error('local worker is still exposed as required');
-          }
+          console.log('[live] health=' + JSON.stringify({
+            ok: health.ok,
+            ready: health.ready,
+            status: health.status,
+            db: health.db,
+            kernel_started: health.kernel_started,
+            issues: health.issues,
+            startup_error: health.startup_error,
+          }));
+          console.log('[live] architecture=' + JSON.stringify({
+            organism: architecture.organism,
+            language_model_role: architecture.language_model_role,
+            final_language_authority: architecture.final_language_authority,
+            execution_policy: architecture.execution_policy,
+            execution_arm: architecture.execution_arm,
+            provider: architecture.provider,
+            provider_enabled: architecture.provider_enabled,
+          }));
+          console.log('[live] capabilities=' + JSON.stringify({
+            execution_policy: capabilities.execution_policy,
+            cloud_operator_ready: capabilities.cloud_operator_ready,
+            local_worker_required: capabilities.local_worker_required,
+            language: capabilities.language,
+            hands: capabilities.hands,
+            evolution: capabilities.evolution,
+          }));
 
           const answer = String(chat.answer || '');
-          if (answer.length < 20) throw new Error('chat answer too short: ' + JSON.stringify(chat));
-          if (/Message reçu\s*:/i.test(answer)) throw new Error('generic dialogue regression: ' + answer);
+          console.log('[live] priority_answer=' + answer.replace(/\s+/g, ' ').slice(0, 1000));
+
+          if (health.ok !== true) failures.push('health.ok != true');
+          if (health.ready !== true) failures.push('runtime not ready');
+          if (health.db !== true) failures.push('database not ready');
+          if (health.kernel_started !== true) failures.push('kernel not started');
+
+          if (architecture.final_language_authority !== 'AURA native cognition') {
+            failures.push('old language authority still deployed');
+          }
+          if (architecture.execution_policy !== 'cloud-first-local-optional') {
+            failures.push('old execution policy still deployed');
+          }
+          if (capabilities.execution_policy !== 'cloud-first-local-optional') {
+            failures.push('capabilities do not expose Cloud-first policy');
+          }
+          if (capabilities.local_worker_required !== false) {
+            failures.push('local worker still exposed as required');
+          }
+          if (answer.length < 20) failures.push('chat answer too short');
+          if (/Message reçu\s*:/i.test(answer)) failures.push('generic dialogue regression');
           if (!/priorit/i.test(answer) || !/1\)/.test(answer)) {
-            throw new Error('priority dialogue regression: ' + answer);
+            failures.push('priority dialogue regression');
           }
 
-          console.log('[live] health=ready; db=ready; kernel=started');
-          console.log('[live] language_authority=' + architecture.final_language_authority);
-          console.log('[live] execution_policy=' + architecture.execution_policy);
-          console.log('[live] priority_answer=' + answer.replace(/\s+/g, ' ').slice(0, 500));
+          if (failures.length) throw new Error('LIVE FAILURES: ' + failures.join(' | '));
           NODE
