@@ -50,17 +50,23 @@ test('direct Fastify entry stays online even when runtime loop is disabled', asy
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  const healthText = await waitFor('/healthz', (text) => text.includes('"gateway_ready":true'));
+  const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const health = JSON.parse(healthText);
   assert.equal(health.ok, true);
-  assert.equal(health.gateway_ready, true);
-  assert.equal(health.runtime_ready, false);
+  assert.equal(health.ready, false);
+
+  const gatewayText = await waitFor('/__aura_gateway', (text) => text.includes('"gateway_ready":true'));
+  const gateway = JSON.parse(gatewayText);
+  assert.equal(gateway.gateway_ready, true);
+  assert.equal(gateway.framework, 'fastify-direct');
+  assert.equal(gateway.application_ready, true);
+  assert.equal(gateway.runtime_ready, false);
 
   const root = await fetch(base + '/');
   assert.equal(root.status, 200);
   const html = await root.text();
-  assert.match(html, /AURA CLOUD/);
-  assert.match(html, /Hostinger · processus unique/);
+  assert.match(html, /Interface de conscience opérationnelle/);
+  assert.match(html, /Carte d’intérêt/);
   assert.equal(child.exitCode, null, stderr);
 });
 
