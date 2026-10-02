@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 
-const GATEWAY_PORT = 34567;
+const GATEWAY_PORT = 3000;
 const base = `http://127.0.0.1:${GATEWAY_PORT}`;
 
 async function waitFor(path, matcher, timeoutMs = 15000) {
