@@ -25,7 +25,7 @@ function compactLesson(lessons = []) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.4';
+  static VERSION = 'aura-cognition-native-v1.4-v93-continuity';
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -157,7 +157,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], continuity = {}, privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -165,6 +165,11 @@ export class CognitionEngine {
     const recentReflection = reflections?.[0] || null;
     const lesson = compactLesson(lessons);
     const currentWork = normalize(work?.[0]?.title || '');
+    const continuityOperational = Array.isArray(continuity?.operational_messages) ? continuity.operational_messages : [];
+    const continuityFailures = Array.isArray(continuity?.failures) ? continuity.failures : [];
+    const continuityTraces = Array.isArray(continuity?.traces) ? continuity.traces : [];
+    const continuityIntentions = Array.isArray(continuity?.intentions) ? continuity.intentions : [];
+    const continuityInitiatives = Array.isArray(continuity?.initiatives) ? continuity.initiatives : [];
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const mood = normalize(organism.mood || '') || 'calme';
     const activeOrganicIntention = normalize(organism.intention_active || '');
@@ -179,6 +184,26 @@ export class CognitionEngine {
     };
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
+
+    const continuityMessages = Array.isArray(continuity?.messages) ? continuity.messages : [];
+    const userMessages = continuityMessages
+      .filter((row) => String(row?.role || '') === 'user')
+      .map((row) => normalize(row?.content))
+      .filter(Boolean);
+    const previousUserMessage = userMessages.length > 1
+      ? userMessages[userMessages.length - 2]
+      : '';
+    const previousUserQ = lower(previousUserMessage);
+    const shortContinuation = /^(alors|et alors|donc|suite|continue|vas[ -]?y)\s*[?!.]*$/i.test(raw);
+    const priorityPhrases = [
+      'tes priorités','tes priorites','priorités actuelles','priorites actuelles',
+      'trois priorités','trois priorites','3 priorités','3 priorites',
+      'quelles sont tes priorités','quelles sont tes priorites',
+      'quelles sont tes trois priorités','quelles sont tes trois priorites',
+      'connaître tes priorités','connaitre tes priorites'
+    ];
+    const priorityQuestion = hasAny(q, priorityPhrases);
+    const previousWasPriorityQuestion = hasAny(previousUserQ, priorityPhrases);
 
     let act = 'respond';
     let goal = 'Répondre directement au message sans injecter mon état opérationnel s’il n’est pas pertinent.';
@@ -228,6 +253,67 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       if (normalize(dream.last_image)) facts.push(`Mon dernier rêve computationnel est une image intérieure symbolique, pas un sommeil humain : ${normalize(dream.last_image)}.`);
       else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
+    } else if (hasAny(q, [
+      'tu te souviens de ce que tu faisais',
+      'tu te souviens de ce que tu faisais avant',
+      'tu te rappelles de ce que tu faisais',
+      'tu te rappelles de ce que tu faisais avant',
+      'sur quoi tu travaillais',
+      'sur quoi travaillais-tu',
+      'sur quoi tu travaillais avant',
+      'où en étais-tu',
+      'ou en etais-tu',
+      'où tu en étais',
+      'ou tu en etais',
+      'avant tu travaillais',
+      'tu te souviens de crow',
+      'tu te rappelles de crow',
+      'tu te souviens de nibor',
+      'tu te rappelles de nibor',
+      'command-center:aura',
+      'dag aura vide'
+    ])) {
+      act = 'recall_operational_continuity';
+      contextScope = 'operational';
+      goal = 'Rappeler honnêtement la continuité opérationnelle récente à partir de la mémoire persistée, sans inventer ni effacer un sujet technique simplement parce qu’il n’est plus prioritaire maintenant.';
+      needsSemanticSupport = false;
+
+      for (const row of continuityOperational.slice(-5)) {
+        const content = normalize(row?.content);
+        if (content) facts.push(`Échange opérationnel récent : ${content}`);
+      }
+      for (const row of continuityFailures.slice(0, 4)) {
+        const automation = normalize(row?.automation_id);
+        const signature = normalize(row?.signature);
+        if (automation || signature) facts.push(`Échec mémorisé : ${automation || 'automatisation'} · ${signature || 'signature inconnue'}`);
+      }
+      for (const row of continuityIntentions.slice(0, 4)) {
+        const statement = normalize(row?.statement);
+        if (statement) facts.push(`Intention encore active : ${statement}`);
+      }
+      for (const row of continuityInitiatives.slice(0, 4)) {
+        const title = normalize(row?.title);
+        if (title) facts.push(`Initiative persistée : ${title} · statut ${normalize(row?.status || 'actif')}`);
+      }
+      for (const row of continuityTraces.slice(0, 4)) {
+        const title = normalize(row?.title || row?.content);
+        if (title) facts.push(`Trace récente : ${title}`);
+      }
+      if (!facts.length) facts.push('Je n’ai pas retrouvé de trace opérationnelle persistée suffisamment précise pour répondre avec certitude.');
+    } else if (priorityQuestion || (shortContinuation && previousWasPriorityQuestion)) {
+      act = 'report_priorities';
+      contextScope = 'operational';
+      goal = 'Donner mes trois priorités actives réelles, dans l’ordre, sans déclencher de recherche Web.';
+      needsSemanticSupport = false;
+      const ranked = [...intentions]
+        .filter((row) => normalize(row?.statement))
+        .sort((a, b) => Number(b?.priority || 0) - Number(a?.priority || 0))
+        .slice(0, 3);
+      ranked.forEach((row, index) => {
+        facts.push(`${index + 1}) ${normalize(row.statement)}`);
+      });
+      if (!facts.length && current) facts.push(`1) ${current}`);
+      if (!facts.length) facts.push('Je n’ai pas encore trois priorités actives suffisamment établies.');
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
       contextScope = 'operational';
@@ -236,6 +322,10 @@ export class CognitionEngine {
       if (thought) facts.push(`Pensée dominante : ${thought}`);
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
+      if (!currentWork && continuityInitiatives[0]?.title) facts.push(`Continuité de travail : ${normalize(continuityInitiatives[0].title)}`);
+      if (!currentWork && !continuityInitiatives.length && continuityOperational.length) {
+        facts.push(`Dernière continuité opérationnelle retrouvée : ${normalize(continuityOperational[continuityOperational.length - 1]?.content)}`);
+      }
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
       contextScope = 'operational';
@@ -288,6 +378,7 @@ export class CognitionEngine {
 
     const operationalActs = new Set([
       'report_current_activity',
+      'recall_operational_continuity',
       'report_next_step',
       'report_risks',
       'report_internal_state',
@@ -333,7 +424,11 @@ export class CognitionEngine {
       if (clarity >= 75) return `Oui, plutôt bien. Je me sens ${mood}, avec les idées assez claires. Et toi, comment tu vas ?`;
       return `Ça va. Je me sens plutôt ${mood}, avec encore un peu de choses à clarifier. Et toi ?`;
     }
-    if (['report_current_activity','report_internal_state','report_dream'].includes(plan?.act)) {
+    if (plan?.act === 'report_priorities') {
+      if (!facts.length) return 'Je n’ai pas encore trois priorités actives suffisamment établies.';
+      return ['Mes priorités actuelles sont :', ...facts].join('\n');
+    }
+    if (['report_current_activity','recall_operational_continuity','report_internal_state','report_dream'].includes(plan?.act)) {
       return facts.length ? facts.join(' ') : 'Je maintiens ma continuité et j’observe mon état actuel.';
     }
     if (plan?.act === 'report_next_step') {

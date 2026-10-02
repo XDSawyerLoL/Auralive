@@ -55,6 +55,8 @@ export class CognitiveKernel {
     this.lastError = '';
     this.lastTickAt = '';
     this.lastReflectionAt = '';
+    this.neuralSignalSeq = 0;
+    this.neuralSignals = [];
   }
 
   attachExpertRelay(expertRelay) {
@@ -210,6 +212,37 @@ export class CognitiveKernel {
     if (this.stimuli.length > 120) this.stimuli.splice(0, this.stimuli.length - 120);
   }
 
+  emitNeuralSignal({
+    kind = 'cognitive',
+    source = 'aura',
+    target = 'reasoning',
+    intensity = 0.5,
+    label = '',
+    origin = 'kernel',
+  } = {}) {
+    const event = {
+      id: ++this.neuralSignalSeq,
+      kind: String(kind).slice(0, 48),
+      source: String(source).slice(0, 80),
+      target: String(target).slice(0, 80),
+      intensity: clamp(intensity),
+      label: String(label || '').slice(0, 180),
+      origin: String(origin || 'kernel').slice(0, 80),
+      created_at: now(),
+    };
+    this.neuralSignals.push(event);
+    if (this.neuralSignals.length > 240) {
+      this.neuralSignals.splice(0, this.neuralSignals.length - 240);
+    }
+    return event;
+  }
+
+  neuralSignalsSince(since = 0, limit = 80) {
+    const after = Math.max(0, Number(since) || 0);
+    const max = Math.max(1, Math.min(Number(limit) || 80, 160));
+    return this.neuralSignals.filter((event) => event.id > after).slice(-max);
+  }
+
   async trace(kind, title, content = '', context = {}) {
     await query(
       'INSERT INTO aura_cognitive_traces(kind,title,content,context,created_at) VALUES(?,?,?,?,?)',
@@ -251,6 +284,21 @@ export class CognitiveKernel {
     if (source === 'horizon' || type.startsWith('aura.') || type.startsWith('stream.')) {
       await this.trace('event', type, String(payload?.title || payload?.text || '').slice(0, 1000), { source, surprise });
     }
+
+    const lowerType = String(type || '').toLowerCase();
+    let route = { source: 'aura', target: 'reasoning', intensity: 0.46 };
+    if (lowerType.includes('chat')) route = { source: 'aura', target: 'reasoning', intensity: 0.72 };
+    else if (source === 'horizon' || lowerType.includes('horizon')) route = { source: 'horizon', target: 'evidence', intensity: 0.64 };
+    else if (lowerType.includes('web')) route = { source: 'web', target: 'evidence', intensity: 0.60 };
+    else if (lowerType.includes('automation.failure')) route = { source: 'automation', target: 'stability', intensity: 0.88 };
+    else if (lowerType.includes('bridge') || lowerType.includes('worker')) route = { source: 'worker', target: 'automation', intensity: 0.62 };
+    this.emitNeuralSignal({
+      kind: lowerType.includes('chat') ? 'interaction' : 'event',
+      ...route,
+      intensity: Math.max(route.intensity, Math.min(1, Number(surprise || 0) * 0.85)),
+      label: String(payload?.title || payload?.text || type || '').slice(0, 180),
+      origin: source,
+    });
     return { ok: true };
   }
 
@@ -273,6 +321,14 @@ export class CognitiveKernel {
     );
     this.adjustSoul({ introspection: 0.01, continuity: 0.004 });
     await this.saveSoul();
+    this.emitNeuralSignal({
+      kind: 'learning',
+      source: 'learning',
+      target: 'memory',
+      intensity: Math.max(0.35, clamp(confidence)),
+      label: String(content || lessonKey).slice(0, 180),
+      origin: String(source || 'experience'),
+    });
     return { lesson_key: lessonKey, content, confidence: clamp(confidence), evidence_count: evidenceCount };
   }
 
@@ -286,6 +342,14 @@ export class CognitiveKernel {
     );
     this.soulCache.current_intention = String(statement).slice(0, 500);
     await this.saveSoul();
+    this.emitNeuralSignal({
+      kind: 'intention',
+      source: 'planning',
+      target: 'aura',
+      intensity: Math.max(0.4, clamp(priority)),
+      label: String(statement).slice(0, 180),
+      origin: String(source || 'api'),
+    });
     return { id, statement, priority: clamp(priority), status: 'active' };
   }
 
@@ -445,6 +509,14 @@ export class CognitiveKernel {
         cognition_version: CognitionEngine.VERSION,
         language_model_used_for_decision: false,
       };
+      this.emitNeuralSignal({
+        kind: 'reflection',
+        source: 'reasoning',
+        target: 'planning',
+        intensity: Math.max(0.45, confidence),
+        label: String(summary || title).slice(0, 180),
+        origin: String(trigger || 'reflection'),
+      });
       await this.trace('reflection', title, summary, reflection);
       return { ok: true, reflection, soul: await this.soul() };
     } finally {
@@ -488,6 +560,14 @@ export class CognitiveKernel {
       },
     });
     await this.saveSoul();
+    this.emitNeuralSignal({
+      kind: ok ? 'outcome-success' : 'outcome-failure',
+      source: 'automation',
+      target: ok ? 'learning' : 'stability',
+      intensity: ok ? 0.62 : 0.92,
+      label: ok ? String(eventType).slice(0, 180) : String(signature).slice(0, 180),
+      origin: automationId,
+    });
     if (ok) return { ok: true, learned: true, native_learning: nativeLearning };
 
     this.pushStimulus({ type: 'automation.failure', source: 'automation', occurred_at: timestamp, payload: { automation_id: automationId, event_type: eventType, signature } });
@@ -624,32 +704,187 @@ export class CognitiveKernel {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
 
-    if (this.bridge?.enabled && await this.bridge.workerOnline()) {
-      const result = await this.bridge.operate(mission, requestedRisks);
-      await this.trace('operator', 'Quantic Studio execution', mission, {
+    const normalizedRisks = Array.isArray(requestedRisks)
+      ? requestedRisks.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+    const localRiskSet = new Set(['local-control', 'local-write', 'process', 'browser-control']);
+    const explicitlyLocal = normalizedRisks.some((risk) => localRiskSet.has(risk));
+
+    // 1) Cloud first. AURA tries its own typed Cloud capabilities before
+    // considering any local worker.
+    if (this.fabric) {
+      try {
+        const cloudCapabilities = this.fabric.list()
+          .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
+        if (cloudCapabilities.length) {
+          const compiler = new DagCompiler({ enabled: false });
+          const graph = await compiler.compile(mission, cloudCapabilities, {
+            maxNodes: 8,
+            maxParallel: 2,
+            budgetMicrounits: 0,
+          });
+          const cloudOnly = graph.nodes.length > 0
+            && graph.nodes.every((node) => String(node.capability || '').startsWith('cloud.workspace.'));
+          if (cloudOnly) {
+            const executor = new TaskGraphExecutor(this.fabric);
+            const result = await executor.execute(graph, {
+              trigger: 'cloud-first-operator',
+              allowSideEffects: true,
+            });
+            if (result.ok) {
+              await this.trace('operator', 'AURA Cloud execution', mission, {
+                delegated: false,
+                executed: true,
+                graph_id: result.graph_id,
+                capabilities: graph.nodes.map((node) => node.capability),
+                execution_policy: 'cloud-first-local-optional',
+              });
+              return {
+                ok: true,
+                status: 'completed',
+                task: mission,
+                execution_mode: 'aura-cloud-first',
+                execution_policy: 'cloud-first-local-optional',
+                cloud_operator_ready: true,
+                local_worker_required: false,
+                executed: true,
+                authority: 'typed-reversible-cloud-workspace',
+                graph,
+                result,
+              };
+            }
+          }
+        }
+      } catch (error) {
+        await this.trace('operator', 'AURA Cloud capability miss', mission, {
+          delegated: false,
+          executed: false,
+          error: String(error?.message || error).slice(0, 1000),
+          execution_policy: 'cloud-first-local-optional',
+        }).catch(() => {});
+      }
+    }
+
+    // 2) Local execution is optional and only considered for missions that
+    // explicitly request local-machine side effects.
+    const localOnline = Boolean(
+      this.bridge?.enabled && await this.bridge.workerOnline().catch(() => false)
+    );
+    if (explicitlyLocal && localOnline) {
+      const result = await this.bridge.operate(mission, normalizedRisks);
+      await this.trace('operator', 'AURA optional local execution', mission, {
         delegated: true,
         executed: Boolean(result?.executed),
         job_id: result?.job_id || '',
+        execution_policy: 'cloud-first-local-optional',
       });
       return {
         ok: true,
         task: mission,
-        execution_mode: 'quantic-studio-real',
+        execution_mode: 'aura-local-specialized',
+        execution_policy: 'cloud-first-local-optional',
+        cloud_operator_ready: false,
+        local_worker_required: true,
+        local_worker_online: true,
         ...result,
       };
     }
 
+    // 3) No silent substitution. If AURA lacks the typed Cloud capability,
+    // she records the missing capability instead of pretending the local
+    // worker is her primary execution authority.
     const plan = await this.runAgent(
       'operator',
-      `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
+      `${mission}\n\nAucune capacité Cloud typée ne correspond encore à cette mission. Décris uniquement la capacité manquante, un plan réversible et un critère de réussite. Le worker local n'est pas une dépendance générale.`,
     );
     return {
-      ok: true,
+      ok: false,
+      status: 'waiting-cloud-capability',
       task: mission,
-      execution_mode: 'plan-only-fallback',
+      execution_mode: 'cloud-capability-missing',
+      execution_policy: 'cloud-first-local-optional',
+      cloud_operator_ready: false,
+      local_worker_required: explicitlyLocal,
+      local_worker_online: localOnline,
       executed: false,
       plan: plan.answer,
-      authority: 'Quantic Studio worker offline',
+      authority: 'AURA Cloud first; local worker optional for explicit local side effects only',
+    };
+  }
+
+  async continuitySnapshot(queryText = '') {
+    const [messages, traces, outcomes, activeIntentions, initiatives] = await Promise.all([
+      query(
+        `SELECT id,author,role,content,created_at
+         FROM aura_cloud_messages
+         ORDER BY id DESC LIMIT 40`,
+      ),
+      query(
+        `SELECT id,kind,title,content,created_at
+         FROM aura_cognitive_traces
+         ORDER BY id DESC LIMIT 30`,
+      ),
+      query(
+        `SELECT id,automation_id,event_type,ok,signature,created_at
+         FROM aura_outcomes
+         ORDER BY id DESC LIMIT 20`,
+      ),
+      this.intentions(12),
+      query(
+        `SELECT id,domain,kind,title,objective,priority,confidence,status,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY updated_at DESC LIMIT 16`,
+      ).catch(() => []),
+    ]);
+
+    const recentMessages = messages.reverse();
+    const operationalPattern = /(travail|objectif|priorit|évaluer|evaluer|sandbox|échec|echec|automatisation|command-center|dag|crow|nibor|quantic|worker|projet|mission|corriger|réparer|reparer)/i;
+    const operationalMessages = recentMessages
+      .filter((row) => String(row.role || '') === 'assistant' && operationalPattern.test(String(row.content || '')))
+      .slice(-10)
+      .map((row) => ({
+        content: String(row.content || '').slice(0, 1600),
+        created_at: row.created_at || '',
+      }));
+
+    const failures = outcomes
+      .filter((row) => Number(row.ok || 0) === 0)
+      .slice(0, 10)
+      .map((row) => ({
+        automation_id: String(row.automation_id || '').slice(0, 220),
+        signature: String(row.signature || '').slice(0, 500),
+        event_type: String(row.event_type || '').slice(0, 220),
+        created_at: row.created_at || '',
+      }));
+
+    return {
+      query: String(queryText || '').slice(0, 1000),
+      messages: recentMessages.slice(-18).map((row) => ({
+        role: String(row.role || ''),
+        author: String(row.author || ''),
+        content: String(row.content || '').slice(0, 1600),
+        created_at: row.created_at || '',
+      })),
+      operational_messages: operationalMessages,
+      traces: traces.slice(0, 14).map((row) => ({
+        kind: String(row.kind || ''),
+        title: String(row.title || '').slice(0, 300),
+        content: String(row.content || '').slice(0, 1200),
+        created_at: row.created_at || '',
+      })),
+      failures,
+      intentions: activeIntentions.slice(0, 10).map((row) => ({
+        statement: String(row.statement || '').slice(0, 1200),
+        priority: Number(row.priority || 0),
+        updated_at: row.updated_at || '',
+      })),
+      initiatives: initiatives.slice(0, 10).map((row) => ({
+        title: String(row.title || row.objective || '').slice(0, 500),
+        status: String(row.status || ''),
+        priority: Number(row.priority || 0),
+        updated_at: row.updated_at || '',
+      })),
     };
   }
 
@@ -682,12 +917,13 @@ export class CognitiveKernel {
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent('aura.cloud.chat', { author, text: content.slice(0, 1000) }, 'cloud');
 
-    const [soul, intentions, lessons, reflections, work] = await Promise.all([
+    const [soul, intentions, lessons, reflections, work, continuity] = await Promise.all([
       this.soul({ privateView: true }),
       this.intentions(6),
       this.lessons(6),
       this.reflections(4),
-      this.workItems(5),
+      this.workItems(8),
+      this.continuitySnapshot(content),
     ]);
 
     let plan = this.cognition.planReply({
@@ -697,6 +933,7 @@ export class CognitiveKernel {
       lessons,
       reflections,
       work,
+      continuity,
       privateView,
     });
 
@@ -805,7 +1042,11 @@ export class CognitiveKernel {
         const technicalLeak = /(dag aura vide|command-center:aura|nibor1896\/crow|intention actuelle\s*:|pensée dominante\s*:|travail prioritaire\s*:)/i;
         const safeConversation = recentConversation
           .reverse()
-          .filter((row) => String(row.role || '') !== 'assistant' || !technicalLeak.test(String(row.content || '')));
+          .filter((row) =>
+            plan.context_scope !== 'relationship'
+            || String(row.role || '') !== 'assistant'
+            || !technicalLeak.test(String(row.content || ''))
+          );
         semanticContext = [
           plan.context_scope === 'relationship'
             ? 'CONTEXTE RELATIONNEL RECENT: échange direct entre AURA et son interlocuteur. Utilise-le pour conserver le ton, les références et la continuité, sans inventer de biographie.'
@@ -849,6 +1090,14 @@ export class CognitiveKernel {
       "INSERT INTO aura_cloud_messages(author,role,content,created_at) VALUES('AURA','assistant',?,?)",
       [String(answer).slice(0, 12000), now()],
     );
+    this.emitNeuralSignal({
+      kind: 'expression',
+      source: 'reasoning',
+      target: 'aura',
+      intensity: 0.66,
+      label: String(answer).slice(0, 180),
+      origin: 'conversation',
+    });
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,

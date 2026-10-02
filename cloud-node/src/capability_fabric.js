@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { config } from './config.js';
 import { query } from './db.js';
 import { clamp } from './policy.js';
+import { AuraCloudWorkspace } from './cloud_workspace.js';
 
 const clean = (value, limit = 4000) =>
   String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -254,6 +255,68 @@ export class CapabilityFabric {
   }
 
   registerBuiltins() {
+    const workspace = new AuraCloudWorkspace();
+
+    this.register({
+      id: 'cloud.workspace.create',
+      name: 'AURA isolated cloud workspace create',
+      transport: 'local',
+      tags: ['cloud', 'workspace', 'file', 'create', 'write', 'reversible'],
+      trust: 0.92,
+      observed_reliability: 0.9,
+      latency_ms: 25,
+      cost_microunits: 0,
+      side_effects: true,
+      risk: 'sandbox-reversible',
+      input_contract: { objective: 'string' },
+      output_contract: { path: 'string', sha256: 'string', created: 'boolean' },
+      provider: 'aura-cloud-workspace',
+    }, async (input) => ({
+      ok: true,
+      result: await workspace.create(input),
+      metrics: { cost_microunits: 0 },
+    }));
+
+    this.register({
+      id: 'cloud.workspace.read',
+      name: 'AURA isolated cloud workspace read',
+      transport: 'local',
+      tags: ['cloud', 'workspace', 'file', 'read', 'inspect', 'verify'],
+      trust: 0.94,
+      observed_reliability: 0.92,
+      latency_ms: 15,
+      cost_microunits: 0,
+      side_effects: false,
+      risk: 'safe',
+      input_contract: { path: 'string?', dependencies: 'object?' },
+      output_contract: { path: 'string', content: 'string', sha256: 'string' },
+      provider: 'aura-cloud-workspace',
+    }, async (input) => ({
+      ok: true,
+      result: await workspace.read(input),
+      metrics: { cost_microunits: 0 },
+    }));
+
+    this.register({
+      id: 'cloud.workspace.delete',
+      name: 'AURA isolated cloud workspace delete',
+      transport: 'local',
+      tags: ['cloud', 'workspace', 'file', 'delete', 'remove', 'reversible'],
+      trust: 0.92,
+      observed_reliability: 0.9,
+      latency_ms: 20,
+      cost_microunits: 0,
+      side_effects: true,
+      risk: 'sandbox-reversible',
+      input_contract: { path: 'string?', dependencies: 'object?' },
+      output_contract: { path: 'string', deleted: 'boolean', exists_after: 'boolean' },
+      provider: 'aura-cloud-workspace',
+    }, async (input) => ({
+      ok: true,
+      result: await workspace.remove(input),
+      metrics: { cost_microunits: 0 },
+    }));
+
     if (this.webSubstrate) {
       this.register({
         id: 'web.research',

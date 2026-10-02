@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
+import { buildAuraEvidenceRegistry } from './aura_evidence_registry.js';
 import { ExecutionBridge } from './bridge.js';
 import { CommandCenter } from './command_center.js';
 import { CuriosityEngine } from './curiosity.js';
@@ -25,6 +26,7 @@ import { EvolutionLab } from './evolution.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
+import { releaseInfo } from './release.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';
 import { CloudVoice } from './voice.js';
@@ -463,6 +465,33 @@ app.get('/api/bootstrap/status', async () => ({
   peer_mesh_enabled: Boolean(config.meshP2pEnabled),
 }));
 
+app.get('/api/evidence/status', async () => {
+  const bridgeStatus = bootstrap.dbReady
+    ? await Promise.resolve(bridge.status()).catch(() => ({ enabled: bridge.enabled, worker_online: false }))
+    : { enabled: bridge.enabled, worker_online: false };
+  const commandStatus = bootstrap.runtimeReady
+    ? await Promise.resolve(commandCenter.status({ publicView: true })).catch(() => ({ enabled: config.commandCenterEnabled, started: false }))
+    : { enabled: config.commandCenterEnabled, started: false };
+  const curiosityStatus = bootstrap.runtimeReady
+    ? await Promise.resolve(curiosity.status()).catch(() => ({ enabled: false, started: false }))
+    : { enabled: false, started: false };
+  const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
+    ? bridgeStatus.worker.capabilities
+    : [];
+  return buildAuraEvidenceRegistry({
+    runtime_ready: bootstrap.runtimeReady,
+    db_ready: bootstrap.dbReady,
+    ai_enabled: ai.enabled,
+    worker_online: Boolean(bridgeStatus?.worker_online),
+    worker_actions: workerCapabilities.map((item) => String(item?.name || '')).filter(Boolean),
+    command_center: commandStatus,
+    curiosity: curiosityStatus,
+    horizon: horizon.status(),
+    fabric: fabric.status(),
+    web_substrate: webSubstrate.status(),
+  });
+});
+
 app.get('/api/ai/runtime', async () => ai.diagnostic());
 
 app.get('/api/bridge/status', async (request, reply) => {
@@ -592,10 +621,17 @@ app.get('/api/capabilities', async (request) => {
   const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
     ? bridgeStatus.worker.capabilities
     : [];
+  const cloudOperatorCapabilities = fabric.list()
+    .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
+  const cloudOperatorReady = cloudOperatorCapabilities.length > 0;
   const workerActionNames = new Set(
     workerCapabilities.map((item) => String(item?.name || '')),
   );
   return {
+    release: releaseInfo(),
+    execution_policy: 'cloud-first-local-optional',
+    cloud_operator_ready: cloudOperatorReady,
+    local_worker_required: false,
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
     organism: {
       ready: Boolean(bootstrap.runtimeReady),
@@ -626,16 +662,25 @@ app.get('/api/capabilities', async (request) => {
       mode: bridgeStatus?.worker_online ? 'local-worker' : 'offline',
     },
     hands: {
-      ready: Boolean(bridgeStatus?.worker_online),
-      mode: bridgeStatus?.worker_online ? 'quantic-studio-real' : 'offline',
+      ready: Boolean(cloudOperatorReady || bridgeStatus?.worker_online),
+      mode: cloudOperatorReady
+        ? 'cloud-first'
+        : (bridgeStatus?.worker_online ? 'local-specialized-only' : 'cloud-capability-missing'),
+      execution_policy: 'cloud-first-local-optional',
+      cloud_operator_ready: cloudOperatorReady,
+      cloud_capabilities: cloudOperatorCapabilities.length,
+      local_worker_required: false,
+      local_worker_online: Boolean(bridgeStatus?.worker_online),
       capabilities: privateView ? workerCapabilities : [],
     },
     horizon: { ready: Boolean(horizon.status().enabled) },
     web_substrate: webSubstrate.status(),
     evolution: {
-      ready: Boolean(bridgeStatus?.worker_online),
+      ready: Boolean(config.evolutionEnabled),
       cloud_enabled: Boolean(config.evolutionEnabled),
-      delegated_to_local: Boolean(bridgeStatus?.worker_online),
+      execution_policy: 'cloud-first-local-optional',
+      local_worker_optional: true,
+      local_worker_online: Boolean(bridgeStatus?.worker_online),
     },
     command_center: bootstrap.runtimeReady
       ? await commandCenter.status({ publicView: !privateView })
@@ -651,6 +696,7 @@ app.get('/api/capabilities', async (request) => {
 });
 
 app.get('/api/kernel/architecture', async () => ({
+  release: releaseInfo(),
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
   organism: 'homeostasie_v7_streamlined',
   cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
@@ -664,10 +710,13 @@ app.get('/api/kernel/architecture', async () => ({
   distributed_compute: 'typed DAG -> Capability Fabric -> parallel Node/Rust swarm -> edge/API/local capabilities',
   capability_router: 'trust + observed reliability + latency + cost + task tags',
   network_action_model: 'typed authenticated capabilities; no arbitrary remote shell; remote edge side effects disabled',
-  execution_arm: 'Quantic Studio authenticated bridge for bounded side effects; edge fabric for read/compute',
+  execution_arm: 'AURA Cloud typed workspace first; authenticated local bridge only for explicit local side effects',
   autonomous_risk_envelope: [...config.commandCenterAllowedRisks],
   provider: ai.provider,
   provider_enabled: ai.enabled,
+  decision_authority: 'AURA native cognition',
+  execution_policy: 'cloud-first-local-optional',
+  local_worker_required: false,
 }));
 
 app.get('/healthz', async () => {
@@ -682,6 +731,7 @@ app.get('/healthz', async () => {
     }
   }
   return {
+    release: releaseInfo(),
     ok: true,
     ready: bootstrap.runtimeReady && databaseAlive,
     status: bootstrap.runtimeReady && databaseAlive ? 'ready' : 'diagnostic',
@@ -867,6 +917,26 @@ app.get('/api/kernel/public/attention', async () => {
   };
 });
 
+
+app.get('/api/kernel/public/neural-signals', async (request) => {
+  if (!bootstrap.runtimeReady) return { since: 0, last_id: 0, events: [] };
+  const since = Math.max(0, Number(request.query?.since || 0));
+  const events = kernel.neuralSignalsSince(since, 100).map((event) => ({
+    id: Number(event.id || 0),
+    kind: String(event.kind || '').slice(0, 48),
+    source: String(event.source || '').slice(0, 80),
+    target: String(event.target || '').slice(0, 80),
+    intensity: Math.max(0, Math.min(1, Number(event.intensity || 0))),
+    label: String(event.label || '').slice(0, 180),
+    origin: String(event.origin || '').slice(0, 80),
+    created_at: event.created_at || '',
+  }));
+  return {
+    since,
+    last_id: events.length ? Number(events[events.length - 1].id || since) : since,
+    events,
+  };
+});
 
 app.get('/api/kernel/soul', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;

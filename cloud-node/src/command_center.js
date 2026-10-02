@@ -1194,21 +1194,7 @@ export class CommandCenter {
         }));
       }
     }
-    if (!bridgeStatus?.worker_online) {
-      candidates.push(this.candidate({
-        domain: 'quantic-studio',
-        kind: 'reflection',
-        title: 'Maintenir l’autonomie malgré le bras local hors ligne',
-        objective:
-          'Évaluer ce que je peux continuer à faire côté Cloud sans Quantic Studio, '
-          + 'identifier les missions bloquées et préparer leur reprise dès le retour du worker local.',
-        rationale: 'Le worker Quantic Studio n’est pas actuellement en ligne.',
-        priority: 0.64,
-        confidence: 0.98,
-        requested_risks: [],
-        signature: 'bridge-offline',
-      }));
-    }
+
 
     if (!candidates.length) {
       candidates.push(this.candidate({
@@ -1312,36 +1298,9 @@ export class CommandCenter {
       return { id, status: 'waiting', reason: 'auto execution disabled' };
     }
 
-    if (initiative.kind === 'operator' && !bridgeOnline) {
-      await this.updateInitiative(id, {
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        result: { reason: 'Quantic Studio worker offline' },
-      });
-      return { id, status: 'waiting', reason: 'worker offline' };
-    }
 
-    const targetRepository = String(initiative.action_payload?.repository || '').trim();
-    const crossProductEvolution = initiative.kind === 'evolution'
-      && targetRepository
-      && targetRepository.toLowerCase() !== 'xdsawyerlol/auralive';
-    if (crossProductEvolution && !bridgeOnline) {
-      await this.updateInitiative(id, {
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        result: {
-          reason: 'Quantic Studio worker offline',
-          repository: targetRepository,
-        },
-      });
-      return {
-        id,
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        reason: 'worker offline',
-        repository: targetRepository,
-      };
-    }
+
+
 
     await query(
       "UPDATE aura_initiatives SET status='running',updated_at=? WHERE id=?",
@@ -1424,11 +1383,11 @@ export class CommandCenter {
           { repository, base_branch: baseBranch },
         );
       } else if (initiative.kind === 'operator') {
-        executionMode = 'quantic-studio-operator';
         result = await this.kernel.operate(
           initiative.objective,
           initiative.requested_risks,
         );
+        executionMode = String(result?.execution_mode || 'aura-cloud-first');
       } else {
         executionMode = 'native-reflection';
         result = await this.kernel.tick({

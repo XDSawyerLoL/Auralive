@@ -1,6 +1,7 @@
 export const DASHBOARD_SCRIPT = String.raw`
 const $ = function(id){ return document.getElementById(id); };
 let lastSoul = null;
+let lastNeuralSignalId=0;
 let lastAttention = null;
 let livingScene = null;
 let voicePlayer = null;
@@ -262,6 +263,17 @@ function renderNext(work,attention){
   if(node){$('nextAction').textContent='Poursuivre le focus sur '+node.label+'.';const p=pct(node.score);$('confidenceValue').textContent=p+'%';$('confidenceBar').style.width=p+'%';return;}
   $('nextAction').textContent='Observer le système avant de prioriser une nouvelle action.';$('confidenceValue').textContent='—';$('confidenceBar').style.width='0%';
 }
+async function refreshNeuralSignals(){
+  try{
+    const packet=await api('/api/kernel/public/neural-signals?since='+encodeURIComponent(lastNeuralSignalId));
+    const events=Array.isArray(packet&&packet.events)?packet.events:[];
+    if(events.length&&window.AURANeuralField&&typeof window.AURANeuralField.ingestSignals==='function'){
+      window.AURANeuralField.ingestSignals(events);
+    }
+    if(packet&&Number(packet.last_id||0)>lastNeuralSignalId)lastNeuralSignalId=Number(packet.last_id||0);
+  }catch(_){}
+}
+
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
@@ -503,5 +515,5 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}refreshNeuralSignals();setInterval(updateClock,1000);setInterval(refreshNeuralSignals,1000);setInterval(refresh,8000);
 `;

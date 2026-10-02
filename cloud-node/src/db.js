@@ -670,7 +670,23 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs] = await Promise.all([
+  const [
+    soul,
+    intentions,
+    lessons,
+    routines,
+    improvements,
+    evolution,
+    commandServices,
+    initiatives,
+    reasoningSessions,
+    fabricCapabilities,
+    fabricGraphs,
+    messages,
+    cognitiveTraces,
+    outcomes,
+    organismEvents,
+  ] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -682,6 +698,10 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
     query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
     query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT id,author,role,content,created_at FROM aura_cloud_messages ORDER BY id DESC LIMIT 500'),
+    query('SELECT id,kind,title,content,context,created_at FROM aura_cognitive_traces ORDER BY id DESC LIMIT 500'),
+    query('SELECT id,automation_id,event_type,ok,signature,report,created_at FROM aura_outcomes ORDER BY id DESC LIMIT 300'),
+    query('SELECT id,kind,reason,payload,state,created_at FROM aura_organism_events ORDER BY id DESC LIMIT 300'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -698,6 +718,10 @@ export async function createLogicalBackup(reason = 'scheduled') {
     reasoning_sessions: reasoningSessions,
     fabric_capabilities: fabricCapabilities,
     fabric_graphs: fabricGraphs,
+    messages,
+    cognitive_traces: cognitiveTraces,
+    outcomes,
+    organism_events: organismEvents,
   });
   const id = randomUUID();
   await query(
