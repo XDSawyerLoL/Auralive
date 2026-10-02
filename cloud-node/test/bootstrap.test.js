@@ -27,6 +27,7 @@ function launch(extraEnv = {}) {
       NODE_ENV: 'production',
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
       PORT: '49999',
+      AURA_PORT: String(GATEWAY_PORT),
       AURA_GATEWAY_PORT: String(GATEWAY_PORT),
       DB_HOST: '',
       DB_USER: '',
@@ -43,7 +44,7 @@ function launch(extraEnv = {}) {
   });
 }
 
-test('native gateway stays online even when full runtime is disabled', async (t) => {
+test('direct Fastify entry stays online even when runtime loop is disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -63,7 +64,7 @@ test('native gateway stays online even when full runtime is disabled', async (t)
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('single-process gateway serves AURA dashboard without MySQL', async (t) => {
+test('direct Fastify entry serves modern AURA dashboard without MySQL', async (t) => {
   const child = launch();
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
