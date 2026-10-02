@@ -21,13 +21,13 @@ test('expression falls back to AURA-native wording without an LLM', async () => 
   assert.match(answer, /Tester le nouveau noyau/);
 });
 
-test('language model receives an already decided speech plan', async () => {
+test('external model can never formulate AURA final reply', async () => {
   const calls = [];
   const ai = {
     enabled: true,
     async generate(prompt, system) {
       calls.push({ prompt, system });
-      return 'Je poursuis la validation du noyau.';
+      return 'Texte externe qui ne doit jamais devenir la parole finale.';
     },
   };
   const cognition = new CognitionEngine();
@@ -42,10 +42,10 @@ test('language model receives an already decided speech plan', async () => {
   };
 
   const answer = await expression.verbalize(plan);
-  assert.equal(answer, 'Je poursuis la validation du noyau.');
-  assert.equal(calls.length, 1);
-  assert.match(calls[0].system, /voix d’AURA|voix d'AURA/i);
-  assert.match(calls[0].prompt, /Tu n’as aucun droit de changer les faits/i);
-  assert.match(calls[0].prompt, /continuité de conversation/i);
-  assert.match(calls[0].prompt, /Directrice opérationnelle de Quantic Sillage/i);
+  assert.match(answer, /valider le noyau/i);
+  assert.doesNotMatch(answer, /Texte externe/i);
+  assert.equal(calls.length, 0);
+  const diagnostic = expression.diagnostic();
+  assert.equal(diagnostic.final_language_authority, 'aura-native-cognition');
+  assert.equal(diagnostic.external_model_can_formulate_final_reply, false);
 });
