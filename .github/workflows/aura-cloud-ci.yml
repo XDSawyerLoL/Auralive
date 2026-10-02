@@ -38,7 +38,6 @@ jobs:
       - name: Test
         run: npm test
 
-
   live-smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -48,11 +47,14 @@ jobs:
           AURA_URL: https://antiquewhite-dolphin-780448.hostingersite.com
         run: |
           set -euo pipefail
-          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/" -o /tmp/root.html
-          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/healthz" -o /tmp/health.json
-          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/api/kernel/architecture" -o /tmp/architecture.json
-          curl -fsS --retry 2 --retry-delay 2 --max-time 20 "$AURA_URL/api/capabilities" -o /tmp/capabilities.json
-          curl -fsS --retry 2 --retry-delay 2 --max-time 30             -H 'Content-Type: application/json'             -d '{"text":"Quelles sont tes trois priorités actuelles ?","author":"AURA-CI-SMOKE"}'             "$AURA_URL/api/chat" -o /tmp/chat.json
+          CURL=(curl -fsS --retry 2 --retry-delay 2 --max-time 30 -A "Mozilla/5.0 AURA-CI-Smoke/1.0")
+          "${CURL[@]}" "$AURA_URL/healthz" -o /tmp/health.json
+          "${CURL[@]}" "$AURA_URL/api/kernel/architecture" -o /tmp/architecture.json
+          "${CURL[@]}" "$AURA_URL/api/capabilities" -o /tmp/capabilities.json
+          "${CURL[@]}" \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"Quelles sont tes trois priorités actuelles ?","author":"AURA-CI-SMOKE"}' \
+            "$AURA_URL/api/chat" -o /tmp/chat.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -61,7 +63,6 @@ jobs:
           const architecture = read('/tmp/architecture.json');
           const capabilities = read('/tmp/capabilities.json');
           const chat = read('/tmp/chat.json');
-
           const failures = [];
 
           console.log('[live] health=' + JSON.stringify({
