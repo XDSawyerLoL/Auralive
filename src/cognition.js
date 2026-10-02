@@ -532,6 +532,7 @@ export class CognitionEngine {
     if (plan?.act === 'report_next_step') {
       const next = value('Prochaine action issue de ma réflexion');
       const intention = value('Intention prioritaire') || normalize(plan?.current_intention || '');
+      if (next && intention) return end(`Pour faire avancer ${intention}, ma prochaine étape est ${next}`);
       if (next) return end(`Ma prochaine étape est ${next}`);
       if (intention) return end(`Ma prochaine étape est de faire avancer ${intention}`);
       return 'Je n’ai pas encore de prochaine étape suffisamment établie.';
