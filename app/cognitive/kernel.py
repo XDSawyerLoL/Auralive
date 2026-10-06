@@ -1559,6 +1559,10 @@ class CognitiveKernel:
         pre = self.organism.before_interaction(
             self.organism.migrate(self._soul_cache),
             content,
+            meta={
+                "author": author[:120],
+                "private_relationship": bool(private),
+            },
         )
         self._soul_cache["organism"] = pre["state"]
         self._sync_legacy_from_organism()
