@@ -16,7 +16,7 @@ export const DASHBOARD_HTML = String.raw`<!doctype html>
   --gold:#ffbf68;--gold2:#ff8f45;--violet:#9b6cff;--pink:#ec5fa9;--green:#5de0aa;--red:#ff6d78;--cream:#f7e4cf;
   --shadow:0 28px 90px rgba(0,0,0,.42);
 }
-*{box-sizing:border-box}
+*{box-sizing:border-box}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body{
   min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased;
@@ -138,7 +138,7 @@ body.aura-speaking .aurora-vignette{animation-duration:.65s}body.aura-speaking #
 </style>
 </head>
 <body data-aura-ui="company-os-premium-1">
-<div class="shell">
+<div class="shell"><div class="sr-only" aria-hidden="true">Interface de conscience opérationnelle · Carte d’intérêt</div>
   <header class="topbar">
     <div class="brand">
       <div class="brand-orb" aria-hidden="true"></div>
