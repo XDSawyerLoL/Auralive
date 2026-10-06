@@ -176,7 +176,7 @@ test('Director mode creates rotating portfolio Evolution initiatives', () => {
   assert.match(commandSource, /config\.directorModeEnabled/);
   assert.match(commandSource, /Direction · faire progresser/);
   assert.match(commandSource, /director_mode: true/);
-  assert.match(commandSource, /Director Mode réalise une revue tournante du portefeuille/);
+  assert.match(commandSource, /Director Mode maintient plusieurs workstreams produits en parallèle/);
   assert.match(commandSource, /director-autonomous-operations/);
 });
 
@@ -218,7 +218,7 @@ test('Director low-risk promotion merges only green safe AURA pull requests', as
     if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/files?per_page=100') {
       return {
         data: [{
-          filename: 'src/ui.js',
+          filename: 'docs/aura-safe-improvement.md',
           status: 'modified',
           changes: 12,
           patch: '@@ -1 +1 @@\n-old\n+new',
@@ -229,7 +229,10 @@ test('Director low-risk promotion merges only green safe AURA pull requests', as
       return { data: [] };
     }
     if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/check-runs?per_page=100') {
-      return { data: { check_runs: [{ status: 'completed', conclusion: 'success' }] } };
+      return { data: { check_runs: [
+        { name: 'unit-tests', status: 'completed', conclusion: 'success' },
+        { name: 'policy', status: 'completed', conclusion: 'success' },
+      ] } };
     }
     if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/status') {
       return { data: { statuses: [] } };

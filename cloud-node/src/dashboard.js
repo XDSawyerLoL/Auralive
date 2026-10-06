@@ -317,7 +317,10 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
     <aside class="right-stack">
       <section class="panel">
         <div class="panel-head"><span>◉</span><div class="panel-title">Pensée dominante</div></div>
-        <div class="panel-body"><div class="thought-card" id="dominantThought">Chargement de la pensée dominante…</div></div>
+        <div class="panel-body">
+          <div class="thought-card" id="dominantThought">Chargement de la pensée dominante…</div>
+          <div class="thought-card" id="continuityState" style="margin-top:10px">Continuité autonome : vérification…</div>
+        </div>
       </section>
       <section class="panel">
         <div class="panel-head"><span>▣</span><div class="panel-title">Travail en cours</div><div class="spacer"></div><div class="panel-meta" id="workMeta">—</div></div>
@@ -349,11 +352,20 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
           <div class="command-stat"><span>Flotte</span><strong id="commandFleet">—</strong></div>
           <div class="command-stat"><span>Autonomie</span><strong id="commandMode">—</strong></div>
           <div class="command-stat"><span>Initiatives</span><strong id="commandCount">—</strong></div>
+          <div class="command-stat"><span>Entreprise agentique</span><strong id="commandCompany">—</strong></div>
         </div>
         <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune initiative calculée.</div></div>
         <div class="confidence">Priorité / confiance : <span id="confidenceValue">—</span></div>
         <div class="progress"><span id="confidenceBar" style="width:0%"></span></div>
       </div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>▦</span><div class="panel-title">Portefeuille Quantic Sillage</div><div class="spacer"></div><div class="panel-meta" id="portfolioMeta">Temps réel</div></div>
+      <div class="panel-body"><div class="intent-list" id="portfolioList"><div class="empty">Lecture des produits…</div></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>✓</span><div class="panel-title">Preuves opérationnelles</div><div class="spacer"></div><div class="panel-meta" id="receiptMeta">Reçus persistés</div></div>
+      <div class="panel-body"><div class="activity-list" id="receiptList"><div class="empty">Lecture du journal…</div></div></div>
     </section>
     <section class="panel">
       <div class="panel-head"><span>◫</span><div class="panel-title">Mémoire et leçons</div><div class="spacer"></div><div class="panel-meta" id="memoryMeta">—</div></div>

@@ -159,12 +159,83 @@ function isPrivate(request) {
   return validPrivateSession(cookies(request).aura_session);
 }
 
+function requestOrigin(request) {
+  return String(request.headers.origin || '').trim().replace(/\/$/, '');
+}
+
+function sameOrigin(request) {
+  const origin = requestOrigin(request);
+  if (!origin) return false;
+  const forwardedProto = String(request.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || request.protocol || 'https';
+  const host = String(request.headers.host || '').trim();
+  return Boolean(host && origin === `${protocol}://${host}`);
+}
+
 function requirePrivate(request, reply) {
-  if (!isPrivate(request)) {
+  const token = bearer(request);
+  if (tokenEquals(token, config.cloudToken)) return true;
+
+  const sessionValid = validPrivateSession(cookies(request).aura_session);
+  if (!sessionValid) {
     reply.code(401).send({ error: 'Accès privé AURA requis' });
     return false;
   }
+
+  const method = String(request.method || 'GET').toUpperCase();
+  const mutating = !['GET','HEAD','OPTIONS'].includes(method);
+  if (mutating) {
+    const origin = requestOrigin(request);
+    if (!origin || (!sameOrigin(request) && !corsOrigins.has(origin))) {
+      reply.code(403).send({ error: 'Origine admin non autorisée', code: 'AURA_CSRF_ORIGIN_REJECTED' });
+      return false;
+    }
+  }
   return true;
+}
+
+function requireBridge(request, reply) {
+  const token = bearer(request);
+  if (config.bridgeToken && tokenEquals(token, config.bridgeToken)) return true;
+  if (
+    config.allowLegacyBridgeAdminToken
+    && config.cloudToken
+    && tokenEquals(token, config.cloudToken)
+  ) return true;
+  reply.code(config.bridgeToken ? 401 : 503).send({
+    error: config.bridgeToken
+      ? 'Identité AURA Runtime invalide'
+      : 'AURA_BRIDGE_TOKEN non configuré',
+    code: config.bridgeToken ? 'AURA_BRIDGE_UNAUTHORIZED' : 'AURA_BRIDGE_IDENTITY_NOT_CONFIGURED',
+  });
+  return false;
+}
+
+function requireProduct(request, reply, productId) {
+  const id = String(productId || '').trim().toLowerCase();
+  const token = bearer(request);
+  const expected = String(config.productTokens?.[id] || '');
+  if (expected && tokenEquals(token, expected)) {
+    return { ok: true, mode: 'scoped-product-token', product_id: id };
+  }
+  if (
+    config.allowLegacyProductAdminToken
+    && config.cloudToken
+    && tokenEquals(token, config.cloudToken)
+  ) {
+    return { ok: true, mode: 'legacy-admin-token', product_id: id };
+  }
+  if (tokenEquals(token, config.cloudToken) || validPrivateSession(cookies(request).aura_session)) {
+    if (!requirePrivate(request, reply)) return null;
+    return { ok: true, mode: 'founder-admin', product_id: id };
+  }
+  reply.code(expected ? 401 : 503).send({
+    error: expected
+      ? 'Identité produit AURA invalide'
+      : `Identité produit non configurée pour ${id}`,
+    code: expected ? 'AURA_PRODUCT_UNAUTHORIZED' : 'AURA_PRODUCT_IDENTITY_NOT_CONFIGURED',
+  });
+  return null;
 }
 
 function requireCanary(request, reply) {
@@ -492,7 +563,7 @@ app.post('/api/auth/session', async (request, reply) => {
   const session = createPrivateSession(maxAge);
   reply.header(
     'Set-Cookie',
-    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=None`,
+    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`,
   );
   return {
     authenticated: true,
@@ -504,7 +575,7 @@ app.post('/api/auth/session', async (request, reply) => {
 app.delete('/api/auth/session', async (_request, reply) => {
   reply.header(
     'Set-Cookie',
-    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None',
+    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
   );
   return { authenticated: false };
 });
@@ -524,6 +595,10 @@ app.get('/api/bootstrap/status', async () => ({
   last_attempt_at: bootstrap.lastAttemptAt,
   last_ready_at: bootstrap.lastReadyAt,
   cloud_token_configured: Boolean(config.cloudToken),
+  bridge_token_configured: Boolean(config.bridgeToken),
+  product_identity_tokens_configured: Object.keys(config.productTokens || {}).length,
+  legacy_bridge_admin_token_allowed: Boolean(config.allowLegacyBridgeAdminToken),
+  legacy_product_admin_token_allowed: Boolean(config.allowLegacyProductAdminToken),
   canary_required: Boolean(config.evolutionCanaryRequired),
   canary_token_configured: Boolean(config.canaryToken),
   ai_mode: config.aiMode,
@@ -556,7 +631,7 @@ app.get('/api/bridge/status', async (request, reply) => {
 });
 
 app.post('/api/bridge/heartbeat', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   const result = await bridge.heartbeat(workerId, request.body || {});
@@ -571,14 +646,14 @@ app.post('/api/bridge/heartbeat', async (request, reply) => {
 });
 
 app.post('/api/bridge/claim', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   return { job: await bridge.claim(workerId) };
 });
 
 app.post('/api/bridge/jobs/:id/renew', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   try {
@@ -592,7 +667,7 @@ app.post(
   '/api/bridge/jobs/:id/complete',
   { bodyLimit: 24 * 1024 * 1024 },
   async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   try {
@@ -1226,6 +1301,16 @@ app.get('/api/kernel/work', async (request, reply) =>
     ? kernel.workItems(request.query?.limit)
     : undefined);
 
+app.get('/api/kernel/agenda', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.agendaSnapshot()
+    : undefined);
+
+app.get('/api/kernel/activity-since-last-conversation', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.activitySinceLastConversation('private-founder')
+    : undefined);
+
 app.get('/api/kernel/attention', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.attentionMap()
@@ -1323,8 +1408,11 @@ app.get('/api/aura/products', async (request, reply) => {
 });
 
 app.post('/api/aura/products/register', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
   const body = request.body || {};
+  const productId = String(body.id || '').trim().toLowerCase();
+  const auth = requireProduct(request, reply, productId);
+  if (!auth) return;
   try {
     const product = await commandCenter.upsertService({
       id: body.id,
@@ -1344,6 +1432,8 @@ app.post('/api/aura/products/register', async (request, reply) => {
         modification_policy: body.modification_policy || 'branch-test-canary-promote',
         bridge_version: String(body.bridge_version || 'aura-universal-bridge-v1').slice(0, 120),
         runtime: body.runtime || {},
+        auth_mode: auth.mode,
+        authenticated_product_id: auth.product_id,
       },
     });
     await kernel.observeEvent('quantic.product.registered', {
@@ -1358,12 +1448,18 @@ app.post('/api/aura/products/register', async (request, reply) => {
 });
 
 app.post('/api/aura/products/:id/observe', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
+  const auth = requireProduct(request, reply, request.params.id);
+  if (!auth) return;
   try {
     const product = await commandCenter.observeService(request.params.id, {
       state: request.body?.state || 'online',
       detail: request.body?.detail || request.body?.message || '',
-      metadata: request.body?.metadata || {},
+      metadata: {
+        ...(request.body?.metadata || {}),
+        auth_mode: auth.mode,
+        authenticated_product_id: auth.product_id,
+      },
     });
     await kernel.observeEvent(
       'quantic.product.observation',
@@ -1382,11 +1478,14 @@ app.post('/api/aura/products/:id/observe', async (request, reply) => {
 });
 
 app.post('/api/aura/products/:id/event', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
+  const auth = requireProduct(request, reply, request.params.id);
+  if (!auth) return;
   const type = String(request.body?.type || 'quantic.product.event').slice(0, 120);
   const payload = request.body?.payload || {};
   await kernel.observeEvent(type, {
     product_id: request.params.id,
+    auth_mode: auth.mode,
     ...payload,
   }, request.params.id);
   return { ok: true };

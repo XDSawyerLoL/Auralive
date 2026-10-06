@@ -391,6 +391,7 @@ function renderCommandCenter(command,work,attention){
     $('commandFleet').textContent='—';
     $('commandMode').textContent='—';
     $('commandCount').textContent='—';
+    if($('commandCompany'))$('commandCompany').textContent='—';
     renderNext(work,attention);
     return;
   }
@@ -403,6 +404,15 @@ function renderCommandCenter(command,work,attention){
   $('commandMode').textContent=command.github_write_authority?'Agit + observe':'Observe + planifie';
   $('commandMode').className=command.github_write_authority?'good':'warn';
   $('commandCount').textContent=active+' active'+(active>1?'s':'');
+  const readiness=command.company_readiness||{};
+  if($('commandCompany')){
+    const score=Number(readiness.overall||0);
+    $('commandCompany').textContent=score?score.toFixed(1)+'/10':'—';
+    $('commandCompany').className=score>=8?'good':(score>0?'warn':'');
+    $('commandCompany').title=Array.isArray(readiness.blockers)&&readiness.blockers.length
+      ? readiness.blockers.join(' · ')
+      : 'Objectif ≥ 8/10 atteint sur les preuves runtime disponibles.';
+  }
   const top=command.top_initiative||null;
   if(top){
     $('nextAction').textContent=String(top.title||top.objective||'Initiative autonome');
@@ -413,6 +423,42 @@ function renderCommandCenter(command,work,attention){
     return;
   }
   renderNext(work,attention);
+}
+function renderPortfolio(command){
+  const list=$('portfolioList');
+  const meta=$('portfolioMeta');
+  if(!list||!meta)return;
+  const rows=Array.isArray(command&&command.portfolio)?command.portfolio:[];
+  if(!rows.length){
+    meta.textContent='Aucune télémétrie';
+    list.innerHTML='<div class="empty">Aucun produit observable pour le moment.</div>';
+    return;
+  }
+  const healthy=rows.filter(function(row){return ['online','healthy'].includes(String(row.state||''));}).length;
+  const troubled=rows.filter(function(row){return ['stale','offline','degraded','error','unhealthy'].includes(String(row.state||''));}).length;
+  meta.textContent=healthy+'/'+rows.length+' opérationnels'+(troubled?' · '+troubled+' à traiter':'');
+  list.innerHTML=rows.map(function(row){
+    const age=row.heartbeat_age_seconds==null?'jamais':(Number(row.heartbeat_age_seconds)<60?Number(row.heartbeat_age_seconds)+' s':Math.round(Number(row.heartbeat_age_seconds)/60)+' min');
+    const active=Number(row.active_workstreams||0);
+    const state=String(row.state||'unknown');
+    return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.name||row.id||'Produit')+'</div><span class="badge">'+escapeHtml(state)+'</span></div><div class="memory-date">heartbeat '+escapeHtml(age)+' · '+active+' workstream'+(active>1?'s':'')+(row.last_work_at?' · travail '+fmtTime(row.last_work_at):'')+'</div></div>';
+  }).join('');
+}
+function renderReceipts(command){
+  const list=$('receiptList');
+  const meta=$('receiptMeta');
+  if(!list||!meta)return;
+  const rows=Array.isArray(command&&command.recent_receipts)?command.recent_receipts:[];
+  meta.textContent=rows.length+' preuve'+(rows.length>1?'s':'')+' récente'+(rows.length>1?'s':'');
+  if(!rows.length){
+    list.innerHTML='<div class="empty">Aucun reçu opérationnel récent.</div>';
+    return;
+  }
+  list.innerHTML=rows.slice(0,12).map(function(row){
+    const title=String(row.title||row.event||'Activité AURA');
+    const detail=[row.domain,row.status,row.execution_mode].filter(Boolean).join(' · ');
+    return '<div class="activity-row"><div><div class="activity-title">'+escapeHtml(title)+'</div><div class="memory-date">'+escapeHtml(detail)+' · reçu #'+escapeHtml(row.receipt_id||'—')+'</div></div><div class="activity-time">'+fmtTime(row.created_at)+'</div></div>';
+  }).join('');
 }
 function renderCuriosity(status){
   const list=$('curiosityList');
@@ -551,6 +597,13 @@ async function refresh(){
 
     const attention=publicState.attention||null;
     $('dominantThought').textContent=(attention&&attention.focus_statement?attention.focus_statement:'Observation autonome du système.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    const continuity=ks.continuity||{};
+    const continuityState=continuity.state||{};
+    const lastAutonomous=continuityState.last_autonomous_reflection_at?fmtDate(continuityState.last_autonomous_reflection_at)+' '+fmtTime(continuityState.last_autonomous_reflection_at):'pas encore';
+    $('continuityState').textContent='Continuité autonome : '+(continuity.enabled?'active':'inactive')
+      +' · dernière réflexion : '+lastAutonomous
+      +' · '+(continuityState.unfinished_work?'travail inachevé suivi':'auto-réévaluation')
+      +(continuityState.last_reason?' · raison : '+continuityState.last_reason:'');
     lastSoul=Object.assign({},soul);
 
     if(boot.runtime_ready){
@@ -564,6 +617,8 @@ async function refresh(){
       renderWork(work);
       renderMap(attention);
       renderCommandCenter(commandStatus,work,attention);
+      renderPortfolio(commandStatus);
+      renderReceipts(commandStatus);
       renderCuriosity(curiosityStatus);
       renderScout(scoutStatus);
     }else{
@@ -572,6 +627,8 @@ async function refresh(){
       $('activityList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       renderCommandCenter(commandStatus,[],null);
+      renderPortfolio(commandStatus);
+      renderReceipts(commandStatus);
       renderCuriosity(curiosityStatus);
       renderScout(scoutStatus);
     }

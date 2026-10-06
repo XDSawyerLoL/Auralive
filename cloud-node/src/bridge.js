@@ -147,7 +147,15 @@ export function selectMoaAgents(workers = [], maxAgents = 3, role = 'reasoning')
 }
 
 const settings = Object.freeze({
-  token: String(process.env.AURA_BRIDGE_TOKEN || process.env.AURA_CLOUD_TOKEN || ''),
+  token: String(
+    process.env.AURA_BRIDGE_TOKEN
+    || (
+      ['1','true','yes','oui','on'].includes(String(process.env.AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN || '').trim().toLowerCase())
+        ? process.env.AURA_CLOUD_TOKEN
+        : ''
+    )
+    || ''
+  ),
   leaseSeconds: intEnv('AURA_BRIDGE_LEASE_SECONDS', 90, 15, 900),
   workerOnlineMs: intEnv('AURA_BRIDGE_WORKER_ONLINE_MS', 45_000, 5_000, 300_000),
   operatorWaitMs: intEnv('AURA_BRIDGE_OPERATOR_WAIT_MS', 18_000, 1_000, 55_000),

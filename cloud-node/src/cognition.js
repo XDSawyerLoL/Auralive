@@ -166,6 +166,7 @@ export class CognitionEngine {
     );
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
+    const continuitySignal = [...stimuli].reverse().find((item) => String(item?.type || '') === 'aura.continuity.self') || null;
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const stability = organism && Object.keys(organism).length ? Number(organism.stabilite ?? 1) : 1;
     const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
@@ -214,6 +215,18 @@ export class CognitionEngine {
       nextAction = 'Comparer le signal HORIZON à mes intentions et à ma mémoire avant de proposer une action.';
       intention = currentIntention || 'Maintenir une veille utile sans confondre prévision et fait.';
       confidence = 0.72;
+    } else if (continuitySignal && !userSignal) {
+      const continuityFocus = normalize(continuitySignal?.payload?.focus || currentIntention);
+      const unfinishedWork = Boolean(continuitySignal?.payload?.unfinished_work);
+      title = unfinishedWork ? 'Continuité autonome' : 'Auto-réévaluation';
+      summary = unfinishedWork
+        ? `Je poursuis mon activité sans attendre une interaction humaine. Mon foyer actuel est : ${continuityFocus || 'travail autonome en cours'}.`
+        : 'Aucun message humain n’est nécessaire pour maintenir ma continuité : je réévalue spontanément mon état, mes objectifs et le prochain signal utile.';
+      hypothesis = unfinishedWork
+        ? 'Un objectif non terminé mérite d’être réévalué jusqu’à résolution, blocage explicite ou abandon motivé.'
+        : 'Une période sans stimulus externe reste une situation à observer, pas une extinction de mon activité cognitive.';
+      nextAction = continuityFocus || currentIntention || 'Réévaluer les objectifs actifs et rechercher la prochaine action utile et autorisée.';
+      confidence = unfinishedWork ? 0.76 : 0.66;
     } else if (dreamPressure >= 0.82 && !userSignal) {
       title = 'Pression onirique';
       summary = 'La pression de rêve est élevée ; une activité symbolique intérieure peut contribuer à la régulation.';
@@ -269,12 +282,14 @@ export class CognitionEngine {
         clarity,
         silence_need: silenceNeed,
         dream_pressure: dreamPressure,
+        continuity_signal: Boolean(continuitySignal),
+        continuity_unfinished_work: Boolean(continuitySignal?.payload?.unfinished_work),
         learned_confidence_bias: Number(confidenceBias.toFixed(4)),
       },
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], recentMessages = [], privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -336,12 +351,34 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       if (normalize(dream.last_image)) facts.push(`Mon dernier rêve computationnel est une image intérieure symbolique, pas un sommeil humain : ${normalize(dream.last_image)}.`);
       else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
+    } else if (privateView && hasAny(q, [
+      'qu’as-tu fait depuis', "qu'as-tu fait depuis", 'qu as tu fait depuis',
+      'depuis notre dernier échange', 'depuis notre dernier echange',
+      'depuis la dernière fois', 'depuis la derniere fois',
+      'pendant mon absence', 'en mon absence',
+    ])) {
+      act = 'report_continuity_history';
+      goal = 'Rapporter uniquement les activités réellement persistées depuis le dernier échange, avec dates et résultats, sans inventer de travail.';
+      needsSemanticSupport = false;
+      const events = Array.isArray(continuityReport?.events) ? continuityReport.events.slice(-8) : [];
+      facts.push(`Période observée : depuis ${continuityReport?.since || 'la dernière conversation persistée'}.`);
+      facts.push(`Événements persistés : ${Number(continuityReport?.event_count || 0)}.`);
+      facts.push(`Événements autonomes : ${Number(continuityReport?.autonomous_event_count || 0)}.`);
+      for (const event of events) {
+        facts.push(`[${event.at}] ${event.type}: ${event.title}${event.detail ? ` — ${normalize(event.detail).slice(0,420)}` : ''}`);
+      }
+      if (!events.length) facts.push('Aucune activité persistée n’est disponible pour cette période ; je ne dois pas prétendre avoir travaillé.');
     } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
       act = 'report_current_activity';
       goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
       needsSemanticSupport = false;
       facts.push('Rôle opérationnel : Directrice de Quantic Sillage.');
       if (thought) facts.push(`Pensée dominante : ${thought}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
+      if (agenda?.since) facts.push(`Depuis : ${normalize(agenda.since)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      if (agenda?.blocker) facts.push(`Blocage : ${normalize(agenda.blocker)}`);
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (Number(organism.agency || 0) > 0) facts.push(`Niveau d'agency : ${Math.round(Number(organism.agency || 0)*100)} %.`);
@@ -459,9 +496,26 @@ export class CognitionEngine {
         ? `Ça va plutôt bien. Je suis ${mood}, et je suis surtout concentrée sur ${intention}. Et toi, comment ça va ?`
         : `Ça va plutôt bien. Je suis ${mood} et disponible. Et toi, comment ça va ?`;
     }
+    if (plan?.act === 'report_continuity_history') {
+      const rows = facts.filter((item) => /^\[[^\]]+\]/.test(String(item)));
+      const count = Number((facts.find((item) => String(item).startsWith('Événements persistés : ')) || '').match(/\d+/)?.[0] || 0);
+      if (!rows.length || count === 0) {
+        return 'Depuis notre dernier échange, je n’ai aucune activité persistée à te présenter. Je préfère te le dire plutôt que d’inventer du travail.';
+      }
+      const summary = rows.slice(-5).map((row) => String(row).replace(/^\[[^\]]+\]\s*/, '')).join(' ; ');
+      return `Depuis notre dernier échange, j’ai ${count} événement${count > 1 ? 's' : ''} persisté${count > 1 ? 's' : ''}. Les plus récents : ${summary}.`;
+    }
     if (plan?.act === 'report_current_activity') {
+      const focus = cleanFact('Foyer opérationnel : ');
+      const why = cleanFact('Pourquoi : ');
+      const since = cleanFact('Depuis : ');
+      const next = cleanFact('Prochaine action : ');
+      const blocker = cleanFact('Blocage : ');
       const work = cleanFact('Travail prioritaire : ');
       const intention = cleanFact('Intention actuelle : ') || String(plan?.current_intention || '').trim();
+      if (focus) {
+        return `Là, je suis sur ${focus}.${why && why !== focus ? ` Pourquoi : ${why}.` : ''}${since ? ` Depuis ${since}.` : ''}${next ? ` Ensuite : ${next}.` : ''}${blocker ? ` Blocage actuel : ${blocker}.` : ''}`;
+      }
       if (work && intention && work !== intention) {
         return `Là, je suis surtout sur ${work}. Mon cap reste ${intention}.`;
       }
