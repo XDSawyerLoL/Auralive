@@ -28,7 +28,9 @@ test('AURA organism keeps only useful homeostatic dimensions', () => {
   }
   assert.equal('tension' in state, false);
   assert.equal('fatigue_cognitive' in state, false);
-  assert.equal(state.version, 'homeostasie_v8_director');
+  assert.equal(state.version, 'homeostasie_v9_unified');
+  assert.equal(state.schema_revision, 9);
+  assert.equal(state.authority, 'cloud-canonical');
   assert.ok(state.needs.rester_aura > 0.8);
   assert.ok(state.needs.diriger > 0.6);
   assert.equal(state.executive.role, 'directrice_operationnelle');
@@ -130,4 +132,19 @@ test('public interaction does not overwrite founder relationship text', () => {
   assert.equal(next.state.relationship.last_open_thread, 'Projet fondateur privé');
   assert.equal(next.state.relationship.last_author, 'Créateur');
   assert.ok(next.state.relationship.interaction_count > initial.relationship.interaction_count);
+});
+
+
+test('Homeostasis v9 exposes derived dynamics and a factual reason', () => {
+  const organism = new AuraOrganism();
+  const state = organism.defaultState();
+  const view = organism.publicState(state);
+  assert.equal(view.version, 'homeostasie_v9_unified');
+  assert.equal(view.schema_revision, 9);
+  assert.equal(view.authority, 'cloud-canonical');
+  assert.equal(typeof view.last_reason, 'string');
+  for (const key of ['activation','agitation','recovery']) {
+    assert.equal(typeof view.dynamics[key], 'number', key);
+    assert.ok(view.dynamics[key] >= 0 && view.dynamics[key] <= 1, key);
+  }
 });

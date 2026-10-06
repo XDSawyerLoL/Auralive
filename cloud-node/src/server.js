@@ -636,12 +636,17 @@ app.post('/api/bridge/heartbeat', async (request, reply) => {
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   const result = await bridge.heartbeat(workerId, request.body || {});
   await fabric.refreshMesh().catch(() => {});
-  if (request.body?.organism && typeof request.body.organism === 'object') {
-    await kernel.importOrganismState(request.body.organism);
-  }
+  const organism = await kernel.organismState({ publicView: false });
   return {
     ...result,
-    organism: await kernel.organismState({ publicView: false }),
+    organism,
+    organism_sync: {
+      mode: 'cloud-authoritative',
+      schema_revision: Number(organism?.schema_revision || 9),
+      version: String(organism?.version || ''),
+      worker_version: String(request.body?.organism_version || ''),
+      accepted_worker_state: false,
+    },
   };
 });
 

@@ -443,6 +443,13 @@ class CognitiveKernel:
         if not isinstance(candidate, dict) or not candidate:
             return False
         current = self.organism.migrate(self._soul_cache)
+        current_revision = int(current.get("schema_revision") or 9)
+        candidate_revision = int(candidate.get("schema_revision") or 0)
+        if candidate_revision < current_revision:
+            return False
+        authority = str(candidate.get("authority") or "")
+        if authority and authority != "cloud-canonical":
+            return False
         current_at = str(current.get("updated_at") or "")
         candidate_at = str(candidate.get("updated_at") or "")
         try:
@@ -1559,6 +1566,10 @@ class CognitiveKernel:
         pre = self.organism.before_interaction(
             self.organism.migrate(self._soul_cache),
             content,
+            meta={
+                "author": author[:120],
+                "private_relationship": bool(private),
+            },
         )
         self._soul_cache["organism"] = pre["state"]
         self._sync_legacy_from_organism()

@@ -253,6 +253,11 @@ class NativeCognitionEngine:
                     f"Stabilité : {round(float(organism.get('stabilite') or 0) * 100)} %.",
                     f"Clarté : {round(float(organism.get('clarte') or 0) * 100)} %.",
                     f"Curiosité : {round(float(organism.get('curiosite') or 0) * 100)} %.",
+                    f"Agency : {round(float(organism.get('agency') or 0) * 100)} %.",
+                    f"Engagement : {round(float(organism.get('engagement') or 0) * 100)} %.",
+                    f"Confiance : {round(float(organism.get('confiance') or 0) * 100)} %.",
+                    f"Satisfaction : {round(float(organism.get('satisfaction') or 0) * 100)} %.",
+                    f"Frustration : {round(float(organism.get('frustration') or 0) * 100)} %.",
                     f"Besoin de silence : {round(float(organism.get('besoin_de_silence') or 0) * 100)} %.",
                     f"Pression de rêve : {round(float(organism.get('pression_de_reve') or 0) * 100)} %.",
                 ]

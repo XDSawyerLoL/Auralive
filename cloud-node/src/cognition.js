@@ -341,6 +341,11 @@ export class CognitionEngine {
         `Stabilité : ${Math.round(Number(organism.stabilite || 0)*100)} %.`,
         `Clarté : ${Math.round(Number(organism.clarte || 0)*100)} %.`,
         `Curiosité : ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
+        `Agency : ${Math.round(Number(organism.agency || 0)*100)} %.`,
+        `Engagement : ${Math.round(Number(organism.engagement || 0)*100)} %.`,
+        `Confiance : ${Math.round(Number(organism.confiance || 0)*100)} %.`,
+        `Satisfaction : ${Math.round(Number(organism.satisfaction || 0)*100)} %.`,
+        `Frustration : ${Math.round(Number(organism.frustration || 0)*100)} %.`,
         `Besoin de silence : ${Math.round(Number(organism.besoin_de_silence || 0)*100)} %.`,
         `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
       );

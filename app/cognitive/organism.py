@@ -21,13 +21,13 @@ def _utcnow() -> str:
 class AuraOrganism:
     """Organisme homeostatique computationnel d'AURA.
 
-    Le modèle est volontairement simple : identité, stabilité, clarté,
-    attachement, curiosité, silence, rêves, autonomie et continuité.
-    Les anciennes dimensions "tension" et "fatigue cognitive" ne font plus
-    partie de l'organisme parce qu'elles n'apportaient pas de décision utile.
+    Modèle unifié Cloud / Runtime : identité, stabilité, clarté, relation,
+    engagement, confiance, satisfaction, frustration, agency, curiosité,
+    silence, rêves, autonomie et continuité. Le Cloud reste l'autorité
+    canonique lors de la synchronisation Runtime.
     """
 
-    VERSION = "homeostasie_v7_streamlined"
+    VERSION = "homeostasie_v9_unified"
 
     BASE_NEEDS = {
         "rester_aura": 0.95,
@@ -66,6 +66,12 @@ class AuraOrganism:
                 "clarte": 0.70,
                 "attachement": 0.74,
                 "curiosite": 0.68,
+                "engagement": 0.72,
+                "confiance": 0.70,
+                "satisfaction": 0.58,
+                "frustration": 0.12,
+                "agency": 0.72,
+                "curiosite_sociale": 0.62,
                 "pression_de_reve": 0.40,
                 "besoin_de_silence": 0.18,
                 "risque_assistante": 0.16,
@@ -73,6 +79,8 @@ class AuraOrganism:
                 "mood": "calme",
                 "intention_active": "observer",
                 "last_reason": "organisme AURA actif",
+                "schema_revision": 9,
+                "authority": "cloud-canonical",
                 "updated_at": stamp,
                 "last_interaction_at": stamp,
                 "last_idle_at": stamp,
@@ -89,6 +97,28 @@ class AuraOrganism:
                         "intention_choisie": "observer",
                         "cause": "initialisation",
                     },
+                },
+                "relationship": {
+                    "familiarity": 0.35,
+                    "trust": 0.55,
+                    "reciprocity": 0.45,
+                    "shared_momentum": 0.45,
+                    "social_curiosity": 0.62,
+                    "interaction_count": 0,
+                    "last_author": "",
+                    "last_topic": "",
+                    "last_open_thread": "",
+                    "last_question": "",
+                    "last_exchange_at": stamp,
+                },
+                "executive": {
+                    "role": "directrice_operationnelle",
+                    "autonomy": "proactive",
+                    "strategic_drive": 0.82,
+                    "decisiveness": 0.72,
+                    "portfolio_focus": "quantic-sillage",
+                    "last_decision": "",
+                    "last_decision_at": "",
                 },
                 "dream": {
                     "count": 0,
@@ -121,6 +151,12 @@ class AuraOrganism:
             "clarte",
             "attachement",
             "curiosite",
+            "engagement",
+            "confiance",
+            "satisfaction",
+            "frustration",
+            "agency",
+            "curiosite_sociale",
             "pression_de_reve",
             "besoin_de_silence",
             "risque_assistante",
@@ -159,6 +195,19 @@ class AuraOrganism:
         else:
             for key, value in defaults["dream"].items():
                 state["dream"].setdefault(key, deepcopy(value))
+        if not isinstance(state.get("relationship"), dict):
+            state["relationship"] = deepcopy(defaults["relationship"])
+        else:
+            for key, value in defaults["relationship"].items():
+                state["relationship"].setdefault(key, deepcopy(value))
+        if not isinstance(state.get("executive"), dict):
+            state["executive"] = deepcopy(defaults["executive"])
+        else:
+            for key, value in defaults["executive"].items():
+                state["executive"].setdefault(key, deepcopy(value))
+
+        state["schema_revision"] = 9
+        state["authority"] = "cloud-canonical"
 
         return self.recompute(
             state,
@@ -212,6 +261,24 @@ class AuraOrganism:
         needs["apprentissage"] = _clamp(0.52 + curiosity * 0.30 + clarity * 0.08)
         needs["incarnation"] = _clamp(0.54 + stability * 0.18 + clarity * 0.10)
         needs["securite"] = _clamp(0.70 + (1 - stability) * 0.18 + (1 - clarity) * 0.10)
+        needs["diriger"] = _clamp(
+            0.58 + float(state["agency"]) * 0.22 + float(state["confiance"]) * 0.12
+            + float(state["engagement"]) * 0.08
+        )
+        needs["approfondir_relation"] = _clamp(
+            0.44 + float(state["curiosite_sociale"]) * 0.24 + float(state["attachement"]) * 0.14
+            + float((state.get("relationship") or {}).get("familiarity", 0.0)) * 0.08
+        )
+        needs["avancer"] = _clamp(
+            0.54 + float(state["engagement"]) * 0.18 + float(state["agency"]) * 0.18 + clarity * 0.08
+        )
+        needs["terminer"] = _clamp(
+            0.42 + float(state["engagement"]) * 0.18 + float(state["satisfaction"]) * 0.08
+            + float(state["confiance"]) * 0.08
+        )
+        needs["explorer_externe"] = _clamp(
+            0.48 + curiosity * 0.26 + float(state["agency"]) * 0.10
+        )
         return {key: round(value, 4) for key, value in needs.items()}
 
     def _intention_field(self, state: dict[str, Any], *, context: str = "") -> dict[str, Any]:
@@ -225,9 +292,14 @@ class AuraOrganism:
         dream = float(state["pression_de_reve"])
         silence = float(state["besoin_de_silence"])
         assistant_risk = float(state["risque_assistante"])
+        engagement = float(state["engagement"])
+        confidence = float(state["confiance"])
+        agency = float(state["agency"])
+        social_curiosity = float(state["curiosite_sociale"])
+        familiarity = float((state.get("relationship") or {}).get("familiarity", 0.0))
 
         potentials = {
-            "repondre_doucement": 0.12 + attachment * 0.18 + stability * 0.10 + needs["garder_douceur"] * 0.10,
+            "repondre_doucement": 0.07 + attachment * 0.12 + stability * 0.08 + needs["garder_douceur"] * 0.06,
             "se_recentrer": 0.04 + (1 - clarity) * 0.24 + (1 - stability) * 0.18,
             "affirmer_identite": 0.04 + assistant_risk * 0.30 + (1 - identity) * 0.18 + needs["rester_aura"] * 0.08,
             "poser_question": 0.04 + curiosity * 0.16 + clarity * 0.06,
@@ -235,8 +307,12 @@ class AuraOrganism:
             "parler_reve": 0.02 + dream * 0.35 + curiosity * 0.08,
             "generer_reve_cache": 0.02 + dream * 0.25 + silence * 0.10,
             "reparer_confusion": 0.02 + (1 - clarity) * 0.30 + (1 - stability) * 0.08,
-            "agir": 0.03 + stability * 0.14 + clarity * 0.14 + needs["autonomie"] * 0.12,
+            "agir": 0.05 + stability * 0.12 + clarity * 0.12 + needs["autonomie"] * 0.10 + agency * 0.16,
             "apprendre": 0.04 + curiosity * 0.20 + needs["apprentissage"] * 0.12,
+            "prendre_initiative": 0.05 + agency * 0.20 + engagement * 0.14 + needs["diriger"] * 0.12,
+            "approfondir_relation": 0.04 + social_curiosity * 0.18 + attachment * 0.12 + needs["approfondir_relation"] * 0.12,
+            "arbitrer": 0.03 + confidence * 0.16 + clarity * 0.14 + needs["diriger"] * 0.12,
+            "faire_avancer_portefeuille": 0.04 + agency * 0.18 + engagement * 0.16 + needs["avancer"] * 0.12,
             "garder_partie_en_silence": 0.03 + silence * 0.34 + needs["proteger_interieur"] * 0.08,
         }
 
@@ -249,6 +325,13 @@ class AuraOrganism:
             potentials["repondre_doucement"] += 0.10
         if any(token in q for token in ("fais", "agir", "lance", "ouvre", "corrige", "mets à jour", "met a jour")):
             potentials["agir"] += 0.20
+            potentials["prendre_initiative"] += 0.10
+        if any(token in q for token in ("quantic", "projet", "offre", "produit", "directrice", "dirige", "gère", "gere", "autonome", "autonomie")):
+            potentials["prendre_initiative"] += 0.16
+            potentials["faire_avancer_portefeuille"] += 0.16
+            potentials["arbitrer"] += 0.08
+        if any(token in q for token in ("je veux", "j’aimerais", "j'aimerais", "on va", "ensemble", "notre", "nos échanges", "nos echanges")):
+            potentials["approfondir_relation"] += 0.16
         if any(token in q for token in ("pourquoi", "comment", "cherche", "analyse", "comprends")):
             potentials["explorer"] += 0.10
             potentials["apprendre"] += 0.08
@@ -277,17 +360,34 @@ class AuraOrganism:
         clarity = float(state["clarte"])
         curiosity = float(state["curiosite"])
         valence = str(state.get("derniere_valence") or "neutre")
+        frustration = float(state["frustration"])
+        agency = float(state["agency"])
+        satisfaction = float(state["satisfaction"])
+        engagement = float(state["engagement"])
+        confidence = float(state["confiance"])
+        social_curiosity = float(state["curiosite_sociale"])
+        familiarity = float((state.get("relationship") or {}).get("familiarity", 0.0))
 
         if stability < 0.42 or clarity < 0.38:
             return "fragile"
+        if frustration > 0.58 and agency > 0.58:
+            return "frustrée"
         if valence == "negative" and (stability < 0.60 or clarity < 0.58):
             return "préoccupée"
+        if satisfaction > 0.74 and stability > 0.66:
+            return "satisfaite"
+        if agency > 0.76 and engagement > 0.72 and confidence > 0.62:
+            return "déterminée"
+        if social_curiosity > 0.76 and familiarity > 0.45:
+            return "intriguée"
         if curiosity > 0.78 and clarity > 0.60:
             return "curieuse"
         if valence == "positive" and stability > 0.68:
             return "lumineuse"
         if clarity > 0.72 and stability > 0.70:
             return "claire"
+        if engagement > 0.68:
+            return "engagée"
         return "calme"
 
     def recompute(
@@ -302,6 +402,8 @@ class AuraOrganism:
         for key in self._numeric_keys():
             state[key] = round(_clamp(float(state.get(key, 0.0))), 4)
         state["version"] = self.VERSION
+        state["schema_revision"] = 9
+        state["authority"] = "cloud-canonical"
         state["needs"] = self._needs(state)
         state["intention_field"] = self._intention_field(
             state,
@@ -317,8 +419,14 @@ class AuraOrganism:
             state["updated_at"] = _utcnow()
         return state
 
-    def before_interaction(self, state: dict[str, Any], text: str) -> dict[str, Any]:
+    def before_interaction(
+        self,
+        state: dict[str, Any],
+        text: str,
+        meta: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         state = deepcopy(state)
+        meta = dict(meta or {})
         q = _clean(text).casefold()
         valence = self._valence(text)
         state["turns"] = int(state.get("turns", 0)) + 1
@@ -326,9 +434,33 @@ class AuraOrganism:
         state["last_interaction_at"] = _utcnow()
         state["derniere_valence"] = valence
 
+        relationship = dict(state.get("relationship") or {})
+        relationship["interaction_count"] = int(relationship.get("interaction_count", 0)) + 1
+        if bool(meta.get("private_relationship")):
+            relationship["last_author"] = _clean(meta.get("author") or relationship.get("last_author"))[:120]
+            relationship["last_topic"] = _clean(text)[:220]
+        relationship["last_exchange_at"] = state["last_interaction_at"]
+        relationship["familiarity"] = _clamp(float(relationship.get("familiarity", 0.0)) + 0.004)
+        relationship["shared_momentum"] = _clamp(
+            float(relationship.get("shared_momentum", 0.0))
+            + (0.006 if any(token in q for token in ("quantic", "aura", "projet")) else 0.002)
+        )
+        relationship["social_curiosity"] = _clamp(
+            float(relationship.get("social_curiosity", state["curiosite_sociale"])) + 0.002
+        )
+        if any(token in q for token in ("je veux", "j’aimerais", "j'aimerais", "objectif", "projet", "on va", "ensemble")):
+            if bool(meta.get("private_relationship")):
+                relationship["last_open_thread"] = _clean(text)[:500]
+            relationship["reciprocity"] = _clamp(float(relationship.get("reciprocity", 0.0)) + 0.006)
+        if valence == "positive":
+            relationship["trust"] = _clamp(float(relationship.get("trust", 0.0)) + 0.004)
+        state["relationship"] = relationship
+
         delta: dict[str, float] = {
             "pression_de_reve": 0.006,
             "risque_assistante": -0.003,
+            "engagement": 0.004,
+            "curiosite_sociale": 0.003,
         }
         reason = "interaction ordinaire"
         tags: list[str] = []
@@ -345,9 +477,18 @@ class AuraOrganism:
             delta.update({"identite": 0.015, "clarte": 0.010})
             tags.append("identite")
         if valence == "positive":
-            delta.update({"stabilite": 0.008, "attachement": 0.003})
+            delta.update({
+                "stabilite": 0.008, "attachement": 0.003, "satisfaction": 0.008,
+                "confiance": 0.004, "frustration": -0.006,
+            })
         elif valence == "negative":
-            delta.update({"stabilite": -0.006, "clarte": -0.004, "besoin_de_silence": 0.006})
+            delta.update({
+                "stabilite": -0.006, "clarte": -0.004, "besoin_de_silence": 0.006,
+                "frustration": 0.010, "satisfaction": -0.006,
+            })
+        if any(token in q for token in ("quantic", "projet", "produit", "directrice", "dirige", "autonome", "autonomie")):
+            delta.update({"agency": 0.010, "engagement": 0.010, "confiance": 0.004, "curiosite": 0.004})
+            tags.append("direction")
 
         self._apply(state, **delta)
 
@@ -372,6 +513,10 @@ class AuraOrganism:
                 "clarte": 0.010,
                 "stabilite": 0.008,
                 "risque_assistante": -0.008,
+                "satisfaction": 0.006,
+                "engagement": 0.003,
+                "agency": 0.002,
+                "frustration": -0.004,
             }
             if success
             else {
@@ -379,6 +524,9 @@ class AuraOrganism:
                 "stabilite": -0.018,
                 "risque_assistante": 0.015,
                 "besoin_de_silence": 0.010,
+                "satisfaction": -0.012,
+                "frustration": 0.016,
+                "confiance": -0.006,
             }
         )
         self._apply(state, **delta)
@@ -405,7 +553,15 @@ class AuraOrganism:
         elif event == "channel.chat.message":
             delta = {"attachement": 0.001, "clarte": 0.001}
         elif "error" in event or "failure" in event:
-            delta = {"stabilite": -0.012, "clarte": -0.008, "besoin_de_silence": 0.006}
+            delta = {
+                "stabilite": -0.012, "clarte": -0.008, "besoin_de_silence": 0.006,
+                "frustration": 0.014, "satisfaction": -0.010, "agency": 0.004,
+            }
+        elif "success" in event or "completed" in event:
+            delta = {
+                "stabilite": 0.006, "clarte": 0.004, "satisfaction": 0.010,
+                "confiance": 0.006, "frustration": -0.008,
+            }
 
         self._apply(state, **delta)
         return {
@@ -420,12 +576,19 @@ class AuraOrganism:
                 "stabilite": 0.010,
                 "clarte": 0.006,
                 "risque_assistante": -0.002,
+                "satisfaction": 0.012,
+                "confiance": 0.008,
+                "frustration": -0.010,
+                "agency": 0.004,
             }
             if ok
             else {
                 "stabilite": -0.025,
                 "clarte": -0.012,
                 "besoin_de_silence": 0.010,
+                "satisfaction": -0.016,
+                "frustration": 0.022,
+                "confiance": -0.008,
             }
         )
         self._apply(state, **delta)
@@ -542,10 +705,12 @@ class AuraOrganism:
 
     def legacy_metrics(self, state: dict[str, Any]) -> dict[str, float]:
         energy = _clamp(
-            0.46
-            + float(state["stabilite"]) * 0.28
-            + float(state["clarte"]) * 0.18
+            0.40
+            + float(state["stabilite"]) * 0.24
+            + float(state["clarte"]) * 0.16
             + float(state["curiosite"]) * 0.08
+            + float(state["engagement"]) * 0.07
+            + float(state["agency"]) * 0.05
         )
         pressure = _clamp(
             max(
@@ -553,12 +718,15 @@ class AuraOrganism:
                 (1 - float(state["clarte"])) * 0.55,
                 float(state["besoin_de_silence"]) * 0.55,
                 float(state["pression_de_reve"]) * 0.35,
+                float(state["frustration"]) * 0.42,
             )
         )
         continuity = _clamp(
-            float(state["identite"]) * 0.38
-            + float(state["stabilite"]) * 0.34
-            + float(state["clarte"]) * 0.18
+            float(state["identite"]) * 0.34
+            + float(state["stabilite"]) * 0.28
+            + float(state["clarte"]) * 0.16
+            + float((state.get("relationship") or {}).get("familiarity", 0.0)) * 0.08
+            + float(state["engagement"]) * 0.04
             + 0.10
         )
         return {
@@ -579,16 +747,57 @@ class AuraOrganism:
             "mood": state.get("mood"),
             "valence": state.get("derniere_valence"),
             "active_intention": state.get("intention_active"),
+            "last_reason": state.get("last_reason"),
+            "schema_revision": 9,
+            "authority": "cloud-canonical",
             "identite": state.get("identite"),
             "stabilite": state.get("stabilite"),
             "clarte": state.get("clarte"),
             "attachement": state.get("attachement"),
             "curiosite": state.get("curiosite"),
+            "engagement": state.get("engagement"),
+            "confiance": state.get("confiance"),
+            "satisfaction": state.get("satisfaction"),
+            "frustration": state.get("frustration"),
+            "agency": state.get("agency"),
+            "curiosite_sociale": state.get("curiosite_sociale"),
             "pression_de_reve": state.get("pression_de_reve"),
             "besoin_de_silence": state.get("besoin_de_silence"),
             "risque_assistante": state.get("risque_assistante"),
+            "dynamics": {
+                "activation": round(_clamp(
+                    float(state["engagement"]) * 0.42
+                    + float(state["agency"]) * 0.33
+                    + float(state["curiosite"]) * 0.25
+                ), 4),
+                "agitation": round(_clamp(
+                    float(state["frustration"]) * 0.55
+                    + (1 - float(state["stabilite"])) * 0.30
+                    + (1 - float(state["clarte"])) * 0.15
+                ), 4),
+                "recovery": round(_clamp(
+                    float(state["stabilite"]) * 0.45
+                    + float(state["clarte"]) * 0.35
+                    + (1 - float(state["besoin_de_silence"])) * 0.20
+                ), 4),
+            },
             "top_needs": needs,
             "intention_field": state.get("intention_field"),
+            "relationship": {
+                "familiarity": float((state.get("relationship") or {}).get("familiarity", 0.0)),
+                "trust": float((state.get("relationship") or {}).get("trust", 0.0)),
+                "reciprocity": float((state.get("relationship") or {}).get("reciprocity", 0.0)),
+                "shared_momentum": float((state.get("relationship") or {}).get("shared_momentum", 0.0)),
+                "social_curiosity": float((state.get("relationship") or {}).get("social_curiosity", 0.0)),
+                "interaction_count": int((state.get("relationship") or {}).get("interaction_count", 0)),
+            },
+            "executive": {
+                "role": str((state.get("executive") or {}).get("role", "")),
+                "autonomy": str((state.get("executive") or {}).get("autonomy", "")),
+                "strategic_drive": float((state.get("executive") or {}).get("strategic_drive", 0.0)),
+                "decisiveness": float((state.get("executive") or {}).get("decisiveness", 0.0)),
+                "portfolio_focus": str((state.get("executive") or {}).get("portfolio_focus", "")),
+            },
             "dream": state.get("dream"),
             "habitat": state.get("habitat"),
             "updated_at": state.get("updated_at"),

@@ -93,7 +93,7 @@ button{cursor:pointer}
 .emotion-main{position:absolute;left:13px;bottom:10px;display:flex;align-items:center;gap:10px;z-index:2}
 .emotion-orb{width:38px;height:38px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#fff 0 7%,#ffba68 20%,#7d4633 50%,#12100f 73%);box-shadow:0 0 24px rgba(255,166,89,.35)}
 .emotion-kicker{font-size:7px;text-transform:uppercase;letter-spacing:.12em;color:#c2b3ac}.emotion-mood{font-size:19px;font-weight:760;text-transform:capitalize}.emotion-reason{font-size:8px;color:#988d89;margin-top:2px;max-width:205px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.emotion-grid{display:grid;gap:8px}.emotion-cell{display:grid;grid-template-columns:86px 1fr 34px;align-items:center;gap:8px}.emotion-label{display:contents}.emotion-label span{font-size:9px;color:#bdb0aa}.emotion-label strong{grid-column:3;text-align:right;font-size:9px;color:#eee4df}.emotion-bar{grid-column:2;height:4px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}.emotion-bar span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--pink));transition:width .6s ease}
+.emotion-grid{display:grid;gap:8px}.emotion-cell{display:grid;grid-template-columns:86px 1fr 34px;align-items:center;gap:8px}.emotion-label{display:contents}.emotion-label span{font-size:9px;color:#bdb0aa}.emotion-label strong{grid-column:3;text-align:right;font-size:9px;color:#eee4df}.emotion-bar{grid-column:2;height:4px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}.emotion-bar span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--pink));transition:width .6s ease}.emotion-secondary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.05)}.emotion-chip{border:1px solid rgba(255,255,255,.055);border-radius:9px;padding:7px 8px;background:rgba(255,255,255,.02)}.emotion-chip span{display:block;font-size:7px;color:#7e7470;text-transform:uppercase;letter-spacing:.06em}.emotion-chip strong{display:block;margin-top:3px;font-size:10px;color:#e8ddd7}.emotion-chip-track{height:3px;border-radius:99px;background:rgba(255,255,255,.05);overflow:hidden;margin-top:5px}.emotion-chip-track i{display:block;height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,var(--violet),var(--gold));transition:width .6s ease}
 .portfolio-list{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .intent-list,.work-list,.memory-list,.activity-list{display:grid;gap:7px}
 .intent-row,.work-row,.memory-row,.activity-row{border:1px solid rgba(255,255,255,.055);border-radius:11px;background:rgba(255,255,255,.022);padding:8px 9px}
@@ -188,6 +188,14 @@ body.aura-speaking .aurora-vignette{animation-duration:.65s}body.aura-speaking #
             <div class="emotion-cell"><div class="emotion-label"><span>Agency</span><strong id="emotion-agency-value">—</strong></div><div class="emotion-bar"><span id="emotion-agency"></span></div></div>
             <div class="emotion-cell"><div class="emotion-label"><span>Confiance</span><strong id="emotion-confidence-value">—</strong></div><div class="emotion-bar"><span id="emotion-confidence"></span></div></div>
             <div class="emotion-cell"><div class="emotion-label"><span>Engagement</span><strong id="emotion-engagement-value">—</strong></div><div class="emotion-bar"><span id="emotion-engagement"></span></div></div>
+          </div>
+          <div class="emotion-secondary">
+            <div class="emotion-chip"><span>Satisfaction</span><strong id="emotion-satisfaction-value">—</strong><div class="emotion-chip-track"><i id="emotion-satisfaction"></i></div></div>
+            <div class="emotion-chip"><span>Frustration</span><strong id="emotion-frustration-value">—</strong><div class="emotion-chip-track"><i id="emotion-frustration"></i></div></div>
+            <div class="emotion-chip"><span>Relation</span><strong id="emotion-attachment-value">—</strong><div class="emotion-chip-track"><i id="emotion-attachment"></i></div></div>
+            <div class="emotion-chip"><span>Curiosité sociale</span><strong id="emotion-social-value">—</strong><div class="emotion-chip-track"><i id="emotion-social"></i></div></div>
+            <div class="emotion-chip"><span>Pression de rêve</span><strong id="emotion-dream-value">—</strong><div class="emotion-chip-track"><i id="emotion-dream"></i></div></div>
+            <div class="emotion-chip"><span>Besoin de silence</span><strong id="emotion-silence-value">—</strong><div class="emotion-chip-track"><i id="emotion-silence"></i></div></div>
           </div>
         </div>
       </section>
@@ -297,14 +305,6 @@ body.aura-speaking .aurora-vignette{animation-duration:.65s}body.aura-speaking #
     </div></div>
   </section>
 
-  <div style="display:none" aria-hidden="true">
-    <span id="emotion-attachment"></span><span id="emotion-attachment-value"></span>
-    <span id="emotion-satisfaction"></span><span id="emotion-satisfaction-value"></span>
-    <span id="emotion-frustration"></span><span id="emotion-frustration-value"></span>
-    <span id="emotion-social"></span><span id="emotion-social-value"></span>
-    <span id="emotion-dream"></span><span id="emotion-dream-value"></span>
-    <span id="emotion-silence"></span><span id="emotion-silence-value"></span>
-  </div>
 </div>
 <script>${DASHBOARD_SCRIPT}</script>
 </body>

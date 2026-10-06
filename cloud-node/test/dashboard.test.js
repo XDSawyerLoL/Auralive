@@ -73,18 +73,22 @@ test('dashboard speaks through the tokenless Mairaiy voice ticket bridge', () =>
 });
 
 
-test('living AURA visuals are driven by the organism state', () => {
+test('living AURA visuals are driven by Homeostasis v9 state', () => {
   for (const token of [
     'id="organismMood"',
     'id="organismDot"',
     'scene.organism',
     'const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}',
-    'const tension=Number(o.tension||0)',
+    'const dynamics=o.dynamics||{}',
+    'const agitation=Number(dynamics.agitation||0)',
+    'const activation=Number(dynamics.activation||0)',
+    'const recovery=Number(dynamics.recovery||0)',
     'const dream=Number(o.pression_de_reve||0)',
-    'const fatigue=Number(o.fatigue_cognitive||0)',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
+  assert.equal(DASHBOARD_HTML.includes('fatigue_cognitive'), false);
+  assert.equal(DASHBOARD_HTML.includes('o.tension'), false);
 });
 
 
