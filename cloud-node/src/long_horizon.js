@@ -210,6 +210,12 @@ export class LongHorizonMissionEngine {
         stamp,
       ],
     );
+    if (sourceIntentionId) {
+      await this.kernel.setIntentionStatus(sourceIntentionId, 'working', {
+        mission_id: id,
+        lifecycle_reason: 'mission-created',
+      }).catch(() => {});
+    }
 
     try {
       await this.planMission(id, { reason: 'initial-plan' });
@@ -498,6 +504,18 @@ export class LongHorizonMissionEngine {
        WHERE id=?`,
       [status, success ? 1 : Number(mission.progress || 0), success ? '' : normalizeText(reason, 4000), stamp, stamp, mission.id],
     );
+    if (mission.source_intention_id) {
+      await this.kernel.setIntentionStatus(
+        mission.source_intention_id,
+        success ? 'completed' : 'blocked',
+        {
+          mission_id: mission.id,
+          mission_status: status,
+          lifecycle_reason: success ? 'mission-completed' : 'mission-failed',
+          blocker: success ? '' : normalizeText(reason || 'révisions épuisées', 1800),
+        },
+      ).catch(() => {});
+    }
     await this.kernel.learn({
       lessonKey: `mission:${mission.id}:${status}`,
       content: success
@@ -768,11 +786,23 @@ export class LongHorizonMissionEngine {
         `UPDATE aura_missions SET status='paused',updated_at=? WHERE id=?`,
         [now(), mission.id],
       );
+      if (mission.source_intention_id) {
+        await this.kernel.setIntentionStatus(mission.source_intention_id, 'waiting', {
+          mission_id: mission.id,
+          lifecycle_reason: 'mission-paused',
+        }).catch(() => {});
+      }
     } else if (command === 'resume') {
       await query(
         `UPDATE aura_missions SET status='running',updated_at=? WHERE id=? AND status='paused'`,
         [now(), mission.id],
       );
+      if (mission.source_intention_id) {
+        await this.kernel.setIntentionStatus(mission.source_intention_id, 'working', {
+          mission_id: mission.id,
+          lifecycle_reason: 'mission-resumed',
+        }).catch(() => {});
+      }
     } else if (command === 'cancel') {
       const stamp = now();
       await query(
@@ -795,6 +825,12 @@ export class LongHorizonMissionEngine {
         `UPDATE aura_missions SET status='cancelled',completed_at=?,updated_at=? WHERE id=?`,
         [stamp, stamp, mission.id],
       );
+      if (mission.source_intention_id) {
+        await this.kernel.setIntentionStatus(mission.source_intention_id, 'abandoned', {
+          mission_id: mission.id,
+          lifecycle_reason: 'mission-cancelled',
+        }).catch(() => {});
+      }
     } else {
       throw new Error('Action de mission inconnue');
     }
