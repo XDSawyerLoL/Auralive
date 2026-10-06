@@ -31,6 +31,7 @@ function launch(extraEnv = {}) {
       NODE_ENV: 'production',
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
       PORT: '49999',
+      AURA_PORT: String(HOSTINGER_PORT),
       AURA_GATEWAY_PORT: '3987',
       DB_HOST: '',
       DB_USER: '',
