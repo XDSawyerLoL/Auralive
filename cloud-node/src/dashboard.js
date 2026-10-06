@@ -97,7 +97,7 @@ button{cursor:pointer}
 .portfolio-list{display:grid;grid-template-columns:1fr 1fr;gap:7px}
 .intent-list,.work-list,.memory-list,.activity-list{display:grid;gap:7px}
 .intent-row,.work-row,.memory-row,.activity-row{border:1px solid rgba(255,255,255,.055);border-radius:11px;background:rgba(255,255,255,.022);padding:8px 9px}
-.intent-top,.work-top{display:flex;align-items:flex-start;gap:7px}.intent-title,.work-title{font-size:9px;line-height:1.3;flex:1}.badge{font-size:7px;border-radius:99px;padding:3px 6px;border:1px solid rgba(255,236,211,.11);color:#c6b9b3;white-space:nowrap}
+.intent-top,.work-top{display:flex;align-items:flex-start;gap:7px}.intent-title,.work-title{font-size:9px;line-height:1.3;flex:1}.badge{font-size:7px;border-radius:99px;padding:3px 6px;border:1px solid rgba(255,236,211,.11);color:#c6b9b3;white-space:nowrap}.badge.online,.badge.healthy{color:#7de8b7;border-color:rgba(93,224,170,.18);background:rgba(93,224,170,.055)}.badge.stale,.badge.waiting{color:#ffc679;border-color:rgba(255,191,104,.2);background:rgba(255,191,104,.055)}.badge.offline,.badge.error,.badge.unhealthy,.badge.degraded{color:#ff8a92;border-color:rgba(255,109,120,.2);background:rgba(255,109,120,.055)}.product-row{min-height:52px}
 .memory-date,.activity-time{font-size:7px;color:#6f6662}.memory-text,.activity-title{font-size:9px;line-height:1.35}.activity-kind{font-size:7px;color:#bbada6}
 .progress{height:4px;background:rgba(255,255,255,.055);border-radius:99px;overflow:hidden;margin-top:7px}.progress span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--gold),var(--violet))}
 .map-panel{min-height:690px;display:flex;flex-direction:column}
@@ -134,6 +134,7 @@ body.aura-speaking .aurora-vignette{animation-duration:.65s}body.aura-speaking #
 @media(max-width:1280px){.top-nav{display:none}.command-box{min-width:380px}.dashboard{grid-template-columns:260px minmax(520px,1fr) 290px}.telemetry-rail{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:980px){.topbar{grid-template-columns:1fr auto}.command-box{grid-column:1/-1;grid-row:2;min-width:0}.dashboard{grid-template-columns:1fr}.map-panel{order:-1;min-height:580px}.map-wrap{min-height:535px}.left-col,.right-col{grid-template-columns:1fr 1fr}.bottom-proof,.secondary{grid-template-columns:1fr}.telemetry-rail{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:680px){.shell{padding:9px}.topbar{top:5px}.brand{min-width:0}.brand-name{font-size:17px}.status-row{margin-top:8px}.telemetry-rail{grid-template-columns:repeat(2,1fr)}.left-col,.right-col{grid-template-columns:1fr}.map-panel{min-height:510px}.map-wrap{min-height:465px}.portfolio-list{grid-template-columns:1fr}.download-grid{grid-template-columns:1fr}.bottom-proof{grid-template-columns:1fr}.secondary{grid-template-columns:1fr}.legend{display:none}.map-foot{max-width:80%}}
+@media(max-width:480px){.command-box textarea{font-size:16px}.msg{font-size:15px}.chat-panel{min-height:56svh}.map-panel{min-height:460px}.map-wrap{min-height:415px}.panel-title{font-size:13px}.intent-title,.work-title,.memory-text,.activity-title{font-size:11px}.telemetry-rail{grid-template-columns:1fr 1fr}.status-row{scrollbar-width:none}}
 </style>
 </head>
 <body data-aura-ui="company-os-premium-1">
@@ -289,7 +290,7 @@ body.aura-speaking .aurora-vignette{animation-duration:.65s}body.aura-speaking #
   </section>
 
   <section class="panel download-panel">
-    <div class="panel-head"><div class="panel-title">Quantic Glide</div><div class="spacer"></div><div class="panel-meta">Applications officielles</div></div>
+    <div class="panel-head"><div class="panel-title">Télécharger Quantic Glide</div><div class="spacer"></div><div class="panel-meta">Applications officielles</div></div>
     <div class="panel-body"><div class="download-grid">
       <div class="download-card"><div class="download-icon">▣</div><div class="download-copy"><strong>Windows x64</strong><span>Version stable · AURA intégrée</span></div><a class="download-btn" href="/downloads/glide/windows">Télécharger .exe</a></div>
       <div class="download-card"><div class="download-icon">◈</div><div class="download-copy"><strong>Android</strong><span>Version mobile privée</span></div><a class="download-btn" href="/downloads/glide/android">Télécharger .apk</a></div>
