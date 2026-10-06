@@ -123,6 +123,30 @@ const BAD_WORKFLOW_CONCLUSIONS = new Set([
   'action_required',
   'startup_failure',
 ]);
+
+export function productHeartbeatHealth(row = {}, {
+  nowMs = Date.now(),
+  staleSeconds = config.commandCenterProductStaleSeconds,
+  offlineSeconds = config.commandCenterProductOfflineSeconds,
+} = {}) {
+  const state = String(row.state || 'unknown').toLowerCase();
+  const observedAt = Date.parse(String(row.last_observed_at || ''));
+  if (!Number.isFinite(observedAt)) {
+    return { state, next_state: state, age_seconds: null, transition: false };
+  }
+  const ageSeconds = Math.max(0, Math.round((Number(nowMs) - observedAt) / 1000));
+  let nextState = state;
+  if (!['error','unhealthy','degraded','offline'].includes(state)) {
+    if (ageSeconds >= Number(offlineSeconds)) nextState = 'offline';
+    else if (ageSeconds >= Number(staleSeconds) && state === 'online') nextState = 'stale';
+  }
+  return {
+    state,
+    next_state: nextState,
+    age_seconds: ageSeconds,
+    transition: nextState !== state,
+  };
+}
 const REPO_SERVICE_MAP = new Map([
   ['xdsawyerlol/auralive', 'aura'],
   ['xdsawyerlol/quanticsillage', 'quantic-sillage'],
@@ -994,21 +1018,18 @@ export class CommandCenter {
     );
     const transitions = [];
     for (const row of rows) {
-      const state = String(row.state || 'unknown').toLowerCase();
-      if (['error','unhealthy','degraded','offline'].includes(state)) continue;
-      const observedAt = Date.parse(String(row.last_observed_at || ''));
-      if (!Number.isFinite(observedAt)) continue;
-      const ageMs = Math.max(0, stamp - observedAt);
-      let next = '';
-      let detail = '';
-      if (ageMs >= offlineMs) {
-        next = 'offline';
-        detail = `Aucun heartbeat produit depuis ${Math.round(ageMs / 1000)} s; seuil offline=${config.commandCenterProductOfflineSeconds}s.`;
-      } else if (ageMs >= staleMs && state === 'online') {
-        next = 'stale';
-        detail = `Heartbeat produit périmé depuis ${Math.round(ageMs / 1000)} s; seuil stale=${config.commandCenterProductStaleSeconds}s.`;
-      }
-      if (!next || next === state) continue;
+      const health = productHeartbeatHealth(row, {
+        nowMs: stamp,
+        staleSeconds: config.commandCenterProductStaleSeconds,
+        offlineSeconds: config.commandCenterProductOfflineSeconds,
+      });
+      const state = health.state;
+      const next = health.next_state;
+      const ageSeconds = health.age_seconds;
+      if (!health.transition || ageSeconds == null) continue;
+      const detail = next === 'offline'
+        ? `Aucun heartbeat produit depuis ${ageSeconds} s; seuil offline=${config.commandCenterProductOfflineSeconds}s.`
+        : `Heartbeat produit périmé depuis ${ageSeconds} s; seuil stale=${config.commandCenterProductStaleSeconds}s.`;
       const metadata = parseJson(row.metadata, {});
       const result = await query(
         `UPDATE aura_command_services
@@ -1020,7 +1041,7 @@ export class CommandCenter {
           JSON.stringify({
             ...metadata,
             health_transition_source: 'heartbeat-ttl',
-            heartbeat_age_seconds: Math.round(ageMs / 1000),
+            heartbeat_age_seconds: ageSeconds,
           }).slice(0, 20000),
           now(),
           row.id,
@@ -1028,7 +1049,7 @@ export class CommandCenter {
         ],
       );
       if (Number(result.affectedRows || 0)) {
-        transitions.push({ id: row.id, from: state, to: next, age_seconds: Math.round(ageMs / 1000) });
+        transitions.push({ id: row.id, from: state, to: next, age_seconds: ageSeconds });
         await query(
           'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
           [
