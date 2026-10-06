@@ -108,3 +108,18 @@ test('kernel exposes a unified agenda and evidence-backed absence ledger', () =>
   assert.match(kernelSource, /has_real_activity/);
   assert.match(kernelSource, /Foyer opérationnel/);
 });
+
+
+test('intention lifecycle follows long-horizon mission state', async () => {
+  const kernelSource = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
+  const horizonSource = fs.readFileSync(new URL('../src/long_horizon.js', import.meta.url), 'utf8');
+
+  assert.match(kernelSource, /async setIntentionStatus\(/);
+  assert.match(kernelSource, /'working','waiting','blocked'/);
+  assert.match(horizonSource, /mission-created/);
+  assert.match(horizonSource, /mission-completed/);
+  assert.match(horizonSource, /mission-failed/);
+  assert.match(horizonSource, /mission-paused/);
+  assert.match(horizonSource, /mission-resumed/);
+  assert.match(horizonSource, /mission-cancelled/);
+});
