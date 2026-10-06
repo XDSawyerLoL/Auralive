@@ -74,8 +74,8 @@ test('dashboard visibly exposes product portfolio and operational receipts', () 
   const html = fs.readFileSync(new URL('../src/dashboard.js', import.meta.url), 'utf8');
   const runtime = fs.readFileSync(new URL('../src/dashboard-runtime.js', import.meta.url), 'utf8');
 
-  assert.match(html, /Portefeuille Quantic Sillage/);
-  assert.match(html, /Preuves opérationnelles/);
+  assert.match(html, /Produits Quantic/);
+  assert.match(html, /Preuve de travail/);
   assert.match(html, /id="portfolioList"/);
   assert.match(html, /id="receiptList"/);
   assert.match(runtime, /function renderPortfolio\(/);
