@@ -176,7 +176,7 @@ test('Director mode creates rotating portfolio Evolution initiatives', () => {
   assert.match(commandSource, /config\.directorModeEnabled/);
   assert.match(commandSource, /Direction · faire progresser/);
   assert.match(commandSource, /director_mode: true/);
-  assert.match(commandSource, /Director Mode réalise une revue tournante du portefeuille/);
+  assert.match(commandSource, /Director Mode maintient plusieurs workstreams produits en parallèle/);
   assert.match(commandSource, /director-autonomous-operations/);
 });
 
