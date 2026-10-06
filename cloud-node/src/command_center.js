@@ -2430,6 +2430,35 @@ export class CommandCenter {
     return this.executeInitiative(row);
   }
 
+  async operationalLedger(limit = 24) {
+    const bounded = Math.max(1, Math.min(Number(limit) || 24, 80));
+    const rows = await query(
+      `SELECT e.id,e.initiative_id,e.kind,e.created_at,
+              i.domain,i.title,i.kind AS initiative_kind,i.status,i.execution_mode,i.updated_at
+       FROM aura_command_events e
+       LEFT JOIN aura_initiatives i ON i.id=e.initiative_id
+       WHERE e.kind IN (
+         'initiative-created','initiative-result','initiative-error','initiative-superseded',
+         'service-observation','service-state-change','service-heartbeat-expired',
+         'director-promotion','expert-remediation-proposed'
+       )
+       ORDER BY e.id DESC LIMIT ?`,
+      [bounded],
+    );
+    return rows.map((row) => ({
+      receipt_id: Number(row.id || 0),
+      initiative_id: String(row.initiative_id || ''),
+      event: String(row.kind || ''),
+      domain: String(row.domain || 'quantic-sillage'),
+      title: String(row.title || row.kind || 'Activité AURA').slice(0, 240),
+      kind: String(row.initiative_kind || row.kind || ''),
+      status: String(row.status || ''),
+      execution_mode: String(row.execution_mode || ''),
+      created_at: row.created_at,
+      updated_at: row.updated_at || row.created_at,
+    }));
+  }
+
   async portfolioSnapshot() {
     await this.refreshProductHealth().catch(() => []);
     const [services, active] = await Promise.all([
@@ -2473,7 +2502,7 @@ export class CommandCenter {
   }
 
   async status({ publicView = true } = {}) {
-    const [counts, bridgeStatus, services, longHorizon, portfolio] = await Promise.all([
+    const [counts, bridgeStatus, services, longHorizon, portfolio, receipts] = await Promise.all([
       one(
         `SELECT COUNT(*) AS total,
           SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
@@ -2487,6 +2516,7 @@ export class CommandCenter {
       this.services(),
       this.longHorizon.status().catch(() => ({ enabled: false, error: 'unavailable' })),
       this.portfolioSnapshot().catch(() => []),
+      this.operationalLedger(24).catch(() => []),
     ]);
     const degraded = services.filter((item) => BAD_SERVICE_STATES.has(String(item.state || '').toLowerCase()));
     const fleet = this.fleetSnapshot || [];
@@ -2531,6 +2561,7 @@ export class CommandCenter {
         offline_seconds: config.commandCenterProductOfflineSeconds,
       },
       portfolio,
+      recent_receipts: receipts,
       fleet: {
         score: fleetScore,
         healthy: fleet.filter((item) => item.state === 'healthy').length,
