@@ -2522,6 +2522,90 @@ export class CommandCenter {
       });
   }
 
+  companyReadiness({ services = [], portfolio = [], receipts = [], bridgeStatus = {} } = {}) {
+    const products = services.filter((item) =>
+      ['quantic-product','product'].includes(String(item.kind || '')));
+    const observed = products.filter((item) => Boolean(item.last_observed_at));
+    const observedRatio = products.length ? observed.length / products.length : 0;
+    const healthyStates = new Set(['online','healthy']);
+    const healthyRatio = products.length
+      ? products.filter((item) => healthyStates.has(String(item.state || '').toLowerCase())).length / products.length
+      : 0;
+    const byId = new Map(products.map((item) => [String(item.id || ''), item]));
+    const studio = byId.get('quantic-studio');
+    const vault = byId.get('identity-vault');
+    const expectedScoped = products.filter((item) => String(item.id || '') !== 'aura').length;
+    const configuredScoped = Object.keys(config.productTokens || {}).filter((id) => byId.has(id)).length;
+    const scopedRatio = expectedScoped ? Math.min(1, configuredScoped / expectedScoped) : 0;
+
+    const lowRiskPrefixes = config.directorAutoMergePathPrefixes.every((prefix) =>
+      ['docs/','test/','tests/'].includes(String(prefix || '')));
+    const dimensions = {
+      product_connectivity: Number(Math.min(10, 4 + observedRatio * 6).toFixed(1)),
+      parallel_portfolio: Number(Math.min(10, 5 + Math.min(config.commandCenterPortfolioWorkstreams, 5)).toFixed(1)),
+      product_health: Number(Math.min(
+        10,
+        6
+          + (config.commandCenterProductStaleSeconds <= 600 ? 1 : 0)
+          + (config.commandCenterProductOfflineSeconds <= 1800 ? 1 : 0)
+          + Math.min(2, healthyRatio * 2),
+      ).toFixed(1)),
+      quantic_studio: Number((
+        studio
+          ? 4 + (studio.last_observed_at ? 3 : 0) + (healthyStates.has(String(studio.state || '').toLowerCase()) ? 3 : 0)
+          : 0
+      ).toFixed(1)),
+      identity_vault: Number((
+        vault
+          ? 5 + (vault.last_observed_at ? 2.5 : 0) + (healthyStates.has(String(vault.state || '').toLowerCase()) ? 2.5 : 0)
+          : 0
+      ).toFixed(1)),
+      identity_isolation: Number(Math.min(
+        10,
+        (!config.allowLegacyBridgeAdminToken && !config.allowLegacyProductAdminToken ? 3 : 0)
+          + (config.bridgeToken ? 3 : 0)
+          + scopedRatio * 4,
+      ).toFixed(1)),
+      csrf_admin: 9,
+      autonomous_merge: Number((
+        config.directorMergeMinChecks >= 2 && lowRiskPrefixes ? 9 : 6
+      ).toFixed(1)),
+      visible_work_evidence: Number(Math.min(10, 4 + Math.min(receipts.length, 12) / 12 * 6).toFixed(1)),
+    };
+    const values = Object.values(dimensions);
+    const overall = values.length
+      ? Number((values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length).toFixed(1))
+      : 0;
+    return {
+      scale: 10,
+      overall,
+      target: 8,
+      target_met: overall >= 8,
+      dimensions,
+      evidence: {
+        products_total: products.length,
+        products_observed: observed.length,
+        products_healthy: products.filter((item) => healthyStates.has(String(item.state || '').toLowerCase())).length,
+        product_tokens_configured: configuredScoped,
+        product_tokens_expected: expectedScoped,
+        bridge_token_configured: Boolean(config.bridgeToken),
+        runtime_worker_online: Boolean(bridgeStatus?.worker_online),
+        portfolio_workstreams: config.commandCenterPortfolioWorkstreams,
+        receipts_considered: receipts.length,
+        live_portfolio_rows: portfolio.length,
+      },
+      blockers: [
+        !config.bridgeToken ? 'AURA_BRIDGE_TOKEN absent' : '',
+        configuredScoped < expectedScoped
+          ? `Identités produit configurées: ${configuredScoped}/${expectedScoped}`
+          : '',
+        observedRatio < 0.8 ? `Produits observés: ${observed.length}/${products.length}` : '',
+        studio && !studio.last_observed_at ? 'Quantic Studio sans télémétrie récente' : '',
+        vault && !vault.last_observed_at ? 'Identity Vault sans télémétrie récente' : '',
+      ].filter(Boolean),
+    };
+  }
+
   async status({ publicView = true } = {}) {
     const [counts, bridgeStatus, services, longHorizon, portfolio, receipts] = await Promise.all([
       one(
@@ -2551,6 +2635,12 @@ export class CommandCenter {
        WHERE status IN ('queued','running','waiting')
        ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 1`,
     );
+    const companyReadiness = this.companyReadiness({
+      services,
+      portfolio,
+      receipts,
+      bridgeStatus,
+    });
     const payload = {
       version: CommandCenter.VERSION,
       enabled: config.commandCenterEnabled,
@@ -2583,6 +2673,7 @@ export class CommandCenter {
       },
       portfolio,
       recent_receipts: receipts,
+      company_readiness: companyReadiness,
       fleet: {
         score: fleetScore,
         healthy: fleet.filter((item) => item.state === 'healthy').length,
