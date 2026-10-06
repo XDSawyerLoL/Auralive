@@ -50,14 +50,13 @@ test('company control plane contains bounded multi-product workstreams and recei
 test('scoped service identities replace implicit admin-token sharing', () => {
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
   const bridge = fs.readFileSync(new URL('../src/bridge.js', import.meta.url), 'utf8');
-  const worker = fs.readFileSync(new URL('../../aura_runtime/worker.py', import.meta.url), 'utf8');
 
   assert.match(server, /function requireBridge\(/);
   assert.match(server, /function requireProduct\(/);
   assert.match(server, /AURA_CSRF_ORIGIN_REJECTED/);
   assert.match(server, /SameSite=Lax/);
   assert.match(bridge, /AURA_BRIDGE_TOKEN/);
-  assert.match(worker, /AURA_BRIDGE_TOKEN/);
+  assert.doesNotMatch(bridge, /token: String\(process\.env\.AURA_BRIDGE_TOKEN \|\| process\.env\.AURA_CLOUD_TOKEN/);
   assert.match(server, /scoped-product-token/);
 });
 
