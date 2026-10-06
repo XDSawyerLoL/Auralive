@@ -5,14 +5,14 @@ import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 
 test('AURA operational consciousness interface exposes core product surfaces', () => {
   for (const label of [
-    'Interface de conscience opérationnelle',
-    'Dialogue',
-    'Carte d’intérêt',
-    'Pensée dominante',
-    'Travail en cours',
-    'Intentions actives',
-    'Ce qu’elle fait maintenant',
-    'Centre de commande',
+    'Company OS',
+    'Quantic Sillage · Cognition en direct',
+    'État émotionnel',
+    'Produits Quantic',
+    'Santé du système',
+    'Workstreams actifs',
+    'Preuve de travail',
+    'Conversation avec AURA',
     'Mémoire et leçons',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
@@ -37,14 +37,13 @@ test('dashboard includes dynamic attention map without a manual token gate', () 
 });
 
 
-test('desktop dashboard keeps the reference composition', () => {
-  assert.equal(DASHBOARD_HTML.includes('grid-template-areas:'), true);
-  assert.equal(DASHBOARD_HTML.includes('"chat map side"'), true);
-  assert.equal(DASHBOARD_HTML.includes('"chat bottom bottom"'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:chat'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:map'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:side'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:bottom'), true);
+test('desktop dashboard keeps the premium Company OS composition', () => {
+  assert.equal(DASHBOARD_HTML.includes('grid-template-columns:294px minmax(620px,1fr) 330px'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="dashboard"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="left-col"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="panel map-panel"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="right-col"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="bottom-proof"'), true);
   assert.equal(DASHBOARD_HTML.includes("setLive(true,boot.runtime_ready?'En ligne · '+mood"), true);
 });
 
@@ -154,10 +153,10 @@ test('dashboard exposes a dedicated emotional state surface', () => {
 
 test('mobile dashboard uses readable phone typography and viewport-sized panels', () => {
   assert.equal(DASHBOARD_HTML.includes('@media(max-width:480px)'), true);
-  assert.equal(DASHBOARD_HTML.includes('.composer textarea{font-size:16px'), true);
+  assert.equal(DASHBOARD_HTML.includes('.command-box textarea{font-size:16px'), true);
   assert.equal(DASHBOARD_HTML.includes('.msg{font-size:15px'), true);
-  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:70svh}'), true);
-  assert.equal(DASHBOARD_HTML.includes('.top-actions{width:100%'), true);
+  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:56svh}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.map-panel{min-height:460px}'), true);
 });
 
 test('mobile voice primes audio but never substitutes a device TTS for Mairaiy', () => {
@@ -239,9 +238,9 @@ test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
 });
 
 
-test('dashboard exposes the verifiable 2.2.1 living build identity', () => {
-  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="living-2.2.1"'), true);
-  assert.equal(DASHBOARD_HTML.includes('AURA 2.2.1 · LONG HORIZON'), true);
+test('dashboard exposes the verifiable premium Company OS identity', () => {
+  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="company-os-premium-1"'), true);
+  assert.equal(DASHBOARD_HTML.includes('AURA · COMPANY OS'), true);
   for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
