@@ -323,7 +323,7 @@ export class CognitiveKernel {
   async dedupeActiveIntentions() {
     const rows = await query(
       `SELECT id,statement,priority,source,context,created_at,updated_at
-       FROM aura_intentions WHERE status='active'
+       FROM aura_intentions WHERE status IN ('active','working','waiting','blocked')
        ORDER BY priority DESC,updated_at DESC LIMIT 200`,
     );
     const keepers = new Map();
@@ -352,7 +352,7 @@ export class CognitiveKernel {
     const key = intentionKey(normalizedStatement);
     const existingRows = await query(
       `SELECT id,statement,priority,source,context,created_at,updated_at
-       FROM aura_intentions WHERE status='active'
+       FROM aura_intentions WHERE status IN ('active','working','waiting','blocked')
        ORDER BY priority DESC,updated_at DESC LIMIT 120`,
     );
     const existing = existingRows.find((row) => intentionKey(row.statement) === key);
@@ -402,14 +402,41 @@ export class CognitiveKernel {
   async intentions(limit = 30) {
     return query(
       `SELECT id,statement,priority,status,source,context,created_at,updated_at FROM aura_intentions
-       WHERE status='active' ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+       WHERE status IN ('active','working','waiting','blocked')
+       ORDER BY
+         CASE status
+           WHEN 'working' THEN 0
+           WHEN 'active' THEN 1
+           WHEN 'waiting' THEN 2
+           WHEN 'blocked' THEN 3
+           ELSE 4
+         END,
+         priority DESC,updated_at DESC LIMIT ?`,
       [Math.max(1, Math.min(Number(limit) || 30, 100))],
     );
   }
 
-  async completeIntention(id) {
-    const result = await query("UPDATE aura_intentions SET status='completed',updated_at=? WHERE id=?", [now(), String(id)]);
+  async setIntentionStatus(id, status, contextPatch = {}) {
+    const allowed = new Set(['active','working','waiting','blocked','completed','abandoned','superseded']);
+    const normalized = String(status || '').trim().toLowerCase();
+    if (!allowed.has(normalized)) throw new Error(`Statut d'intention inconnu: ${normalized}`);
+    const row = await one('SELECT context FROM aura_intentions WHERE id=?', [String(id)]);
+    if (!row) return false;
+    const currentContext = parseJsonObject(row.context);
+    const context = {
+      ...currentContext,
+      ...(contextPatch && typeof contextPatch === 'object' ? contextPatch : {}),
+      lifecycle_updated_at: now(),
+    };
+    const result = await query(
+      'UPDATE aura_intentions SET status=?,context=?,updated_at=? WHERE id=?',
+      [normalized, JSON.stringify(context).slice(0,12000), now(), String(id)],
+    );
     return Number(result.affectedRows || 0) > 0;
+  }
+
+  async completeIntention(id) {
+    return this.setIntentionStatus(id, 'completed', { completion_source: 'kernel' });
   }
 
   async addRoutine(name, prompt, everySeconds, mode = 'reflect') {
