@@ -166,6 +166,7 @@ export class CognitionEngine {
     );
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
+    const continuitySignal = [...stimuli].reverse().find((item) => String(item?.type || '') === 'aura.continuity.self') || null;
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const stability = organism && Object.keys(organism).length ? Number(organism.stabilite ?? 1) : 1;
     const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
@@ -214,6 +215,18 @@ export class CognitionEngine {
       nextAction = 'Comparer le signal HORIZON à mes intentions et à ma mémoire avant de proposer une action.';
       intention = currentIntention || 'Maintenir une veille utile sans confondre prévision et fait.';
       confidence = 0.72;
+    } else if (continuitySignal && !userSignal) {
+      const continuityFocus = normalize(continuitySignal?.payload?.focus || currentIntention);
+      const unfinishedWork = Boolean(continuitySignal?.payload?.unfinished_work);
+      title = unfinishedWork ? 'Continuité autonome' : 'Auto-réévaluation';
+      summary = unfinishedWork
+        ? `Je poursuis mon activité sans attendre une interaction humaine. Mon foyer actuel est : ${continuityFocus || 'travail autonome en cours'}.`
+        : 'Aucun message humain n’est nécessaire pour maintenir ma continuité : je réévalue spontanément mon état, mes objectifs et le prochain signal utile.';
+      hypothesis = unfinishedWork
+        ? 'Un objectif non terminé mérite d’être réévalué jusqu’à résolution, blocage explicite ou abandon motivé.'
+        : 'Une période sans stimulus externe reste une situation à observer, pas une extinction de mon activité cognitive.';
+      nextAction = continuityFocus || currentIntention || 'Réévaluer les objectifs actifs et rechercher la prochaine action utile et autorisée.';
+      confidence = unfinishedWork ? 0.76 : 0.66;
     } else if (dreamPressure >= 0.82 && !userSignal) {
       title = 'Pression onirique';
       summary = 'La pression de rêve est élevée ; une activité symbolique intérieure peut contribuer à la régulation.';
@@ -269,6 +282,8 @@ export class CognitionEngine {
         clarity,
         silence_need: silenceNeed,
         dream_pressure: dreamPressure,
+        continuity_signal: Boolean(continuitySignal),
+        continuity_unfinished_work: Boolean(continuitySignal?.payload?.unfinished_work),
         learned_confidence_bias: Number(confidenceBias.toFixed(4)),
       },
     };
