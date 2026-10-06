@@ -19,6 +19,24 @@ function csv(name, fallback = '') {
     .filter(Boolean);
 }
 
+function secretMap(name) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return Object.freeze({});
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return Object.freeze({});
+    const clean = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      const id = String(key || '').trim().toLowerCase();
+      const secret = String(value || '').trim();
+      if (id && secret) clean[id] = secret;
+    }
+    return Object.freeze(clean);
+  } catch {
+    return Object.freeze({});
+  }
+}
+
 function normalizeIceServer(row) {
   const raw = typeof row === 'string' ? { urls: row } : (row && typeof row === 'object' ? row : {});
   const sourceUrls = Array.isArray(raw.urls) ? raw.urls : [raw.urls];
@@ -105,6 +123,9 @@ export const config = Object.freeze({
   logLevel: process.env.LOG_LEVEL || 'info',
 
   cloudToken: process.env.AURA_CLOUD_TOKEN || '',
+  bridgeToken: process.env.AURA_BRIDGE_TOKEN || '',
+  productTokens: secretMap('AURA_PRODUCT_TOKENS_JSON'),
+  allowLegacyProductAdminToken: bool('AURA_ALLOW_LEGACY_PRODUCT_ADMIN_TOKEN', false),
   canaryToken: process.env.AURA_EVOLUTION_CANARY_TOKEN || '',
 
   publicChatRateLimitMax: int('AURA_PUBLIC_CHAT_RATE_LIMIT_MAX', 20, 1, 600),
@@ -237,13 +258,21 @@ export const config = Object.freeze({
   directorPromotionPollSeconds: int('AURA_DIRECTOR_PROMOTION_POLL_SECONDS', 300, 60, 3600),
   directorMergeMaxFiles: int('AURA_DIRECTOR_MERGE_MAX_FILES', 4, 1, 8),
   directorMergeMaxChanges: int('AURA_DIRECTOR_MERGE_MAX_CHANGES', 800, 50, 5000),
+  directorMergeMinChecks: int('AURA_DIRECTOR_MERGE_MIN_CHECKS', 2, 1, 20),
+  directorAutoMergePathPrefixes: csv(
+    'AURA_DIRECTOR_AUTO_MERGE_PATH_PREFIXES',
+    'docs/,test/,tests/',
+  ),
   directorTrustedGithubActors: new Set(csv(
     'AURA_DIRECTOR_TRUSTED_GITHUB_ACTORS',
     'XDSawyerLoL',
   ).map((item) => item.toLowerCase())),
   commandCenterTickSeconds: int('AURA_COMMAND_CENTER_TICK_SECONDS', 60, 15, 86400),
   commandCenterWarmupSeconds: int('AURA_COMMAND_CENTER_WARMUP_SECONDS', 20, 10, 300),
-  commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 8, 1, 24),
+  commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 12, 1, 48),
+  commandCenterPortfolioWorkstreams: int('AURA_COMMAND_PORTFOLIO_WORKSTREAMS', 4, 1, 8),
+  commandCenterProductStaleSeconds: int('AURA_COMMAND_PRODUCT_STALE_SECONDS', 600, 120, 86400),
+  commandCenterProductOfflineSeconds: int('AURA_COMMAND_PRODUCT_OFFLINE_SECONDS', 1200, 300, 172800),
   commandCenterCooldownSeconds: int('AURA_COMMAND_CENTER_COOLDOWN_SECONDS', 900, 60, 86400),
   commandCenterMinConfidence: num('AURA_COMMAND_CENTER_MIN_CONFIDENCE', 0.58, 0.1, 1),
   commandCenterAllowedRisks: new Set(csv(
