@@ -359,6 +359,14 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
       </div>
     </section>
     <section class="panel">
+      <div class="panel-head"><span>▦</span><div class="panel-title">Portefeuille Quantic Sillage</div><div class="spacer"></div><div class="panel-meta" id="portfolioMeta">Temps réel</div></div>
+      <div class="panel-body"><div class="intent-list" id="portfolioList"><div class="empty">Lecture des produits…</div></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><span>✓</span><div class="panel-title">Preuves opérationnelles</div><div class="spacer"></div><div class="panel-meta" id="receiptMeta">Reçus persistés</div></div>
+      <div class="panel-body"><div class="activity-list" id="receiptList"><div class="empty">Lecture du journal…</div></div></div>
+    </section>
+    <section class="panel">
       <div class="panel-head"><span>◫</span><div class="panel-title">Mémoire et leçons</div><div class="spacer"></div><div class="panel-meta" id="memoryMeta">—</div></div>
       <div class="panel-body"><div class="memory-list" id="memoryList"><div class="empty">Chargement…</div></div></div>
     </section>
