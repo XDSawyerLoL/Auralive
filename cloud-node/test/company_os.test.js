@@ -97,3 +97,12 @@ test('company readiness score stays evidence-based and visible', () => {
   assert.match(html, /id="commandCompany"/);
   assert.match(runtime, /company_readiness/);
 });
+
+
+test('queued portfolio workstreams are resumed instead of stranded', () => {
+  const command = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
+  assert.match(command, /async resumeQueuedPortfolioInitiatives\(\)/);
+  assert.match(command, /mode: 'portfolio-resume'/);
+  assert.match(command, /NOT EXISTS \([\s\S]*aura_mission_steps/);
+  assert.match(command, /Promise\.allSettled\(safe\.map/);
+});
