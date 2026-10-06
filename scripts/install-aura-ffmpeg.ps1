@@ -4,8 +4,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
-$expectedSha256 = "9c078e2a1734e69d5ec6b27a8e2506a2776b09309ac59907d055c8fdebbc1aac"
+$url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-19-13-11/ffmpeg-N-126655-gbfac54a03b-win64-gpl-shared.zip"
+$expectedSha256 = "4d5e5bdc6d811d87ef48d80c48e65e1eb3c6589ed73182d817f077f33d221985"
 $zip = Join-Path $env:RUNNER_TEMP "aura-ffmpeg.zip"
 $extract = Join-Path $env:RUNNER_TEMP "aura-ffmpeg"
 
