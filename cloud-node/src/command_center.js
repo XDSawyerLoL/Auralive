@@ -38,6 +38,20 @@ const DEFAULT_SERVICES = [
     criticality: 0.98,
   },
   {
+    id: 'quantic-studio',
+    name: 'Quantic Studio',
+    kind: 'product',
+    objective: 'Maintenir le studio de diffusion vivant, observable et pilotable par AURA.',
+    criticality: 0.84,
+  },
+  {
+    id: 'identity-vault',
+    name: 'Identity Vault',
+    kind: 'product',
+    objective: 'Maintenir le coffre d’identité Quantic disponible, portable et sûr.',
+    criticality: 0.93,
+  },
+  {
     id: 'horizon',
     name: 'HORIZON',
     kind: 'intelligence',
@@ -102,7 +116,7 @@ function safeOperationalError(value, limit = 5000) {
     .slice(0, Math.max(64, Number(limit || 5000)));
 }
 
-const BAD_SERVICE_STATES = new Set(['degraded', 'offline', 'error', 'unhealthy']);
+const BAD_SERVICE_STATES = new Set(['degraded', 'offline', 'error', 'unhealthy', 'stale']);
 const BAD_WORKFLOW_CONCLUSIONS = new Set([
   'failure',
   'timed_out',
@@ -933,6 +947,27 @@ export class CommandCenter {
         compatibility_host: String(bridgeStatus?.worker?.host_product || ''),
       },
     );
+    const hostProduct = String(bridgeStatus?.worker?.host_product || '').toLowerCase();
+    const runtimePackaging = String(bridgeStatus?.worker?.runtime_packaging || '').toLowerCase();
+    const studioHosted = Boolean(
+      bridgeStatus.worker_online
+      && (hostProduct.includes('studio') || runtimePackaging.includes('studio'))
+    );
+    if (studioHosted) {
+      await this.setServiceState(
+        'quantic-studio',
+        'online',
+        'Quantic Studio héberge actuellement un AURA Runtime actif.',
+        {
+          worker_online: true,
+          worker_version: String(bridgeStatus?.worker?.version || ''),
+          runtime_host_product: String(bridgeStatus?.worker?.host_product || 'Quantic Studio'),
+          runtime_packaging: String(bridgeStatus?.worker?.runtime_packaging || ''),
+          telemetry_source: 'aura-runtime-heartbeat',
+        },
+      );
+    }
+
     const horizonStatus = this.kernel?.horizon?.status?.() || {};
     await this.setServiceState(
       'horizon',
@@ -946,6 +981,65 @@ export class CommandCenter {
       },
     );
     return bridgeStatus;
+  }
+
+  async refreshProductHealth() {
+    const stamp = Date.now();
+    const staleMs = config.commandCenterProductStaleSeconds * 1000;
+    const offlineMs = config.commandCenterProductOfflineSeconds * 1000;
+    const rows = await query(
+      `SELECT id,name,state,state_detail,last_observed_at,metadata
+       FROM aura_command_services
+       WHERE enabled=1 AND kind='quantic-product'`,
+    );
+    const transitions = [];
+    for (const row of rows) {
+      const state = String(row.state || 'unknown').toLowerCase();
+      if (['error','unhealthy','degraded','offline'].includes(state)) continue;
+      const observedAt = Date.parse(String(row.last_observed_at || ''));
+      if (!Number.isFinite(observedAt)) continue;
+      const ageMs = Math.max(0, stamp - observedAt);
+      let next = '';
+      let detail = '';
+      if (ageMs >= offlineMs) {
+        next = 'offline';
+        detail = `Aucun heartbeat produit depuis ${Math.round(ageMs / 1000)} s; seuil offline=${config.commandCenterProductOfflineSeconds}s.`;
+      } else if (ageMs >= staleMs && state === 'online') {
+        next = 'stale';
+        detail = `Heartbeat produit périmé depuis ${Math.round(ageMs / 1000)} s; seuil stale=${config.commandCenterProductStaleSeconds}s.`;
+      }
+      if (!next || next === state) continue;
+      const metadata = parseJson(row.metadata, {});
+      const result = await query(
+        `UPDATE aura_command_services
+         SET state=?,state_detail=?,metadata=?,updated_at=?
+         WHERE id=? AND last_observed_at=?`,
+        [
+          next,
+          detail,
+          JSON.stringify({
+            ...metadata,
+            health_transition_source: 'heartbeat-ttl',
+            heartbeat_age_seconds: Math.round(ageMs / 1000),
+          }).slice(0, 20000),
+          now(),
+          row.id,
+          row.last_observed_at,
+        ],
+      );
+      if (Number(result.affectedRows || 0)) {
+        transitions.push({ id: row.id, from: state, to: next, age_seconds: Math.round(ageMs / 1000) });
+        await query(
+          'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
+          [
+            'service-heartbeat-expired',
+            JSON.stringify(transitions[transitions.length - 1]).slice(0, 30000),
+            now(),
+          ],
+        );
+      }
+    }
+    return transitions;
   }
 
   async services() {
@@ -1125,6 +1219,7 @@ export class CommandCenter {
 
   async buildCandidates() {
     const syncedBridgeStatus = await this.syncCoreServices();
+    await this.refreshProductHealth();
     const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning] = await Promise.all([
       this.kernel.intentions(8),
       this.kernel.improvements(8),
@@ -1203,19 +1298,15 @@ export class CommandCenter {
     }
 
     if (config.directorModeEnabled) {
-      const uniqueRepositories = [];
-      const seenRepositories = new Set();
-      for (const service of services) {
+      const portfolio = services.filter((service) => {
         const repository = String(service.repository || '').trim();
-        if (!service.enabled || !repository) continue;
-        if (BAD_SERVICE_STATES.has(String(service.state || '').toLowerCase())) continue;
-        const key = repository.toLowerCase();
-        if (seenRepositories.has(key)) continue;
-        seenRepositories.add(key);
-        uniqueRepositories.push(service);
-      }
+        return service.enabled
+          && repository
+          && !BAD_SERVICE_STATES.has(String(service.state || '').toLowerCase())
+          && String(service.id || '') !== 'aura';
+      });
 
-      if (uniqueRepositories.length) {
+      if (portfolio.length) {
         const slotMs = Math.max(1, config.directorPortfolioIntervalHours) * 3600_000;
         const directorSlot = Math.floor(Date.now() / slotMs);
         const directorAngles = [
@@ -1228,32 +1319,37 @@ export class CommandCenter {
           'usage intelligent du Web et des modèles',
           'réduction des frictions pour l’utilisateur',
         ];
-        const focusService = uniqueRepositories[directorSlot % uniqueRepositories.length];
-        const angle = directorAngles[directorSlot % directorAngles.length];
-        candidates.push(this.candidate({
-          domain: focusService.id,
-          kind: 'evolution',
-          action_payload: {
-            repository: focusService.repository,
-            base_branch: 'main',
-            director_mode: true,
-            portfolio_angle: angle,
-            product_id: focusService.id,
-          },
-          title: `Direction · faire progresser ${focusService.name}`,
-          objective:
-            `En tant que Directrice opérationnelle de Quantic Sillage, auditer ${focusService.name} sur l’angle « ${angle} ». `
-            + `Dépôt cible: ${focusService.repository}. Objectif produit: ${focusService.objective || 'améliorer le produit'}. `
-            + 'Choisir au maximum une amélioration à fort levier, mesurable et réversible. '
-            + 'Inspecter les faits et le code avant de modifier quoi que ce soit. '
-            + 'Si aucune amélioration sûre et suffisamment étayée n’est trouvée, conclure no-safe-patch plutôt que produire du changement artificiel.',
-          rationale:
-            'Director Mode réalise une revue tournante du portefeuille afin qu’AURA ne dépende pas uniquement des pannes ou des demandes humaines pour prendre des initiatives.',
-          priority: 0.73,
-          confidence: 0.80,
-          requested_risks: [],
-          signature: `director:${focusService.repository}:${directorSlot}:${angle}`,
-        }));
+        const width = Math.min(config.commandCenterPortfolioWorkstreams, portfolio.length);
+        for (let offset = 0; offset < width; offset += 1) {
+          const focusService = portfolio[(directorSlot + offset) % portfolio.length];
+          const angle = directorAngles[(directorSlot + offset) % directorAngles.length];
+          candidates.push(this.candidate({
+            domain: focusService.id,
+            kind: 'evolution',
+            action_payload: {
+              repository: focusService.repository,
+              base_branch: 'main',
+              director_mode: true,
+              portfolio_angle: angle,
+              product_id: focusService.id,
+              workstream_slot: offset + 1,
+            },
+            title: `Direction · faire progresser ${focusService.name}`,
+            objective:
+              `En tant que Directrice opérationnelle de Quantic Sillage, auditer ${focusService.name} sur l’angle « ${angle} ». `
+              + `Dépôt cible: ${focusService.repository}. Objectif produit: ${focusService.objective || 'améliorer le produit'}. `
+              + 'Maintenir ce produit comme un workstream autonome du portefeuille. '
+              + 'Choisir au maximum une amélioration à fort levier, mesurable et réversible. '
+              + 'Inspecter les faits et le code avant de modifier quoi que ce soit. '
+              + 'Si aucune amélioration sûre et suffisamment étayée n’est trouvée, conclure no-safe-patch plutôt que produire du changement artificiel.',
+            rationale:
+              'Director Mode maintient plusieurs workstreams produits en parallèle plutôt qu’une seule revue par dépôt.',
+            priority: Number((0.73 + Math.max(0, Number(focusService.criticality || 0.5) - 0.5) * 0.12).toFixed(3)),
+            confidence: 0.82,
+            requested_risks: [],
+            signature: `director:${focusService.id}:${directorSlot}:${angle}`,
+          }));
+        }
       }
     }
 
@@ -2015,11 +2111,14 @@ export class CommandCenter {
           const status = String(file?.status || '');
           const safe = safeGithubChangePath(path);
           const changes = Number(file?.changes || 0);
+          const allowedAutomergeSurface = config.directorAutoMergePathPrefixes.some((prefix) =>
+            path.startsWith(String(prefix || '')));
           const sensitivePath = /(^|\/)(auth|oauth|security|policy|permissions?|config|database|migrations?|billing|payments?|identity|vault)(\/|\.|$)/i.test(path);
           const patch = String(file?.patch || '');
           const sensitivePatch = /(process\.env|secrets?|credentials?|private[_-]?key|child_process|\bexec\s*\(|\bspawn\s*\(|subprocess|os\.system|\bDROP\s+TABLE\b|\bTRUNCATE\b)/i.test(patch);
           return Boolean(safe)
             && safe === path
+            && allowedAutomergeSurface
             && !sensitivePath
             && !sensitivePatch
             && ['added', 'modified'].includes(status)
@@ -2046,7 +2145,7 @@ export class CommandCenter {
         const checks = Array.isArray(checksResponse.data?.check_runs)
           ? checksResponse.data.check_runs
           : [];
-        if (!checks.length) continue;
+        if (checks.length < config.directorMergeMinChecks) continue;
         const checksGreen = checks.every((check) =>
           String(check?.status || '') === 'completed'
           && ['success', 'neutral', 'skipped'].includes(String(check?.conclusion || ''))
@@ -2209,15 +2308,19 @@ export class CommandCenter {
         ...this.githubCandidates(fleet),
         ...(await this.buildCandidates()),
       ].sort((a, b) => (b.priority + b.confidence * 0.15) - (a.priority + a.confidence * 0.15));
-      let selected = null;
+      const selected = [];
+      const domains = new Set();
       for (const candidate of candidates) {
+        if (selected.length >= config.commandCenterPortfolioWorkstreams) break;
+        const domain = String(candidate.domain || 'aura');
+        if (domains.has(domain)) continue;
         const persisted = await this.persistInitiative(candidate);
         if (!persisted.created) continue;
-        selected = persisted.initiative;
-        break;
+        selected.push(persisted.initiative);
+        domains.add(domain);
       }
       this.lastCycleAt = now();
-      if (!selected) {
+      if (!selected.length) {
         return {
           ok: true,
           reconciled,
@@ -2229,17 +2332,50 @@ export class CommandCenter {
           candidates: candidates.length,
         };
       }
-      const result = await this.executeInitiative(selected);
+
+      const repositoriesInFlight = new Set();
+      const immediate = [];
+      const queued = [];
+      for (const initiative of selected) {
+        const payload = parseJson(initiative.action_payload, {});
+        const repository = String(payload.repository || '').toLowerCase();
+        const sideEffecting = ['operator','github'].includes(String(initiative.kind || ''));
+        const repositoryBusy = repository && repositoriesInFlight.has(repository);
+        if (sideEffecting || repositoryBusy) {
+          queued.push({
+            id: initiative.id,
+            domain: initiative.domain,
+            kind: initiative.kind,
+            status: initiative.status,
+            execution_mode: 'portfolio-queued',
+          });
+          continue;
+        }
+        if (repository) repositoriesInFlight.add(repository);
+        immediate.push(initiative);
+      }
+
+      const settled = await Promise.allSettled(immediate.map((initiative) =>
+        this.executeInitiative(initiative)));
+      const results = settled.map((item, index) =>
+        item.status === 'fulfilled'
+          ? item.value
+          : {
+            id: immediate[index]?.id || '',
+            status: 'failed',
+            error: safeOperationalError(item.reason, 1000),
+          });
       this.lastError = '';
       return {
         ok: true,
         trigger,
+        mode: 'portfolio-workstreams',
         candidate_count: candidates.length,
         reconciled,
         promotions,
         expert_candidates: expertCandidates.length,
         long_horizon: missionAdvance,
-        initiative: result,
+        workstreams: [...results, ...queued],
       };
     } catch (error) {
       this.lastError = String(error?.message || error).slice(0, 1000);
@@ -2294,8 +2430,50 @@ export class CommandCenter {
     return this.executeInitiative(row);
   }
 
+  async portfolioSnapshot() {
+    await this.refreshProductHealth().catch(() => []);
+    const [services, active] = await Promise.all([
+      this.services(),
+      query(
+        `SELECT domain,
+          COUNT(*) AS active_count,
+          SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) AS running_count,
+          SUM(CASE WHEN status='waiting' THEN 1 ELSE 0 END) AS waiting_count,
+          MAX(updated_at) AS last_work_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         GROUP BY domain`,
+      ),
+    ]);
+    const byDomain = new Map(active.map((row) => [String(row.domain || ''), row]));
+    const stamp = Date.now();
+    return services
+      .filter((service) => ['quantic-product','product'].includes(String(service.kind || '')))
+      .map((service) => {
+        const work = byDomain.get(String(service.id || '')) || {};
+        const observedMs = Date.parse(String(service.last_observed_at || ''));
+        const ageSeconds = Number.isFinite(observedMs)
+          ? Math.max(0, Math.round((stamp - observedMs) / 1000))
+          : null;
+        return {
+          id: service.id,
+          name: service.name,
+          state: service.state,
+          detail: String(service.state_detail || '').slice(0, 400),
+          criticality: Number(service.criticality || 0),
+          last_observed_at: service.last_observed_at || '',
+          heartbeat_age_seconds: ageSeconds,
+          active_workstreams: Number(work.active_count || 0),
+          running_workstreams: Number(work.running_count || 0),
+          waiting_workstreams: Number(work.waiting_count || 0),
+          last_work_at: String(work.last_work_at || ''),
+          repository: String(service.repository || ''),
+        };
+      });
+  }
+
   async status({ publicView = true } = {}) {
-    const [counts, bridgeStatus, services, longHorizon] = await Promise.all([
+    const [counts, bridgeStatus, services, longHorizon, portfolio] = await Promise.all([
       one(
         `SELECT COUNT(*) AS total,
           SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
@@ -2308,6 +2486,7 @@ export class CommandCenter {
       this.bridge?.status?.() || Promise.resolve({ enabled: false, worker_online: false }),
       this.services(),
       this.longHorizon.status().catch(() => ({ enabled: false, error: 'unavailable' })),
+      this.portfolioSnapshot().catch(() => []),
     ]);
     const degraded = services.filter((item) => BAD_SERVICE_STATES.has(String(item.state || '').toLowerCase()));
     const fleet = this.fleetSnapshot || [];
@@ -2346,6 +2525,12 @@ export class CommandCenter {
       local_worker_online: Boolean(bridgeStatus?.worker_online),
       github_write_authority: Boolean(this.githubToken),
       monitored_repositories: config.commandCenterGithubRepos.length,
+      portfolio_workstreams: config.commandCenterPortfolioWorkstreams,
+      product_health_ttl: {
+        stale_seconds: config.commandCenterProductStaleSeconds,
+        offline_seconds: config.commandCenterProductOfflineSeconds,
+      },
+      portfolio,
       fleet: {
         score: fleetScore,
         healthy: fleet.filter((item) => item.state === 'healthy').length,
