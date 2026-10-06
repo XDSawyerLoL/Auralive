@@ -195,6 +195,13 @@ export const config = Object.freeze({
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
 
+  // Continuous Existence: AURA periodically re-evaluates unfinished work even
+  // when no human message or external event arrives. This is native cognition
+  // only; it does not authorize new risks or paid inference.
+  continuityEnabled: bool('AURA_CONTINUITY_ENABLED', true),
+  continuityReflectionSeconds: int('AURA_CONTINUITY_REFLECTION_SECONDS', 600, 60, 86400),
+  continuityMaxReflectionsPerHour: int('AURA_CONTINUITY_MAX_REFLECTIONS_PER_HOUR', 4, 1, 24),
+
   curiosityEnabled: bool('AURA_CURIOSITY_ENABLED', true),
   curiosityTickSeconds: int('AURA_CURIOSITY_TICK_SECONDS', 180, 30, 86400),
   curiosityWarmupSeconds: int('AURA_CURIOSITY_WARMUP_SECONDS', 45, 10, 600),
