@@ -39,7 +39,6 @@ jobs:
         env:
           NODE_ENV: production
           PORT: "49999"
-          AURA_PORT: "3000"
           AURA_GATEWAY_PORT: "3987"
           AURA_INTERNAL_PORT: "3988"
         run: |
