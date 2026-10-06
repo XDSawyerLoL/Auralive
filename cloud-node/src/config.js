@@ -125,6 +125,7 @@ export const config = Object.freeze({
   cloudToken: process.env.AURA_CLOUD_TOKEN || '',
   bridgeToken: process.env.AURA_BRIDGE_TOKEN || '',
   productTokens: secretMap('AURA_PRODUCT_TOKENS_JSON'),
+  allowLegacyBridgeAdminToken: bool('AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN', false),
   allowLegacyProductAdminToken: bool('AURA_ALLOW_LEGACY_PRODUCT_ADMIN_TOKEN', false),
   canaryToken: process.env.AURA_EVOLUTION_CANARY_TOKEN || '',
 
