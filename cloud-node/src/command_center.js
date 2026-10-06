@@ -990,6 +990,22 @@ export class CommandCenter {
           telemetry_source: 'aura-runtime-heartbeat',
         },
       );
+    } else if (
+      hostProduct.includes('studio')
+      || runtimePackaging.includes('embedded-compatibility-host')
+    ) {
+      await this.setServiceState(
+        'quantic-studio',
+        'offline',
+        'Le dernier AURA Runtime hébergé par Quantic Studio ne répond plus.',
+        {
+          worker_online: false,
+          worker_version: String(bridgeStatus?.worker?.version || ''),
+          runtime_host_product: String(bridgeStatus?.worker?.host_product || 'Quantic Studio'),
+          runtime_packaging: String(bridgeStatus?.worker?.runtime_packaging || ''),
+          telemetry_source: 'aura-runtime-heartbeat',
+        },
+      );
     }
 
     const horizonStatus = this.kernel?.horizon?.status?.() || {};
