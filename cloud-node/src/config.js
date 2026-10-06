@@ -275,8 +275,8 @@ export const config = Object.freeze({
   commandCenterWarmupSeconds: int('AURA_COMMAND_CENTER_WARMUP_SECONDS', 20, 10, 300),
   commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 12, 1, 48),
   commandCenterPortfolioWorkstreams: int('AURA_COMMAND_PORTFOLIO_WORKSTREAMS', 4, 1, 8),
-  commandCenterProductStaleSeconds: int('AURA_COMMAND_PRODUCT_STALE_SECONDS', 600, 120, 86400),
-  commandCenterProductOfflineSeconds: int('AURA_COMMAND_PRODUCT_OFFLINE_SECONDS', 1200, 300, 172800),
+  commandCenterProductStaleSeconds: int('AURA_COMMAND_PRODUCT_STALE_SECONDS', 360, 120, 86400),
+  commandCenterProductOfflineSeconds: int('AURA_COMMAND_PRODUCT_OFFLINE_SECONDS', 900, 300, 172800),
   commandCenterCooldownSeconds: int('AURA_COMMAND_CENTER_COOLDOWN_SECONDS', 900, 60, 86400),
   commandCenterMinConfidence: num('AURA_COMMAND_CENTER_MIN_CONFIDENCE', 0.58, 0.1, 1),
   commandCenterAllowedRisks: new Set(csv(
