@@ -1625,7 +1625,12 @@ export class CognitiveKernel {
         enabled: config.continuityEnabled,
         reflection_seconds: config.continuityReflectionSeconds,
         max_reflections_per_hour: config.continuityMaxReflectionsPerHour,
-        state: this.soulCache?.existence || {},
+        state: {
+          mode: String(this.soulCache?.existence?.mode || 'continuous'),
+          last_autonomous_reflection_at: String(this.soulCache?.existence?.last_autonomous_reflection_at || ''),
+          last_reason: String(this.soulCache?.existence?.last_reason || ''),
+          unfinished_work: Boolean(this.soulCache?.existence?.unfinished_work),
+        },
       },
       operator_mode: config.cloudOperatorMode,
       cognition: {
