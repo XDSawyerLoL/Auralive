@@ -111,7 +111,7 @@ test('production entry uses one Fastify listener on Hostinger port 3000 with run
   assert.equal(root.status, 200);
   const html = await root.text();
   assert.match(html, /AURA/);
-  assert.match(html, /Interface de conscience opérationnelle/);
+  assert.match(html, /Company OS/);
   assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
@@ -122,10 +122,10 @@ test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  const html = await waitFor('/', (text) => text.includes('Interface de conscience opérationnelle'));
+  const html = await waitFor('/', (text) => text.includes('Company OS'));
   assert.match(html, /AURA/);
-  assert.match(html, /Interface de conscience opérationnelle/);
-  assert.match(html, /Carte d’intérêt/);
+  assert.match(html, /Company OS/);
+  assert.match(html, /Quantic Sillage · Cognition en direct/);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const payload = JSON.parse(healthText);
