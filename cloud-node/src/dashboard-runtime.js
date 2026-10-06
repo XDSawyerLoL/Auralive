@@ -391,6 +391,7 @@ function renderCommandCenter(command,work,attention){
     $('commandFleet').textContent='—';
     $('commandMode').textContent='—';
     $('commandCount').textContent='—';
+    if($('commandCompany'))$('commandCompany').textContent='—';
     renderNext(work,attention);
     return;
   }
@@ -403,6 +404,15 @@ function renderCommandCenter(command,work,attention){
   $('commandMode').textContent=command.github_write_authority?'Agit + observe':'Observe + planifie';
   $('commandMode').className=command.github_write_authority?'good':'warn';
   $('commandCount').textContent=active+' active'+(active>1?'s':'');
+  const readiness=command.company_readiness||{};
+  if($('commandCompany')){
+    const score=Number(readiness.overall||0);
+    $('commandCompany').textContent=score?score.toFixed(1)+'/10':'—';
+    $('commandCompany').className=score>=8?'good':(score>0?'warn':'');
+    $('commandCompany').title=Array.isArray(readiness.blockers)&&readiness.blockers.length
+      ? readiness.blockers.join(' · ')
+      : 'Objectif ≥ 8/10 atteint sur les preuves runtime disponibles.';
+  }
   const top=command.top_initiative||null;
   if(top){
     $('nextAction').textContent=String(top.title||top.objective||'Initiative autonome');
