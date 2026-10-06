@@ -14,6 +14,12 @@ def test_aura_organism_keeps_only_useful_homeostatic_dimensions():
         "clarte",
         "attachement",
         "curiosite",
+        "engagement",
+        "confiance",
+        "satisfaction",
+        "frustration",
+        "agency",
+        "curiosite_sociale",
         "pression_de_reve",
         "besoin_de_silence",
         "risque_assistante",
@@ -23,8 +29,12 @@ def test_aura_organism_keeps_only_useful_homeostatic_dimensions():
 
     assert "tension" not in state
     assert "fatigue_cognitive" not in state
-    assert state["version"] == "homeostasie_v7_streamlined"
+    assert state["version"] == "homeostasie_v9_unified"
+    assert state["schema_revision"] == 9
+    assert state["authority"] == "cloud-canonical"
     assert state["needs"]["rester_aura"] > 0.8
+    assert state["needs"]["diriger"] > 0.6
+    assert state["executive"]["role"] == "directrice_operationnelle"
     assert state["intention_field"]["collapse"]["intention_choisie"]
 
 
@@ -104,3 +114,32 @@ def test_migration_removes_obsolete_dimensions_and_preserves_revision_timestamp(
     assert migrated["updated_at"] == "2026-09-24T20:00:00+00:00"
     assert "tension" not in migrated
     assert "fatigue_cognitive" not in migrated
+
+
+def test_v9_public_state_matches_cloud_dimensions():
+    organism = AuraOrganism()
+    state = organism.default_state()
+    view = organism.public_state(state)
+
+    assert view["version"] == "homeostasie_v9_unified"
+    assert view["schema_revision"] == 9
+    assert view["authority"] == "cloud-canonical"
+    assert view["last_reason"]
+    for key in ("activation", "agitation", "recovery"):
+        assert isinstance(view["dynamics"][key], float)
+        assert 0.0 <= view["dynamics"][key] <= 1.0
+
+
+def test_director_interaction_updates_agency_and_private_relationship():
+    organism = AuraOrganism()
+    initial = organism.default_state()
+    pre = organism.before_interaction(
+        initial,
+        "Je veux que tu diriges Quantic Sillage et que notre projet avance ensemble.",
+        meta={"author": "Créateur", "private_relationship": True},
+    )
+
+    assert pre["state"]["agency"] > initial["agency"]
+    assert pre["state"]["engagement"] > initial["engagement"]
+    assert pre["state"]["relationship"]["last_author"] == "Créateur"
+    assert "diriges Quantic Sillage" in pre["state"]["relationship"]["last_open_thread"]
