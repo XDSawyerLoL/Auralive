@@ -286,21 +286,24 @@ function initLivingAuraScene(){
     nctx.clearRect(0,0,scene.w,scene.h);
     nctx.globalCompositeOperation='screen';
     const o=scene.organism||{};
-    const tension=Number(o.tension||0);
+    const dynamics=o.dynamics||{};
+    const agitation=Number(dynamics.agitation||0);
+    const activation=Number(dynamics.activation||0);
+    const recovery=Number(dynamics.recovery||0);
     const curiosity=Number(o.curiosite||0);
     const stability=Number(o.stabilite||0);
     const dream=Number(o.pression_de_reve||0);
-    const fatigue=Number(o.fatigue_cognitive||0);
     const attachment=Number(o.attachement||0);
+    const silence=Number(o.besoin_de_silence||0);
     const cx=scene.w*.5, cy=scene.h*.50;
-    const tempo=.00042+tension*.00038+(1-fatigue)*.00008;
+    const tempo=.00040+agitation*.00042+activation*.00012-silence*.00008;
     const breath=.5+.5*Math.sin(t*tempo);
     glow(cx+Math.sin(t*.00016)*10,cy+Math.cos(t*.00013)*8,Math.max(scene.w,scene.h)*(.28+dream*.06),'rgba(255,157,72,ALPHA)',.14+.10*dream+.055*breath);
     glow(cx-scene.w*.22+Math.sin(t*.00010)*18,cy-scene.h*.18,scene.w*.24,'rgba(151,92,255,ALPHA)',.055+.12*curiosity);
     glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00012)*12,scene.w*.25,'rgba(232,78,164,ALPHA)',.045+.095*stability);
     glow(cx+scene.w*.29+Math.cos(t*.00009)*12,cy+scene.h*.19,scene.w*.20,'rgba(255,190,102,ALPHA)',.045+.09*attachment);
-    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00011)*11,scene.w*.20,'rgba(187,92,255,ALPHA)',.035+.15*tension);
-    glow(cx,cy,Math.min(scene.w,scene.h)*(.15+.08*stability),'rgba(255,224,190,ALPHA)',.05+.08*(1-fatigue));
+    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00011)*11,scene.w*.20,'rgba(187,92,255,ALPHA)',.035+.15*agitation);
+    glow(cx,cy,Math.min(scene.w,scene.h)*(.15+.08*stability),'rgba(255,224,190,ALPHA)',.05+.08*recovery);
     nctx.globalCompositeOperation='source-over';
   }
 
@@ -309,7 +312,7 @@ function initLivingAuraScene(){
     pctx.globalCompositeOperation='screen';
     const colors=['255,231,207','155,108,255','236,95,169','255,191,104','93,224,170'];
     scene.dust.forEach(function(d){
-      const o=scene.organism||{};const motion=.55+Number(o.curiosite||0)*.75-Number(o.fatigue_cognitive||0)*.25;
+      const o=scene.organism||{};const dynamics=o.dynamics||{};const motion=.45+Number(o.curiosite||0)*.55+Number(dynamics.activation||0)*.55-Number(o.besoin_de_silence||0)*.35;
       if(!reduceMotion){d.x+=d.vx*motion;d.y+=d.vy*motion;}
       if(d.x<-.02)d.x=1.02;if(d.x>1.02)d.x=-.02;if(d.y<-.02)d.y=1.02;if(d.y>1.02)d.y=-.02;
       const pulse=.46+.54*Math.sin(t*.00125+d.phase)*.5+.27;
@@ -322,7 +325,7 @@ function initLivingAuraScene(){
 
     const cx=scene.w*.5,cy=scene.h*.50;
     scene.sparks.forEach(function(s){
-      const o=scene.organism||{};const orbit=.65+Number(o.curiosite||0)*.85+Number(o.tension||0)*.35;
+      const o=scene.organism||{};const dynamics=o.dynamics||{};const orbit=.60+Number(o.curiosite||0)*.70+Number(dynamics.activation||0)*.45+Number(dynamics.agitation||0)*.30;
       if(!reduceMotion)s.angle+=s.speed*16.6*orbit;
       const wobble=1+Math.sin(t*.0008+s.phase)*.07;
       const rr=Math.min(scene.w,scene.h)*s.radius*wobble;
@@ -342,11 +345,12 @@ function initLivingAuraScene(){
     const core=$('core');
     if(core){
       const o=scene.organism||{};
-      const tension=Number(o.tension||0), stability=Number(o.stabilite||0), fatigue=Number(o.fatigue_cognitive||0);
-      const amp=.014+tension*.026+(1-stability)*.010;
-      const speed=.0009+tension*.0012+(1-fatigue)*.00025;
+      const dynamics=o.dynamics||{};
+      const agitation=Number(dynamics.agitation||0), activation=Number(dynamics.activation||0), stability=Number(o.stabilite||0), silence=Number(o.besoin_de_silence||0);
+      const amp=.012+agitation*.024+activation*.012+(1-stability)*.010;
+      const speed=.00072+activation*.00070+agitation*.00085-silence*.00020;
       const pulse=reduceMotion?1:(1+Math.sin(t*speed)*amp+Math.sin(t*.00041)*.012);
-      const rot=reduceMotion?0:Math.sin(t*(.00008+tension*.00007))*(.35+tension*1.35);
+      const rot=reduceMotion?0:Math.sin(t*(.00007+agitation*.00008))*(.28+agitation*1.15);
       core.setAttribute('transform','translate(450 325) rotate('+rot+') scale('+pulse+') translate(-450 -325)');
     }
     document.querySelectorAll('.aura-node').forEach(function(node,index){
