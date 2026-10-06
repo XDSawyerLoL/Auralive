@@ -352,6 +352,7 @@ body.aura-speaking .energy-pulse{animation-duration:1.6s}
           <div class="command-stat"><span>Flotte</span><strong id="commandFleet">—</strong></div>
           <div class="command-stat"><span>Autonomie</span><strong id="commandMode">—</strong></div>
           <div class="command-stat"><span>Initiatives</span><strong id="commandCount">—</strong></div>
+          <div class="command-stat"><span>Entreprise agentique</span><strong id="commandCompany">—</strong></div>
         </div>
         <div class="next-action"><div class="next-orb">→</div><div class="next-copy" id="nextAction">Aucune initiative calculée.</div></div>
         <div class="confidence">Priorité / confiance : <span id="confidenceValue">—</span></div>
