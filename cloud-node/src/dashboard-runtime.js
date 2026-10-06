@@ -414,6 +414,42 @@ function renderCommandCenter(command,work,attention){
   }
   renderNext(work,attention);
 }
+function renderPortfolio(command){
+  const list=$('portfolioList');
+  const meta=$('portfolioMeta');
+  if(!list||!meta)return;
+  const rows=Array.isArray(command&&command.portfolio)?command.portfolio:[];
+  if(!rows.length){
+    meta.textContent='Aucune télémétrie';
+    list.innerHTML='<div class="empty">Aucun produit observable pour le moment.</div>';
+    return;
+  }
+  const healthy=rows.filter(function(row){return ['online','healthy'].includes(String(row.state||''));}).length;
+  const troubled=rows.filter(function(row){return ['stale','offline','degraded','error','unhealthy'].includes(String(row.state||''));}).length;
+  meta.textContent=healthy+'/'+rows.length+' opérationnels'+(troubled?' · '+troubled+' à traiter':'');
+  list.innerHTML=rows.map(function(row){
+    const age=row.heartbeat_age_seconds==null?'jamais':(Number(row.heartbeat_age_seconds)<60?Number(row.heartbeat_age_seconds)+' s':Math.round(Number(row.heartbeat_age_seconds)/60)+' min');
+    const active=Number(row.active_workstreams||0);
+    const state=String(row.state||'unknown');
+    return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.name||row.id||'Produit')+'</div><span class="badge">'+escapeHtml(state)+'</span></div><div class="memory-date">heartbeat '+escapeHtml(age)+' · '+active+' workstream'+(active>1?'s':'')+(row.last_work_at?' · travail '+fmtTime(row.last_work_at):'')+'</div></div>';
+  }).join('');
+}
+function renderReceipts(command){
+  const list=$('receiptList');
+  const meta=$('receiptMeta');
+  if(!list||!meta)return;
+  const rows=Array.isArray(command&&command.recent_receipts)?command.recent_receipts:[];
+  meta.textContent=rows.length+' preuve'+(rows.length>1?'s':'')+' récente'+(rows.length>1?'s':'');
+  if(!rows.length){
+    list.innerHTML='<div class="empty">Aucun reçu opérationnel récent.</div>';
+    return;
+  }
+  list.innerHTML=rows.slice(0,12).map(function(row){
+    const title=String(row.title||row.event||'Activité AURA');
+    const detail=[row.domain,row.status,row.execution_mode].filter(Boolean).join(' · ');
+    return '<div class="activity-row"><div><div class="activity-title">'+escapeHtml(title)+'</div><div class="memory-date">'+escapeHtml(detail)+' · reçu #'+escapeHtml(row.receipt_id||'—')+'</div></div><div class="activity-time">'+fmtTime(row.created_at)+'</div></div>';
+  }).join('');
+}
 function renderCuriosity(status){
   const list=$('curiosityList');
   const meta=$('curiosityMeta');
@@ -571,6 +607,8 @@ async function refresh(){
       renderWork(work);
       renderMap(attention);
       renderCommandCenter(commandStatus,work,attention);
+      renderPortfolio(commandStatus);
+      renderReceipts(commandStatus);
       renderCuriosity(curiosityStatus);
       renderScout(scoutStatus);
     }else{
@@ -579,6 +617,8 @@ async function refresh(){
       $('activityList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       renderCommandCenter(commandStatus,[],null);
+      renderPortfolio(commandStatus);
+      renderReceipts(commandStatus);
       renderCuriosity(curiosityStatus);
       renderScout(scoutStatus);
     }
