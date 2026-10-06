@@ -2243,6 +2243,65 @@ export class CommandCenter {
     return this.executeInitiative(row);
   }
 
+  async resumeQueuedPortfolioInitiatives() {
+    const rows = await query(
+      `SELECT i.*
+       FROM aura_initiatives i
+       WHERE i.status='queued'
+         AND NOT EXISTS (
+           SELECT 1 FROM aura_mission_steps ms WHERE ms.initiative_id=i.id
+         )
+       ORDER BY i.priority DESC,i.confidence DESC,i.updated_at ASC
+       LIMIT ?`,
+      [Math.max(1, config.commandCenterPortfolioWorkstreams * 3)],
+    );
+    if (!rows.length) return [];
+
+    const selected = [];
+    const domains = new Set();
+    const repositories = new Set();
+    let sideEffectSelected = false;
+    for (const row of rows) {
+      if (selected.length >= config.commandCenterPortfolioWorkstreams) break;
+      const domain = String(row.domain || 'aura');
+      if (domains.has(domain)) continue;
+      const payload = parseJson(row.action_payload, {});
+      const repository = String(payload.repository || '').trim().toLowerCase();
+      const sideEffecting = ['operator','github'].includes(String(row.kind || ''));
+      if (repository && repositories.has(repository)) continue;
+      if (sideEffecting && sideEffectSelected) continue;
+      selected.push(row);
+      domains.add(domain);
+      if (repository) repositories.add(repository);
+      if (sideEffecting) sideEffectSelected = true;
+    }
+    if (!selected.length) return [];
+
+    const safe = selected.filter((row) => !['operator','github'].includes(String(row.kind || '')));
+    const sideEffect = selected.find((row) => ['operator','github'].includes(String(row.kind || ''))) || null;
+    const settled = await Promise.allSettled(safe.map((row) => this.executeInitiative(row)));
+    const results = settled.map((item, index) =>
+      item.status === 'fulfilled'
+        ? item.value
+        : {
+          id: safe[index]?.id || '',
+          status: 'failed',
+          error: safeOperationalError(item.reason, 1000),
+        });
+    if (sideEffect) {
+      try {
+        results.push(await this.executeInitiative(sideEffect));
+      } catch (error) {
+        results.push({
+          id: sideEffect.id,
+          status: 'failed',
+          error: safeOperationalError(error, 1000),
+        });
+      }
+    }
+    return results;
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -2265,6 +2324,21 @@ export class CommandCenter {
           mode: 'long-horizon-resume',
           reconciled,
           initiative: resumedMissionInitiative,
+        };
+      }
+      const resumedPortfolio = await this.resumeQueuedPortfolioInitiatives().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return [];
+      });
+      if (resumedPortfolio.length) {
+        this.lastCycleAt = now();
+        this.lastError = '';
+        return {
+          ok: true,
+          trigger,
+          mode: 'portfolio-resume',
+          reconciled,
+          workstreams: resumedPortfolio,
         };
       }
       const promotions = await this.promoteDirectorPullRequests().catch((error) => {
