@@ -551,6 +551,13 @@ async function refresh(){
 
     const attention=publicState.attention||null;
     $('dominantThought').textContent=(attention&&attention.focus_statement?attention.focus_statement:'Observation autonome du système.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    const continuity=ks.continuity||{};
+    const continuityState=continuity.state||{};
+    const lastAutonomous=continuityState.last_autonomous_reflection_at?fmtDate(continuityState.last_autonomous_reflection_at)+' '+fmtTime(continuityState.last_autonomous_reflection_at):'pas encore';
+    $('continuityState').textContent='Continuité autonome : '+(continuity.enabled?'active':'inactive')
+      +' · dernière réflexion : '+lastAutonomous
+      +' · '+(continuityState.unfinished_work?'travail inachevé suivi':'auto-réévaluation')
+      +(continuityState.last_reason?' · raison : '+continuityState.last_reason:'');
     lastSoul=Object.assign({},soul);
 
     if(boot.runtime_ready){
