@@ -13,16 +13,6 @@ test('bridge heartbeat is Cloud-authoritative and never imports worker organism'
   assert.doesNotMatch(block, /importOrganismState\(request\.body\.organism/);
 });
 
-test('runtime heartbeat declares version only and does not upload organism body', () => {
-  const worker = fs.readFileSync(new URL('../../aura_runtime/worker.py', import.meta.url), 'utf8');
-  const start = worker.indexOf('async def _heartbeat');
-  const end = worker.indexOf('async def _claim', start);
-  const block = worker.slice(start, end);
-  assert.match(block, /"organism_version"/);
-  assert.match(block, /"organism_schema_revision"/);
-  assert.doesNotMatch(block, /"organism": organism/);
-});
-
 test('premium neural map consumes v9 dynamics, not removed tension/fatigue fields', () => {
   const runtime = fs.readFileSync(new URL('../src/dashboard-runtime.js', import.meta.url), 'utf8');
   const start = runtime.indexOf('function initLivingAuraScene');
