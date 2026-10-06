@@ -81,3 +81,19 @@ test('dashboard visibly exposes product portfolio and operational receipts', () 
   assert.match(runtime, /function renderPortfolio\(/);
   assert.match(runtime, /function renderReceipts\(/);
 });
+
+
+test('company readiness score stays evidence-based and visible', () => {
+  const command = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../src/dashboard.js', import.meta.url), 'utf8');
+  const runtime = fs.readFileSync(new URL('../src/dashboard-runtime.js', import.meta.url), 'utf8');
+
+  assert.match(command, /companyReadiness\(/);
+  assert.match(command, /target_met: overall >= 8/);
+  assert.match(command, /product_tokens_configured/);
+  assert.match(command, /products_observed/);
+  assert.match(command, /receipts_considered/);
+  assert.match(html, /Entreprise agentique/);
+  assert.match(html, /id="commandCompany"/);
+  assert.match(runtime, /company_readiness/);
+});
