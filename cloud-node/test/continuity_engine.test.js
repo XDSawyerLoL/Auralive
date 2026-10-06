@@ -57,3 +57,54 @@ test('continuous existence is enabled by default and separately budgeted', () =>
   assert.match(configSource, /continuityReflectionSeconds: int\('AURA_CONTINUITY_REFLECTION_SECONDS', 600/);
   assert.match(configSource, /continuityMaxReflectionsPerHour: int\('AURA_CONTINUITY_MAX_REFLECTIONS_PER_HOUR', 4/);
 });
+
+
+test('private chat can report only persisted activity since the previous exchange', () => {
+  const cognition = new CognitionEngine();
+  const plan = cognition.planReply({
+    text: "Qu'as-tu fait depuis notre dernier échange ?",
+    soul: { current_intention: 'Piloter AURA', organism: {} },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    agenda: {},
+    continuityReport: {
+      since: '2026-10-06T06:00:00.000Z',
+      event_count: 2,
+      autonomous_event_count: 2,
+      events: [
+        { at: '2026-10-06T06:10:00.000Z', type: 'reflection', title: 'Continuité autonome', detail: 'Réévaluation du travail.' },
+        { at: '2026-10-06T06:20:00.000Z', type: 'mission', title: 'Fiabiliser AURA', detail: 'running · progression 40%' },
+      ],
+    },
+    recentMessages: [],
+    privateView: true,
+  });
+
+  assert.equal(plan.act, 'report_continuity_history');
+  assert.equal(plan.needs_semantic_support, false);
+  const reply = cognition.deterministicReply(plan);
+  assert.match(reply, /2 événements persistés/i);
+  assert.match(reply, /Fiabiliser AURA/i);
+});
+
+test('absence report refuses to invent activity when the ledger is empty', () => {
+  const cognition = new CognitionEngine();
+  const plan = cognition.planReply({
+    text: "Qu'as-tu fait depuis la dernière fois ?",
+    soul: { current_intention: 'Piloter AURA', organism: {} },
+    continuityReport: { since: '2026-10-06T06:00:00.000Z', event_count: 0, autonomous_event_count: 0, events: [] },
+    privateView: true,
+  });
+  const reply = cognition.deterministicReply(plan);
+  assert.match(reply, /aucune activité persistée/i);
+  assert.match(reply, /plutôt que d’inventer/i);
+});
+
+test('kernel exposes a unified agenda and evidence-backed absence ledger', () => {
+  assert.match(kernelSource, /async agendaSnapshot\(\)/);
+  assert.match(kernelSource, /async activitySinceLastConversation\(/);
+  assert.match(kernelSource, /has_real_activity/);
+  assert.match(kernelSource, /Foyer opérationnel/);
+});
