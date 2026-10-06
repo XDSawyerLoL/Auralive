@@ -173,6 +173,10 @@ export class CognitiveKernel {
   async importOrganismState(candidate) {
     if (!candidate || typeof candidate !== 'object') return false;
     const current = this.organism.migrate(this.soulCache || {});
+    const currentRevision = Number(current.schema_revision || 9);
+    const candidateRevision = Number(candidate.schema_revision || 0);
+    if (candidateRevision < currentRevision) return false;
+    if (String(candidate.authority || '') && String(candidate.authority) !== 'cloud-canonical') return false;
     const currentAt = Date.parse(String(current.updated_at || ''));
     const candidateAt = Date.parse(String(candidate.updated_at || ''));
     if (Number.isFinite(currentAt) && Number.isFinite(candidateAt) && candidateAt <= currentAt) return false;
