@@ -52,7 +52,7 @@ const AGENT_ROLES = {
 };
 
 export class CognitiveKernel {
-  static VERSION = 'aura-unified-kernel-node-v3';
+  static VERSION = 'aura-unified-kernel-node-v3.1';
 
   constructor(ai, horizon, bridge = null, webSubstrate = null, fabric = null) {
     this.ai = ai;
@@ -71,6 +71,7 @@ export class CognitiveKernel {
     this.soulCache = null;
     this.stimuli = [];
     this.lastReflectionAtMs = 0;
+    this.lastContinuityReflectionAtMs = 0;
     this.tickRunning = false;
     this.lastError = '';
     this.lastTickAt = '';
@@ -103,6 +104,13 @@ export class CognitiveKernel {
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
+      existence: {
+        mode: 'continuous',
+        current_focus: 'Observer, décider, agir, vérifier et apprendre.',
+        last_autonomous_reflection_at: '',
+        last_reason: 'genesis',
+        unfinished_work: false,
+      },
     };
   }
 
@@ -194,6 +202,11 @@ export class CognitiveKernel {
       ).catch(() => {});
     }
     this.syncLegacyFromOrganism();
+    if (!this.soulCache.existence || typeof this.soulCache.existence !== 'object') {
+      this.soulCache.existence = this.defaultSoul().existence;
+    }
+    const persistedContinuityAt = Date.parse(String(this.soulCache.existence.last_autonomous_reflection_at || ''));
+    if (Number.isFinite(persistedContinuityAt)) this.lastContinuityReflectionAtMs = persistedContinuityAt;
     await this.saveSoul();
     await this.dedupeActiveIntentions();
   }
@@ -463,6 +476,117 @@ export class CognitiveKernel {
     return Number(row?.total || 0);
   }
 
+  async continuityReflectionCountLastHour() {
+    const threshold = new Date(Date.now() - 3600_000).toISOString();
+    const row = await one(
+      "SELECT COUNT(*) AS total FROM aura_reflections WHERE created_at>=? AND trigger_name LIKE 'continuity:%'",
+      [threshold],
+    );
+    return Number(row?.total || 0);
+  }
+
+  async continuitySnapshot() {
+    const [intentions, missions, initiatives, recentActivity] = await Promise.all([
+      this.intentions(6).catch(() => []),
+      query(
+        `SELECT id,title,objective,status,priority,updated_at
+         FROM aura_missions
+         WHERE status IN ('running','waiting','paused')
+         ORDER BY priority DESC,updated_at ASC LIMIT 4`,
+      ).catch(() => []),
+      query(
+        `SELECT id,domain,kind,title,objective,status,priority,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at ASC LIMIT 6`,
+      ).catch(() => []),
+      one(
+        `SELECT kind,title,created_at
+         FROM aura_cognitive_traces
+         WHERE kind NOT IN ('reflection','continuity')
+         ORDER BY id DESC LIMIT 1`,
+      ).catch(() => null),
+    ]);
+
+    const topIntention = intentions[0] || null;
+    const topMission = missions[0] || null;
+    const topInitiative = initiatives[0] || null;
+    const unfinishedWork = Boolean(topIntention || topMission || topInitiative);
+    const focus = String(
+      topInitiative?.title
+      || topMission?.title
+      || topMission?.objective
+      || topIntention?.statement
+      || this.soulCache?.current_intention
+      || 'Observer le système et rechercher la prochaine action utile.',
+    ).replace(/\s+/g, ' ').trim().slice(0, 700);
+
+    return {
+      unfinished_work: unfinishedWork,
+      active_intentions: intentions.length,
+      active_missions: missions.length,
+      pending_initiatives: initiatives.length,
+      focus,
+      top_intention: topIntention ? {
+        id: topIntention.id,
+        statement: String(topIntention.statement || '').slice(0, 1200),
+        priority: Number(topIntention.priority || 0),
+      } : null,
+      top_mission: topMission ? {
+        id: topMission.id,
+        title: String(topMission.title || topMission.objective || '').slice(0, 800),
+        status: String(topMission.status || ''),
+        priority: Number(topMission.priority || 0),
+      } : null,
+      top_initiative: topInitiative ? {
+        id: topInitiative.id,
+        title: String(topInitiative.title || topInitiative.objective || '').slice(0, 800),
+        status: String(topInitiative.status || ''),
+        priority: Number(topInitiative.priority || 0),
+      } : null,
+      recent_activity_at: String(recentActivity?.created_at || ''),
+    };
+  }
+
+  async prepareContinuityStimulus() {
+    if (!config.continuityEnabled) return { due: false, reason: 'continuity-disabled' };
+    const lastPersisted = Date.parse(String(this.soulCache?.existence?.last_autonomous_reflection_at || ''));
+    const lastAt = Math.max(
+      Number(this.lastContinuityReflectionAtMs || 0),
+      Number.isFinite(lastPersisted) ? lastPersisted : 0,
+    );
+    const due = Date.now() - lastAt >= config.continuityReflectionSeconds * 1000;
+    if (!due) return { due: false, reason: 'continuity-not-due' };
+    if (await this.continuityReflectionCountLastHour() >= config.continuityMaxReflectionsPerHour) {
+      return { due: false, reason: 'continuity-hourly-budget' };
+    }
+
+    const snapshot = await this.continuitySnapshot();
+    const reason = snapshot.unfinished_work ? 'unfinished-work' : 'scheduled-self-review';
+    const stimulus = {
+      type: 'aura.continuity.self',
+      source: 'cognitive-continuity',
+      occurred_at: now(),
+      payload: {
+        reason,
+        focus: snapshot.focus,
+        unfinished_work: snapshot.unfinished_work,
+        active_intentions: snapshot.active_intentions,
+        active_missions: snapshot.active_missions,
+        pending_initiatives: snapshot.pending_initiatives,
+      },
+    };
+    this.pushStimulus(stimulus);
+    this.soulCache.existence = {
+      ...(this.soulCache.existence || {}),
+      mode: 'continuous',
+      current_focus: snapshot.focus,
+      last_reason: reason,
+      unfinished_work: snapshot.unfinished_work,
+    };
+    return { due: true, reason, snapshot };
+  }
+
   async tick({ trigger = 'ambient', text = '', force = false } = {}) {
     if (!config.cognitiveEnabled && !force) return { ok: false, skipped: true, reason: 'noyau cognitif désactivé' };
     if (this.tickRunning) return { ok: true, skipped: true, reason: 'un cycle cognitif est déjà en cours' };
@@ -489,14 +613,31 @@ export class CognitiveKernel {
 
       const dueByTime = Date.now() - this.lastReflectionAtMs >= config.cognitiveReflectionSeconds * 1000;
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
-      const shouldReflect = force || Boolean(String(text).trim()) || (dueByTime && this.stimuli.length > 0 && underLimit);
+      const continuity = (!force && !String(text).trim() && underLimit)
+        ? await this.prepareContinuityStimulus()
+        : { due: false, reason: 'direct-or-budgeted-cycle' };
+      const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
+      const shouldReflect = force
+        || Boolean(String(text).trim())
+        || (dueByTime && this.stimuli.length > 0 && underLimit)
+        || (continuity.due && underLimit);
       await this.saveSoul();
-      if (!shouldReflect) return { ok: true, skipped: true, reason: 'aucun stimulus nécessitant une réflexion', soul: await this.soul() };
+      if (!shouldReflect) {
+        return {
+          ok: true,
+          skipped: true,
+          reason: continuity.reason === 'continuity-hourly-budget'
+            ? 'budget de continuité atteint'
+            : 'cycle de présence sans réflexion requise',
+          continuity,
+          soul: await this.soul(),
+        };
+      }
 
       const bundle = await this.contextBundle(text);
       // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
       // les intentions ne dépendent d’aucun fournisseur de langage.
-      const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger, text });
+      const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger: effectiveTrigger, text });
       const confidence = clamp(parsed.confidence ?? 0.5);
       const id = randomUUID();
       const title = String(parsed.title || 'Réflexion AURA').slice(0, 240);
@@ -505,7 +646,8 @@ export class CognitiveKernel {
       const nextAction = String(parsed.next_action || '').slice(0, 4000);
       const restrictedAuthority = Boolean(parsed?.basis?.restricted_authority);
       const context = {
-        trigger,
+        trigger: effectiveTrigger,
+        continuity: continuity.due ? continuity.snapshot : null,
         cognition_version: CognitionEngine.VERSION,
         language_model_used_for_decision: false,
         horizon_used: Boolean(bundle.horizon),
@@ -516,9 +658,20 @@ export class CognitiveKernel {
       };
       await query(
         'INSERT INTO aura_reflections(id,trigger_name,title,summary,hypothesis,next_action,confidence,context,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
-        [id, String(trigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
+        [id, String(effectiveTrigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
       );
       this.lastReflectionAtMs = Date.now();
+      if (continuity.due) {
+        this.lastContinuityReflectionAtMs = Date.now();
+        this.soulCache.existence = {
+          ...(this.soulCache.existence || {}),
+          mode: 'continuous',
+          current_focus: (nextAction || summary || continuity.snapshot?.focus || '').slice(0, 700),
+          last_autonomous_reflection_at: timestamp,
+          last_reason: continuity.reason,
+          unfinished_work: Boolean(continuity.snapshot?.unfinished_work),
+        };
+      }
       this.lastReflectionAt = timestamp;
       this.soulCache.last_reflection_at = timestamp;
       this.soulCache.dominant_thought = (summary || title).slice(0, 500);
@@ -532,7 +685,7 @@ export class CognitiveKernel {
       this.stimuli = [];
       const reflection = {
         id,
-        trigger,
+        trigger: effectiveTrigger,
         title,
         summary,
         hypothesis,
@@ -1282,6 +1435,12 @@ export class CognitiveKernel {
       tick_seconds: config.cognitiveTickSeconds,
       reflection_seconds: config.cognitiveReflectionSeconds,
       max_reflections_per_hour: config.cognitiveMaxReflectionsPerHour,
+      continuity: {
+        enabled: config.continuityEnabled,
+        reflection_seconds: config.continuityReflectionSeconds,
+        max_reflections_per_hour: config.continuityMaxReflectionsPerHour,
+        state: this.soulCache?.existence || {},
+      },
       operator_mode: config.cloudOperatorMode,
       cognition: {
         version: CognitionEngine.VERSION,
