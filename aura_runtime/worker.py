@@ -512,7 +512,9 @@ class AuraRuntimeWorker:
                 ),
                 "engine": str(identity.get("current_engine") or identity.get("primary_engine") or ""),
                 "platform": platform.platform(),
-                "organism": organism,
+                "organism_version": str(organism.get("version") or ""),
+                "organism_schema_revision": int(organism.get("schema_revision") or 0),
+                "organism_updated_at": str(organism.get("updated_at") or ""),
             },
         )
         cloud_organism = response.get("organism")
