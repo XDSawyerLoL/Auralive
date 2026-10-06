@@ -109,7 +109,10 @@ const AI_DEFAULT_MODEL = AI_MODE === 'gemini'
   : 'gemma3:12b';
 
 function configBridgeMode() {
-  return (process.env.AURA_BRIDGE_TOKEN || process.env.AURA_CLOUD_TOKEN)
+  const legacyAllowed = ['1','true','yes','oui','on'].includes(
+    String(process.env.AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN || '').trim().toLowerCase(),
+  );
+  return (process.env.AURA_BRIDGE_TOKEN || (legacyAllowed && process.env.AURA_CLOUD_TOKEN))
     ? 'remote-execute'
     : 'plan-only';
 }
@@ -418,10 +421,10 @@ export function productionConfigIssues() {
       message: 'AI_MODE=gemini exige AI_API_KEY.',
     });
   }
-  if (config.aiMode === 'bridge' && !config.cloudToken && !process.env.AURA_BRIDGE_TOKEN) {
+  if (config.aiMode === 'bridge' && !config.bridgeToken && !config.allowLegacyBridgeAdminToken) {
     issues.push({
       code: 'bridge_token_missing',
-      message: 'AI_MODE=bridge exige AURA_CLOUD_TOKEN ou AURA_BRIDGE_TOKEN.',
+      message: 'AI_MODE=bridge exige AURA_BRIDGE_TOKEN; le token admin n’est plus accepté implicitement.',
     });
   }
   if (process.env.NODE_ENV === 'production' && config.fabricDiscoveryUrls.length && !config.fabricToken) {
