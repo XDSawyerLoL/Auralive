@@ -106,7 +106,8 @@ test('kernel exposes a unified agenda and evidence-backed absence ledger', () =>
   assert.match(kernelSource, /async agendaSnapshot\(\)/);
   assert.match(kernelSource, /async activitySinceLastConversation\(/);
   assert.match(kernelSource, /has_real_activity/);
-  assert.match(kernelSource, /Foyer opérationnel/);
+  const cognitionSource = fs.readFileSync(new URL('../src/cognition.js', import.meta.url), 'utf8');
+  assert.match(cognitionSource, /Foyer opérationnel/);
 });
 
 
