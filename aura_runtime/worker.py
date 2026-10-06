@@ -217,7 +217,19 @@ class AuraRuntimeWorker:
 
     @property
     def token(self) -> str:
-        return str(getattr(self.settings, "aura_cloud_token", "") or "").strip()
+        bridge_token = str(
+            os.environ.get("AURA_BRIDGE_TOKEN")
+            or getattr(self.settings, "aura_bridge_token", "")
+            or ""
+        ).strip()
+        if bridge_token:
+            return bridge_token
+        legacy_allowed = str(
+            os.environ.get("AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN", "")
+        ).strip().lower() in {"1", "true", "yes", "oui", "on"}
+        if legacy_allowed:
+            return str(getattr(self.settings, "aura_cloud_token", "") or "").strip()
+        return ""
 
     @property
     def poll_seconds(self) -> float:
