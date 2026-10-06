@@ -1018,11 +1018,13 @@ export class CognitiveKernel {
           ),
         };
 
-    const [intentions, lessons, reflections, work, recentMessages] = await Promise.all([
+    const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
       privateView ? this.intentions(6) : Promise.resolve([]),
       privateView ? this.lessons(6) : Promise.resolve([]),
       privateView ? this.reflections(4) : Promise.resolve([]),
       privateView ? this.workItems(5) : Promise.resolve([]),
+      privateView ? this.agendaSnapshot() : Promise.resolve({}),
+      privateView ? this.activitySinceLastConversation(conversationSession) : Promise.resolve({}),
       query(
         privateView
           ? `SELECT author,role,content,created_at FROM aura_cloud_messages
@@ -1042,6 +1044,8 @@ export class CognitiveKernel {
       lessons,
       reflections,
       work,
+      agenda,
+      continuityReport,
       recentMessages: [...recentMessages].reverse(),
       privateView,
     });
@@ -1183,6 +1187,161 @@ export class CognitiveKernel {
        ORDER BY id DESC LIMIT ?`,
       [Math.max(1, Math.min(Number(limit) || 12, 50))],
     );
+  }
+
+  async agendaSnapshot() {
+    const [mission, initiative, intention, reflection] = await Promise.all([
+      one(
+        `SELECT id,title,objective,status,priority,progress,last_error,started_at,updated_at
+         FROM aura_missions
+         WHERE status IN ('planning','running','waiting','paused')
+         ORDER BY priority DESC,updated_at ASC LIMIT 1`,
+      ).catch(() => null),
+      one(
+        `SELECT id,domain,kind,title,objective,status,priority,confidence,execution_mode,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at ASC LIMIT 1`,
+      ).catch(() => null),
+      one(
+        `SELECT id,statement,priority,source,created_at,updated_at
+         FROM aura_intentions
+         WHERE status='active'
+         ORDER BY priority DESC,updated_at DESC LIMIT 1`,
+      ).catch(() => null),
+      one(
+        `SELECT id,title,summary,next_action,confidence,created_at
+         FROM aura_reflections
+         ORDER BY created_at DESC LIMIT 1`,
+      ).catch(() => null),
+    ]);
+
+    const current = String(
+      initiative?.title || mission?.title || mission?.objective || intention?.statement
+      || this.soulCache?.existence?.current_focus || this.soulCache?.current_intention || '',
+    ).replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const since = String(
+      initiative?.updated_at || mission?.started_at || mission?.updated_at
+      || intention?.created_at || intention?.updated_at || '',
+    );
+    const blocker = String(
+      mission?.last_error
+      || (mission?.status === 'waiting' ? 'Mission en attente d’un signal ou d’une dépendance.' : '')
+      || (initiative?.status === 'waiting' ? 'Initiative en attente d’un signal ou d’une dépendance.' : ''),
+    ).replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const nextAction = String(
+      reflection?.next_action || initiative?.objective || mission?.objective
+      || intention?.statement || '',
+    ).replace(/\s+/g, ' ').trim().slice(0, 1600);
+    const why = String(
+      mission?.objective || initiative?.objective || intention?.statement
+      || this.soulCache?.current_intention || '',
+    ).replace(/\s+/g, ' ').trim().slice(0, 1600);
+
+    return {
+      current,
+      why,
+      since,
+      next_action: nextAction,
+      blocker,
+      status: String(initiative?.status || mission?.status || (intention ? 'active' : 'idle')),
+      mission_id: mission?.id || '',
+      initiative_id: initiative?.id || '',
+      intention_id: intention?.id || '',
+      reflection_id: reflection?.id || '',
+    };
+  }
+
+  async activitySinceLastConversation(sessionId = 'private-founder') {
+    const session = String(sessionId || 'private-founder').slice(0, 96);
+    const previous = await one(
+      `SELECT created_at FROM aura_cloud_messages
+       WHERE session_id=? AND role='assistant'
+       ORDER BY id DESC LIMIT 1`,
+      [session],
+    ).catch(() => null);
+    const since = String(previous?.created_at || this.soulCache?.born_at || '1970-01-01T00:00:00.000Z');
+
+    const [traces, reflections, outcomes, missions, initiatives] = await Promise.all([
+      query(
+        `SELECT kind,title,content,created_at FROM aura_cognitive_traces
+         WHERE created_at>? ORDER BY id ASC LIMIT 40`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT trigger_name,title,summary,next_action,created_at FROM aura_reflections
+         WHERE created_at>? ORDER BY created_at ASC LIMIT 24`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT automation_id,event_type,ok,signature,created_at FROM aura_outcomes
+         WHERE created_at>? ORDER BY created_at ASC LIMIT 24`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT id,title,status,progress,last_error,updated_at FROM aura_missions
+         WHERE updated_at>? ORDER BY updated_at ASC LIMIT 16`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT id,domain,title,status,execution_mode,updated_at FROM aura_initiatives
+         WHERE updated_at>? ORDER BY updated_at ASC LIMIT 20`,
+        [since],
+      ).catch(() => []),
+    ]);
+
+    const events = [
+      ...reflections.map((row) => ({
+        type: 'reflection',
+        at: row.created_at,
+        title: row.title,
+        detail: row.summary,
+        next_action: row.next_action,
+        autonomous: String(row.trigger_name || '').startsWith('continuity:'),
+      })),
+      ...outcomes.map((row) => ({
+        type: 'outcome',
+        at: row.created_at,
+        title: `${row.automation_id}: ${row.ok ? 'réussi' : 'échec'}`,
+        detail: row.signature,
+        autonomous: true,
+      })),
+      ...missions.map((row) => ({
+        type: 'mission',
+        at: row.updated_at,
+        title: row.title,
+        detail: `${row.status} · progression ${Math.round(Number(row.progress || 0) * 100)}%${row.last_error ? ` · blocage: ${row.last_error}` : ''}`,
+        autonomous: true,
+      })),
+      ...initiatives.map((row) => ({
+        type: 'initiative',
+        at: row.updated_at,
+        title: row.title,
+        detail: `${row.domain || 'AURA'} · ${row.status || ''} · ${row.execution_mode || ''}`,
+        autonomous: true,
+      })),
+      ...traces
+        .filter((row) => !['reflection','expression'].includes(String(row.kind || '')))
+        .map((row) => ({
+          type: String(row.kind || 'activity'),
+          at: row.created_at,
+          title: row.title,
+          detail: row.content,
+          autonomous: true,
+        })),
+    ]
+      .filter((row) => row.at && row.title)
+      .sort((a,b) => String(a.at).localeCompare(String(b.at)))
+      .slice(-60);
+
+    return {
+      since,
+      until: now(),
+      event_count: events.length,
+      autonomous_event_count: events.filter((row) => row.autonomous).length,
+      events,
+      has_real_activity: events.length > 0,
+    };
   }
 
   async workItems(limit = 6) {
