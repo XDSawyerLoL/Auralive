@@ -1226,6 +1226,16 @@ app.get('/api/kernel/work', async (request, reply) =>
     ? kernel.workItems(request.query?.limit)
     : undefined);
 
+app.get('/api/kernel/agenda', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.agendaSnapshot()
+    : undefined);
+
+app.get('/api/kernel/activity-since-last-conversation', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.activitySinceLastConversation('private-founder')
+    : undefined);
+
 app.get('/api/kernel/attention', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.attentionMap()
