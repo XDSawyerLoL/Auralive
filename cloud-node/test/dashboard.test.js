@@ -234,7 +234,8 @@ test('dashboard no longer clutters the primary screen with download cards', () =
 
 test('dashboard exposes the verifiable chat-first Company OS identity', () => {
   assert.equal(DASHBOARD_HTML.includes('data-aura-ui="chat-first-v1"'), true);
-  assert.equal(DASHBOARD_HTML.includes('AURA · COMPANY OS'), true);
+  assert.equal(DASHBOARD_HTML.includes('Company OS'), true);
+  assert.equal(DASHBOARD_HTML.includes('Parler à AURA'), true);
   for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
