@@ -3,17 +3,15 @@ import assert from 'node:assert/strict';
 import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 
-test('AURA operational consciousness interface exposes core product surfaces', () => {
+test('AURA chat-first interface exposes the essential surfaces without technical overload', () => {
   for (const label of [
     'Company OS',
-    'Quantic Sillage · Cognition en direct',
-    'État émotionnel',
-    'Produits Quantic',
-    'Santé du système',
-    'Workstreams actifs',
-    'Preuve de travail',
-    'Conversation avec AURA',
-    'Mémoire et leçons',
+    'AURA vivante',
+    'Parler à AURA',
+    'Ce qu’elle fait maintenant',
+    'État d’AURA',
+    'Entreprise agentique',
+    'Afficher les détails techniques',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
@@ -37,13 +35,14 @@ test('dashboard includes dynamic attention map without a manual token gate', () 
 });
 
 
-test('desktop dashboard keeps the premium Company OS composition', () => {
-  assert.equal(DASHBOARD_HTML.includes('grid-template-columns:294px minmax(620px,1fr) 330px'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="dashboard"'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="left-col"'), true);
+test('desktop dashboard keeps AURA and the conversation as the primary composition', () => {
+  assert.equal(DASHBOARD_HTML.includes('grid-template-columns:minmax(0,1.1fr) minmax(430px,.9fr)'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="hero"'), true);
   assert.equal(DASHBOARD_HTML.includes('class="panel map-panel"'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="right-col"'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="bottom-proof"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="panel chat-panel"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="composer"'), true);
+  assert.equal(DASHBOARD_HTML.includes('id="message"'), true);
+  assert.equal(DASHBOARD_HTML.includes('id="send"'), true);
   assert.equal(DASHBOARD_HTML.includes("setLive(true,boot.runtime_ready?'En ligne · '+mood"), true);
 });
 
@@ -132,9 +131,9 @@ test('dashboard exposes exact Mairaiy readiness without a generic TTS escape hat
 });
 
 
-test('dashboard exposes a dedicated emotional state surface', () => {
+test('dashboard keeps full Homeostasis v9 available in the collapsed detail surface', () => {
   for (const token of [
-    'État émotionnel',
+    'État d’AURA',
     'id="emotionMood"',
     'id="emotionReason"',
     'id="emotion-stability"',
@@ -155,12 +154,12 @@ test('dashboard exposes a dedicated emotional state surface', () => {
   assert.equal(DASHBOARD_SCRIPT.includes('renderEmotion(organism)'), true);
 });
 
-test('mobile dashboard uses readable phone typography and viewport-sized panels', () => {
-  assert.equal(DASHBOARD_HTML.includes('@media(max-width:480px)'), true);
-  assert.equal(DASHBOARD_HTML.includes('.command-box textarea{font-size:16px'), true);
+test('mobile dashboard keeps chat readable and primary', () => {
+  assert.equal(DASHBOARD_HTML.includes('@media(max-width:640px)'), true);
+  assert.equal(DASHBOARD_HTML.includes('.composer textarea{font-size:16px'), true);
   assert.equal(DASHBOARD_HTML.includes('.msg{font-size:15px'), true);
-  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:56svh}'), true);
-  assert.equal(DASHBOARD_HTML.includes('.map-panel{min-height:460px}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:68svh}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.map-panel{min-height:390px}'), true);
 });
 
 test('mobile voice primes audio but never substitutes a device TTS for Mairaiy', () => {
@@ -200,9 +199,9 @@ test('dashboard renders the public operational projection without locked placeho
 
 
 
-test('dashboard exposes autonomous capability scouting publicly', () => {
+test('dashboard keeps autonomous capability scouting available in technical details', () => {
   for (const token of [
-    'Veille autonome',
+    'Veille',
     'id="scoutMeta"',
     'id="scoutList"',
     'renderScout(scoutStatus)',
@@ -227,23 +226,14 @@ test('dashboard exposes operational command-center state instead of decorative a
 });
 
 
-test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
-  for (const token of [
-    'Télécharger Quantic Glide',
-    'Windows x64',
-    'Android',
-    'href="/downloads/glide/windows"',
-    'href="/downloads/glide/android"',
-    'Télécharger .exe',
-    'Télécharger .apk',
-  ]) {
-    assert.equal(DASHBOARD_HTML.includes(token), true, token);
-  }
+test('dashboard no longer clutters the primary screen with download cards', () => {
+  assert.equal(DASHBOARD_HTML.includes('download-grid'), false);
+  assert.equal(DASHBOARD_HTML.includes('class="download-panel"'), false);
 });
 
 
-test('dashboard exposes the verifiable premium Company OS identity', () => {
-  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="company-os-premium-1"'), true);
+test('dashboard exposes the verifiable chat-first Company OS identity', () => {
+  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="chat-first-v1"'), true);
   assert.equal(DASHBOARD_HTML.includes('AURA · COMPANY OS'), true);
   for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
@@ -265,4 +255,21 @@ test('dashboard exposes the exact Cloud voice blocker instead of a generic offli
   assert.equal(DASHBOARD_SCRIPT.includes("free-tier-unconfirmed"), true);
   assert.equal(DASHBOARD_SCRIPT.includes("missing-api-key"), true);
   assert.equal(DASHBOARD_SCRIPT.includes("garde-fou zéro-coût"), true);
+});
+
+
+test('conversation remains directly usable without opening technical details', () => {
+  const chatIndex = DASHBOARD_HTML.indexOf('class="panel chat-panel"');
+  const detailsIndex = DASHBOARD_HTML.indexOf('<details class="advanced">');
+  const composerIndex = DASHBOARD_HTML.indexOf('class="composer"', chatIndex);
+  assert.ok(chatIndex >= 0);
+  assert.ok(composerIndex > chatIndex);
+  assert.ok(detailsIndex > composerIndex);
+  assert.match(DASHBOARD_SCRIPT, /\$\('send'\)\.onclick=function\(\)\{sendMessage\(\$\('message'\)\.value\);\};/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat',\{method:'POST'/);
+});
+
+test('technical information is collapsed by default', () => {
+  assert.match(DASHBOARD_HTML, /<details class="advanced">/);
+  assert.doesNotMatch(DASHBOARD_HTML, /<details class="advanced" open>/);
 });
