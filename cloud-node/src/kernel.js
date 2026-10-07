@@ -1053,8 +1053,8 @@ export class CognitiveKernel {
       privateView ? this.intentions(6) : Promise.resolve([]),
       privateView ? this.lessons(6) : Promise.resolve([]),
       privateView ? this.reflections(4) : Promise.resolve([]),
-      privateView ? this.workItems(5) : Promise.resolve([]),
-      privateView ? this.agendaSnapshot() : Promise.resolve({}),
+      privateView ? this.workItems(5) : this.publicWorkItems(5),
+      privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot(),
       privateView ? this.activitySinceLastConversation(conversationSession) : Promise.resolve({}),
       query(
         privateView
@@ -1281,6 +1281,62 @@ export class CognitiveKernel {
       intention_id: intention?.id || '',
       reflection_id: reflection?.id || '',
     };
+  }
+
+  async publicAgendaSnapshot() {
+    const initiative = await one(
+      `SELECT id,domain,kind,title,status,priority,confidence,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+         AND kind IN ('github','evolution','research')
+       ORDER BY priority DESC,updated_at DESC LIMIT 1`,
+    ).catch(() => null);
+    if (!initiative) {
+      const focus = String(
+        this.soulCache?.existence?.current_focus || this.soulCache?.current_intention || '',
+      ).replace(/\s+/g, ' ').trim().slice(0, 500);
+      return {
+        current: focus,
+        why: focus ? 'Foyer autonome actuellement enregistré par AURA.' : '',
+        since: '',
+        next_action: focus ? `Poursuivre et réévaluer : ${focus}` : '',
+        blocker: '',
+        status: focus ? 'active' : 'idle',
+      };
+    }
+    const title = String(initiative.title || 'initiative active').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const domain = String(initiative.domain || 'AURA').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const status = String(initiative.status || 'queued');
+    return {
+      current: title,
+      why: `Priorité opérationnelle publique de ${domain}.`,
+      since: String(initiative.updated_at || ''),
+      next_action: status === 'waiting'
+        ? `Réévaluer le blocage public de ${title}`
+        : `Faire avancer ${title}`,
+      blocker: status === 'waiting' ? 'En attente d’une dépendance ou d’un signal.' : '',
+      status,
+      initiative_id: String(initiative.id || ''),
+    };
+  }
+
+  async publicWorkItems(limit = 5) {
+    const max = Math.max(1, Math.min(Number(limit) || 5, 8));
+    const rows = await query(
+      `SELECT domain,kind,title,priority,confidence,status,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+         AND kind IN ('github','evolution','research')
+       ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+      [max],
+    ).catch(() => []);
+    return rows.map((row) => ({
+      kind: String(row.kind || 'initiative'),
+      title: String(row.title || '').replace(/\s+/g, ' ').trim().slice(0, 180),
+      detail: `${String(row.domain || 'AURA')} · ${String(row.status || '')}`,
+      priority: clamp(Math.max(Number(row.priority || 0.5), Number(row.confidence || 0.5) * 0.75)),
+      updated_at: row.updated_at,
+    })).filter((row) => row.title);
   }
 
   async activitySinceLastConversation(sessionId = 'private-founder') {
