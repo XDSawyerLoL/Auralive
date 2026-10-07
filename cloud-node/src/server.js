@@ -846,9 +846,12 @@ app.get('/api/capabilities', async (request) => {
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
       ready: Boolean(ai.enabled),
+      native_dialogue_ready: Boolean(bootstrap.runtimeReady),
+      native_dialogue_version: CognitionEngine.VERSION,
       provider: privateView ? ai.provider : String(languageDiagnostic.provider || 'unavailable'),
       local_worker: Boolean(bridgeStatus?.worker_online),
       fallback_only: !ai.enabled,
+      mode: ai.enabled ? 'native+semantic-verbalisation' : 'native-only',
       last_backend: String(languageDiagnostic.last_backend || ''),
       last_error: String(languageDiagnostic.last_error || '').slice(0, 300),
       zero_cost_mode: Boolean(languageDiagnostic.zero_cost_mode),
@@ -921,7 +924,7 @@ app.get('/api/capabilities', async (request) => {
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
-  organism: 'homeostasie_v7_streamlined',
+  organism: 'homeostasie_v9_unified',
   cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
   language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
   cognition_independent_from_language_model: true,
