@@ -125,7 +125,10 @@ test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
   const html = await waitFor('/', (text) => text.includes('Company OS'));
   assert.match(html, /AURA/);
   assert.match(html, /Company OS/);
-  assert.match(html, /Quantic Sillage · Cognition en direct/);
+  assert.match(html, /AURA vivante/);
+  assert.match(html, /Parler à AURA/);
+  assert.match(html, /id="message"/);
+  assert.match(html, /id="send"/);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const payload = JSON.parse(healthText);
