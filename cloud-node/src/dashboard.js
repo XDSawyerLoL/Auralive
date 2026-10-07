@@ -40,7 +40,7 @@ button{cursor:pointer}
 .brand-sub{font-size:8px;color:#9f918a;letter-spacing:.18em;text-transform:uppercase;margin-top:3px}
 .top-status{margin-left:auto;display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
 .pill{display:flex;align-items:center;gap:6px;padding:7px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.025);font-size:9px;color:#b4aaa5;white-space:nowrap}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px currentColor}.live-dot.good{background:var(--green)}.live-dot.bad{background:var(--red)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px currentColor}.live-dot.good{background:var(--green)}.live-dot.warn{background:var(--gold)}.live-dot.bad{background:var(--red)}
 .clock{font-size:9px;color:#8f827d;display:flex;gap:5px}.clock .time{color:#eee3dd;font-weight:700}
 .icon-btn{border:1px solid var(--line);background:rgba(255,255,255,.025);color:#d8ccc6;border-radius:10px;padding:7px 9px;font-size:9px}
 .setup-banner{display:none;margin-bottom:10px;border:1px solid rgba(255,181,93,.22);background:rgba(255,169,78,.06);border-radius:14px;padding:10px 12px;font-size:10px;color:#e1cdbd}.setup-banner.show{display:block}.setup-title{font-weight:800;color:#ffc17d}.setup-list{margin:6px 0 0;padding-left:18px}
