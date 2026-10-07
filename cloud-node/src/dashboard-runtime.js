@@ -540,19 +540,23 @@ async function refresh(){
       const capabilities=await api('/api/capabilities');
       const language=(capabilities&&capabilities.language)||{};
       const languageReady=Boolean(language.ready);
-      $('languageDot').className='live-dot '+(languageReady?'good':'bad');
+      const nativeDialogueReady=Boolean(language.native_dialogue_ready||(capabilities&&capabilities.cognition&&capabilities.cognition.ready));
+      $('languageDot').className='live-dot '+(languageReady||nativeDialogueReady?'good':'bad');
       if(languageReady){
         const provider=String(language.provider||language.last_backend||'moteur actif');
         $('languageText').textContent='Dialogue · naturel';
-        $('languageText').title='Moteur de formulation actif · '+provider;
+        $('languageText').title='Noyau natif + moteur de formulation · '+provider;
+      }else if(nativeDialogueReady){
+        $('languageText').textContent='Dialogue · natif';
+        $('languageText').title='Noyau conversationnel AURA actif sans dépendre d’un modèle externe.';
       }else{
-        $('languageText').textContent='Dialogue · secours';
-        $('languageText').title=String(language.last_error||'Aucun moteur de langage actif; réponses natives de secours.');
+        $('languageText').textContent='Dialogue · indisponible';
+        $('languageText').title=String(language.last_error||'Noyau conversationnel indisponible.');
       }
 
       const voice=(capabilities&&capabilities.voice)||{};
       const voiceReady=Boolean(voice.ready);
-      $('voiceDot').className='live-dot '+(voiceReady?'good':'bad');
+      $('voiceDot').className='live-dot '+(voiceReady?'good':'warn');
       if(voice.fabric_ready){
         $('voiceText').textContent='Mairaiy · Aoede';
         $('voiceText').title='Voix Mairaiy historique · Gemini TTS · Aoede · fr-fr';
@@ -560,7 +564,7 @@ async function refresh(){
         $('voiceText').textContent='Mairaiy · Studio';
         $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
       }else{
-        $('voiceText').textContent='Mairaiy · attente';
+        $('voiceText').textContent='Mairaiy · à configurer';
         const cloudReason=String(voice.cloud_reason||'');
         const reasonLabel=cloudReason==='free-tier-unconfirmed'
           ? 'Aoede bloquée par le garde-fou zéro-coût : niveau gratuit Gemini non confirmé.'
@@ -571,7 +575,7 @@ async function refresh(){
       }
     }catch(_){
       $('voiceDot').className='live-dot';
-      $('voiceText').textContent='Mairaiy · attente';
+      $('voiceText').textContent='Mairaiy · diagnostic';
     }
 
     const evolution=publicState.evolution||{};

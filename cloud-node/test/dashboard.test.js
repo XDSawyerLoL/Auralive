@@ -274,3 +274,16 @@ test('technical information is collapsed by default', () => {
   assert.match(DASHBOARD_HTML, /<details class="advanced">/);
   assert.doesNotMatch(DASHBOARD_HTML, /<details class="advanced" open>/);
 });
+
+
+test('dashboard reports native dialogue as healthy when semantic model is absent', () => {
+  assert.match(DASHBOARD_SCRIPT, /Dialogue · natif/);
+  assert.match(DASHBOARD_SCRIPT, /native_dialogue_ready/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT, /Dialogue · secours/);
+});
+
+test('unconfigured Mairaiy is a warning, not a false runtime failure', () => {
+  assert.match(DASHBOARD_HTML, /live-dot\.warn/);
+  assert.match(DASHBOARD_SCRIPT, /Mairaiy · à configurer/);
+  assert.match(DASHBOARD_SCRIPT, /voiceReady\?'good':'warn'/);
+});

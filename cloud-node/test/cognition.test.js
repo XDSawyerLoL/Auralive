@@ -183,3 +183,90 @@ test('generic fallback never recites AURA diagnostics when language layer is una
   const answer = engine.deterministicReply(plan);
   assert.doesNotMatch(answer, /Sujet de l’échange|Rôle opérationnel|Pensée dominante|Vie intérieure/i);
 });
+
+
+test('native dialogue tolerates "tu fait quoi" typo and reports real activity', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu fait quoi?',
+    soul: {
+      current_intention: 'Faire avancer Quantic Sillage',
+      dominant_thought: 'Piloter le portefeuille',
+      organism: { mood: 'engagée', agency: 0.82, relationship: {}, executive: {} },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [{ title: 'Stabiliser Quantic Glide' }],
+    agenda: {
+      current: 'Stabiliser Quantic Glide',
+      why: 'Priorité opérationnelle publique de quantic-glide.',
+      next_action: 'Faire avancer les tests navigateur',
+      status: 'running',
+    },
+    recentMessages: [
+      { role: 'user', content: 'salut' },
+      { role: 'assistant', content: 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?' },
+    ],
+    privateView: false,
+  });
+
+  assert.equal(plan.act, 'report_current_activity');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /Stabiliser Quantic Glide/);
+  assert.doesNotMatch(answer, /réponse assez solide|Je reste sur ce que tu viens de dire/i);
+});
+
+test('short acknowledgement keeps activity context instead of generic fallback', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'hum',
+    soul: { organism: { mood: 'engagée', relationship: {}, executive: {} } },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    agenda: {
+      current: 'Stabiliser Quantic Glide',
+      next_action: 'Relancer les tests réels',
+    },
+    recentMessages: [
+      { role: 'assistant', content: 'Là, je suis sur Stabiliser Quantic Glide.' },
+      { role: 'user', content: 'hum' },
+    ],
+    privateView: false,
+  });
+
+  assert.equal(plan.act, 'acknowledge_context');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(engine.deterministicReply(plan), /Stabiliser Quantic Glide/);
+});
+
+test('"c est a dire" clarifies the previous answer from operational context', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: "c'est a dire",
+    soul: { organism: { mood: 'engagée', relationship: {}, executive: {} } },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [{ title: 'Stabiliser Quantic Glide' }],
+    agenda: {
+      current: 'Stabiliser Quantic Glide',
+      why: 'Le navigateur doit passer ses validations.',
+      next_action: 'Relancer les tests réels',
+    },
+    recentMessages: [
+      { role: 'assistant', content: 'Oui. Pour être concrète : je suis sur Stabiliser Quantic Glide.' },
+      { role: 'user', content: "c'est a dire" },
+    ],
+    privateView: false,
+  });
+
+  assert.equal(plan.act, 'clarify_previous');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /Je veux dire que, concrètement/);
+  assert.match(answer, /Relancer les tests réels/);
+});

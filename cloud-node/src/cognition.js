@@ -8,6 +8,48 @@ function lower(value) {
   return normalize(value).toLocaleLowerCase('fr-FR');
 }
 
+function fold(value) {
+  return lower(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9?!.\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function previousAssistantMessage(context = []) {
+  return [...(Array.isArray(context) ? context : [])]
+    .reverse()
+    .find((row) => String(row?.role || '') === 'assistant') || null;
+}
+
+function asksCurrentActivity(text) {
+  const q = fold(text);
+  return (
+    /\b(?:que|qu')\s*(?:est[- ]ce\s*que\s*)?tu\s+fai[st]\b/.test(q)
+    || /\btu\s+fai[st]\s+quoi\b/.test(q)
+    || /\bqu(?:'|e)\s*est[- ]ce\s*que\s*tu\s+fai[st]\b/.test(q)
+    || /\btu\s+travailles?\s+sur\s+quoi\b/.test(q)
+    || /\btu\s+bosses?\s+sur\s+quoi\b/.test(q)
+    || /\btu\s+fai[st]\s+quoi\s+en\s+ce\s+moment\b/.test(q)
+  );
+}
+
+function isShortAcknowledgement(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return ['hum','hmm','hm','mouais','ok','okay','d accord',"d'accord",'je vois','ah','aha'].includes(q);
+}
+
+function isClarificationFollowup(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return [
+    "c'est a dire",'c est a dire','cad','comment ca','comment ça',
+    'tu veux dire quoi','qu est ce que tu veux dire',"qu'est ce que tu veux dire",
+    'et donc','donc','precise','précise'
+  ].includes(q);
+}
+
 function hasAny(text, terms) {
   return terms.some((term) => text.includes(term));
 }
@@ -373,7 +415,7 @@ export class CognitionEngine {
         facts.push(`[${event.at}] ${event.type}: ${event.title}${event.detail ? ` — ${normalize(event.detail).slice(0,420)}` : ''}`);
       }
       if (!events.length) facts.push('Aucune activité persistée n’est disponible pour cette période ; je ne dois pas prétendre avoir travaillé.');
-    } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
+    } else if (asksCurrentActivity(raw) || hasAny(q, ['que fais-tu', 'tu fais quoi', 'tu fait quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'qu’est-ce que tu fait', "qu'est-ce que tu fait"])) {
       act = 'report_current_activity';
       goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
       needsSemanticSupport = false;
@@ -387,6 +429,24 @@ export class CognitionEngine {
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (Number(organism.agency || 0) > 0) facts.push(`Niveau d'agency : ${Math.round(Number(organism.agency || 0)*100)} %.`);
+    } else if (isClarificationFollowup(raw)) {
+      act = 'clarify_previous';
+      goal = 'Clarifier naturellement la réponse précédente en utilisant le contexte de conversation et l’activité opérationnelle réelle.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
+    } else if (isShortAcknowledgement(raw)) {
+      act = 'acknowledge_context';
+      goal = 'Réagir brièvement au signal de l’utilisateur sans répéter une formule générique et en gardant le fil de conversation.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
@@ -527,6 +587,23 @@ export class CognitionEngine {
       if (work || intention) return `Là, je suis surtout concentrée sur ${work || intention}.`;
       return 'Là, je suis disponible et je cherche la prochaine action réellement utile.';
     }
+    if (plan?.act === 'clarify_previous') {
+      const focus = cleanFact('Foyer opérationnel : ') || cleanFact('Travail prioritaire : ');
+      const why = cleanFact('Pourquoi : ');
+      const next = cleanFact('Prochaine action : ');
+      const previous = cleanFact('Réponse précédente : ');
+      if (focus) {
+        return `Je veux dire que, concrètement, je suis sur ${focus}.${why && why !== focus ? ` C’est prioritaire parce que ${why}.` : ''}${next ? ` Ensuite, je dois ${next}.` : ''}`;
+      }
+      if (previous) return `Je reformule : ${previous}`;
+      return 'Je me suis mal exprimée. Dis-moi ce que tu veux que je précise et je te réponds concrètement.';
+    }
+    if (plan?.act === 'acknowledge_context') {
+      const focus = cleanFact('Foyer opérationnel : ');
+      const next = cleanFact('Prochaine action : ');
+      if (focus) return `Oui. Pour être concrète : je suis sur ${focus}.${next ? ` La suite, c’est ${next}.` : ''}`;
+      return 'Oui. Je t’écoute.';
+    }
     if (plan?.act === 'report_next_step') {
       const next = cleanFact('Prochaine action issue de ma réflexion : ') || cleanFact('Intention prioritaire : ');
       return next ? `La prochaine étape, c’est ${next}.` : 'Je n’ai pas encore de prochaine étape assez solide pour te la présenter comme acquise.';
@@ -558,6 +635,10 @@ export class CognitionEngine {
 
     const userText = String(plan?.user_text || '').trim();
     const thread = String(plan?.relationship?.last_open_thread || '').trim();
+    const previous = previousAssistantMessage(plan?.conversation_context || []);
+    if (previous?.content && userText.length <= 48) {
+      return `Je te suis. Sur ce que je viens de dire : ${String(previous.content).slice(0, 260)}`;
+    }
     if (thread) {
       return `Je te suis. Je garde aussi le fil de ce qu’on disait sur ${thread}. Développe ton idée et je te réponds dessus, sans te réciter mon état interne.`;
     }

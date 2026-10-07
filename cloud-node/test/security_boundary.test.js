@@ -68,7 +68,12 @@ test('public chat cannot read private cognitive collections or inject raw text i
   assert.match(kernelSource, /privateView \? this\.intentions\(6\) : Promise\.resolve\(\[\]\)/);
   assert.match(kernelSource, /privateView \? this\.lessons\(6\) : Promise\.resolve\(\[\]\)/);
   assert.match(kernelSource, /privateView \? this\.reflections\(4\) : Promise\.resolve\(\[\]\)/);
-  assert.match(kernelSource, /privateView \? this\.workItems\(5\) : Promise\.resolve\(\[\]\)/);
+  assert.match(kernelSource, /privateView \? this\.workItems\(5\) : this\.publicWorkItems\(5\)/);
+  assert.match(kernelSource, /privateView \? this\.agendaSnapshot\(\) : this\.publicAgendaSnapshot\(\)/);
+  assert.match(kernelSource, /async publicWorkItems\(limit = 5\)/);
+  assert.match(kernelSource, /async publicAgendaSnapshot\(\)/);
+  assert.match(kernelSource, /kind IN \('github','evolution','research'\)/);
+  assert.doesNotMatch(kernelSource, /publicWorkItems[\s\S]{0,1400}last_error/);
   assert.match(kernelSource, /text_length: content\.length/);
   assert.match(kernelSource, /privateView \? 'cloud-private' : 'cloud-public'/);
   assert.match(kernelSource, /privateRelationship: privateView/);
