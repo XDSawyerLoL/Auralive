@@ -562,14 +562,14 @@ async function refresh(){
       const language=(capabilities&&capabilities.language)||{};
       const languageReady=Boolean(language.ready);
       const nativeDialogueReady=Boolean(language.native_dialogue_ready||(capabilities&&capabilities.cognition&&capabilities.cognition.ready));
-      $('languageDot').className='live-dot '+(languageReady||nativeDialogueReady?'good':'bad');
+      $('languageDot').className='live-dot '+(languageReady?'good':nativeDialogueReady?'warn':'bad');
       if(languageReady){
         const provider=String(language.provider||language.last_backend||'moteur actif');
         $('languageText').textContent='Dialogue · naturel';
         $('languageText').title='Noyau natif + moteur de formulation · '+provider;
       }else if(nativeDialogueReady){
-        $('languageText').textContent='Dialogue · natif';
-        $('languageText').title='Noyau conversationnel AURA actif sans dépendre d’un modèle externe.';
+        $('languageText').textContent='Dialogue · dégradé';
+        $('languageText').title='Noyau cognitif actif, mais formulation naturelle indisponible : réponses de secours, maîtrise du français non démontrée.';
       }else{
         $('languageText').textContent='Dialogue · indisponible';
         $('languageText').title=String(language.last_error||'Noyau conversationnel indisponible.');
