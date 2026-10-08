@@ -5,9 +5,19 @@ import { LanguageFaculty, LANGUAGE_BENCHMARK, scoreLanguageAnswer } from '../src
 function memoryStore() {
   const experiences = [];
   const benchmarks = [];
+  const beliefs = new Map();
   return {
-    experiences, benchmarks,
+    experiences, benchmarks, beliefs,
     async query(sql, args = []) {
+      if (sql.includes('INSERT INTO aura_world_beliefs')) {
+        const entry = beliefs.get(args[0]) || { domain_key: args[0], observations: 0, successes: 0, failures: 0 };
+        entry.observations += 1; entry.successes += args[1]; entry.failures += args[2];
+        entry.last_signature = args[3]; entry.updated_at = args[4];
+        beliefs.set(args[0], entry); return [];
+      }
+      if (sql.includes('SELECT domain_key,observations')) return [...beliefs.values()]
+        .filter((entry) => entry.observations >= 2)
+        .sort((a,b) => b.observations - a.observations).slice(0,4);
       if (sql.includes('INSERT INTO aura_language_experiences')) {
         experiences.push({ session_id: args[0], kind: args[1], note: args[2], evidence_status: args[3], created_at: args[4] });
         return [];
@@ -107,13 +117,20 @@ test('feedback and world observations stay scoped to their session and keep prov
   await language.rememberOutcome({
     automationId: 'aura-scout', eventType: 'build', ok: false, signature: 'missing-module',
   });
+  await language.rememberOutcome({
+    automationId: 'aura-scout', eventType: 'build', ok: true, signature: 'dependency-restored',
+  });
   const a = await language.contextFor('session-a');
   assert.equal(a.length, 1);
   assert.equal(a[0].evidence_status, 'user-statement-unverified');
   assert.equal((await language.contextFor('session-b')).length, 1);
-  assert.equal((await language.contextFor('private-founder')).length, 1);
-  assert.match((await language.contextFor('private-founder'))[0].note, /échec/);
-  assert.equal((await language.progress()).experiences, 3);
+  const founder = await language.contextFor('private-founder');
+  assert.equal(founder.length, 3);
+  assert.match(founder[0].note, /échec/);
+  assert.equal(founder[2].evidence_status, 'statistical-estimate-from-reported-outcomes');
+  assert.match(founder[2].note, /50 %/);
+  assert.equal((await language.progress()).experiences, 4);
+  assert.equal((await language.contextFor('session-a')).length, 1);
 });
 
 test('an unavailable language model cannot silently improve the score', async () => {
