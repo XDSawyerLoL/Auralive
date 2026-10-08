@@ -402,9 +402,8 @@ async function startRuntime() {
     await kernel.start();
     bootstrap.runtimeReady = true;
     bootstrap.lastReadyAt = new Date().toISOString();
-    setImmediate(() => { void kernel.language.evaluate().catch((error) => {
-      app.log.warn({ err: error }, 'AURA: benchmark français indisponible');
-    }); });
+    // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
+    // The founder can explicitly invoke the authenticated evaluation endpoint.
     app.log.info('AURA Cloud: noyau persistant démarré.');
 
     try {
