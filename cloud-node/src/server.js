@@ -402,6 +402,10 @@ async function startRuntime() {
     await kernel.start();
     bootstrap.runtimeReady = true;
     bootstrap.lastReadyAt = new Date().toISOString();
+    // An unattended baseline may run only through the explicitly free/local route.
+    setImmediate(() => { void kernel.language.evaluate().catch((error) => {
+      app.log.warn({ err: error }, 'AURA: évaluation linguistique indisponible');
+    }); });
     app.log.info('AURA Cloud: noyau persistant démarré.');
 
     try {
@@ -1235,6 +1239,16 @@ async function publicOperationalSnapshot() {
 }
 
 app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
+
+app.get('/api/language/progress', async () => {
+  if (!bootstrap.runtimeReady) return { status: 'not-evaluated', score: null, delta: null, evaluated_at: null };
+  return kernel.language.progress();
+});
+
+app.post('/api/language/evaluate', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return kernel.language.evaluate({ force: Boolean(request.body?.force) });
+});
 
 app.get('/api/scout/status', async () => capabilityScout.status());
 
