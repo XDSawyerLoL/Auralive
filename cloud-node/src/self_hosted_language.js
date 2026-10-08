@@ -1,4 +1,5 @@
 import { config } from './config.js';
+import { EmbeddedLanguage } from './embedded_language.js';
 
 // Only a user-managed local daemon or explicitly authorized HTTPS inference
 // endpoint is accepted. This is not an arbitrary third-party model API router.
@@ -31,7 +32,19 @@ export class SelfHostedLanguage {
     this.lastModel = '';
     this.lastSuccessAt = '';
     this.lastLatencyMs = 0;
+    this.embedded = new EmbeddedLanguage({
+      enabled: Boolean(config.embeddedLanguageEnabled
+        && config.selfHostedLanguageBaseUrl === 'http://127.0.0.1:18080/v1'),
+    });
   }
+
+  beginAutomaticStartup() {
+    if (!this.embedded.enabled) return;
+    // Never block public HTTP or MySQL startup for first model download.
+    void this.embedded.start();
+  }
+
+  stopEmbedded() { this.embedded.stop(); }
 
   get enabled() {
     return Boolean(config.zeroCostMode && config.selfHostedLanguageEnabled
@@ -53,7 +66,8 @@ export class SelfHostedLanguage {
       connection: !url ? 'unconfigured' : (isLoopback ? 'loopback' : 'owner-managed-https'),
       tokens_billed: false,
       external_api_required: false,
-      model_loaded_by_aura: false,
+      model_loaded_by_aura: this.embedded.stage === 'ready',
+      embedded: this.embedded.snapshot(),
     };
   }
 
@@ -61,6 +75,11 @@ export class SelfHostedLanguage {
     if (!this.enabled) return null;
     const started = Date.now();
     try {
+      if (this.embedded.enabled && this.embedded.stage !== 'ready') {
+        this.beginAutomaticStartup();
+        throw new Error('embedded-model-not-ready: ' + this.embedded.stage
+          + (this.embedded.error ? ' (' + this.embedded.error + ')' : ''));
+      }
       const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
       if (config.selfHostedLanguageApiKey) headers.Authorization = `Bearer ${config.selfHostedLanguageApiKey}`;
       const response = await fetch(`${config.selfHostedLanguageBaseUrl}/chat/completions`, {
