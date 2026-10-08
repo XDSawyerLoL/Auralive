@@ -87,7 +87,17 @@ export class FrenchLanguageFaculty {
     const ready = Boolean(selfHosted.enabled || federation.enabled || local);
     let blockingReason = '';
     let setupHint = '';
-    if (selfHosted.enabled && this.lastMode === 'degraded') {
+    if (selfHosted.enabled && selfHosted.embedded?.enabled
+      && selfHosted.embedded.stage !== 'ready'
+      && selfHosted.embedded.stage !== 'disabled') {
+      blockingReason = selfHosted.embedded.stage === 'unavailable'
+        ? 'same-host-inference-unavailable' : 'same-host-model-installing';
+      setupHint = selfHosted.embedded.stage === 'unavailable'
+        ? 'Hostinger refuse ou bloque le moteur intégré : '
+          + String(selfHosted.embedded.error || 'vérifier RAM, exécution native et réseau de téléchargement.')
+        : 'AURA installe et charge automatiquement son modèle français sur cet hébergement ('
+          + selfHosted.embedded.stage + '). Aucune clé de modèle externe requise.';
+    } else if (selfHosted.enabled && this.lastMode === 'degraded') {
       blockingReason = 'self-hosted-provider-failed';
       setupHint = 'Le moteur AURA auto-hébergé est configuré mais ne répond pas. Vérifier son service, son modèle et self_hosted_language.last_error dans GET /api/ai/runtime.';
     } else if (!ready && selfHosted.configured) {
@@ -212,7 +222,7 @@ export class FrenchLanguageFaculty {
       }
     }
 
-    if (this.federation?.enabled) {
+    if (this.federation?.enabled && !this.selfHosted?.embedded?.enabled) {
       try {
         const result = await this.federation.generate(
           prompt,
