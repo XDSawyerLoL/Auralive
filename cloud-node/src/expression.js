@@ -1,3 +1,4 @@
+import { config } from './config.js';
 import { FrenchLanguageFaculty } from './french_language.js';
 
 function normalize(value) {
@@ -62,10 +63,13 @@ export class ExpressionLayer {
       this.lastError = normalize(error?.message || error).slice(0, 500);
     }
 
-    // BIOS conversationnel uniquement : ce chemin n'est pas la faculté de langue.
-    // Il garde AURA utilisable quand tous les modèles libres et le runtime local
-    // sont indisponibles, mais doit rester visible comme mode dégradé.
     this.fallbackCount += 1;
+    if (config.frenchLanguageRequired) {
+      this.lastMode = 'natural-language-unavailable';
+      return 'Ma faculté de français naturel est indisponible pour le moment. Mon noyau fonctionne, mais je refuse de simuler une conversation avec des réponses pré-écrites.';
+    }
+
+    // Secours legacy explicitement opt-in seulement.
     this.lastMode = 'deterministic-emergency-fallback';
     return fallback;
   }
@@ -76,8 +80,11 @@ export class ExpressionLayer {
       version: ExpressionLayer.VERSION,
       language,
       natural_french_ready: Boolean(language.ready),
-      mode: language.ready ? 'learned-language-model' : 'degraded-deterministic-fallback',
+      mode: language.ready
+        ? 'learned-language-model'
+        : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
       scripted_normal_path: false,
+      strict_natural_language: Boolean(config.frenchLanguageRequired),
       fallback_count: this.fallbackCount,
       last_mode: this.lastMode,
       last_error: this.lastError || language.last_error || '',
