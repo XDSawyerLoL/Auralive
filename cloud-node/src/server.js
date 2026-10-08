@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
+import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
 import { CuriosityEngine } from './curiosity.js';
 import { CapabilityScout } from './capability_scout.js';
@@ -581,10 +582,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 });
 
 app.get('/api/bootstrap/status', async () => ({
-  product: 'AURA Cloud',
-  runtime: 'Node.js/Fastify',
-  version: '2.2.1',
-  node: process.version,
+  ...buildInfo(),
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
   db_ready: bootstrap.dbReady,
@@ -621,6 +619,14 @@ app.get('/api/bootstrap/status', async () => ({
   peer_mesh_enabled: Boolean(config.meshP2pEnabled),
   capability_scout_enabled: Boolean(config.capabilityScoutEnabled),
   capability_scout_prompt_required: false,
+}));
+
+app.get('/api/build', async () => ({
+  ...buildInfo(),
+  homeostasis: 'homeostasie_v9_unified',
+  cognition: CognitionEngine.VERSION,
+  kernel: CognitiveKernel.VERSION,
+  production_truth: true,
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -955,6 +961,7 @@ app.get('/healthz', async () => {
   }
   return {
     ok: true,
+    build: buildInfo(),
     ready: bootstrap.runtimeReady && databaseAlive,
     status: bootstrap.runtimeReady && databaseAlive ? 'ready' : 'diagnostic',
     db: databaseAlive,
