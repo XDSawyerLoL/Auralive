@@ -35,11 +35,11 @@ test('dashboard includes dynamic attention map without a manual token gate', () 
 });
 
 
-test('desktop dashboard keeps AURA and the conversation as the primary composition', () => {
-  assert.equal(DASHBOARD_HTML.includes('grid-template-columns:minmax(0,1.1fr) minmax(430px,.9fr)'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="hero"'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="panel map-panel"'), true);
-  assert.equal(DASHBOARD_HTML.includes('class="panel chat-panel"'), true);
+test('desktop dashboard keeps conversation dominant and AURA compact', () => {
+  assert.equal(DASHBOARD_HTML.includes('grid-template-columns:minmax(0,1fr) 330px'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="main"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="panel chat"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="side"'), true);
   assert.equal(DASHBOARD_HTML.includes('class="composer"'), true);
   assert.equal(DASHBOARD_HTML.includes('id="message"'), true);
   assert.equal(DASHBOARD_HTML.includes('id="send"'), true);
@@ -158,8 +158,8 @@ test('mobile dashboard keeps chat readable and primary', () => {
   assert.equal(DASHBOARD_HTML.includes('@media(max-width:640px)'), true);
   assert.equal(DASHBOARD_HTML.includes('.composer textarea{font-size:16px'), true);
   assert.equal(DASHBOARD_HTML.includes('.msg{font-size:15px'), true);
-  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:68svh}'), true);
-  assert.equal(DASHBOARD_HTML.includes('.map-panel{min-height:390px}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.chat{min-height:calc(100svh - 68px)}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.map-wrap{height:165px}'), true);
 });
 
 test('mobile voice primes audio but never substitutes a device TTS for Mairaiy', () => {
@@ -232,8 +232,8 @@ test('dashboard no longer clutters the primary screen with download cards', () =
 });
 
 
-test('dashboard exposes the verifiable chat-first Company OS identity', () => {
-  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="chat-first-v1"'), true);
+test('dashboard exposes the verifiable minimal conversation identity', () => {
+  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="minimal-conversation-v2"'), true);
   assert.equal(DASHBOARD_HTML.includes('Company OS'), true);
   assert.equal(DASHBOARD_HTML.includes('Parler à AURA'), true);
   for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
@@ -260,8 +260,8 @@ test('dashboard exposes the exact Cloud voice blocker instead of a generic offli
 
 
 test('conversation remains directly usable without opening technical details', () => {
-  const chatIndex = DASHBOARD_HTML.indexOf('class="panel chat-panel"');
-  const detailsIndex = DASHBOARD_HTML.indexOf('<details class="advanced">');
+  const chatIndex = DASHBOARD_HTML.indexOf('class="panel chat"');
+  const detailsIndex = DASHBOARD_HTML.indexOf('<details class="panel details">');
   const composerIndex = DASHBOARD_HTML.indexOf('class="composer"', chatIndex);
   assert.ok(chatIndex >= 0);
   assert.ok(composerIndex > chatIndex);
@@ -271,8 +271,8 @@ test('conversation remains directly usable without opening technical details', (
 });
 
 test('technical information is collapsed by default', () => {
-  assert.match(DASHBOARD_HTML, /<details class="advanced">/);
-  assert.doesNotMatch(DASHBOARD_HTML, /<details class="advanced" open>/);
+  assert.match(DASHBOARD_HTML, /<details class="panel details">/);
+  assert.doesNotMatch(DASHBOARD_HTML, /<details class="panel details" open>/);
 });
 
 
