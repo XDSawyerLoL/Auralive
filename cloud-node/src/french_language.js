@@ -6,6 +6,41 @@ function safeError(error) {
   return normalize(error?.message || error).slice(0, 700);
 }
 
+// Public error classification: never reveal tokens or upstream payload details.
+export function classifyFreeLanguageFailure(message = '') {
+  const reason = normalize(message).toLowerCase();
+  if (/\bhttp\s*401\b|invalid.api.key|invalid_api_key|unauthori[sz]ed|authentication.failed/.test(reason)) {
+    return { code: 'openrouter-auth-rejected',
+      hint: 'OpenRouter refuse la clé (401). Vérifier AURA_OPENROUTER_API_KEY dans Hostinger et redémarrer l’application.' };
+  }
+  if (/\bhttp\s*402\b|payment.required|negative.balance/.test(reason)) {
+    return { code: 'openrouter-account-restricted',
+      hint: 'OpenRouter refuse le compte (402), parfois même pour les modèles gratuits. Vérifier le solde et les restrictions du compte OpenRouter, sans activer de modèle payant.' };
+  }
+  if (/\bhttp\s*403\b|forbidden|permission.denied/.test(reason)) {
+    return { code: 'openrouter-access-denied',
+      hint: 'OpenRouter ou le réseau refuse l’accès (403). Vérifier les restrictions de clé et les journaux réseau Hostinger.' };
+  }
+  if (/\bhttp\s*429\b|rate.limit|too.many.requests|budget.exhausted|quota.exceeded|quota/.test(reason)) {
+    return { code: 'free-model-rate-limited',
+      hint: 'Quota gratuit dépassé ou fournisseur saturé (429). Vérifier les requêtes restantes sur OpenRouter ; réessayer après réinitialisation ou utiliser un modèle local gratuit.' };
+  }
+  if (/aborterror|aborted|timed?.out|timeout|fetch.failed|econn|enotfound|network|dns/.test(reason)) {
+    return { code: 'provider-network-timeout',
+      hint: 'La requête vers OpenRouter n’aboutit pas. Vérifier la connexion HTTPS sortante de Hostinger vers openrouter.ai et le délai de réponse.' };
+  }
+  if (/response.empty|empty.response|no.choices|empty.completion/.test(reason)) {
+    return { code: 'free-model-empty-response',
+      hint: 'OpenRouter a répondu sans texte utilisable. Vérifier le modèle retourné et essayer openrouter/free ou un autre modèle :free vérifié.' };
+  }
+  if (/quarantin|zero_cost_invariant_violation|blocked.model/.test(reason)) {
+    return { code: 'free-model-safety-blocked',
+      hint: 'Le garde-fou zéro coût a bloqué le fournisseur ou le modèle. Vérifier le modèle sélectionné et les données de tarification sans désactiver AURA_ZERO_COST_MODE.' };
+  }
+  return { code: 'free-language-provider-failed',
+    hint: 'Le fournisseur gratuit est configuré mais ne produit pas de réponse. Lire free_federation.last_error dans GET /api/ai/runtime.' };
+}
+
 function compactContext(rows = []) {
   return (Array.isArray(rows) ? rows : [])
     .slice(-10)
@@ -56,17 +91,21 @@ export class FrenchLanguageFaculty {
             : (Array.isArray(federation.configured_models) && !federation.configured_models.length
               ? 'no-free-model-selected'
               : 'free-federation-disabled'))));
+    const failed = blockingReason === 'free-language-provider-failed'
+      ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
+      : null;
+    const failureCode = failed?.code || blockingReason;
     const setupHint = blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
       : blockingReason === 'free-language-provider-failed'
-        ? 'Le modèle gratuit est configuré mais ne répond pas. Vérifier quota/réseau et GET /api/ai/runtime.'
+        ? failed.hint
         : blockingReason === 'free-federation-disabled'
           ? 'Vérifier AURA_FREE_FEDERATION_ENABLED=true, AURA_ZERO_COST_MODE=true et la connexion du modèle local.'
           : blockingReason
             ? 'Consulter GET /api/ai/runtime pour vérifier la configuration du fournisseur gratuit.'
             : '';
     return {
-      blocking_reason: blockingReason,
+      blocking_reason: failureCode,
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
