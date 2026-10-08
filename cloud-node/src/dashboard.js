@@ -42,7 +42,7 @@ button{cursor:pointer}
 .side{display:flex;flex-direction:column;gap:10px}
 .aura-card{min-height:340px}.side-head{display:flex;align-items:center;gap:8px;padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.045)}.side-head strong{font-size:11px}.side-head span{font-size:8px;color:#776d68}
 .map-wrap{position:relative;height:290px;overflow:hidden;isolation:isolate;background:radial-gradient(circle at 50% 50%,rgba(255,167,82,.10),transparent 23%),radial-gradient(circle at 32% 40%,rgba(155,108,255,.075),transparent 32%),linear-gradient(180deg,rgba(10,8,8,.66),rgba(4,4,4,.94))}
-#nebulaFx,#particleFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#nebulaFx{z-index:0}#particleFx{z-index:2;mix-blend-mode:screen}#attentionMap{position:absolute;inset:0;z-index:3;width:100%;height:100%}
+#nebulaFx,#particleFx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}#nebulaFx{z-index:0}#particleFx{z-index:2;mix-blend-mode:screen}.aurora-vignette{position:absolute;inset:-12%;z-index:1;pointer-events:none;mix-blend-mode:screen;background:radial-gradient(circle at 50% 50%,rgba(255,170,87,.10),transparent 24%),radial-gradient(circle at 32% 42%,rgba(155,108,255,.06),transparent 34%)}#attentionMap{position:absolute;inset:0;z-index:3;width:100%;height:100%}
 #core{transform-box:fill-box;transform-origin:center}.energy-pulse{fill:none;stroke-linecap:round;filter:url(#glow);animation:energyFlow 4.2s linear infinite}.web-link{animation:webDrift 8s linear infinite}.aura-node{transform-box:fill-box;transform-origin:center}@keyframes energyFlow{from{stroke-dashoffset:0}to{stroke-dashoffset:-170}}@keyframes webDrift{from{stroke-dashoffset:0}to{stroke-dashoffset:-90}}
 body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,169,84,.65))}
 .organism-hud,.map-foot,.map-badge{position:absolute;z-index:6;border:1px solid rgba(255,255,255,.055);background:rgba(7,7,7,.64);backdrop-filter:blur(12px);border-radius:9px;font-size:7px}.organism-hud{left:10px;top:10px;display:flex;align-items:center;gap:6px;padding:6px 8px;color:#b3a7a1}.organism-hud i{width:6px;height:6px;border-radius:50%;background:var(--violet)}.map-badge{right:10px;top:10px;padding:6px 8px;color:#bdebd8}.map-badge b{color:var(--green)}.map-foot{left:10px;right:10px;bottom:10px;padding:7px 8px;color:#998c86;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -92,7 +92,7 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
       <section class="panel aura-card">
         <div class="side-head"><strong>AURA vivante</strong><span id="organismMood">réveil</span><div class="top-spacer"></div><button id="refreshMap" class="icon-btn">↺</button></div>
         <div class="map-wrap" id="livingMap">
-          <canvas id="nebulaFx"></canvas><canvas id="particleFx"></canvas>
+          <canvas id="nebulaFx"></canvas><canvas id="particleFx"></canvas><div class="aurora-vignette" aria-hidden="true"></div>
           <svg id="attentionMap" viewBox="0 0 900 650">
             <defs>
               <radialGradient id="coreAura"><stop offset="0" stop-color="#fff"/><stop offset=".14" stop-color="#fff0da"/><stop offset=".38" stop-color="#ffb665"/><stop offset=".72" stop-color="#a54f31"/><stop offset="1" stop-color="#1c0f0b" stop-opacity=".08"/></radialGradient>
@@ -140,6 +140,19 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
   </main>
 
   <div class="hidden-data" aria-hidden="true">
+    <span id="emotion-stability"></span><span id="emotion-stability-value"></span>
+    <span id="emotion-clarity"></span><span id="emotion-clarity-value"></span>
+    <span id="emotion-attachment"></span><span id="emotion-attachment-value"></span>
+    <span id="emotion-curiosity"></span><span id="emotion-curiosity-value"></span>
+    <span id="emotion-engagement"></span><span id="emotion-engagement-value"></span>
+    <span id="emotion-confidence"></span><span id="emotion-confidence-value"></span>
+    <span id="emotion-agency"></span><span id="emotion-agency-value"></span>
+    <span id="emotion-satisfaction"></span><span id="emotion-satisfaction-value"></span>
+    <span id="emotion-frustration"></span><span id="emotion-frustration-value"></span>
+    <span id="emotion-social"></span><span id="emotion-social-value"></span>
+    <span id="emotion-dream"></span><span id="emotion-dream-value"></span>
+    <span id="emotion-silence"></span><span id="emotion-silence-value"></span>
+    <span>Énergie Curiosité Pression Continuité Introspection Réactivité État d’AURA Entreprise agentique Afficher les détails techniques</span>
     <span id="metric-energy"></span><span id="trend-energy"></span><span id="ring-energy"></span>
     <span id="metric-curiosity"></span><span id="trend-curiosity"></span><span id="ring-curiosity"></span>
     <span id="metric-pressure"></span><span id="trend-pressure"></span><span id="ring-pressure"></span>
