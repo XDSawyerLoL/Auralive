@@ -171,7 +171,12 @@ export const config = Object.freeze({
   frenchLanguageRequired: bool('AURA_FRENCH_LANGUAGE_REQUIRED', true),
   // Owner-operated llama.cpp/Ollama inference; no third-party tokens or quotas.
   selfHostedLanguageEnabled: bool('AURA_SELF_HOSTED_LANGUAGE_ENABLED', true),
-  selfHostedLanguageBaseUrl: String(process.env.AURA_SELF_HOSTED_BASE_URL || '').replace(/\/$/, ''),
+  // On managed Hostinger Node.js, attempt to run local GGUF inference inside the same app.
+  // The auto runtime never calls an external text generation API.
+  embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.NODE_ENV === 'production'),
+  selfHostedLanguageBaseUrl: String(process.env.AURA_SELF_HOSTED_BASE_URL
+    || (bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.NODE_ENV === 'production')
+      ? 'http://127.0.0.1:18080/v1' : '')).replace(/\/$/, ''),
   selfHostedLanguageModel: String(process.env.AURA_SELF_HOSTED_MODEL || 'aura-fr').trim(),
   selfHostedLanguageApiKey: process.env.AURA_SELF_HOSTED_API_KEY || '',
   // Remote HTTPS servers require explicit operator attestation of ownership and no usage billing.
