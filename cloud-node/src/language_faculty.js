@@ -159,6 +159,19 @@ export class LanguageFaculty {
     const recent = Date.parse(previous.evaluated_at || '');
     if (!force && Number.isFinite(recent) && Date.now() - recent < DAY_MS) return previous;
 
+    // Reserve full evaluation capacity before sending any model request.
+    // A benchmark must never burn part of the free daily quota only to fail mid-test.
+    if (this.ai?.federation?.enabled && typeof this.ai.federation.budgetFor === 'function') {
+      const quota = await this.ai.federation.budgetFor('manual-evaluation');
+      if (quota.available < LANGUAGE_BENCHMARK.length || quota.cooldown_until) {
+        const reason = quota.cooldown_until
+          ? 'Fournisseur gratuit limité jusqu’à ' + quota.cooldown_until
+          : 'Évaluation suspendue : quota insuffisant (' + quota.available + ' requêtes restantes).';
+        this.lastError = reason;
+        return { ...previous, status: 'quota-insufficient', last_error: reason };
+      }
+    }
+
     const outcomes = [];
     for (const item of LANGUAGE_BENCHMARK) {
       const plan = this.cognition.planReply({
@@ -167,7 +180,7 @@ export class LanguageFaculty {
       });
       this.expression.lastError = '';
       const answer = clean(await this.expression.verbalize(plan, {
-        maxTokens: 200, taskRole: 'conversation',
+        maxTokens: 200, taskRole: 'manual-evaluation',
       }), 1800);
       // Never present a deterministic offline fallback as a measured model success.
       if (!this.ai.enabled || !answer || this.expression.lastError) {
