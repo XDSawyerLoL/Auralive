@@ -189,3 +189,45 @@ test('self-hosted endpoint requires loopback or operator-confirmed HTTPS, never 
   assert.equal(isSelfHostedEndpointAllowed('https://api.openai.com/v1', true), false);
   assert.equal(isSelfHostedEndpointAllowed('https://admin:secret@inference.example.com/v1', true), false);
 });
+
+test('embedded CPU support is explicitly limited to Linux x64 and arm64', async () => {
+  const { EmbeddedLanguage, embeddedSupported } = await import('../src/embedded_language.js');
+  assert.equal(embeddedSupported('linux', 'x64'), true);
+  assert.equal(embeddedSupported('linux', 'arm64'), true);
+  assert.equal(embeddedSupported('win32', 'x64'), false);
+  const inert = new EmbeddedLanguage({ enabled: false });
+  assert.equal(inert.snapshot().stage, 'disabled');
+  assert.equal(await inert.start(), false);
+});
+
+test('automatic same-host integration starts pending, not falsely ready', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const script = [
+    "process.env.NODE_ENV='production';",
+    "process.env.CI='false';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='false';",
+    "process.env.AURA_SELF_HOSTED_BASE_URL='';",
+    "process.env.AURA_EMBEDDED_LANGUAGE_ENABLED='true';",
+    "const { SelfHostedLanguage } = await import('./src/self_hosted_language.js');",
+    "const client = new SelfHostedLanguage();",
+    "console.log(JSON.stringify(client.snapshot()));",
+  ].join('\n');
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: new URL('..', import.meta.url).pathname, encoding: 'utf8',
+    env: { ...process.env, CI: 'false', AURA_EMBEDDED_LANGUAGE_ENABLED: 'true', AURA_SELF_HOSTED_BASE_URL: '' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const snap = JSON.parse(result.stdout.trim());
+  assert.equal(snap.enabled, true);
+  assert.equal(snap.embedded.enabled, true);
+  assert.equal(snap.embedded.stage, 'pending');
+  assert.equal(snap.ready, false);
+  assert.equal(snap.embedded.external_inference, false);
+});
+
+test('AURA auto-starts embedded engine independent of MySQL runtime and stops it cleanly', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(source, /export function startRuntimeLoop\(\) \{\s+ai\.selfHosted\.beginAutomaticStartup\(\)/);
+  assert.match(source, /export async function stopAura\(\) \{\s+ai\.selfHosted\.stopEmbedded\(\)/);
+});
