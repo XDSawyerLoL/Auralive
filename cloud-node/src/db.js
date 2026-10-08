@@ -724,6 +724,15 @@ export async function initSchema() {
       created_at VARCHAR(40) NOT NULL,
       INDEX idx_aura_language_experiences_session(session_id,id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_world_beliefs (
+      domain_key VARCHAR(220) PRIMARY KEY,
+      observations INT NOT NULL DEFAULT 0,
+      successes INT NOT NULL DEFAULT 0,
+      failures INT NOT NULL DEFAULT 0,
+      last_signature VARCHAR(500) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_world_beliefs_observations(observations,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS aura_language_benchmarks (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
       score INT NOT NULL,
