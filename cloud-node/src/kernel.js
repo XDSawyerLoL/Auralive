@@ -1705,7 +1705,7 @@ export class CognitiveKernel {
         version: CognitionEngine.VERSION,
         independent_from_language_model: true,
       },
-      expression: this.expression.diagnostic(),
+      expression: await this.expression.diagnostic(),
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
       active_inference: {
         ...this.inferenceAssessment(),
