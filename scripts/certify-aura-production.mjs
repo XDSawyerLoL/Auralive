@@ -129,12 +129,12 @@ await request('/api/command/status', {
 
 await request('/api/chat', {
   method: 'POST',
-  body: { message: 'Que fais-tu en ce moment ?' },
+  body: { text: 'Que fais-tu en ce moment ?' },
   predicate: (body) => Boolean(
     body
-    && typeof body.reply === 'string'
-    && body.reply.trim().length >= 8
-    && !/Je te suis\. Je reste sur ce que tu viens de dire\.?/i.test(body.reply)
+    && typeof body.answer === 'string'
+    && body.answer.trim().length >= 8
+    && !/Je te suis\. Je reste sur ce que tu viens de dire\.?/i.test(body.answer)
   ),
 });
 
