@@ -45,7 +45,29 @@ export class FrenchLanguageFaculty {
     const federation = this.federation?.snapshot?.() || {};
     const local = await this.localAvailable();
     const ready = Boolean(federation.enabled || local);
+    const blockingReason = ready
+      ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
+      : (!federation.api_key_configured
+        ? 'openrouter-free-key-missing'
+        : (federation.zero_cost_mode === false
+          ? 'zero-cost-mode-disabled'
+          : (!federation.endpoint_verified
+            ? 'untrusted-free-provider-endpoint'
+            : (Array.isArray(federation.configured_models) && !federation.configured_models.length
+              ? 'no-free-model-selected'
+              : 'free-federation-disabled'))));
+    const setupHint = blockingReason === 'openrouter-free-key-missing'
+      ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
+      : blockingReason === 'free-language-provider-failed'
+        ? 'Le modèle gratuit est configuré mais ne répond pas. Vérifier quota/réseau et GET /api/ai/runtime.'
+        : blockingReason === 'free-federation-disabled'
+          ? 'Vérifier AURA_FREE_FEDERATION_ENABLED=true, AURA_ZERO_COST_MODE=true et la connexion du modèle local.'
+          : blockingReason
+            ? 'Consulter GET /api/ai/runtime pour vérifier la configuration du fournisseur gratuit.'
+            : '';
     return {
+      blocking_reason: blockingReason,
+      setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
       verified_ready: Boolean((federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
@@ -172,6 +194,7 @@ export class FrenchLanguageFaculty {
     }
 
     this.lastMode = 'degraded';
+    this.lastError = this.lastError || (this.federation?.enabled ? 'free-provider-empty-response' : 'no-free-provider-connected');
     this.lastBackend = '';
     this.lastModel = '';
     this.lastLatencyMs = Date.now() - started;

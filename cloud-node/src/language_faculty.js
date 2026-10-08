@@ -125,12 +125,15 @@ export class LanguageFaculty {
     ]);
     const latest = records[0] || null;
     const previous = records[1] || null;
+    const languageState = await this.expression?.language?.status?.() || { ready: this.canEvaluate, blocking_reason: '', setup_hint: '' };
     const score = latest ? Number(latest.score) : null;
     const prior = previous ? Number(previous.score) : null;
     return {
       version: VERSION, benchmark: 'frozen-fr-conversation-v1',
       benchmark_cases: LANGUAGE_BENCHMARK.length,
-      status: latest ? 'measured' : 'not-evaluated',
+      status: latest ? 'measured' : (languageState.ready ? 'not-evaluated' : 'model-unavailable'),
+      blocking_reason: languageState.blocking_reason || '',
+      setup_hint: languageState.setup_hint || '',
       scope: 'Évaluation de conversation et verbalisation, pas de conscience ni entraînement des poids',
       score, previous_score: prior,
       delta: latest && previous ? score - prior : null,

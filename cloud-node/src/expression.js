@@ -67,7 +67,10 @@ export class ExpressionLayer {
     this.fallbackCount += 1;
     if (config.frenchLanguageRequired) {
       this.lastMode = 'natural-language-unavailable';
-      return 'Ma faculté de français naturel est indisponible pour le moment. Mon noyau fonctionne, mais je refuse de simuler une conversation avec des réponses pré-écrites.';
+      // Operational diagnostic only; never impersonate natural conversation with templates.
+      const languageStatus = await this.language.status();
+      return 'Ma faculté de français naturel est indisponible. '
+        + (languageStatus.setup_hint || 'Aucun modèle linguistique libre n’est joignable.');
     }
 
     // Secours legacy explicitement opt-in seulement.

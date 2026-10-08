@@ -81,3 +81,15 @@ test('French faculty reports unavailable instead of pretending scripted language
   assert.equal(status.primary, 'unavailable');
   assert.equal(status.emergency_fallback_only, true);
 });
+
+
+test('unconfigured language reports a useful setup hint without exposing a secret', async () => {
+  const faculty = new FrenchLanguageFaculty({
+    federation: { enabled: false, snapshot: () => ({ enabled: false, zero_cost_mode: true, api_key_configured: false }) },
+    bridge: null,
+  });
+  const status = await faculty.status();
+  assert.equal(status.blocking_reason, 'openrouter-free-key-missing');
+  assert.match(status.setup_hint, /AURA_OPENROUTER_API_KEY/);
+  assert.equal(status.verified_ready, false);
+});
