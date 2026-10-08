@@ -53,7 +53,7 @@ test('cognition v2 keeps ambiguous short question attached to prior turn', () =>
       { role: 'user', content: 'Et pourquoi ?' },
     ],
   });
-  assert.equal(plan.act, 'reference_followup');
+  assert.equal(plan.act, 'resolve_reference_followup');
   assert.equal(plan.needs_semantic_support, false);
   assert.match(engine.deterministicReply(plan), /Stabiliser Quantic Glide|référence/i);
 });
