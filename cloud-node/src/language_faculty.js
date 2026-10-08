@@ -131,7 +131,7 @@ export class LanguageFaculty {
     return {
       version: VERSION, benchmark: 'frozen-fr-conversation-v1',
       benchmark_cases: LANGUAGE_BENCHMARK.length,
-      status: latest ? 'measured' : (languageState.ready ? 'not-evaluated' : 'model-unavailable'),
+      status: latest ? 'measured' : ((languageState.blocking_reason || !languageState.ready) ? 'model-unavailable' : 'not-evaluated'),
       blocking_reason: languageState.blocking_reason || '',
       setup_hint: languageState.setup_hint || '',
       scope: 'Évaluation de conversation et verbalisation, pas de conscience ni entraînement des poids',
