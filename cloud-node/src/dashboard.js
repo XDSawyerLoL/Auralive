@@ -51,6 +51,13 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
 .hidden-data{display:none!important}
 .intent-list,.work-list,.memory-list,.activity-list{display:grid;gap:5px}.intent-row,.work-row,.memory-row,.activity-row{border:1px solid rgba(255,255,255,.05);border-radius:8px;padding:6px;background:rgba(255,255,255,.015)}.intent-title,.work-title,.memory-text,.activity-title{font-size:7px}.memory-date,.activity-time,.activity-kind,.badge{font-size:6px;color:#6f6662}
 .progress{height:3px;background:rgba(255,255,255,.05);border-radius:999px;overflow:hidden}.progress span{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--violet))}
+.language-card{padding:12px 13px;display:grid;gap:8px}
+.language-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.language-head strong{font-size:11px;font-weight:700}.language-score{color:var(--gold);font-size:17px;font-weight:750;font-variant-numeric:tabular-nums}
+.language-track{height:8px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+.language-fill{height:100%;width:0%;border-radius:inherit;background:linear-gradient(90deg,#ffb566,#d78ff6);transition:width .9s ease}
+.language-details{display:flex;justify-content:space-between;gap:9px;font-size:9px;color:var(--muted)}
+.language-details span{min-width:0}.language-details span:last-child{text-align:right}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(max-width:900px){.main{grid-template-columns:1fr}.side{order:-1}.aura-card{min-height:250px}.map-wrap{height:220px}.chat{min-height:72svh}.side .mini-card:nth-of-type(n+3){display:none}}
 @media(max-width:640px){.shell{padding:7px}.topbar{height:54px;padding:7px 9px}.brand-sub{display:none}.status-compact .pill:nth-child(n+2){display:none}.main{margin-top:7px}.side{display:block}.aura-card{margin-bottom:7px}.mini-card{display:none}.chat{min-height:calc(100svh - 68px)}.messages{padding:13px}.msg{font-size:15px;max-width:92%}.composer textarea{font-size:16px}.map-wrap{height:165px}.organism-hud,.map-badge{display:none}.map-foot{font-size:7px}}
@@ -107,6 +114,12 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
           <div class="map-badge"><b>●</b> live</div>
           <div class="map-foot"><span id="focusStatement">chargement du focus…</span></div>
         </div>
+      </section>
+
+      <section class="panel language-card" aria-label="Progression mesurée du français">
+        <div class="language-head"><strong>Apprentissage du français</strong><span class="language-score" id="languageScore">—</span></div>
+        <div class="language-track" id="languageTrack" role="progressbar" aria-label="Évaluation du langage" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Pas encore évalué"><div class="language-fill" id="languageProgressBar"></div></div>
+        <div class="language-details"><span id="languageTrend">Premier test en attente</span><span id="languageTestDate">Tests comparables · 9 tâches</span></div>
       </section>
 
       <section class="panel mini-card">
