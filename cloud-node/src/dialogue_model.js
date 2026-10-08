@@ -77,7 +77,7 @@ function looksLikeDirective(q) {
 }
 
 function looksLikeClarification(q) {
-  const stripped = q.replace(/[?!.]+$/g, '').trim();
+  const stripped = q.replace(/-/g, ' ').replace(/[?!.]+$/g, '').replace(/\s+/g, ' ').trim();
   return [
     "c'est a dire",'c est a dire','cad','comment ca','comment ça','pourquoi',
     'et donc','donc','precise','précise','explique','comment ca marche','comment ça marche',
