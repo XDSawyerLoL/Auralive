@@ -3,15 +3,14 @@ import assert from 'node:assert/strict';
 import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 
-test('AURA chat-first interface exposes the essential surfaces without technical overload', () => {
+test('AURA minimal interface exposes only the essential surfaces by default', () => {
   for (const label of [
     'Company OS',
     'AURA vivante',
     'Parler à AURA',
-    'Ce qu’elle fait maintenant',
-    'État d’AURA',
-    'Entreprise agentique',
-    'Afficher les détails techniques',
+    'Ce qu’elle fait',
+    'État',
+    'Détails techniques',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
