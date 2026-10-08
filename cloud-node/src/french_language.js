@@ -48,6 +48,7 @@ export class FrenchLanguageFaculty {
     return {
       version: FrenchLanguageFaculty.VERSION,
       ready,
+      verified_ready: Boolean((federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
       primary: federation.enabled ? 'zero-cost-federation' : (local ? 'runtime-local' : 'unavailable'),
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
