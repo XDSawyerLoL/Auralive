@@ -7,6 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
+import { SkillLearningEngine } from './skill_learning.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -65,6 +66,7 @@ export class CognitiveKernel {
     this.organism = new AuraOrganism();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
+    this.skillLearning = new SkillLearningEngine({ fabric });
     this.lastInferenceAssessment = {};
     this.started = false;
     this.timer = null;
@@ -196,6 +198,9 @@ export class CognitiveKernel {
     this.soulCache.kernel_version = CognitiveKernel.VERSION;
     this.soulCache.organism = this.organism.migrate(this.soulCache);
     this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
+    await this.skillLearning.hydrate().catch((error) => {
+      this.lastError = String(error?.message || error).slice(0, 1000);
+    });
     const legacyIntention = 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.';
     if (String(this.soulCache.current_intention || '').trim() === legacyIntention) {
       this.soulCache.current_intention = 'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.';
@@ -756,6 +761,7 @@ export class CognitiveKernel {
       },
     );
     const nativeLearning = this.nativeLearning.diagnostic(this.soulCache.native_learning);
+    const learnedSkill = await this.skillLearning.observe({ ...payload, ok }).catch(() => null);
     await this.recordOrganismEvent('outcome', ok ? 'action réussie' : 'action échouée', {
       automation_id: automationId,
       event_type: eventType,
@@ -767,9 +773,10 @@ export class CognitiveKernel {
         success_rate: nativeLearning.success_rate,
         last_signal: nativeLearning.last_signal,
       },
+      learned_skill: learnedSkill,
     });
     await this.saveSoul();
-    if (ok) return { ok: true, learned: true, native_learning: nativeLearning };
+    if (ok) return { ok: true, learned: true, native_learning: nativeLearning, learned_skill: learnedSkill };
 
     this.pushStimulus({ type: 'automation.failure', source: 'automation', occurred_at: timestamp, payload: { automation_id: automationId, event_type: eventType, signature } });
     const countRow = await one('SELECT COUNT(*) AS total FROM aura_outcomes WHERE automation_id=? AND ok=0 AND signature=?', [automationId, signature]);
@@ -789,6 +796,7 @@ export class CognitiveKernel {
       learned: true,
       failures: count,
       native_learning: this.nativeLearning.diagnostic(this.soulCache.native_learning),
+      learned_skill: learnedSkill,
     };
   }
 
@@ -1704,6 +1712,7 @@ export class CognitiveKernel {
         version: ActiveInferenceEngine.VERSION,
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
+      skill_learning: await this.skillLearning.status(),
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,
