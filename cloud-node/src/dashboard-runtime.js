@@ -548,8 +548,11 @@ async function refresh(){
         $('languageText').title='Faculté linguistique française active · '+provider+' · réponses non scriptées';
       }else if(nativeDialogueReady){
         $('languageDot').className='live-dot warn';
-        $('languageText').textContent='Français · dégradé';
-        $('languageText').title='Le noyau comprend la conversation, mais la faculté de langue libre est indisponible : secours déterministe uniquement.';
+        const strict=String(language.mode||'')==='natural-language-unavailable';
+        $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
+        $('languageText').title=strict
+          ? 'Le noyau comprend la conversation, mais aucun modèle de langue libre n’est disponible. AURA refuse de simuler une conversation avec des réponses pré-écrites.'
+          : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
       }else{
         $('languageText').textContent='Français · indisponible';
         $('languageText').title=String(language.last_error||'Faculté linguistique et noyau conversationnel indisponibles.');
