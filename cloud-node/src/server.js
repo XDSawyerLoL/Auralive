@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { ExecutionBridge } from './bridge.js';
+import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
 import { CuriosityEngine } from './curiosity.js';
 import { CapabilityScout } from './capability_scout.js';
@@ -581,10 +582,7 @@ app.delete('/api/auth/session', async (_request, reply) => {
 });
 
 app.get('/api/bootstrap/status', async () => ({
-  product: 'AURA Cloud',
-  runtime: 'Node.js/Fastify',
-  version: '2.2.1',
-  node: process.version,
+  ...buildInfo(),
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
   db_ready: bootstrap.dbReady,
@@ -621,6 +619,14 @@ app.get('/api/bootstrap/status', async () => ({
   peer_mesh_enabled: Boolean(config.meshP2pEnabled),
   capability_scout_enabled: Boolean(config.capabilityScoutEnabled),
   capability_scout_prompt_required: false,
+}));
+
+app.get('/api/build', async () => ({
+  ...buildInfo(),
+  homeostasis: 'homeostasie_v9_unified',
+  cognition: CognitionEngine.VERSION,
+  kernel: CognitiveKernel.VERSION,
+  production_truth: true,
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -918,14 +924,30 @@ app.get('/api/capabilities', async (request) => {
       capabilities: fabric.list().length,
       remote_side_effects: false,
     },
+    skill_learning: bootstrap.runtimeReady
+      ? await kernel.skillLearning.status()
+      : { version: 'aura-skill-learning-v2', candidates: 0, promoted: 0, registered_runtime: 0 },
     kernel: privateView ? kernelStatus : undefined,
   };
+});
+
+app.get('/api/skills/status', async () =>
+  bootstrap.runtimeReady
+    ? kernel.skillLearning.status()
+    : { version: 'aura-skill-learning-v2', ready: false, candidates: 0, promoted: 0, registered_runtime: 0 }
+);
+
+app.get('/api/skills', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return { skills: await kernel.skillLearning.list(request.query?.limit) };
 });
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
   organism: 'homeostasie_v9_unified',
-  cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
+  cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
+  dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
+  skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
   language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
@@ -955,6 +977,7 @@ app.get('/healthz', async () => {
   }
   return {
     ok: true,
+    build: buildInfo(),
     ready: bootstrap.runtimeReady && databaseAlive,
     status: bootstrap.runtimeReady && databaseAlive ? 'ready' : 'diagnostic',
     db: databaseAlive,

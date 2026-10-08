@@ -14,7 +14,7 @@ test('long-horizon engine has a stable autonomous mission identity', () => {
 });
 
 test('missions are durable, resumable and linked to initiatives', () => {
-  assert.match(dbSource, /LATEST_SCHEMA_VERSION = 12/);
+  assert.match(dbSource, /LATEST_SCHEMA_VERSION = 13/);
   assert.match(dbSource, /CREATE TABLE IF NOT EXISTS aura_missions/);
   assert.match(dbSource, /CREATE TABLE IF NOT EXISTS aura_mission_steps/);
   assert.match(source, /async ensureAutonomousMission\(\)/);

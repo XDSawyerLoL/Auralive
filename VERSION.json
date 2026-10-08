@@ -1,15 +1,20 @@
 {
-  "cloud": "2.2.1",
+  "cloud": "3.0.0",
   "studio": "2.8.1",
   "native_engine": "0.4.1",
   "schema": {
-    "mysql": 5,
+    "mysql": 13,
     "evolution": 3
   },
   "channel": "stable-next",
-  "updated_at": "2026-09-28",
-  "command_center": 1,
-  "web_substrate": 1,
+  "updated_at": "2026-10-08",
+  "cognition": "2.0",
+  "dialogue_state": "2.0",
+  "homeostasis": 9,
+  "skill_learning": 2,
+  "production_truth": 1,
+  "command_center": 2,
+  "web_substrate": 2,
   "fabric": 1,
   "dag": 1,
   "rust_fabric": "0.1.0"

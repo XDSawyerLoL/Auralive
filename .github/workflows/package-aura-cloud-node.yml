@@ -37,6 +37,7 @@ jobs:
             "runtime": "Node.js 22 / Fastify / MySQL",
             "target": "Hostinger Node.js Web App",
             "git_sha": "$GITHUB_SHA",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "evolution_phase": 3,
             "cognition_native": true,
             "command_center": 1,

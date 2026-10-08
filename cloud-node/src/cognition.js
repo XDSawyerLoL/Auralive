@@ -1,4 +1,5 @@
 import { clamp } from './policy.js';
+import { DialogueStateTracker } from './dialogue_model.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -189,7 +190,11 @@ function inferSymbolicFunction(text) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.1';
+  static VERSION = 'aura-cognition-native-v2.0';
+
+  constructor() {
+    this.dialogue = new DialogueStateTracker();
+  }
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -354,6 +359,7 @@ export class CognitionEngine {
         content: normalize(row?.content).slice(0,500),
       }))
       .filter((row) => row.content);
+    const discourse = this.dialogue.analyze(raw, conversationContext);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -429,7 +435,15 @@ export class CognitionEngine {
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (Number(organism.agency || 0) > 0) facts.push(`Niveau d'agency : ${Math.round(Number(organism.agency || 0)*100)} %.`);
-    } else if (isClarificationFollowup(raw)) {
+    } else if (discourse.move === 'correction') {
+      act = 'repair_understanding';
+      goal = 'Corriger explicitement mon interprétation précédente et recentrer le dialogue sur ce que l’utilisateur désigne réellement.';
+      needsSemanticSupport = false;
+      if (discourse.previous_assistant) facts.push(`Réponse précédente : ${discourse.previous_assistant}`);
+      if (discourse.correction_target) facts.push(`Sujet corrigé : ${discourse.correction_target}`);
+      facts.push(`Correction utilisateur : ${raw}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+    } else if (discourse.move === 'clarification' || isClarificationFollowup(raw)) {
       act = 'clarify_previous';
       goal = 'Clarifier naturellement la réponse précédente en utilisant le contexte de conversation et l’activité opérationnelle réelle.';
       needsSemanticSupport = false;
@@ -439,7 +453,7 @@ export class CognitionEngine {
       if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
       if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
-    } else if (isShortAcknowledgement(raw)) {
+    } else if (discourse.move === 'acknowledgement' || isShortAcknowledgement(raw)) {
       act = 'acknowledge_context';
       goal = 'Réagir brièvement au signal de l’utilisateur sans répéter une formule générique et en gardant le fil de conversation.';
       needsSemanticSupport = false;
@@ -447,6 +461,14 @@ export class CognitionEngine {
       if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
       if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
       if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+    } else if (discourse.move === 'reference_followup') {
+      act = 'resolve_reference_followup';
+      goal = 'Résoudre le référent implicite du message à partir du tour précédent avant de répondre.';
+      needsSemanticSupport = false;
+      if (discourse.reference_text) facts.push(`Référent précédent : ${discourse.reference_text}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      facts.push(`Relance utilisateur : ${raw}`);
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
@@ -528,6 +550,7 @@ export class CognitionEngine {
         portfolio_focus: normalize(executive.portfolio_focus || 'quantic-sillage'),
       },
       conversation_context: conversationContext,
+      discourse,
       user_text: raw,
       private_view: Boolean(privateView),
     };
@@ -604,6 +627,21 @@ export class CognitionEngine {
       if (focus) return `Oui. Pour être concrète : je suis sur ${focus}.${next ? ` La suite, c’est ${next}.` : ''}`;
       return 'Oui. Je t’écoute.';
     }
+    if (plan?.act === 'repair_understanding') {
+      const subject = cleanFact('Sujet corrigé : ');
+      const previous = cleanFact('Réponse précédente : ');
+      if (subject) return `D’accord, je corrige : tu parles de ${subject}. Je laisse de côté mon interprétation précédente et je repars de ce sujet.`;
+      if (previous) return `D’accord. J’avais mal interprété ton message à partir de ma réponse précédente. Je repars de ce que tu viens de préciser.`;
+      return 'D’accord, je corrige mon interprétation et je repars de ce que tu viens de préciser.';
+    }
+    if (plan?.act === 'resolve_reference_followup') {
+      const reference = cleanFact('Référent précédent : ');
+      const focus = cleanFact('Foyer opérationnel : ');
+      const next = cleanFact('Prochaine action : ');
+      if (reference && focus) return `Tu fais référence à ce que je viens de dire. Concrètement : ${focus}.${next ? ` La suite est ${next}.` : ''}`;
+      if (reference) return `Tu fais référence à ceci : ${reference}. Dis-moi si tu veux que je précise le pourquoi, la suite ou le point qui te paraît flou.`;
+      return 'Je rattache ta relance au tour précédent, mais le référent reste ambigu. Je peux préciser le point précédent sans changer de sujet.';
+    }
     if (plan?.act === 'report_next_step') {
       const next = cleanFact('Prochaine action issue de ma réflexion : ') || cleanFact('Intention prioritaire : ');
       return next ? `La prochaine étape, c’est ${next}.` : 'Je n’ai pas encore de prochaine étape assez solide pour te la présenter comme acquise.';
@@ -637,7 +675,10 @@ export class CognitionEngine {
     const thread = String(plan?.relationship?.last_open_thread || '').trim();
     const previous = previousAssistantMessage(plan?.conversation_context || []);
     if (previous?.content && userText.length <= 48) {
-      return `Je te suis. Sur ce que je viens de dire : ${String(previous.content).slice(0, 260)}`;
+      const topics = Array.isArray(plan?.discourse?.topic_terms) ? plan.discourse.topic_terms.slice(0,4).join(', ') : '';
+      return topics
+        ? `Je rattache ta relance au sujet précédent (${topics}). Dis-moi le point précis que tu veux approfondir.`
+        : `Je rattache ta relance à ma réponse précédente. Dis-moi le point précis que tu veux approfondir.`;
     }
     if (thread) {
       return `Je te suis. Je garde aussi le fil de ce qu’on disait sur ${thread}. Développe ton idée et je te réponds dessus, sans te réciter mon état interne.`;

@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 12;
+export const LATEST_SCHEMA_VERSION = 13;
 
 export function getDb() {
   if (pool) return pool;
@@ -584,6 +584,41 @@ async function applyMigrations(db) {
     );
     current = 12;
   }
+
+  if (current < 13) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_skills (
+      id VARCHAR(80) PRIMARY KEY,
+      strategy_key VARCHAR(500) NOT NULL,
+      name VARCHAR(180) NOT NULL,
+      recipe LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'candidate',
+      successes BIGINT NOT NULL DEFAULT 0,
+      failures BIGINT NOT NULL DEFAULT 0,
+      context_count INT NOT NULL DEFAULT 0,
+      confidence DOUBLE NOT NULL DEFAULT 0,
+      source VARCHAR(80) NOT NULL DEFAULT 'outcome',
+      first_seen_at VARCHAR(40) NOT NULL,
+      last_seen_at VARCHAR(40) NOT NULL,
+      promoted_at VARCHAR(40) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_skills_status(status,confidence,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_skill_observations (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      skill_id VARCHAR(80) NOT NULL,
+      ok TINYINT NOT NULL,
+      context_key VARCHAR(240) NOT NULL,
+      evidence LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_skill_obs_skill(skill_id,created_at),
+      INDEX idx_aura_skill_obs_context(skill_id,context_key,ok)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(13,?,?)',
+      ['cross-context-skill-learning', new Date().toISOString()],
+    );
+    current = 13;
+  }
 }
 
 export async function initSchema() {
@@ -779,7 +814,7 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs, skills] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -791,6 +826,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
     query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
     query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT id,strategy_key,name,recipe,status,successes,failures,context_count,confidence,source,promoted_at,updated_at FROM aura_skills ORDER BY confidence DESC,updated_at DESC LIMIT 200'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -807,6 +843,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     reasoning_sessions: reasoningSessions,
     fabric_capabilities: fabricCapabilities,
     fabric_graphs: fabricGraphs,
+    skills,
   });
   const id = randomUUID();
   await query(
