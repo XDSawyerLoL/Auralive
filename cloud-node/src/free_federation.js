@@ -67,6 +67,7 @@ function roleAffinity(model, role) {
     vision: ['vision', 'multimodal', 'image', 'visual'],
     'long-context': ['long-context', 'context', 'document', 'research'],
     conversation: ['conversation', 'general-purpose', 'multilingual', 'instruction'],
+    french: ['french', 'français', 'francais', 'multilingual', 'mistral', 'qwen', 'conversation', 'instruction'],
     translation: ['translation', 'multilingual', 'language'],
   }[roleName(role)] || ['general-purpose', 'reasoning', 'instruction'];
 
