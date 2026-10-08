@@ -275,11 +275,12 @@ test('technical information is collapsed by default', () => {
 });
 
 
-test('dashboard distinguishes learned French faculty from deterministic degraded mode', () => {
+test('dashboard distinguishes learned French faculty from strict language unavailability', () => {
   assert.match(DASHBOARD_SCRIPT, /Français · modèle libre/);
-  assert.match(DASHBOARD_SCRIPT, /Français · dégradé/);
-  assert.match(DASHBOARD_SCRIPT, /native_dialogue_ready/);
+  assert.match(DASHBOARD_SCRIPT, /Français · indisponible/);
+  assert.match(DASHBOARD_SCRIPT, /natural-language-unavailable/);
   assert.match(DASHBOARD_SCRIPT, /réponses non scriptées/);
+  assert.match(DASHBOARD_SCRIPT, /refuse de simuler une conversation/);
   assert.doesNotMatch(DASHBOARD_SCRIPT, /Dialogue · secours/);
 });
 
