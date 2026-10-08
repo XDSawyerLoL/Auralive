@@ -519,6 +519,26 @@ function renderNext(work,attention){
   if(node){$('nextAction').textContent='Poursuivre le focus sur '+node.label+'.';const p=pct(node.score);$('confidenceValue').textContent=p+'%';$('confidenceBar').style.width=p+'%';return;}
   $('nextAction').textContent='Observer le système avant de prioriser une nouvelle action.';$('confidenceValue').textContent='—';$('confidenceBar').style.width='0%';
 }
+function renderLanguageProgress(report){
+  const known=report && typeof report.score==='number' && Number.isFinite(report.score);
+  const score=known?Math.max(0,Math.min(100,Math.round(report.score))):null;
+  $('languageScore').textContent=known?score+'%':'—';
+  $('languageProgressBar').style.width=known?score+'%':'0%';
+  if(known)$('languageTrack').setAttribute('aria-valuenow',String(score));
+  else $('languageTrack').removeAttribute('aria-valuenow');
+  $('languageTrack').setAttribute('aria-valuetext',known?score+' pour cent aux tests':'Pas encore évalué');
+  const delta=typeof report?.delta==='number'?report.delta:null;
+  const suffix=delta===null?'Mesure initiale':delta>0?'↗ +'+delta+' points':delta<0?'↘ '+delta+' points · régression':'→ Stable';
+  $('languageTrend').textContent=known?suffix:'Premier test en attente';
+  if(report?.status==='model-unavailable'&&!known)$('languageTrend').textContent='Moteur gratuit indisponible';
+  if(report?.evaluated_at){
+    const d=new Date(report.evaluated_at);
+    $('languageTestDate').textContent=Number.isNaN(d.getTime())?'Évaluation datée indisponible':'Évalué le '+d.toLocaleDateString('fr-FR');
+  }else $('languageTestDate').textContent='Tests comparables · 9 tâches';
+  const explain='Score mesuré sur '+(report?.benchmark_cases||9)+' tâches fixes de compréhension, mémoire, correction et raisonnement. Ne mesure ni conscience ni entraînement des poids.';
+  $('languageTrack').title=explain;
+}
+
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
@@ -535,6 +555,7 @@ async function refresh(){
     const publicState=await api('/api/dashboard/public');
     const ks=publicState.kernel_status||{};
     const soul=publicState.soul||{};
+    try{renderLanguageProgress(await api('/api/language/progress'));}catch(_){renderLanguageProgress({status:'unavailable'});}
 
     try{
       const capabilities=await api('/api/capabilities');

@@ -48,6 +48,7 @@ export class FrenchLanguageFaculty {
     return {
       version: FrenchLanguageFaculty.VERSION,
       ready,
+      verified_ready: Boolean((federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
       primary: federation.enabled ? 'zero-cost-federation' : (local ? 'runtime-local' : 'unavailable'),
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
@@ -82,6 +83,12 @@ export class FrenchLanguageFaculty {
       executive: plan.executive && typeof plan.executive === 'object' ? plan.executive : {},
       discourse: plan.discourse && typeof plan.discourse === 'object' ? plan.discourse : {},
       conversation: compactContext(plan.conversation_context),
+      experiential_memory: (Array.isArray(plan.experiential_memory) ? plan.experiential_memory : [])
+        .slice(-8).map((row) => ({
+          kind: String(row?.kind || '').slice(0, 48),
+          note: normalize(row?.note || '').slice(0, 900),
+          evidence_status: String(row?.evidence_status || 'unverified').slice(0, 80),
+        })),
     };
   }
 
@@ -94,6 +101,7 @@ export class FrenchLanguageFaculty {
       'Ne copie pas les fautes de l’utilisateur sauf si tu le cites.',
       'Ne transforme pas une intention en fait accompli.',
       'N’invente aucun souvenir, état, action, résultat ou capacité.',
+      'La mémoire d’expérience est contextualisée et non une preuve : distingue affirmation utilisateur, compte rendu et estimation statistique.',
       'N’ajoute pas une question par automatisme : pose-en une seulement si elle est réellement pertinente.',
       'Évite les formulations répétitives et les phrases préfabriquées.',
       'Varie naturellement syntaxe, rythme et vocabulaire sans changer le sens.',

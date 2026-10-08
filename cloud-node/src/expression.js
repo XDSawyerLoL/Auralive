@@ -63,6 +63,7 @@ export class ExpressionLayer {
       this.lastError = normalize(error?.message || error).slice(0, 500);
     }
 
+    this.lastError = this.language.lastError || 'natural-french-backend-unavailable';
     this.fallbackCount += 1;
     if (config.frenchLanguageRequired) {
       this.lastMode = 'natural-language-unavailable';
@@ -79,8 +80,8 @@ export class ExpressionLayer {
     return {
       version: ExpressionLayer.VERSION,
       language,
-      natural_french_ready: Boolean(language.ready),
-      mode: language.ready
+      natural_french_ready: Boolean(language.verified_ready),
+      mode: language.verified_ready
         ? 'learned-language-model'
         : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
       scripted_normal_path: false,

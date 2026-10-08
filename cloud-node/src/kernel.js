@@ -4,6 +4,7 @@ import { one, query } from './db.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
+import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -63,6 +64,7 @@ export class CognitiveKernel {
     this.fabric = fabric;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
+    this.language = new LanguageFaculty({ ai, cognition: this.cognition, expression: this.expression, soul: () => this.soulCache });
     this.organism = new AuraOrganism();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
@@ -745,6 +747,8 @@ export class CognitiveKernel {
     const signature = String(payload.signature || (ok ? 'success' : payload.error || 'failure')).replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 500);
     const timestamp = String(payload.created_at || now());
     await query('INSERT INTO aura_outcomes(automation_id,event_type,ok,signature,report,created_at) VALUES(?,?,?,?,?,?)', [automationId, eventType, ok ? 1 : 0, signature, JSON.stringify(payload).slice(0, 20000), timestamp]);
+    await this.language.rememberOutcome({ automationId, eventType, ok, signature })
+      .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     const organ = this.organism.applyOutcome(
       this.organism.migrate(this.soulCache || {}),
       ok,
@@ -1088,6 +1092,15 @@ export class CognitiveKernel {
       recentMessages: [...recentMessages].reverse(),
       privateView,
     });
+
+    // Scope corrections to the current conversation; reported observations are not independent evidence.
+    await this.language.rememberCorrection({
+      sessionId: conversationSession, discourse: plan.discourse, userText: content,
+    }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
+    plan = {
+      ...plan,
+      experiential_memory: await this.language.contextFor(conversationSession).catch(() => []),
+    };
 
     // Allocation adaptative : le noyau choisit combien de calcul externe
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
