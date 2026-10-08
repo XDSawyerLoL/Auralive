@@ -842,6 +842,9 @@ app.get('/api/capabilities', async (request) => {
     workerCapabilities.map((item) => String(item?.name || '')),
   );
   const languageDiagnostic = ai.diagnostic();
+  const frenchStatus = bootstrap.runtimeReady
+    ? await kernel.expression.language.status().catch(() => ({ ready: false, primary: 'unavailable' }))
+    : { ready: false, primary: 'unavailable' };
   const voiceFabricActuallyReady = Boolean(
     voiceStudio.enabled
     && voiceDiscovery?.ok
@@ -855,13 +858,13 @@ app.get('/api/capabilities', async (request) => {
     },
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
-      ready: Boolean(ai.enabled),
+      ready: Boolean(frenchStatus.ready),
       native_dialogue_ready: Boolean(bootstrap.runtimeReady),
       native_dialogue_version: CognitionEngine.VERSION,
-      provider: privateView ? ai.provider : String(languageDiagnostic.provider || 'unavailable'),
+      provider: String(frenchStatus.primary || 'unavailable'),
       local_worker: Boolean(bridgeStatus?.worker_online),
-      fallback_only: !ai.enabled,
-      mode: ai.enabled ? 'native+semantic-verbalisation' : 'native-only',
+      fallback_only: !frenchStatus.ready,
+      mode: frenchStatus.ready ? 'native+learned-french-faculty' : 'natural-language-unavailable',
       last_backend: String(languageDiagnostic.last_backend || ''),
       last_error: String(languageDiagnostic.last_error || '').slice(0, 300),
       zero_cost_mode: Boolean(languageDiagnostic.zero_cost_mode),
