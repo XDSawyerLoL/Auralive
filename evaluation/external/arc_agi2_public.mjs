@@ -8,9 +8,9 @@ function arg(name, fallback = '') {
 }
 
 const datasetRoot = path.resolve(arg('--dataset', 'external/ARC-AGI-2/data/evaluation'));
-const auraRoot = path.resolve(arg('--aura-root', 'frozen-aura'));
+const auraRoot = path.resolve(arg('--aura-root', '.'));
 const outFile = path.resolve(arg('--out', 'artifacts/external/arc-agi-2-public.json'));
-const frozenSha = process.env.AURA_FROZEN_SHA || '';
+const evaluatedSha = process.env.AURA_EVALUATED_SHA || process.env.GITHUB_SHA || '';
 const datasetSha = process.env.ARC_AGI2_SHA || '';
 
 const solverPath = path.join(auraRoot, 'cloud-node', 'src', 'grid_reasoning.js');
@@ -69,7 +69,7 @@ for (const name of names) {
 const report = {
   schema: 'aura-arc-agi-2-public-eval-v1',
   generated_at: new Date().toISOString(),
-  frozen_aura_sha: frozenSha,
+  evaluated_aura_sha: evaluatedSha,
   arc_agi_2_sha: datasetSha,
   solver: 'cloud-node/src/grid_reasoning.js',
   trial_policy: {
@@ -91,7 +91,7 @@ await fs.mkdir(path.dirname(outFile), { recursive: true });
 await fs.writeFile(outFile, JSON.stringify(report, null, 2) + '\n', 'utf8');
 
 console.log('ARC-AGI-2 public evaluation');
-console.log('Frozen AURA:', frozenSha || '(unspecified)');
+console.log('Evaluated AURA:', evaluatedSha || '(unspecified)');
 console.log('Dataset:', datasetSha || '(unspecified)');
 console.log('Tasks:', report.summary.tasks);
 console.log('Solved tasks:', report.summary.solved_tasks);
