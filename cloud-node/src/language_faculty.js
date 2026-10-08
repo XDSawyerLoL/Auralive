@@ -49,7 +49,8 @@ export function scoreLanguageAnswer(answer, item) {
 }
 
 export class LanguageFaculty {
-  constructor({ ai, cognition, expression, soul }) {
+  constructor({ ai, cognition, expression, soul, storage = { one, query } }) {
+    this.store = storage;
     this.ai = ai;
     this.cognition = cognition;
     this.expression = expression;
@@ -68,7 +69,7 @@ export class LanguageFaculty {
   async rememberCorrection({ sessionId, discourse, userText }) {
     const target = clean(discourse?.correction_target, 300);
     if (discourse?.move !== 'correction' || !target) return false;
-    await query(
+    await this.store.query(
       'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
       [clean(sessionId, 96), 'user-correction',
         clean('Correction donnée par cet interlocuteur : ' + userText, 900),
@@ -78,7 +79,7 @@ export class LanguageFaculty {
   }
 
   async rememberOutcome({ automationId, eventType, ok, signature }) {
-    await query(
+    await this.store.query(
       'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
       ['private-founder', 'operational-outcome',
         clean('Compte rendu opérationnel : ' + automationId + ', ' + eventType
@@ -90,7 +91,7 @@ export class LanguageFaculty {
   async contextFor(sessionId) {
     const id = clean(sessionId, 96);
     if (!id) return [];
-    const rows = await query(
+    const rows = await this.store.query(
       'SELECT kind,note,evidence_status,created_at FROM aura_language_experiences WHERE session_id=? ORDER BY id DESC LIMIT 6',
       [id],
     );
@@ -102,8 +103,8 @@ export class LanguageFaculty {
 
   async progress() {
     const [records, count] = await Promise.all([
-      query('SELECT score,dimensions,provider,created_at FROM aura_language_benchmarks ORDER BY id DESC LIMIT 2'),
-      one('SELECT COUNT(*) AS total FROM aura_language_experiences'),
+      this.store.query('SELECT score,dimensions,provider,created_at FROM aura_language_benchmarks ORDER BY id DESC LIMIT 2'),
+      this.store.one('SELECT COUNT(*) AS total FROM aura_language_experiences'),
     ]);
     const latest = records[0] || null;
     const previous = records[1] || null;
@@ -149,7 +150,7 @@ export class LanguageFaculty {
         maxTokens: 200, taskRole: 'conversation',
       }), 1800);
       // Never present a deterministic offline fallback as a measured model success.
-      if (!answer || this.expression.lastError) {
+      if (!this.ai.enabled || !answer || this.expression.lastError) {
         this.lastError = 'Modèle indisponible pour le cas ' + item.id;
         return { ...previous, status: 'model-unavailable', last_error: this.lastError };
       }
@@ -158,7 +159,7 @@ export class LanguageFaculty {
     const dimensions = {};
     for (const result of outcomes) dimensions[result.dimension] = { passed: result.passed ? 1 : 0, total: 1 };
     const score = Math.round(100 * outcomes.filter((row) => row.passed).length / outcomes.length);
-    await query(
+    await this.store.query(
       'INSERT INTO aura_language_benchmarks(score,dimensions,provider,created_at) VALUES(?,?,?,?)',
       [score, JSON.stringify(dimensions), clean(this.ai.lastBackend || this.ai.provider, 120), now()],
     );
