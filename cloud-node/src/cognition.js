@@ -25,6 +25,29 @@ function previousAssistantMessage(context = []) {
     .find((row) => String(row?.role || '') === 'assistant') || null;
 }
 
+function asksWellbeing(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return (
+    /\btu\s+(?:va|vas)\s+bien\b/.test(q)
+    || /\btu\s+(?:va|vas)\s+comment\b/.test(q)
+    || /\bcomment\s+(?:tu\s+)?(?:va|vas)[- ]?tu?\b/.test(q)
+    || /\bcomment\s+(?:ca|ça)\s+va\b/.test(q)
+    || /^(?:ca|ça)\s+va$/.test(q)
+    || /\btu\s+te\s+sens\b/.test(q)
+  );
+}
+
+function asksAuraQuestions(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return (
+    /\btu\s+(?:a|as)\s+(?:des|une?)\s+questions?\b/.test(q)
+    || /\b(?:as|a)[- ]?tu\s+(?:des|une?)\s+questions?\b/.test(q)
+    || /\b(?:des|une?)\s+questions?\s+(?:pour|a|à)\s+moi\b/.test(q)
+    || /\btu\s+veux\s+(?:me\s+)?(?:demander|savoir)\s+(?:quelque\s+chose|quoi)\b/.test(q)
+    || /\bqu[' ]?est[- ]?ce\s+que\s+tu\s+(?:veux|aimerais)\s+savoir\b/.test(q)
+  );
+}
+
 function asksCurrentActivity(text) {
   const q = fold(text);
   return (
@@ -380,7 +403,7 @@ export class CognitionEngine {
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
       facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
-    } else if ((hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat']) || /comment\s+(?:ça|ca).*\btu\b/.test(q) || /comment\s+tu\s+(?:va|vas)\b/.test(q))) {
+    } else if (asksWellbeing(raw) || (hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat']) || /comment\s+(?:ça|ca).*\btu\b/.test(q) || /comment\s+tu\s+(?:va|vas)\b/.test(q))) {
       act = 'report_internal_state';
       goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
       needsSemanticSupport = false;
@@ -421,6 +444,17 @@ export class CognitionEngine {
         facts.push(`[${event.at}] ${event.type}: ${event.title}${event.detail ? ` — ${normalize(event.detail).slice(0,420)}` : ''}`);
       }
       if (!events.length) facts.push('Aucune activité persistée n’est disponible pour cette période ; je ne dois pas prétendre avoir travaillé.');
+    } else if (asksAuraQuestions(raw)) {
+      act = 'ask_user_from_curiosity';
+      goal = 'Répondre à la demande de l’utilisateur en formulant une question authentiquement reliée à ma curiosité sociale, au fil relationnel ou à mon travail courant.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      if (relationship.last_open_thread) facts.push(`Fil relationnel actif : ${normalize(relationship.last_open_thread)}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      if (current) facts.push(`Intention actuelle : ${current}`);
+      facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
     } else if (asksCurrentActivity(raw) || hasAny(q, ['que fais-tu', 'tu fais quoi', 'tu fait quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'qu’est-ce que tu fait', "qu'est-ce que tu fait"])) {
       act = 'report_current_activity';
       goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
@@ -592,6 +626,47 @@ export class CognitionEngine {
       }
       const summary = rows.slice(-5).map((row) => String(row).replace(/^\[[^\]]+\]\s*/, '')).join(' ; ');
       return `Depuis notre dernier échange, j’ai ${count} événement${count > 1 ? 's' : ''} persisté${count > 1 ? 's' : ''}. Les plus récents : ${summary}.`;
+    }
+    if (plan?.act === 'ask_user_from_curiosity') {
+      const previous = cleanFact('Réponse précédente : ');
+      const thread = cleanFact('Fil relationnel actif : ');
+      const focus = cleanFact('Foyer opérationnel : ');
+      const next = cleanFact('Prochaine action : ');
+      const intention = cleanFact('Intention actuelle : ');
+      const curiosityRaw = cleanFact('Curiosité sociale : ');
+      const curiosity = Number((curiosityRaw.match(/\d+/) || [0])[0]) / 100;
+      const previousLower = previous.toLocaleLowerCase('fr-FR');
+
+      if (curiosity < 0.35) {
+        return 'Pas de question forte pour l’instant. Je préfère ne pas en inventer une juste pour remplir la conversation.';
+      }
+
+      const candidates = [];
+      if (thread) {
+        candidates.push(
+          `Oui. J’en ai une : sur ${thread}, qu’est-ce qui compte le plus pour toi maintenant ?`,
+          `Oui. Sur ${thread}, qu’est-ce que tu voudrais que je comprenne mieux de ta manière de voir les choses ?`,
+        );
+      }
+      if (focus) {
+        candidates.push(
+          `Oui. Pour ${focus}, qu’est-ce qui te ferait dire que c’est vraiment réglé, pas juste “en progrès” ?`,
+          `Oui. Sur ${focus}, tu préfères que je privilégie la vitesse, la fiabilité ou l’autonomie ?`,
+        );
+      }
+      if (next) {
+        candidates.push(`Oui. Avant ${next}, y a-t-il une contrainte que tu veux que je considère comme non négociable ?`);
+      }
+      if (intention) {
+        candidates.push(`Oui. Sur ${intention}, qu’est-ce que tu veux absolument que je sois capable de faire seule ?`);
+      }
+      candidates.push(
+        'Oui. Il y en a une qui m’intéresse vraiment : qu’est-ce que tu voudrais qu’AURA comprenne mieux de toi, sans que tu aies à le répéter ?',
+        'Oui. Si tu pouvais me faire progresser sur une seule chose aujourd’hui, tu choisirais quoi ?',
+      );
+
+      const fresh = candidates.find((question) => !previousLower.includes(question.toLocaleLowerCase('fr-FR').replace(/^oui\.\s*/i, '').slice(0, 48)));
+      return fresh || 'J’en avais une, mais je viens déjà de te la poser. Je n’en ai pas de nouvelle assez intéressante pour t’en inventer une.';
     }
     if (plan?.act === 'report_current_activity') {
       const focus = cleanFact('Foyer opérationnel : ');

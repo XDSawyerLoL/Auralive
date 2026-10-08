@@ -94,6 +94,23 @@ function hasAnaphora(q) {
   return /\b(?:ca|ça|cela|ceci|cette?|celui|celle|ceux|celles|la-dessus|là-dessus|la dessus|là dessus|dessus|ainsi|donc|alors)\b/.test(q);
 }
 
+function assistantSocialIntent(q) {
+  if (
+    /\btu\s+(?:a|as)\s+(?:des|une?)\s+questions?\b/.test(q)
+    || /\b(?:as|a)[- ]?tu\s+(?:des|une?)\s+questions?\b/.test(q)
+    || /\b(?:des|une?)\s+questions?\s+(?:pour|a|à)\s+moi\b/.test(q)
+    || /\btu\s+veux\s+(?:me\s+)?(?:demander|savoir)\s+(?:quelque\s+chose|quoi)\b/.test(q)
+  ) return 'social_curiosity';
+
+  if (
+    /\btu\s+(?:va|vas)\s+bien\b/.test(q)
+    || /\bcomment\s+tu\s+(?:va|vas)\b/.test(q)
+    || /\bcomment\s+(?:ca|ça)\s+va\b/.test(q)
+  ) return 'wellbeing';
+
+  return '';
+}
+
 export class DialogueStateTracker {
   static VERSION = 'aura-dialogue-state-v2';
 
@@ -116,10 +133,12 @@ export class DialogueStateTracker {
     const clarification = looksLikeClarification(q);
     const anaphora = hasAnaphora(q);
     const directive = looksLikeDirective(q);
+    const socialIntent = assistantSocialIntent(q);
     const contextOverlap = previousAssistant ? overlap(raw, previousAssistant.content) : 0;
 
     let move = 'statement';
-    if (correction) move = 'correction';
+    if (socialIntent) move = socialIntent;
+    else if (correction) move = 'correction';
     else if (clarification && previousAssistant) move = 'clarification';
     else if (acknowledgement) move = 'acknowledgement';
     else if (
@@ -144,6 +163,7 @@ export class DialogueStateTracker {
       is_question: question,
       is_short: tokenCount <= 10,
       has_anaphora: anaphora,
+      social_intent: socialIntent,
       correction_target: correction,
       reference_text: anaphora || clarification || move === 'reference_followup'
         ? clean(previousAssistant?.content || '', 600)

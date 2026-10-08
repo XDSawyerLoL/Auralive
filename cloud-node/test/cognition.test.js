@@ -270,3 +270,110 @@ test('"c est a dire" clarifies the previous answer from operational context', ()
   assert.match(answer, /Je veux dire que, concrètement/);
   assert.match(answer, /Relancer les tests réels/);
 });
+
+
+test('"tu va bien" is understood as wellbeing despite conjugation typo and missing question mark', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu va bien.',
+    soul: {
+      organism: {
+        mood: 'satisfaite',
+        stabilite: 0.9,
+        clarte: 0.9,
+        curiosite: 0.7,
+        engagement: 0.8,
+        confiance: 0.8,
+        satisfaction: 0.8,
+        frustration: 0.1,
+        relationship: { social_curiosity: 0.8 },
+        executive: {},
+      },
+    },
+    agenda: { current: 'Documenter Quantic OS' },
+    recentMessages: [
+      { role: 'user', content: 'salut' },
+      { role: 'assistant', content: 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?' },
+    ],
+  });
+
+  assert.equal(plan.act, 'report_internal_state');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(engine.deterministicReply(plan), /Ça va plutôt bien/);
+  assert.doesNotMatch(engine.deterministicReply(plan), /rattache ta relance/i);
+});
+
+test('"tu a des questions" asks a genuine question instead of resolving the previous turn', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu a des questions?',
+    soul: {
+      current_intention: 'Faire avancer Quantic Sillage',
+      organism: {
+        mood: 'curieuse',
+        curiosite_sociale: 0.82,
+        relationship: {
+          social_curiosity: 0.82,
+          last_open_thread: 'rendre AURA plus autonome',
+        },
+        executive: {},
+      },
+    },
+    agenda: {
+      current: 'Documenter l’échec persistant de Quantic OS',
+      next_action: 'Réévaluer le blocage public',
+    },
+    recentMessages: [
+      { role: 'assistant', content: 'Là, je suis sur Documenter l’échec persistant de Quantic OS.' },
+      { role: 'user', content: 'tu a des questions?' },
+    ],
+  });
+
+  assert.equal(plan.act, 'ask_user_from_curiosity');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /\?/);
+  assert.doesNotMatch(answer, /Tu fais référence à ce que je viens de dire/i);
+});
+
+test('repeated "tu a des questions" does not blindly repeat the previous question', () => {
+  const engine = new CognitionEngine();
+  const base = {
+    text: 'tu a des questions?',
+    soul: {
+      current_intention: 'Faire avancer Quantic Sillage',
+      organism: {
+        curiosite_sociale: 0.86,
+        relationship: {
+          social_curiosity: 0.86,
+          last_open_thread: 'rendre AURA plus autonome',
+        },
+        executive: {},
+      },
+    },
+    agenda: {
+      current: 'Documenter l’échec persistant de Quantic OS',
+      next_action: 'Réévaluer le blocage public',
+    },
+  };
+
+  const firstPlan = engine.planReply({
+    ...base,
+    recentMessages: [{ role: 'assistant', content: 'Là, je suis sur Quantic OS.' }],
+  });
+  const first = engine.deterministicReply(firstPlan);
+
+  const secondPlan = engine.planReply({
+    ...base,
+    recentMessages: [
+      { role: 'assistant', content: first },
+      { role: 'user', content: 'tu a des questions?' },
+    ],
+  });
+  const second = engine.deterministicReply(secondPlan);
+
+  assert.equal(firstPlan.act, 'ask_user_from_curiosity');
+  assert.equal(secondPlan.act, 'ask_user_from_curiosity');
+  assert.notEqual(second, first);
+  assert.match(second, /\?|pas de nouvelle/i);
+});
