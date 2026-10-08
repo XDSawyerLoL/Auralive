@@ -85,48 +85,32 @@ export class FrenchLanguageFaculty {
     const selfHosted = this.selfHosted?.snapshot?.() || {};
     const local = await this.localAvailable();
     const ready = Boolean(selfHosted.enabled || federation.enabled || local);
-    const blockingReason = selfHosted.enabled && this.lastMode === 'degraded'
-      ? 'self-hosted-provider-failed'
-      : (!ready && selfHosted.configured
-        ? 'self-hosted-endpoint-rejected'
-        : (!ready && !federation.enabled && !local
-          ? 'self-hosted-model-not-configured'
-          : (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')));
-    // Legacy free-federation diagnostics are used only for explicit opt-in.
-    const legacyBlockingReason = !ready && federation.enabled ? (!federation.api_key_configured
-        ? 'openrouter-free-key-missing'
-        : (federation.zero_cost_mode === false
-          ? 'zero-cost-mode-disabled'
-          : (!federation.endpoint_verified
-            ? 'untrusted-free-provider-endpoint'
-            : (Array.isArray(federation.configured_models) && !federation.configured_models.length
-              ? 'no-free-model-selected'
-              : 'free-federation-disabled')))) : '';
-    const failed = legacyBlockingReason === 'free-language-provider-failed'
-      ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
-      : null;
-    const failureCode = failed?.code || blockingReason;
-    const setupHint = blockingReason === 'self-hosted-model-not-configured'
-      ? 'Aucun moteur linguistique AURA n’est raccordé. Installer un modèle GGUF sur une machine contrôlée et définir AURA_SELF_HOSTED_BASE_URL et AURA_SELF_HOSTED_MODEL. Aucun service externe requis.'
-      : blockingReason === 'self-hosted-endpoint-rejected'
-        ? 'Adresse du moteur AURA refusée : localhost peut utiliser HTTP ; un autre serveur exige HTTPS et AURA_SELF_HOSTED_CONFIRMED=true.'
-      : blockingReason === 'self-hosted-provider-failed'
-        ? 'Le moteur AURA auto-hébergé est configuré mais ne répond pas. Vérifier son service, son modèle chargé et self_hosted_language.last_error dans GET /api/ai/runtime.'
-      : blockingReason === 'openrouter-free-key-missing'
-      ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
-      : blockingReason === 'free-language-provider-failed'
-        ? failed.hint
-        : blockingReason === 'free-federation-disabled'
-          ? 'Vérifier AURA_FREE_FEDERATION_ENABLED=true, AURA_ZERO_COST_MODE=true et la connexion du modèle local.'
-          : blockingReason
-            ? 'Consulter GET /api/ai/runtime pour vérifier la configuration du fournisseur gratuit.'
-            : '';
+    let blockingReason = '';
+    let setupHint = '';
+    if (selfHosted.enabled && this.lastMode === 'degraded') {
+      blockingReason = 'self-hosted-provider-failed';
+      setupHint = 'Le moteur AURA auto-hébergé est configuré mais ne répond pas. Vérifier son service, son modèle et self_hosted_language.last_error dans GET /api/ai/runtime.';
+    } else if (!ready && selfHosted.configured) {
+      blockingReason = 'self-hosted-endpoint-rejected';
+      setupHint = 'Adresse du moteur AURA refusée : localhost peut utiliser HTTP ; un autre serveur exige HTTPS et AURA_SELF_HOSTED_CONFIRMED=true.';
+    } else if (!ready) {
+      blockingReason = 'self-hosted-model-not-configured';
+      setupHint = 'Aucun moteur linguistique AURA n’est raccordé. Installer un modèle GGUF sur une machine contrôlée et définir AURA_SELF_HOSTED_BASE_URL et AURA_SELF_HOSTED_MODEL. Aucun service externe requis.';
+    } else if (this.lastMode === 'degraded' && federation.enabled) {
+      const failure = classifyFreeLanguageFailure(this.lastError || federation.last_error || '');
+      blockingReason = failure.code;
+      setupHint = failure.hint;
+    }
     return {
-      blocking_reason: failureCode,
+      blocking_reason: blockingReason,
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((selfHosted.enabled && this.lastMode === 'aura-self-hosted') || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
+      verified_ready: Boolean(
+        (selfHosted.enabled && this.lastMode === 'aura-self-hosted' && selfHosted.ready)
+        || (federation.enabled && this.lastMode === 'zero-cost-federation')
+        || (local && this.lastMode === 'runtime-local')
+      ),
       primary: selfHosted.enabled ? 'aura-self-hosted' : (local ? 'runtime-local' : (federation.enabled ? 'zero-cost-federation' : 'unavailable')),
       self_hosted_ready: Boolean(selfHosted.ready),
       self_hosted_configured: Boolean(selfHosted.enabled),
