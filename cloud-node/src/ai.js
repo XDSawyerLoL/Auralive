@@ -257,7 +257,7 @@ export class AiClient {
       }
 
       let federationError = null;
-      if (this.federation.enabled) {
+      if (this.federation.enabled && !this.selfHosted.embedded.enabled) {
         try {
           const result = await this.federation.generate(prompt, system, maxTokens, taskRole);
           if (result?.answer) {
