@@ -7,6 +7,10 @@ on:
         description: "AURA production base URL"
         required: false
         default: "https://antiquewhite-dolphin-780448.hostingersite.com"
+      expected_sha:
+        description: "Optional expected deployed git SHA"
+        required: false
+        default: ""
   push:
     paths:
       - "scripts/certify-aura-production.mjs"
@@ -24,6 +28,7 @@ jobs:
     env:
       AURA_PRODUCTION_URL: ${{ inputs.base_url || 'https://antiquewhite-dolphin-780448.hostingersite.com' }}
       AURA_CERT_OUTPUT: aura-production-certification.json
+      AURA_EXPECTED_GIT_SHA: ${{ inputs.expected_sha || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
