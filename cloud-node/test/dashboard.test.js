@@ -275,10 +275,19 @@ test('technical information is collapsed by default', () => {
 });
 
 
-test('dashboard reports native dialogue as healthy when semantic model is absent', () => {
-  assert.match(DASHBOARD_SCRIPT, /Dialogue · natif/);
+test('dashboard reports degraded language when free semantic backend is unavailable', () => {
+  assert.match(DASHBOARD_SCRIPT, /Dialogue · dégradé/);
   assert.match(DASHBOARD_SCRIPT, /native_dialogue_ready/);
   assert.doesNotMatch(DASHBOARD_SCRIPT, /Dialogue · secours/);
+});
+
+test('language progress bar is live, stays visible on mobile and shows regressions', () => {
+  assert.match(DASHBOARD_HTML, /id="languageProgressBar"/);
+  assert.match(DASHBOARD_HTML, /id="languageTrack" role="progressbar"/);
+  assert.match(DASHBOARD_HTML, /class="panel language-card"/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/language\/progress'\)/);
+  assert.match(DASHBOARD_SCRIPT, /delta<0\?'↘ '/);
+  assert.match(DASHBOARD_SCRIPT, /status==='model-unavailable'/);
 });
 
 test('unconfigured Mairaiy is a warning, not a false runtime failure', () => {
