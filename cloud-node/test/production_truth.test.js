@@ -41,5 +41,6 @@ test('production certifier verifies deployed SHA and a real chat turn', () => {
   assert.match(certifierSource, /\/api\/build/);
   assert.match(certifierSource, /homeostasie_v9_unified/);
   assert.match(certifierSource, /\/api\/chat/);
-  assert.match(certifierSource, /Que fais-tu en ce moment/);
+  assert.match(certifierSource, /body: \{ text: 'Que fais-tu en ce moment \?' \}/);
+  assert.match(certifierSource, /body\.answer/);
 });
