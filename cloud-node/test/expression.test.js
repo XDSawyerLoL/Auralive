@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { CognitionEngine } from '../src/cognition.js';
 import { ExpressionLayer } from '../src/expression.js';
 
-test('expression uses deterministic wording only as an explicit emergency fallback', async () => {
+test('strict French mode refuses to impersonate natural conversation with scripted wording', async () => {
   const cognition = new CognitionEngine();
   const expression = new ExpressionLayer({
     enabled: false,
@@ -22,9 +22,11 @@ test('expression uses deterministic wording only as an explicit emergency fallba
   });
 
   const answer = await expression.verbalize(plan);
-  assert.match(answer, /Valider les tests/);
+  assert.match(answer, /faculté de français naturel est indisponible/i);
+  assert.doesNotMatch(answer, /Valider les tests/);
   const diagnostic = await expression.diagnostic();
-  assert.equal(diagnostic.mode, 'degraded-deterministic-fallback');
+  assert.equal(diagnostic.mode, 'natural-language-unavailable');
+  assert.equal(diagnostic.strict_natural_language, true);
   assert.equal(diagnostic.scripted_normal_path, false);
   assert.equal(diagnostic.fallback_count, 1);
 });
