@@ -53,6 +53,7 @@ export class ExpressionLayer {
     try {
       const answer = normalize(await this.language.generate(plan, {
         maxTokens: Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
+        taskRole: String(options.taskRole || 'french'),
       }));
       if (answer) {
         this.lastError = '';
