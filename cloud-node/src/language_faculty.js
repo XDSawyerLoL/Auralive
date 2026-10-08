@@ -80,6 +80,10 @@ export class LanguageFaculty {
 
   async rememberOutcome({ automationId, eventType, ok, signature }) {
     await this.store.query(
+      'INSERT INTO aura_world_beliefs(domain_key,observations,successes,failures,last_signature,updated_at) VALUES(?,1,?,?,?,?) ON DUPLICATE KEY UPDATE observations=observations+1,successes=successes+VALUES(successes),failures=failures+VALUES(failures),last_signature=VALUES(last_signature),updated_at=VALUES(updated_at)',
+      [clean(automationId + ':' + eventType, 220), ok ? 1 : 0, ok ? 0 : 1, clean(signature, 500), now()],
+    );
+    await this.store.query(
       'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
       ['private-founder', 'operational-outcome',
         clean('Compte rendu opérationnel : ' + automationId + ', ' + eventType
@@ -95,10 +99,23 @@ export class LanguageFaculty {
       'SELECT kind,note,evidence_status,created_at FROM aura_language_experiences WHERE session_id=? ORDER BY id DESC LIMIT 6',
       [id],
     );
-    return rows.reverse().map((row) => ({
+    const memories = rows.reverse().map((row) => ({
       kind: row.kind, note: clean(row.note, 900),
       evidence_status: row.evidence_status, at: row.created_at,
     }));
+    if (id !== 'private-founder') return memories;
+    const beliefs = await this.store.query(
+      'SELECT domain_key,observations,successes,failures,last_signature,updated_at FROM aura_world_beliefs WHERE observations>=2 ORDER BY observations DESC LIMIT 4',
+    );
+    return [...memories, ...beliefs.map((row) => ({
+      kind: 'operational-belief',
+      note: clean('Domaine ' + row.domain_key + ' : ' + Number(row.successes)
+        + ' réussites, ' + Number(row.failures) + ' échecs sur ' + Number(row.observations)
+        + ' observations. Taux de réussite estimé (lissé) : '
+        + Math.round(100 * (Number(row.successes) + 1) / (Number(row.observations) + 2)) + ' %.', 900),
+      evidence_status: 'statistical-estimate-from-reported-outcomes',
+      at: row.updated_at,
+    }))];
   }
 
   async progress() {
