@@ -58,7 +58,7 @@ export class SelfHostedLanguage {
     return {
       configured: Boolean(url),
       enabled: this.enabled,
-      ready: Boolean(this.lastSuccessAt),
+      ready: Boolean(this.lastSuccessAt) && (!this.embedded.enabled || this.embedded.stage === 'ready'),
       last_success_at: this.lastSuccessAt,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
