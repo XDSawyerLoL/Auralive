@@ -173,9 +173,9 @@ export const config = Object.freeze({
   selfHostedLanguageEnabled: bool('AURA_SELF_HOSTED_LANGUAGE_ENABLED', true),
   // On managed Hostinger Node.js, attempt to run local GGUF inference inside the same app.
   // The auto runtime never calls an external text generation API.
-  embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.NODE_ENV === 'production'),
+  embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.CI !== 'true'),
   selfHostedLanguageBaseUrl: String(process.env.AURA_SELF_HOSTED_BASE_URL
-    || (bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.NODE_ENV === 'production')
+    || (bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.CI !== 'true')
       ? 'http://127.0.0.1:18080/v1' : '')).replace(/\/$/, ''),
   selfHostedLanguageModel: String(process.env.AURA_SELF_HOSTED_MODEL || 'aura-fr').trim(),
   selfHostedLanguageApiKey: process.env.AURA_SELF_HOSTED_API_KEY || '',
