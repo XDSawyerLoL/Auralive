@@ -154,7 +154,7 @@ Le catalogue OpenRouter `/api/v1/models` est relu périodiquement. AURA ne cible
 **Démarrage CPU sur le même serveur que AURA Cloud :**
 
 1. Installer le binaire `llama-server` du projet libre [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp), sous le compte système dédié à AURA.
-2. Depuis le dossier `cloud-node`, lancer `bash scripts/aura-language-server.sh`. Au premier lancement, la commande charge librement `Qwen/Qwen3-0.6B-GGUF:Q8_0` (licence Apache 2.0, fichier modèle d'environ 639 Mo). Elle écoute seulement sur `127.0.0.1:8080` ; il faut une connexion Internet pour le téléchargement initial des poids.
+2. Lancer sur le serveur propriétaire : `llama-server --host 127.0.0.1 --port 8080 --alias aura-fr --threads 2 -c 2048 --jinja -hf Qwen/Qwen3-0.6B-GGUF:Q8_0`. Au premier lancement, llama.cpp télécharge librement les poids GGUF (Apache 2.0, environ 639 Mo). La génération suivante fonctionne localement, sans API distante. Ne jamais exposer directement le port 8080 sur Internet.
 3. Vérifier `curl http://127.0.0.1:8080/v1/models` puis une requête de conversation : `curl -s http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"aura-fr","messages":[{"role":"user","content":"Réponds en français. Salut."}],"max_tokens":80}'`.
 4. Définir dans les variables Hostinger AURA Cloud :
 
