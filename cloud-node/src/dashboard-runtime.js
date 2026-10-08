@@ -583,7 +583,7 @@ async function refresh(){
         const strict=String(language.mode||'')==='natural-language-unavailable';
         $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
         $('languageText').title=strict
-          ? String(language.setup_hint || 'Aucun modèle libre disponible : vérifier /api/ai/runtime.')
+          ? String(language.setup_hint || 'Aucun modèle libre disponible : vérifier /api/ai/runtime.') + ' AURA refuse de simuler une conversation pré-écrite tant que le modèle manque.'
           : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
       }else{
         $('languageText').textContent='Français · indisponible';
