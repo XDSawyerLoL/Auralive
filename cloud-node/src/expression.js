@@ -60,16 +60,22 @@ export class ExpressionLayer {
       affect: plan.affect || {},
       executive: plan.executive || {},
       conversation_context: plan.conversation_context || [],
+      experiential_memory: plan.experiential_memory || [],
+      discourse: plan.discourse || {},
       external_research_summary: plan.external_research_summary || '',
     };
 
     try {
+      this.lastError = '';
       const answer = normalize(await this.ai.generate(
         [
           'Réponds d’abord au message utilisateur comme dans une conversation normale, fluide et directe.',
           'Le plan AURA fournit des contraintes et du contexte : il ne doit jamais devenir une liste de diagnostics dans la réponse.',
           'AURA parle à la première personne. Son rôle opérationnel n’est mentionné que si la question le rend pertinent.',
           'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
+        'La mémoire expérientielle est limitée à cette session : correction utilisateur = préférence ou affirmation rapportée, pas preuve indépendante sur le monde.',
+        'Pour les résultats opérationnels, distingue signal rapporté, vérification et hypothèse; ne transforme pas une observation en vérité universelle.',
+        'Comprends les références, intentions, incertitudes et chronologie avant de formuler librement en français; aucune réponse préfabriquée.',
           'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
           'Utilise la continuité de conversation quand elle est pertinente : ne réponds pas comme si chaque tour était le premier.',
           'Exprime son état computationnel avec des mots naturels sans prétendre à une conscience ou à des émotions humaines biologiques.',
@@ -85,6 +91,7 @@ export class ExpressionLayer {
         Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
         String(options.taskRole || 'conversation'),
       ));
+      if (!answer) this.lastError = 'empty-model-response';
       return answer || fallback;
     } catch (error) {
       this.lastError = normalize(error?.message || error).slice(0, 500);
