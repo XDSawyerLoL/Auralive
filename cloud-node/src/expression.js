@@ -69,7 +69,7 @@ export class ExpressionLayer {
     return {
       version: ExpressionLayer.VERSION,
       ai_available: Boolean(this.ai?.enabled),
-      natural_french_ready: Boolean(this.language.federation?.enabled || this.language.lastMode === 'runtime-local'),
+      natural_french_ready: ['runtime-local', 'zero-cost-federation'].includes(this.language.lastMode),
       scripted_normal_path: false,
       fallback_mode: 'explicit-unavailable',
       last_mode: this.lastMode,
