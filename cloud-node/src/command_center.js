@@ -1639,6 +1639,7 @@ export class CommandCenter {
     try {
       let result;
       let executionMode;
+      let usedCapabilities = [];
 
       if (initiative.kind === 'github') {
         const githubResult = await this.executeGithubInitiative(initiative);
@@ -1686,6 +1687,7 @@ export class CommandCenter {
             },
           );
           executionMode = 'aura-fabric-research-dag';
+          usedCapabilities = [...new Set((graph.nodes || []).map((node) => String(node.capability || '')).filter(Boolean))];
           result = await this.graphExecutor.execute(
             graph,
             { trigger: 'command-center' },
@@ -1695,6 +1697,7 @@ export class CommandCenter {
             throw new Error('Web Substrate indisponible');
           }
           executionMode = 'web-substrate-research';
+          usedCapabilities = ['web.research'];
           result = await this.webSubstrate.research(
             initiative.objective,
             { trigger: 'command-center' },
@@ -1754,7 +1757,10 @@ export class CommandCenter {
           event_type: `aura.initiative.${initiative.kind}`,
           ok: Boolean(executed),
           signature: executed ? 'success' : (result?.reason || 'not-executed'),
-          report: { initiative_id: id, title: initiative.title, result },
+          report: { initiative_id: id, title: initiative.title, result, capabilities: usedCapabilities },
+          capabilities: usedCapabilities,
+          context_key: String(initiative.domain || initiative.kind || 'command-center'),
+          strategy_key: `command-center:${initiative.kind}:${usedCapabilities.join('>') || initiative.action_type || 'native'}`,
           created_at: now(),
         });
       }
