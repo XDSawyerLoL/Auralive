@@ -68,6 +68,10 @@ export class FrenchLanguageFaculty {
     return this.ai?.federation || null;
   }
 
+  get selfHosted() {
+    return this.ai?.selfHosted || null;
+  }
+
   async localAvailable() {
     try {
       return Boolean(this.ai?.bridge?.enabled && await this.ai.bridge.workerOnline());
@@ -78,11 +82,18 @@ export class FrenchLanguageFaculty {
 
   async status() {
     const federation = this.federation?.snapshot?.() || {};
+    const selfHosted = this.selfHosted?.snapshot?.() || {};
     const local = await this.localAvailable();
-    const ready = Boolean(federation.enabled || local);
-    const blockingReason = ready
-      ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
-      : (!federation.api_key_configured
+    const ready = Boolean(selfHosted.enabled || federation.enabled || local);
+    const blockingReason = selfHosted.enabled && this.lastMode === 'degraded'
+      ? 'self-hosted-provider-failed'
+      : (!ready && selfHosted.configured
+        ? 'self-hosted-endpoint-rejected'
+        : (!ready && !federation.enabled && !local
+          ? 'self-hosted-model-not-configured'
+          : (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')));
+    // Legacy free-federation diagnostics are used only for explicit opt-in.
+    const legacyBlockingReason = !ready && federation.enabled ? (!federation.api_key_configured
         ? 'openrouter-free-key-missing'
         : (federation.zero_cost_mode === false
           ? 'zero-cost-mode-disabled'
@@ -90,12 +101,18 @@ export class FrenchLanguageFaculty {
             ? 'untrusted-free-provider-endpoint'
             : (Array.isArray(federation.configured_models) && !federation.configured_models.length
               ? 'no-free-model-selected'
-              : 'free-federation-disabled'))));
-    const failed = blockingReason === 'free-language-provider-failed'
+              : 'free-federation-disabled')))) : '';
+    const failed = legacyBlockingReason === 'free-language-provider-failed'
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = blockingReason === 'openrouter-free-key-missing'
+    const setupHint = blockingReason === 'self-hosted-model-not-configured'
+      ? 'Aucun moteur linguistique AURA n’est raccordé. Installer un modèle GGUF sur une machine contrôlée et définir AURA_SELF_HOSTED_BASE_URL et AURA_SELF_HOSTED_MODEL. Aucun service externe requis.'
+      : blockingReason === 'self-hosted-endpoint-rejected'
+        ? 'Adresse du moteur AURA refusée : localhost peut utiliser HTTP ; un autre serveur exige HTTPS et AURA_SELF_HOSTED_CONFIRMED=true.'
+      : blockingReason === 'self-hosted-provider-failed'
+        ? 'Le moteur AURA auto-hébergé est configuré mais ne répond pas. Vérifier son service, son modèle chargé et self_hosted_language.last_error dans GET /api/ai/runtime.'
+      : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
@@ -109,8 +126,10 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: federation.enabled ? 'zero-cost-federation' : (local ? 'runtime-local' : 'unavailable'),
+      verified_ready: Boolean((selfHosted.enabled && this.lastMode === 'aura-self-hosted') || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
+      primary: selfHosted.enabled ? 'aura-self-hosted' : (local ? 'runtime-local' : (federation.enabled ? 'zero-cost-federation' : 'unavailable')),
+      self_hosted_ready: Boolean(selfHosted.ready),
+      self_hosted_configured: Boolean(selfHosted.enabled),
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
@@ -191,6 +210,24 @@ export class FrenchLanguageFaculty {
     const started = Date.now();
     this.lastError = '';
 
+    if (this.selfHosted?.enabled) {
+      try {
+        const result = await this.selfHosted.generate(
+          prompt, system, Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
+        );
+        const answer = normalize(result?.answer || '');
+        if (answer) {
+          this.lastMode = 'aura-self-hosted';
+          this.lastBackend = 'aura-self-hosted';
+          this.lastModel = String(result?.model || '');
+          this.lastLatencyMs = Date.now() - started;
+          return answer;
+        }
+      } catch (error) {
+        this.lastError = safeError(error);
+      }
+    }
+
     if (this.federation?.enabled) {
       try {
         const result = await this.federation.generate(
@@ -233,7 +270,7 @@ export class FrenchLanguageFaculty {
     }
 
     this.lastMode = 'degraded';
-    this.lastError = this.lastError || (this.federation?.enabled ? 'free-provider-empty-response' : 'no-free-provider-connected');
+    this.lastError = this.lastError || (this.selfHosted?.enabled ? 'self-hosted-empty-response' : (this.federation?.enabled ? 'free-provider-empty-response' : 'no-self-hosted-model-connected'));
     this.lastBackend = '';
     this.lastModel = '';
     this.lastLatencyMs = Date.now() - started;
