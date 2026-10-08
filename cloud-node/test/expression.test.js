@@ -39,7 +39,7 @@ test('free French faculty verbalizes the decided semantic plan and scoped experi
   assert.equal(calls.length, 1);
   assert.equal(calls[0].role, 'french');
   assert.match(calls[0].system, /faculté linguistique française/i);
-  assert.match(calls[0].prompt, /validation du noyau/);
+  assert.match(calls[0].prompt, /valider le noyau/);
   assert.match(calls[0].prompt, /user-statement-unverified/);
   assert.equal(expression.diagnostic().scripted_normal_path, false);
 });
