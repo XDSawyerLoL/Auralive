@@ -109,6 +109,7 @@ export class DialogueStateTracker {
     const previousAssistant = previousDistinct(rows, 'assistant', raw) || latest(rows, 'assistant');
     const previousUser = previousDistinct(rows, 'user', raw) || latest(rows, 'user');
     const tokenCount = q ? q.split(/\s+/).length : 0;
+    const contentTerms = topicTerms(raw, 8);
     const correction = correctionTarget(raw);
     const question = q.includes('?') || /^(?:qui|que|quoi|quand|ou|où|comment|pourquoi|combien|quel|quelle|quels|quelles|est-ce|est ce)\b/.test(q);
     const acknowledgement = looksLikeAcknowledgement(q);
@@ -121,13 +122,17 @@ export class DialogueStateTracker {
     if (correction) move = 'correction';
     else if (clarification && previousAssistant) move = 'clarification';
     else if (acknowledgement) move = 'acknowledgement';
-    else if (previousAssistant && tokenCount <= 10 && (anaphora || (question && contextOverlap < 0.35))) move = 'reference_followup';
+    else if (
+      previousAssistant
+      && tokenCount <= 10
+      && (anaphora || (question && contextOverlap < 0.35 && contentTerms.length <= 1))
+    ) move = 'reference_followup';
     else if (directive) move = 'directive';
     else if (question) move = 'question';
 
     const anchor = previousAssistant?.content || previousUser?.content || '';
     const topics = [...new Set([
-      ...topicTerms(raw, 6),
+      ...contentTerms.slice(0, 6),
       ...(tokenCount <= 10 ? topicTerms(anchor, 6) : []),
     ])].slice(0, 10);
 
