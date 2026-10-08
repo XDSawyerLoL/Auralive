@@ -2,6 +2,8 @@ import { config, databaseConfigured } from './config.js';
 import { one, query } from './db.js';
 
 const COMPLEX_ROLES = new Set(['reasoning', 'code', 'research', 'critic', 'security', 'evolution', 'math']);
+// Protect interactive conversation from autonomous/background inference.
+const INTERACTIVE_ROLES = new Set(['french', 'conversation', 'translation', 'manual-evaluation']);
 const SAFE_OPENROUTER_MODEL = /^(?:openrouter\/free|[a-z0-9._-]+\/[a-z0-9._:-]+:free)$/i;
 const EXCLUDED_SPECIALIST_TERMS = [
   'content safety',
@@ -121,6 +123,8 @@ export class ZeroCostFederation {
     this.catalogUpdatedAt = 0;
     this.catalogError = '';
     this.selectionCounter = 0;
+    this.rateLimitUntilMs = 0;
+    this.lastRateLimitAt = '';
   }
 
   get enabled() {
@@ -150,7 +154,7 @@ export class ZeroCostFederation {
       );
       if (row) {
         return {
-          requests: Number(row.requests || 0),
+          requests: Math.max(Number(row.requests || 0), Number(this.memoryUsage.get(`${provider}:${date}`)?.requests || 0)),
           failures: Number(row.failures || 0),
           source: 'mysql',
         };
@@ -166,12 +170,30 @@ export class ZeroCostFederation {
     };
   }
 
-  async #reserve(provider) {
-    const usage = await this.#usage(provider);
-    if (usage.requests >= config.freeFederationMaxRequestsPerDay) {
-      throw new Error(
-        `${provider} free daily budget exhausted (${usage.requests}/${config.freeFederationMaxRequestsPerDay})`,
-      );
+  async budgetFor(role = 'auto') {
+    const usage = await this.#usage('openrouter');
+    const max = config.freeFederationMaxRequestsPerDay;
+    const reserve = Math.min(config.freeFederationChatReserve, max);
+    const isInteractive = INTERACTIVE_ROLES.has(roleName(role));
+    const limit = isInteractive ? max : Math.max(0, max - reserve);
+    return {
+      requests: usage.requests,
+      limit,
+      available: Math.max(0, limit - usage.requests),
+      chat_reserved: reserve,
+      role: roleName(role),
+      cooldown_until: this.rateLimitUntilMs > Date.now()
+        ? new Date(this.rateLimitUntilMs).toISOString() : null,
+    };
+  }
+
+  async #reserve(provider, role = 'auto') {
+    if (Date.now() < this.rateLimitUntilMs) {
+      throw new Error(`OpenRouter free HTTP 429: cooldown active until ${new Date(this.rateLimitUntilMs).toISOString()}`);
+    }
+    const budget = await this.budgetFor(role);
+    if (budget.available < 1) {
+      throw new Error(`${provider} free daily budget exhausted for ${role} (${budget.requests}/${budget.limit}; ${budget.chat_reserved} reserved for conversation)`);
     }
     const date = todayUtc();
     const key = `${provider}:${date}`;
@@ -368,7 +390,7 @@ export class ZeroCostFederation {
     }
     await this.#assertCatalogFree(requestedModel);
 
-    await this.#reserve('openrouter');
+    await this.#reserve('openrouter', role);
     const started = Date.now();
     let response;
     let body;
@@ -399,6 +421,15 @@ export class ZeroCostFederation {
       });
 
       const raw = await response.text();
+      if (response.status === 429) {
+        const retryHeader = String(response.headers?.get?.('retry-after') || '').trim();
+        const retrySeconds = /^\d+$/.test(retryHeader) ? Number(retryHeader) : NaN;
+        const retryDateMs = Number.isFinite(Date.parse(retryHeader)) ? Date.parse(retryHeader) - Date.now() : NaN;
+        const retryMs = Number.isFinite(retrySeconds) ? retrySeconds * 1000
+          : (Number.isFinite(retryDateMs) ? retryDateMs : 5 * 60 * 1000);
+        this.rateLimitUntilMs = Date.now() + Math.max(30_000, Math.min(60 * 60 * 1000, retryMs));
+        this.lastRateLimitAt = new Date().toISOString();
+      }
       if (!response.ok) {
         throw new Error(`OpenRouter free HTTP ${response.status}: ${raw.slice(0, 500)}`);
       }
@@ -449,7 +480,9 @@ export class ZeroCostFederation {
       try {
         result = await this.#openRouter(prompt, system, maxTokens, role, requestedModel);
       } catch (primaryError) {
-        if (requestedModel === 'openrouter/free' || this.quarantined.has('openrouter')) {
+        // 429 limits apply at account/provider level; retrying another model wastes quota.
+        if (requestedModel === 'openrouter/free' || this.quarantined.has('openrouter')
+          || /\bhttp\s*429\b|budget.exhausted/i.test(String(primaryError?.message || ''))) {
           throw primaryError;
         }
         // Direct free variants can disappear or hit a provider-specific quota.
@@ -491,6 +524,10 @@ export class ZeroCostFederation {
       max_requests_per_day: config.freeFederationMaxRequestsPerDay,
       process_requests_today: Number(usage.requests || 0),
       process_failures_today: Number(usage.failures || 0),
+      chat_reserved_requests: Math.min(config.freeFederationChatReserve, config.freeFederationMaxRequestsPerDay),
+      background_request_limit: Math.max(0, config.freeFederationMaxRequestsPerDay - config.freeFederationChatReserve),
+      cooldown_until: this.rateLimitUntilMs > Date.now() ? new Date(this.rateLimitUntilMs).toISOString() : null,
+      last_rate_limit_at: this.lastRateLimitAt,
       last_role: this.lastRole,
       last_role_is_complex: COMPLEX_ROLES.has(this.lastRole),
       last_provider: this.lastProvider,

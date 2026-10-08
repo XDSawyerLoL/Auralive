@@ -175,6 +175,8 @@ export const config = Object.freeze({
   freeFederationEnabled: bool('AURA_FREE_FEDERATION_ENABLED', true),
   freeFederationTimeoutMs: int('AURA_FREE_FEDERATION_TIMEOUT_MS', 45000, 1000, 180000),
   freeFederationMaxRequestsPerDay: int('AURA_FREE_FEDERATION_MAX_REQUESTS_PER_DAY', 45, 1, 10000),
+  // Keep the final 30 of 45 internal requests available for chat instead of autonomous tasks.
+  freeFederationChatReserve: int('AURA_FREE_FEDERATION_CHAT_RESERVE', 30, 0, 10000),
   freeFederationDiscoverModels: bool('AURA_FREE_FEDERATION_DISCOVER_MODELS', true),
   freeFederationCatalogTtlSeconds: int('AURA_FREE_FEDERATION_CATALOG_TTL_SECONDS', 900, 60, 86400),
   freeFederationMaxCatalogModels: int('AURA_FREE_FEDERATION_MAX_CATALOG_MODELS', 24, 1, 100),

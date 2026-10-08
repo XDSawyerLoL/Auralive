@@ -125,12 +125,15 @@ export class LanguageFaculty {
     ]);
     const latest = records[0] || null;
     const previous = records[1] || null;
+    const languageState = await this.expression?.language?.status?.() || { ready: this.canEvaluate, blocking_reason: '', setup_hint: '' };
     const score = latest ? Number(latest.score) : null;
     const prior = previous ? Number(previous.score) : null;
     return {
       version: VERSION, benchmark: 'frozen-fr-conversation-v1',
       benchmark_cases: LANGUAGE_BENCHMARK.length,
-      status: latest ? 'measured' : 'not-evaluated',
+      status: latest ? 'measured' : ((languageState.blocking_reason || !languageState.ready) ? 'model-unavailable' : 'not-evaluated'),
+      blocking_reason: languageState.blocking_reason || '',
+      setup_hint: languageState.setup_hint || '',
       scope: 'Évaluation de conversation et verbalisation, pas de conscience ni entraînement des poids',
       score, previous_score: prior,
       delta: latest && previous ? score - prior : null,
@@ -156,6 +159,19 @@ export class LanguageFaculty {
     const recent = Date.parse(previous.evaluated_at || '');
     if (!force && Number.isFinite(recent) && Date.now() - recent < DAY_MS) return previous;
 
+    // Reserve full evaluation capacity before sending any model request.
+    // A benchmark must never burn part of the free daily quota only to fail mid-test.
+    if (this.ai?.federation?.enabled && typeof this.ai.federation.budgetFor === 'function') {
+      const quota = await this.ai.federation.budgetFor('manual-evaluation');
+      if (quota.available < LANGUAGE_BENCHMARK.length || quota.cooldown_until) {
+        const reason = quota.cooldown_until
+          ? 'Fournisseur gratuit limité jusqu’à ' + quota.cooldown_until
+          : 'Évaluation suspendue : quota insuffisant (' + quota.available + ' requêtes restantes).';
+        this.lastError = reason;
+        return { ...previous, status: 'quota-insufficient', last_error: reason };
+      }
+    }
+
     const outcomes = [];
     for (const item of LANGUAGE_BENCHMARK) {
       const plan = this.cognition.planReply({
@@ -164,7 +180,7 @@ export class LanguageFaculty {
       });
       this.expression.lastError = '';
       const answer = clean(await this.expression.verbalize(plan, {
-        maxTokens: 200, taskRole: 'conversation',
+        maxTokens: 200, taskRole: 'manual-evaluation',
       }), 1800);
       // Never present a deterministic offline fallback as a measured model success.
       if (!this.ai.enabled || !answer || this.expression.lastError) {

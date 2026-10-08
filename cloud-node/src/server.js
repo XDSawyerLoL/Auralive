@@ -402,9 +402,8 @@ async function startRuntime() {
     await kernel.start();
     bootstrap.runtimeReady = true;
     bootstrap.lastReadyAt = new Date().toISOString();
-    setImmediate(() => { void kernel.language.evaluate().catch((error) => {
-      app.log.warn({ err: error }, 'AURA: benchmark français indisponible');
-    }); });
+    // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
+    // The founder can explicitly invoke the authenticated evaluation endpoint.
     app.log.info('AURA Cloud: noyau persistant démarré.');
 
     try {
@@ -872,6 +871,8 @@ app.get('/api/capabilities', async (request) => {
       normal_path_scripted: Boolean(expressionDiagnostic.scripted_normal_path),
       emergency_fallback_only: true,
       fallback_count: Number(expressionDiagnostic.fallback_count || 0),
+      blocking_reason: String(expressionDiagnostic.language?.blocking_reason || ''),
+      setup_hint: String(expressionDiagnostic.language?.setup_hint || ''),
       last_backend: String(expressionDiagnostic.language?.last_backend || languageDiagnostic.last_backend || ''),
       last_model: privateView ? String(expressionDiagnostic.language?.last_model || '') : '',
       last_error: String(expressionDiagnostic.last_error || expressionDiagnostic.language?.last_error || languageDiagnostic.last_error || '').slice(0, 300),

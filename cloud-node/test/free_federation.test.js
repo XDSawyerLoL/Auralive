@@ -188,3 +188,75 @@ test('live catalog routing ignores a :free label when current prices are not zer
   assert.notEqual(payload.selected, 'example/fake-free:free');
   assert.equal(payload.diag.free_federation.verified_catalog_models, 2);
 });
+
+
+test('AURA reserves free calls for chat, not just autonomous agents', () => {
+  const script = `
+    process.env.AURA_ZERO_COST_MODE='true';
+    process.env.AI_MODE='off';
+    process.env.AURA_FREE_FEDERATION_ENABLED='true';
+    process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';
+    process.env.AURA_OPENROUTER_API_KEY='mock-key';
+    process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';
+    process.env.AURA_FREE_FEDERATION_MAX_REQUESTS_PER_DAY='4';
+    process.env.AURA_FREE_FEDERATION_CHAT_RESERVE='3';
+    let calls=0;
+    global.fetch=async()=>{
+      calls++;
+      return new Response(JSON.stringify({
+        model:'openrouter/free',choices:[{message:{content:'Français naturel'}}],usage:{cost:0},
+      }),{status:200});
+    };
+    const { ZeroCostFederation }=await import('./src/free_federation.js');
+    const federation=new ZeroCostFederation();
+    const first=await federation.generate('recherche','system',120,'research');
+    let rejected=false;
+    try { await federation.generate('autre recherche','system',120,'research'); }
+    catch (error) { rejected=/reserved for conversation/.test(error.message); }
+    const human=await federation.generate('salut','system',120,'french');
+    console.log(JSON.stringify({calls,first:first?.answer,human:human?.answer,rejected,
+      stats:federation.snapshot()}));
+  `;
+  const result=run(script);
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  const out=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(out.calls,2);
+  assert.equal(out.rejected,true);
+  assert.equal(out.human,'Français naturel');
+  assert.equal(out.stats.chat_reserved_requests,3);
+  assert.equal(out.stats.background_request_limit,1);
+});
+
+test('HTTP 429 temporarily halts free provider retries', () => {
+  const script = `
+    process.env.AURA_ZERO_COST_MODE='true';
+    process.env.AI_MODE='off';
+    process.env.AURA_FREE_FEDERATION_ENABLED='true';
+    process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';
+    process.env.AURA_OPENROUTER_API_KEY='mock-key';
+    process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';
+    let calls=0;
+    global.fetch=async()=>{calls++;return new Response('Rate limit exceeded',
+      {status:429,headers:{'retry-after':'90'}});};
+    const { ZeroCostFederation }=await import('./src/free_federation.js');
+    const federation=new ZeroCostFederation();
+    let first='',second='';
+    try { await federation.generate('salut','system',120,'french'); } catch(e) { first=e.message; }
+    try { await federation.generate('bonjour','system',120,'french'); } catch(e) { second=e.message; }
+    console.log(JSON.stringify({calls,first,second,cooldown:federation.snapshot().cooldown_until}));
+  `;
+  const result=run(script);
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  const out=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(out.calls,1);
+  assert.match(out.first,/HTTP 429/);
+  assert.match(out.second,/cooldown active/);
+  assert.ok(Date.parse(out.cooldown)>Date.now());
+});
+
+test('startup does not waste nine free requests on the language benchmark', async () => {
+  const { readFileSync }=await import('node:fs');
+  const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+  assert.doesNotMatch(server,/setImmediate\(\(\) => \{ void kernel\.language\.evaluate/);
+  assert.match(server,/post\('\/api\/language\/evaluate'/);
+});

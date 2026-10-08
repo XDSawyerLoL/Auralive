@@ -58,6 +58,7 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
 .language-fill{height:100%;width:0%;border-radius:inherit;background:linear-gradient(90deg,#ffb566,#d78ff6);transition:width .9s ease}
 .language-details{display:flex;justify-content:space-between;gap:9px;font-size:9px;color:var(--muted)}
 .language-details span{min-width:0}.language-details span:last-child{text-align:right}
+.language-help{margin:0;padding:8px 9px;border-radius:9px;background:rgba(238,162,94,.08);font-size:10px;color:var(--muted);line-height:1.4}.language-help[hidden]{display:none}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(max-width:900px){.main{grid-template-columns:1fr}.side{order:-1}.aura-card{min-height:250px}.map-wrap{height:220px}.chat{min-height:72svh}.side .mini-card:nth-of-type(n+3){display:none}}
 @media(max-width:640px){.shell{padding:7px}.topbar{height:54px;padding:7px 9px}.brand-sub{display:none}.status-compact .pill:nth-child(n+2){display:none}.main{margin-top:7px}.side{display:block}.aura-card{margin-bottom:7px}.mini-card{display:none}.chat{min-height:calc(100svh - 68px)}.messages{padding:13px}.msg{font-size:15px;max-width:92%}.composer textarea{font-size:16px}.map-wrap{height:165px}.organism-hud,.map-badge{display:none}.map-foot{font-size:7px}}
@@ -120,6 +121,7 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
         <div class="language-head"><strong>Apprentissage du français</strong><span class="language-score" id="languageScore">—</span></div>
         <div class="language-track" id="languageTrack" role="progressbar" aria-label="Évaluation du langage" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Pas encore évalué"><div class="language-fill" id="languageProgressBar"></div></div>
         <div class="language-details"><span id="languageTrend">Premier test en attente</span><span id="languageTestDate">Tests comparables · 9 tâches</span></div>
+        <p class="language-help" id="languageSetupHelp" hidden></p>
       </section>
 
       <section class="panel mini-card">

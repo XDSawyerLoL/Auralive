@@ -530,13 +530,24 @@ function renderLanguageProgress(report){
   const delta=typeof report?.delta==='number'?report.delta:null;
   const suffix=delta===null?'Mesure initiale':delta>0?'↗ +'+delta+' points':delta<0?'↘ '+delta+' points · régression':'→ Stable';
   $('languageTrend').textContent=known?suffix:'Premier test en attente';
-  if(report?.status==='model-unavailable'&&!known)$('languageTrend').textContent='Moteur gratuit indisponible';
+  if(report?.status==='model-unavailable'&&!known){
+    const missing=report?.blocking_reason==='openrouter-free-key-missing';
+    $('languageTrend').textContent=missing?'Modèle gratuit à connecter':'Moteur gratuit indisponible';
+    if(report?.setup_hint)$('languageTrend').title=String(report.setup_hint);
+  }else $('languageTrend').title='';
+  if(report?.status==='unavailable'&&!known)$('languageTrend').textContent='Service de mesure indisponible';
   if(report?.evaluated_at){
     const d=new Date(report.evaluated_at);
     $('languageTestDate').textContent=Number.isNaN(d.getTime())?'Évaluation datée indisponible':'Évalué le '+d.toLocaleDateString('fr-FR');
   }else $('languageTestDate').textContent='Tests comparables · 9 tâches';
   const explain='Score mesuré sur '+(report?.benchmark_cases||9)+' tâches fixes de compréhension, mémoire, correction et raisonnement. Ne mesure ni conscience ni entraînement des poids.';
   $('languageTrack').title=explain;
+  const help=$('languageSetupHelp');
+  if(help){
+    const issue=String(report?.setup_hint||'');
+    help.hidden=!issue;
+    help.textContent=issue;
+  }
 }
 
 async function refresh(){
@@ -572,7 +583,7 @@ async function refresh(){
         const strict=String(language.mode||'')==='natural-language-unavailable';
         $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
         $('languageText').title=strict
-          ? 'Le noyau comprend la conversation, mais aucun modèle de langue libre n’est disponible. AURA refuse de simuler une conversation avec des réponses pré-écrites.'
+          ? String(language.setup_hint || 'Aucun modèle libre disponible : vérifier /api/ai/runtime.') + ' AURA refuse de simuler une conversation pré-écrite tant que le modèle manque.'
           : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
       }else{
         $('languageText').textContent='Français · indisponible';
