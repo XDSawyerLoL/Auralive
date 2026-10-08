@@ -47,7 +47,7 @@ class MemoryPersistence {
       successes: current.successes,
       failures: current.failures,
       contextCount: current.context_count,
-      recipe: skill.recipe,
+      recipe: skill.promotion_eligible === false ? [] : skill.recipe,
     })) {
       current.status = 'promoted';
       current.promoted_at = 'now';
@@ -142,6 +142,6 @@ test('side-effecting capability recipe never becomes an executable learned skill
   await engine.observe({ ...base, context_key: 'a' });
   await engine.observe({ ...base, context_key: 'b' });
   const learned = await engine.observe({ ...base, context_key: 'a' });
-  assert.equal(learned.status, 'promoted');
+  assert.equal(learned.status, 'candidate');
   assert.equal(fabric.registry.has(learned.id), false);
 });
