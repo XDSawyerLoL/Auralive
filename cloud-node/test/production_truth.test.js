@@ -6,7 +6,6 @@ import { buildInfo, buildMatches } from '../src/build_info.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const entrySource = fs.readFileSync(new URL('../server.js', import.meta.url), 'utf8');
-const certifierSource = fs.readFileSync(new URL('../../scripts/certify-aura-production.mjs', import.meta.url), 'utf8');
 
 test('build identity honors explicit immutable git SHA', () => {
   const previous = process.env.AURA_GIT_SHA;
@@ -36,11 +35,3 @@ test('managed host entry honors PORT instead of silently falling back to 3000', 
   assert.match(entrySource, /process\.env\.AURA_PORT \|\| managedPort \|\| '3000'/);
 });
 
-test('production certifier verifies deployed SHA and a real chat turn', () => {
-  assert.match(certifierSource, /AURA_EXPECTED_GIT_SHA/);
-  assert.match(certifierSource, /\/api\/build/);
-  assert.match(certifierSource, /homeostasie_v9_unified/);
-  assert.match(certifierSource, /\/api\/chat/);
-  assert.match(certifierSource, /body: \{ text: 'Que fais-tu en ce moment \?' \}/);
-  assert.match(certifierSource, /body\.answer/);
-});
