@@ -57,3 +57,23 @@ test('cognition v2 keeps ambiguous short question attached to prior turn', () =>
   assert.equal(plan.needs_semantic_support, false);
   assert.match(engine.deterministicReply(plan), /Stabiliser Quantic Glide|référence/i);
 });
+
+
+test('dialogue state classifies assistant wellbeing instead of generic statement', () => {
+  const tracker = new DialogueStateTracker();
+  const frame = tracker.analyze('tu va bien.', [
+    { role: 'assistant', content: 'Salut. Oui, je suis là.' },
+  ]);
+  assert.equal(frame.move, 'wellbeing');
+  assert.equal(frame.social_intent, 'wellbeing');
+});
+
+test('dialogue state classifies assistant curiosity instead of previous-turn reference', () => {
+  const tracker = new DialogueStateTracker();
+  const frame = tracker.analyze('tu a des questions?', [
+    { role: 'assistant', content: 'Je travaille sur Quantic OS.' },
+  ]);
+  assert.equal(frame.move, 'social_curiosity');
+  assert.equal(frame.social_intent, 'social_curiosity');
+  assert.notEqual(frame.move, 'reference_followup');
+});
