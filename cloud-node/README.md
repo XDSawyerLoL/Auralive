@@ -143,3 +143,33 @@ AURA_OPENROUTER_FREE_MODELS=openrouter/free
 ```
 
 Le catalogue OpenRouter `/api/v1/models` est relu périodiquement. AURA ne cible directement qu'un modèle `:free` dont les prix courants `prompt` et `completion` valent exactement zéro ; sinon elle retombe sur `openrouter/free`. Le ledger MySQL `aura_free_provider_usage` conserve le budget quotidien et `aura_free_model_scorecards` mémorise les succès, échecs et latences par modèle/rôle. Les clés ne sont jamais stockées dans ces tables.
+
+
+## AURA 3.0 — moteur de français indépendant (aucun quota d'API externe)
+
+**Le ZIP Node.js de Hostinger n'embarque pas les poids d'un modèle : ce sont deux processus différents.** AURA Cloud conserve ses données, intentions, mémoire et planification. Le modèle GGUF est un moteur local de **verbalisation** raccordé à AURA ; il n'entraîne pas seul une nouvelle langue. Une barre d'évaluation ne mesure pas l'apprentissage des poids.
+
+**Hébergement nécessaire :** un serveur ou une machine sous ton contrôle sur lequel tu peux installer et lancer `llama.cpp` avec assez de RAM et de CPU. Le système Hostinger Web Apps géré accepte le ZIP Node, mais ne garantit **ni** les processus natifs persistants **ni** la mémoire du modèle. Sur un VPS Linux avec accès aux processus système, tu peux exploiter un CPU et un modèle léger. Si tu n'as que le plan Node.js Web Apps, il faut vérifier l'existence d'une machine déjà disponible ; l'import du seul ZIP ne crée pas ce calcul.
+
+**Démarrage CPU sur le même serveur que AURA Cloud :**
+
+1. Installer le binaire `llama-server` du projet libre [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp), sous le compte système dédié à AURA.
+2. Depuis le dossier `cloud-node`, lancer `bash scripts/aura-language-server.sh`. Au premier lancement, la commande charge librement `Qwen/Qwen3-0.6B-GGUF:Q8_0` (licence Apache 2.0, fichier modèle d'environ 639 Mo). Elle écoute seulement sur `127.0.0.1:8080` ; il faut une connexion Internet pour le téléchargement initial des poids.
+3. Vérifier `curl http://127.0.0.1:8080/v1/models` puis une requête de conversation : `curl -s http://127.0.0.1:8080/v1/chat/completions -H 'Content-Type: application/json' -d '{"model":"aura-fr","messages":[{"role":"user","content":"Réponds en français. Salut."}],"max_tokens":80}'`.
+4. Définir dans les variables Hostinger AURA Cloud :
+
+```env
+AURA_ZERO_COST_MODE=true
+AI_MODE=off
+AURA_FRENCH_LANGUAGE_REQUIRED=true
+AURA_SELF_HOSTED_LANGUAGE_ENABLED=true
+AURA_SELF_HOSTED_BASE_URL=http://127.0.0.1:8080/v1
+AURA_SELF_HOSTED_MODEL=aura-fr
+AURA_FREE_FEDERATION_ENABLED=false
+```
+
+5. Redémarrer AURA Cloud. Vérifier `GET /api/ai/runtime` : `self_hosted_language.enabled` doit valoir `true`, puis `self_hosted_language.ready` passe à `true` **après une réponse réussie**. Si `ready=false`, AURA signale l'erreur et ne fabrique pas de conversation.
+
+**Attention réseau :** si AURA Cloud est dans Hostinger Web Apps et le modèle sur un *autre* VPS, `localhost` désigne Hostinger Web Apps et non le VPS. Il faut publier le moteur sous un domaine **HTTPS privé** avec pare-feu, authentification et un proxy TLS administré par toi. Configurer `AURA_SELF_HOSTED_BASE_URL=https://ton-domaine-prive.example/v1`, `AURA_SELF_HOSTED_CONFIRMED=true` et si nécessaire `AURA_SELF_HOSTED_API_KEY` côté AURA Cloud. Ne jamais rendre `llama-server` ouvert directement à Internet, ne jamais versionner de clé. Si aucun endpoint auto-hébergé n'existe, AURA ne peut pas parler naturellement : il n'y a pas de repli automatique payant ou scripté.
+
+La fédération OpenRouter est désormais **désactivée par défaut** dans les nouvelles configurations (`AURA_FREE_FEDERATION_ENABLED=false`). Une ancienne variable `true` déjà définie dans Hostinger garde priorité sur le fichier exemple et doit être changée si tu veux une indépendance totale. L'indépendance vis-à-vis d'OpenRouter ne supprime pas le coût éventuel de la machine, de l'électricité ni de l'hébergement.
