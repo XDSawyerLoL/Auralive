@@ -89,8 +89,8 @@ test('unconfigured language reports a useful setup hint without exposing a secre
     bridge: null,
   });
   const status = await faculty.status();
-  assert.equal(status.blocking_reason, 'openrouter-free-key-missing');
-  assert.match(status.setup_hint, /AURA_OPENROUTER_API_KEY/);
+  assert.equal(status.blocking_reason, 'self-hosted-model-not-configured');
+  assert.match(status.setup_hint, /AURA_SELF_HOSTED_BASE_URL/);
   assert.equal(status.verified_ready, false);
 });
 
