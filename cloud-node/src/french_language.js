@@ -185,7 +185,7 @@ export class FrenchLanguageFaculty {
     ].join(' ');
   }
 
-  async generate(plan, { maxTokens = 700 } = {}) {
+  async generate(plan, { maxTokens = 700, taskRole = 'french' } = {}) {
     const prompt = this.prompt(plan);
     const system = this.system();
     const started = Date.now();
@@ -197,7 +197,7 @@ export class FrenchLanguageFaculty {
           prompt,
           system,
           Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
-          'french',
+          taskRole,
         );
         const answer = normalize(result?.answer || '');
         if (answer) {
