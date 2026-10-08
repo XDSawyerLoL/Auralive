@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { ZeroCostFederation } from './free_federation.js';
+import { SelfHostedLanguage } from './self_hosted_language.js';
 import { freeTierModelAllowed, markConfirmedFreeTier, reserveConfirmedFreeTier } from './gemini_free_tier.js';
 
 function completionUrl() {
@@ -78,9 +79,11 @@ export class AiClient {
     this.lastLatencyMs = 0;
     this.lastBackend = '';
     this.federation = new ZeroCostFederation();
+    this.selfHosted = new SelfHostedLanguage();
   }
 
   get provider() {
+    if (this.selfHosted.enabled) return 'aura-self-hosted';
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
       return this.federation.enabled
         ? 'aura-runtime-local+zero-cost-federation'
@@ -93,6 +96,7 @@ export class AiClient {
   }
 
   get enabled() {
+    if (this.selfHosted.enabled) return true;
     if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (remoteFallbackBlocked()) return false;
@@ -119,6 +123,7 @@ export class AiClient {
       gemini_free_tier_model_allowed: freeTierModelAllowed(geminiModel(), 'text'),
       gemini_free_tier_daily_cap: Number(config.geminiFreeTierTextMaxPerDay),
       free_federation: this.federation.snapshot(),
+      self_hosted_language: this.selfHosted.snapshot(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
@@ -236,6 +241,21 @@ export class AiClient {
         localError = new Error('AURA Runtime local hors ligne');
       }
 
+      let selfHostedError = null;
+      if (this.selfHosted.enabled) {
+        try {
+          const result = await this.selfHosted.generate(prompt, system, maxTokens);
+          if (result?.answer) {
+            this.lastBackend = 'aura-self-hosted:' + result.model;
+            this.lastError = '';
+            this.lastLatencyMs = Date.now() - started;
+            return result.answer;
+          }
+        } catch (error) {
+          selfHostedError = error;
+        }
+      }
+
       let federationError = null;
       if (this.federation.enabled) {
         try {
@@ -252,9 +272,10 @@ export class AiClient {
       }
 
       if (remoteFallbackBlocked() || config.aiMode === 'off' || config.aiMode === 'bridge') {
-        this.lastBackend = federationError ? 'zero-cost-federation-unavailable' : 'zero-cost-block';
+        this.lastBackend = selfHostedError ? 'self-hosted-unavailable' : (federationError ? 'zero-cost-federation-unavailable' : 'zero-cost-block');
         this.lastError = [
           localError ? `local unavailable: ${safeError(localError)}` : '',
+          selfHostedError ? `self-hosted unavailable: ${safeError(selfHostedError)}` : '',
           federationError ? `free federation unavailable: ${safeError(federationError)}` : '',
         ].filter(Boolean).join(' | ');
         this.lastLatencyMs = Date.now() - started;
