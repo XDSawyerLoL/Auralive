@@ -98,6 +98,37 @@ for (const item of cases) {
 
 const behavioralCases = [
   {
+    id: 'social-wellbeing-typo',
+    input: {
+      text: 'tu va bien.',
+      soul: { organism: { mood: 'satisfaite', relationship: { social_curiosity: 0.8 }, executive: {} } },
+      recentMessages: [{ role: 'assistant', content: 'Salut. Oui, je suis là.' }],
+    },
+    predicate: ({ plan, answer }) =>
+      plan.act === 'report_internal_state'
+      && /Ça va plutôt bien/.test(answer),
+  },
+  {
+    id: 'social-curiosity-question',
+    input: {
+      text: 'tu a des questions?',
+      soul: {
+        current_intention: 'Faire avancer AURA',
+        organism: {
+          curiosite_sociale: 0.8,
+          relationship: { social_curiosity: 0.8, last_open_thread: 'autonomie AURA' },
+          executive: {},
+        },
+      },
+      agenda: { current: 'Stabiliser AURA', next_action: 'Valider la production' },
+      recentMessages: [{ role: 'assistant', content: 'Je travaille sur la production.' }],
+    },
+    predicate: ({ plan, answer }) =>
+      plan.act === 'ask_user_from_curiosity'
+      && /\?/.test(answer)
+      && !/Tu fais référence/.test(answer),
+  },
+  {
     id: 'activity-typo',
     input: {
       text: 'tu fait quoi la ?',
