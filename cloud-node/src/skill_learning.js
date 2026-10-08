@@ -170,7 +170,7 @@ class DbSkillPersistence {
       successes: stats?.successes,
       failures: stats?.failures,
       contextCount: stats?.context_count,
-      recipe,
+      recipe: skill.promotion_eligible === false ? [] : recipe,
     });
     const status = promote ? 'promoted' : String(latest?.status || 'candidate');
     await query(
@@ -288,8 +288,27 @@ export class SkillLearningEngine {
     return true;
   }
 
+  recipePromotionEligible(recipe = []) {
+    if (!this.fabric || !Array.isArray(recipe) || !recipe.length) return false;
+    const members = recipe.map((id) => this.fabric.registry?.get(id)).filter(Boolean);
+    if (members.length !== recipe.length) return false;
+    return members.every((item) =>
+      !item.side_effects
+      && !String(item.id || '').startsWith('skill.')
+      && (!config.zeroCostMode || Number(item.cost_microunits || 0) === 0)
+    );
+  }
+
   async observe(payload = {}) {
     const descriptor = deriveSkillDescriptor(payload);
+    if (!descriptor.recipe.length) {
+      return {
+        ignored: true,
+        reason: 'no-replayable-capability-recipe',
+        strategy_key: descriptor.strategy_key,
+      };
+    }
+    descriptor.promotion_eligible = this.recipePromotionEligible(descriptor.recipe);
     const ok = Boolean(payload.ok);
     this.lastObservationAt = new Date().toISOString();
     try {
