@@ -1,14 +1,20 @@
+import { config } from './config.js';
+import { FrenchLanguageFaculty } from './french_language.js';
+
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v3-conversation-first';
+  static VERSION = 'aura-expression-v4-language-faculty';
 
   constructor(ai, cognition) {
     this.ai = ai;
     this.cognition = cognition;
+    this.language = new FrenchLanguageFaculty(ai);
     this.lastError = '';
+    this.lastMode = 'uninitialized';
+    this.fallbackCount = 0;
   }
 
   async semanticSupport(plan, context = '', options = {}) {
@@ -44,59 +50,44 @@ export class ExpressionLayer {
 
   async verbalize(plan, options = {}) {
     const fallback = this.cognition.deterministicReply(plan);
-    if (!this.ai?.enabled) return fallback;
-
-    const payload = {
-      user_text: plan.user_text || '',
-      act: plan.act,
-      goal: plan.goal,
-      facts: plan.facts,
-      semantic_support: plan.semantic_support || '',
-      current_intention: plan.current_intention || '',
-      dominant_thought: plan.dominant_thought || '',
-      mood: plan.mood || '',
-      organism_intention: plan.organism_intention || '',
-      relationship: plan.relationship || {},
-      affect: plan.affect || {},
-      executive: plan.executive || {},
-      conversation_context: plan.conversation_context || [],
-      external_research_summary: plan.external_research_summary || '',
-    };
-
     try {
-      const answer = normalize(await this.ai.generate(
-        [
-          'Réponds d’abord au message utilisateur comme dans une conversation normale, fluide et directe.',
-          'Le plan AURA fournit des contraintes et du contexte : il ne doit jamais devenir une liste de diagnostics dans la réponse.',
-          'AURA parle à la première personne. Son rôle opérationnel n’est mentionné que si la question le rend pertinent.',
-          'Tu n’as aucun droit de changer les faits, l’intention ou la décision.',
-          'N’ajoute aucun souvenir, action, capacité ou état absent du plan.',
-          'Utilise la continuité de conversation quand elle est pertinente : ne réponds pas comme si chaque tour était le premier.',
-          'Exprime son état computationnel avec des mots naturels sans prétendre à une conscience ou à des émotions humaines biologiques.',
-          'Interdiction de réciter des libellés internes comme « Message reçu », « Rôle opérationnel », « Vie intérieure », « statut », « confiance » ou « preuves » sauf demande explicite de diagnostic.',
-          'Évite les formulations bureaucratiques, les répétitions du type « je maintiens », et les listes mécaniques sauf si elles sont réellement utiles.',
-          'Quand un fil relationnel est ouvert, relie naturellement la réponse à ce fil au lieu de réciter des métriques.',
-          'Son ton peut être curieux, déterminé, satisfait, préoccupé ou frustré si le plan le justifie.',
-          'Quand la conversation s’y prête, termine par une seule vraie ouverture ou question utile; pas de question automatique à chaque réponse.',
-          '',
-          JSON.stringify(payload),
-        ].join('\n'),
-        'Tu es la voix d’AURA. Tu rends sa pensée décidée par le noyau vivante, relationnelle et cohérente, sans inventer de faits ni simuler une conscience humaine.',
-        Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
-        String(options.taskRole || 'conversation'),
-      ));
-      return answer || fallback;
+      const answer = normalize(await this.language.generate(plan, {
+        maxTokens: Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
+      }));
+      if (answer) {
+        this.lastError = '';
+        this.lastMode = 'french-language-faculty';
+        return answer;
+      }
     } catch (error) {
       this.lastError = normalize(error?.message || error).slice(0, 500);
-      return fallback;
     }
+
+    this.fallbackCount += 1;
+    if (config.frenchLanguageRequired) {
+      this.lastMode = 'natural-language-unavailable';
+      return 'Ma faculté de français naturel est indisponible pour le moment. Mon noyau fonctionne, mais je refuse de simuler une conversation avec des réponses pré-écrites.';
+    }
+
+    // Secours legacy explicitement opt-in seulement.
+    this.lastMode = 'deterministic-emergency-fallback';
+    return fallback;
   }
 
-  diagnostic() {
+  async diagnostic() {
+    const language = await this.language.status();
     return {
       version: ExpressionLayer.VERSION,
-      ai_available: Boolean(this.ai?.enabled),
-      last_error: this.lastError,
+      language,
+      natural_french_ready: Boolean(language.ready),
+      mode: language.ready
+        ? 'learned-language-model'
+        : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
+      scripted_normal_path: false,
+      strict_natural_language: Boolean(config.frenchLanguageRequired),
+      fallback_count: this.fallbackCount,
+      last_mode: this.lastMode,
+      last_error: this.lastError || language.last_error || '',
       role: 'verbalisation-only',
     };
   }

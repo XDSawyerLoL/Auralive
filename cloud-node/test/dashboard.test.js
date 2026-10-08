@@ -275,9 +275,12 @@ test('technical information is collapsed by default', () => {
 });
 
 
-test('dashboard reports native dialogue as healthy when semantic model is absent', () => {
-  assert.match(DASHBOARD_SCRIPT, /Dialogue · natif/);
-  assert.match(DASHBOARD_SCRIPT, /native_dialogue_ready/);
+test('dashboard distinguishes learned French faculty from strict language unavailability', () => {
+  assert.match(DASHBOARD_SCRIPT, /Français · modèle libre/);
+  assert.match(DASHBOARD_SCRIPT, /Français · indisponible/);
+  assert.match(DASHBOARD_SCRIPT, /natural-language-unavailable/);
+  assert.match(DASHBOARD_SCRIPT, /réponses non scriptées/);
+  assert.match(DASHBOARD_SCRIPT, /refuse de simuler une conversation/);
   assert.doesNotMatch(DASHBOARD_SCRIPT, /Dialogue · secours/);
 });
 

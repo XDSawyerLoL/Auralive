@@ -838,6 +838,13 @@ app.get('/api/capabilities', async (request) => {
     workerCapabilities.map((item) => String(item?.name || '')),
   );
   const languageDiagnostic = ai.diagnostic();
+  const expressionDiagnostic = bootstrap.runtimeReady
+    ? await kernel.expression.diagnostic()
+    : {
+        natural_french_ready: false,
+        mode: 'unavailable',
+        language: { ready: false, primary: 'unavailable', last_error: '' },
+      };
   const voiceFabricActuallyReady = Boolean(
     voiceStudio.enabled
     && voiceDiscovery?.ok
@@ -851,16 +858,21 @@ app.get('/api/capabilities', async (request) => {
     },
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
-      ready: Boolean(ai.enabled),
+      ready: Boolean(expressionDiagnostic.natural_french_ready),
       native_dialogue_ready: Boolean(bootstrap.runtimeReady),
       native_dialogue_version: CognitionEngine.VERSION,
-      provider: privateView ? ai.provider : String(languageDiagnostic.provider || 'unavailable'),
+      faculty_version: String(expressionDiagnostic.language?.version || ''),
+      provider: String(expressionDiagnostic.language?.primary || 'unavailable'),
       local_worker: Boolean(bridgeStatus?.worker_online),
-      fallback_only: !ai.enabled,
-      mode: ai.enabled ? 'native+semantic-verbalisation' : 'native-only',
-      last_backend: String(languageDiagnostic.last_backend || ''),
-      last_error: String(languageDiagnostic.last_error || '').slice(0, 300),
-      zero_cost_mode: Boolean(languageDiagnostic.zero_cost_mode),
+      fallback_only: !expressionDiagnostic.natural_french_ready,
+      mode: String(expressionDiagnostic.mode || 'unavailable'),
+      normal_path_scripted: Boolean(expressionDiagnostic.scripted_normal_path),
+      emergency_fallback_only: true,
+      fallback_count: Number(expressionDiagnostic.fallback_count || 0),
+      last_backend: String(expressionDiagnostic.language?.last_backend || languageDiagnostic.last_backend || ''),
+      last_model: privateView ? String(expressionDiagnostic.language?.last_model || '') : '',
+      last_error: String(expressionDiagnostic.last_error || expressionDiagnostic.language?.last_error || languageDiagnostic.last_error || '').slice(0, 300),
+      zero_cost_mode: Boolean(expressionDiagnostic.language?.zero_cost ?? languageDiagnostic.zero_cost_mode),
       remote_fallback_blocked: Boolean(languageDiagnostic.remote_fallback_blocked),
     },
     voice: {
@@ -948,7 +960,7 @@ app.get('/api/kernel/architecture', async () => ({
   cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
   dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
   skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
-  language_model_role: 'replaceable specialist constellation for semantic-support-and-verbalisation-only',
+  language_model_role: 'French Language Faculty: replaceable zero-cost multilingual model for expression only; deterministic wording is emergency fallback, never the normal path',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
   command_center: 'continuous native initiative engine with bounded autonomous execution',

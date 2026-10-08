@@ -543,15 +543,19 @@ async function refresh(){
       const nativeDialogueReady=Boolean(language.native_dialogue_ready||(capabilities&&capabilities.cognition&&capabilities.cognition.ready));
       $('languageDot').className='live-dot '+(languageReady||nativeDialogueReady?'good':'bad');
       if(languageReady){
-        const provider=String(language.provider||language.last_backend||'moteur actif');
-        $('languageText').textContent='Dialogue · naturel';
-        $('languageText').title='Noyau natif + moteur de formulation · '+provider;
+        const provider=String(language.provider||language.last_backend||'modèle libre');
+        $('languageText').textContent='Français · modèle libre';
+        $('languageText').title='Faculté linguistique française active · '+provider+' · réponses non scriptées';
       }else if(nativeDialogueReady){
-        $('languageText').textContent='Dialogue · natif';
-        $('languageText').title='Noyau conversationnel AURA actif sans dépendre d’un modèle externe.';
+        $('languageDot').className='live-dot warn';
+        const strict=String(language.mode||'')==='natural-language-unavailable';
+        $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
+        $('languageText').title=strict
+          ? 'Le noyau comprend la conversation, mais aucun modèle de langue libre n’est disponible. AURA refuse de simuler une conversation avec des réponses pré-écrites.'
+          : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
       }else{
-        $('languageText').textContent='Dialogue · indisponible';
-        $('languageText').title=String(language.last_error||'Noyau conversationnel indisponible.');
+        $('languageText').textContent='Français · indisponible';
+        $('languageText').title=String(language.last_error||'Faculté linguistique et noyau conversationnel indisponibles.');
       }
 
       const voice=(capabilities&&capabilities.voice)||{};
