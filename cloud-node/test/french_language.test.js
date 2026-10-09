@@ -231,3 +231,41 @@ test('AURA auto-starts embedded engine independent of MySQL runtime and stops it
   assert.match(source, /export function startRuntimeLoop\(\) \{\s+ai\.selfHosted\.beginAutomaticStartup\(\)/);
   assert.match(source, /export async function stopAura\(\) \{\s+ai\.selfHosted\.stopEmbedded\(\)/);
 });
+
+
+test('noexec detection chooses the longest Linux mount, not chmod permissions', async () => {
+  const { mountIsNoexec } = await import('../src/embedded_language.js');
+  const mountinfo = [
+    '21 1 0:1 / / rw,relatime - overlay overlay rw',
+    '22 21 0:2 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw',
+    '23 21 0:3 / /app rw,relatime - overlay overlay rw',
+    '24 23 0:4 / /app/readonly ro,noexec,relatime - overlay overlay ro',
+  ].join('\n');
+  assert.equal(mountIsNoexec('/tmp/aura-embedded-language', mountinfo), true);
+  assert.equal(mountIsNoexec('/app/.aura-language-runtime', mountinfo), false);
+  assert.equal(mountIsNoexec('/app/readonly/bin', mountinfo), true);
+  assert.equal(mountIsNoexec('/does-not-exist', ''), null);
+});
+
+test('automatic cache candidates prioritize application and home over noexec temp', async () => {
+  const { embeddedCacheCandidates } = await import('../src/embedded_language.js');
+  const choices = embeddedCacheCandidates({
+    cwd: '/app', home: '/home/aura', temporary: '/tmp',
+  });
+  assert.deepEqual(choices, [
+    '/app/.aura-language-runtime',
+    '/home/aura/.cache/aura-language-runtime',
+    '/tmp/aura-embedded-language',
+  ]);
+  assert.deepEqual(embeddedCacheCandidates({ explicit: '/data/model-cache' }), ['/data/model-cache']);
+});
+
+test('embedded language signals execution restrictions rather than continuing retries on Hostinger', async () => {
+  const { EmbeddedLanguage } = await import('../src/embedded_language.js');
+  const engine = new EmbeddedLanguage({ enabled: true, cacheDir: '/proc/aura-forbidden-cache' });
+  const result = await engine.start();
+  assert.equal(result, false);
+  assert.equal(engine.snapshot().stage, 'unavailable');
+  assert.ok(engine.snapshot().retry_after);
+  assert.equal(await engine.start(), false);
+});
