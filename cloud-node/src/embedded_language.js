@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { access, chmod, mkdir, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -18,6 +18,40 @@ function guardPath(value) {
   const directory = String(value || '').trim();
   if (!directory || !resolve(directory).startsWith('/')) throw new Error('embedded-invalid-cache-dir');
   return directory;
+}
+
+// Linux's per-mount noexec overrides chmod(0700). Resolve the longest matching
+// mount so a noexec /tmp is never mistaken for a writable executable cache.
+export function mountIsNoexec(directory, mountinfo = '') {
+  const candidate = resolve(String(directory || '/'));
+  let bestLength = -1;
+  let noexec = false;
+  for (const line of String(mountinfo || '').split('\n')) {
+    const fields = line.split(' - ')[0].split(' ');
+    if (fields.length < 6) continue;
+    const mountPath = fields[4]
+      .replace(/\\040/g, ' ').replace(/\\011/g, '\t')
+      .replace(/\\012/g, '\n').replace(/\\134/g, '\\');
+    if (candidate !== mountPath && !candidate.startsWith(mountPath === '/' ? '/' : mountPath + '/')) continue;
+    if (mountPath.length <= bestLength) continue;
+    bestLength = mountPath.length;
+    noexec = fields[5].split(',').includes('noexec');
+  }
+  return bestLength >= 0 ? noexec : null;
+}
+
+async function isNoexec(directory) {
+  try { return mountIsNoexec(directory, await readFile('/proc/self/mountinfo', 'utf8')); }
+  catch { return null; }
+}
+
+export function embeddedCacheCandidates({ explicit = '', cwd = process.cwd(), home = homedir(), temporary = tmpdir() } = {}) {
+  if (explicit) return [guardPath(explicit)];
+  return [...new Set([
+    join(cwd, '.aura-language-runtime'),
+    join(home, '.cache', 'aura-language-runtime'),
+    join(temporary, 'aura-embedded-language'),
+  ].map(guardPath))];
 }
 
 async function memoryLimitBytes() {
@@ -91,11 +125,14 @@ export class EmbeddedLanguage {
   constructor({
     enabled = false,
     baseUrl = 'http://127.0.0.1:' + PORT,
-    cacheDir = join(tmpdir(), 'aura-embedded-language'),
+    cacheDir = process.env.AURA_EMBEDDED_CACHE_DIR || '',
   } = {}) {
     this.enabled = Boolean(enabled);
     this.baseUrl = baseUrl;
     this.cacheDir = cacheDir;
+    this.requestedCacheDir = cacheDir;
+    this.executionAttempts = [];
+    this.retryAfterMs = 0;
     this.stage = this.enabled ? 'pending' : 'disabled';
     this.error = '';
     this.startedAt = '';
@@ -114,17 +151,22 @@ export class EmbeddedLanguage {
       download_only_public_weights: true,
       serving: this.baseUrl,
       external_inference: false,
+      cache_location: this.cacheDir ? (this.cacheDir.startsWith(tmpdir()) ? 'temporary' : 'persistent') : 'not-selected',
+      execution_attempts: this.executionAttempts.slice(-5),
+      retry_after: this.retryAfterMs > Date.now() ? new Date(this.retryAfterMs).toISOString() : null,
     };
   }
 
   async start() {
     if (!this.enabled) return false;
     if (this.stage === 'ready') return true;
+    if (this.stage === 'unavailable' && Date.now() < this.retryAfterMs) return false;
     if (this.bootPromise) return this.bootPromise;
     this.startedAt = new Date().toISOString();
     this.bootPromise = this.#boot().catch((error) => {
       this.error = safeError(error);
       this.stage = 'unavailable';
+      this.retryAfterMs = Date.now() + 20 * 60 * 1000;
       return false;
     }).finally(() => { this.bootPromise = null; });
     return this.bootPromise;
@@ -134,7 +176,34 @@ export class EmbeddedLanguage {
     if (!embeddedSupported()) throw new Error('embedded-platform-not-supported; requires Linux x64/arm64');
     const memory = await memoryLimitBytes();
     if (memory != null && memory < MIN_RAM_BYTES) throw new Error('embedded-insufficient-ram: at least 1.75GiB for the model');
-    guardPath(this.cacheDir);
+    this.executionAttempts = [];
+    const candidates = embeddedCacheCandidates({ explicit: this.requestedCacheDir });
+    for (const [index, candidate] of candidates.entries()) {
+      const label = index === 0 ? 'application' : index === 1 ? 'home' : 'temporary';
+      const mountedNoexec = await isNoexec(candidate);
+      if (mountedNoexec === true) {
+        this.executionAttempts.push(label + ':noexec');
+        continue;
+      }
+      this.cacheDir = candidate;
+      try {
+        this.stage = 'preparing-local-executable';
+        const success = await this.#bootInCache();
+        return success;
+      } catch (error) {
+        const problem = String(error?.message || error || '');
+        const blocked = /\b(?:EACCES|EPERM|EROFS|permission denied|spawn .*eacces)\b/i.test(problem);
+        if (!blocked) throw error;
+        this.executionAttempts.push(label + ':execution-denied');
+        if (this.worker?.exitCode === null) this.worker.kill('SIGTERM');
+        this.worker = null;
+      }
+    }
+    throw new Error('embedded-execution-denied: all allowed cache locations are noexec, read-only or EACCES; '
+      + this.executionAttempts.join(', ') + '. Hostinger requires an in-process WASM inference backend.');
+  }
+
+  async #bootInCache() {
     await mkdir(this.cacheDir, { recursive: true, mode: 0o700 });
     const binDir = join(this.cacheDir, 'llama-' + VERSION);
     await mkdir(binDir, { recursive: true, mode: 0o700 });
