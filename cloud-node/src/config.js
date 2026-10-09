@@ -169,10 +169,23 @@ export const config = Object.freeze({
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
   frenchLanguageRequired: bool('AURA_FRENCH_LANGUAGE_REQUIRED', true),
+  // Owner-operated llama.cpp/Ollama inference; no third-party tokens or quotas.
+  selfHostedLanguageEnabled: bool('AURA_SELF_HOSTED_LANGUAGE_ENABLED', true),
+  // On managed Hostinger Node.js, attempt to run local GGUF inference inside the same app.
+  // The auto runtime never calls an external text generation API.
+  embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.CI !== 'true'),
+  selfHostedLanguageBaseUrl: String(process.env.AURA_SELF_HOSTED_BASE_URL
+    || (bool('AURA_EMBEDDED_LANGUAGE_ENABLED', process.env.CI !== 'true')
+      ? 'http://127.0.0.1:18080/v1' : '')).replace(/\/$/, ''),
+  selfHostedLanguageModel: String(process.env.AURA_SELF_HOSTED_MODEL || 'aura-fr').trim(),
+  selfHostedLanguageApiKey: process.env.AURA_SELF_HOSTED_API_KEY || '',
+  // Remote HTTPS servers require explicit operator attestation of ownership and no usage billing.
+  selfHostedLanguageConfirmed: bool('AURA_SELF_HOSTED_CONFIRMED', false),
+  selfHostedLanguageTimeoutMs: int('AURA_SELF_HOSTED_TIMEOUT_MS', 120000, 1000, 240000),
 
   // AURA 2.2: remote inference may run in zero-cost mode only through model IDs
   // whose endpoint is intrinsically free. No paid fallback is ever enabled here.
-  freeFederationEnabled: bool('AURA_FREE_FEDERATION_ENABLED', true),
+  freeFederationEnabled: bool('AURA_FREE_FEDERATION_ENABLED', false),
   freeFederationTimeoutMs: int('AURA_FREE_FEDERATION_TIMEOUT_MS', 45000, 1000, 180000),
   freeFederationMaxRequestsPerDay: int('AURA_FREE_FEDERATION_MAX_REQUESTS_PER_DAY', 45, 1, 10000),
   // Keep the final 30 of 45 internal requests available for chat instead of autonomous tasks.

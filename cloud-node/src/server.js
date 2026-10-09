@@ -2041,6 +2041,7 @@ function startMaintenance() {
 }
 
 export function startRuntimeLoop() {
+  ai.selfHosted.beginAutomaticStartup();
   startRuntime().catch((error) => {
     bootstrap.startupError = safeError(error);
   });
@@ -2056,6 +2057,7 @@ export function startRuntimeLoop() {
 }
 
 export async function stopAura() {
+  ai.selfHosted.stopEmbedded();
   if (retryTimer) {
     clearInterval(retryTimer);
     retryTimer = null;

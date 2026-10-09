@@ -89,8 +89,8 @@ test('unconfigured language reports a useful setup hint without exposing a secre
     bridge: null,
   });
   const status = await faculty.status();
-  assert.equal(status.blocking_reason, 'openrouter-free-key-missing');
-  assert.match(status.setup_hint, /AURA_OPENROUTER_API_KEY/);
+  assert.equal(status.blocking_reason, 'self-hosted-model-not-configured');
+  assert.match(status.setup_hint, /AURA_SELF_HOSTED_BASE_URL/);
   assert.equal(status.verified_ready, false);
 });
 
@@ -133,4 +133,175 @@ test('failed configured federation advertises true root cause and never pretends
   assert.equal(status.ready, true);
   assert.equal(status.verified_ready, false);
   assert.match(status.setup_hint, /Quota/);
+});
+
+
+// An owner-hosted model is the primary engine, regardless of an available free API.
+test('self-hosted Qwen via llama.cpp takes precedence over OpenRouter', async () => {
+  let federationCalls = 0;
+  let ownedCalls = 0;
+  const faculty = new FrenchLanguageFaculty({
+    selfHosted: {
+      enabled: true,
+      snapshot() { return { configured: true, enabled: true, ready: true, model: 'aura-fr' }; },
+      async generate() { ownedCalls += 1; return { answer: 'Bonjour, je suis là.', model: 'aura-fr' }; },
+    },
+    federation: {
+      enabled: true,
+      snapshot() { return { enabled: true, zero_cost_mode: true }; },
+      async generate() { federationCalls += 1; return { answer: 'Réseau tiers' }; },
+    },
+    bridge: null,
+  });
+  const answer = await faculty.generate({ user_text: 'salut', goal: 'saluer naturellement' });
+  assert.equal(answer, 'Bonjour, je suis là.');
+  assert.equal(ownedCalls, 1);
+  assert.equal(federationCalls, 0);
+  const status = await faculty.status();
+  assert.equal(status.primary, 'aura-self-hosted');
+  assert.equal(status.verified_ready, true);
+});
+
+test('self-hosted provider error does not fabricate an answer', async () => {
+  const faculty = new FrenchLanguageFaculty({
+    selfHosted: {
+      enabled: true,
+      snapshot() { return { configured: true, enabled: true, ready: false }; },
+      async generate() { throw new Error('AURA inference HTTP 503'); },
+    },
+    federation: { enabled: false, snapshot() { return { enabled: false }; } },
+  });
+  assert.equal(await faculty.generate({ user_text: 'salut' }), '');
+  const status = await faculty.status();
+  assert.equal(status.blocking_reason, 'self-hosted-provider-failed');
+  assert.equal(status.verified_ready, false);
+  assert.match(status.setup_hint, /auto-hébergé/);
+});
+
+test('self-hosted endpoint requires loopback or operator-confirmed HTTPS, never third-party API', async () => {
+  const { isSelfHostedEndpointAllowed } = await import('../src/self_hosted_language.js');
+  assert.equal(isSelfHostedEndpointAllowed('http://127.0.0.1:8080/v1'), true);
+  assert.equal(isSelfHostedEndpointAllowed('http://localhost:11434/v1'), true);
+  assert.equal(isSelfHostedEndpointAllowed('http://inference.example.com/v1', true), false);
+  assert.equal(isSelfHostedEndpointAllowed('https://inference.example.com/v1'), false);
+  assert.equal(isSelfHostedEndpointAllowed('https://inference.example.com/v1', true), true);
+  assert.equal(isSelfHostedEndpointAllowed('https://openrouter.ai/api/v1', true), false);
+  assert.equal(isSelfHostedEndpointAllowed('https://api.openai.com/v1', true), false);
+  assert.equal(isSelfHostedEndpointAllowed('https://admin:secret@inference.example.com/v1', true), false);
+});
+
+test('embedded CPU support is explicitly limited to Linux x64 and arm64', async () => {
+  const { EmbeddedLanguage, embeddedSupported } = await import('../src/embedded_language.js');
+  assert.equal(embeddedSupported('linux', 'x64'), true);
+  assert.equal(embeddedSupported('linux', 'arm64'), true);
+  assert.equal(embeddedSupported('win32', 'x64'), false);
+  const inert = new EmbeddedLanguage({ enabled: false });
+  assert.equal(inert.snapshot().stage, 'disabled');
+  assert.equal(await inert.start(), false);
+});
+
+test('automatic same-host integration starts pending, not falsely ready', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const script = [
+    "process.env.NODE_ENV='production';",
+    "process.env.CI='false';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='false';",
+    "process.env.AURA_SELF_HOSTED_BASE_URL='';",
+    "process.env.AURA_EMBEDDED_LANGUAGE_ENABLED='true';",
+    "const { SelfHostedLanguage } = await import('./src/self_hosted_language.js');",
+    "const client = new SelfHostedLanguage();",
+    "console.log(JSON.stringify(client.snapshot()));",
+  ].join('\n');
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    cwd: new URL('..', import.meta.url).pathname, encoding: 'utf8',
+    env: { ...process.env, CI: 'false', AURA_EMBEDDED_LANGUAGE_ENABLED: 'true', AURA_SELF_HOSTED_BASE_URL: '' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const snap = JSON.parse(result.stdout.trim());
+  assert.equal(snap.enabled, true);
+  assert.equal(snap.embedded.enabled, true);
+  assert.equal(snap.embedded.stage, 'pending');
+  assert.equal(snap.ready, false);
+  assert.equal(snap.embedded.external_inference, false);
+});
+
+test('AURA auto-starts embedded engine independent of MySQL runtime and stops it cleanly', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
+  assert.match(source, /export function startRuntimeLoop\(\) \{\s+ai\.selfHosted\.beginAutomaticStartup\(\)/);
+  assert.match(source, /export async function stopAura\(\) \{\s+ai\.selfHosted\.stopEmbedded\(\)/);
+});
+
+
+test('noexec detection chooses the longest Linux mount, not chmod permissions', async () => {
+  const { mountIsNoexec } = await import('../src/embedded_language.js');
+  const mountinfo = [
+    '21 1 0:1 / / rw,relatime - overlay overlay rw',
+    '22 21 0:2 / /tmp rw,nosuid,nodev,noexec,relatime - tmpfs tmpfs rw',
+    '23 21 0:3 / /app rw,relatime - overlay overlay rw',
+    '24 23 0:4 / /app/readonly ro,noexec,relatime - overlay overlay ro',
+  ].join('\n');
+  assert.equal(mountIsNoexec('/tmp/aura-embedded-language', mountinfo), true);
+  assert.equal(mountIsNoexec('/app/.aura-language-runtime', mountinfo), false);
+  assert.equal(mountIsNoexec('/app/readonly/bin', mountinfo), true);
+  assert.equal(mountIsNoexec('/does-not-exist', ''), null);
+});
+
+test('automatic cache candidates prioritize application and home over noexec temp', async () => {
+  const { embeddedCacheCandidates } = await import('../src/embedded_language.js');
+  const choices = embeddedCacheCandidates({
+    cwd: '/app', home: '/home/aura', temporary: '/tmp',
+  });
+  assert.deepEqual(choices, [
+    '/app/.aura-language-runtime',
+    '/home/aura/.cache/aura-language-runtime',
+    '/tmp/aura-embedded-language',
+  ]);
+  assert.deepEqual(embeddedCacheCandidates({ explicit: '/data/model-cache' }), ['/data/model-cache']);
+});
+
+test('embedded language signals execution restrictions rather than continuing retries on Hostinger', async () => {
+  const { EmbeddedLanguage } = await import('../src/embedded_language.js');
+  const engine = new EmbeddedLanguage({ enabled: true, cacheDir: '/proc/aura-forbidden-cache' });
+  const result = await engine.start();
+  assert.equal(result, false);
+  assert.equal(engine.snapshot().stage, 'unavailable');
+  assert.ok(engine.snapshot().retry_after);
+  assert.equal(await engine.start(), false);
+});
+
+
+test('llama-server library search finds bundled .so and symlinked sonames in nested directories', async () => {
+  const { findLlamaLibraryDirectories } = await import('../src/embedded_language.js');
+  const { mkdtemp, mkdir, writeFile, symlink, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'aura-llama-libs-'));
+  try {
+    const inner = join(root, 'llama-b11425');
+    const nested = join(inner, 'lib');
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(inner, 'llama-server'), '');
+    await writeFile(join(nested, 'libllama-common.so.0.0.11425'), '');
+    await symlink('libllama-common.so.0.0.11425', join(nested, 'libllama-common.so.0'));
+    await writeFile(join(inner, 'libggml.so.0'), '');
+    const found = await findLlamaLibraryDirectories(root);
+    assert.deepEqual(found, [inner, nested]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('llama-server loader path includes all bundled library locations before inherited locations', async () => {
+  const { createLlamaLibraryPath, nativeLoaderFailure } = await import('../src/embedded_language.js');
+  assert.equal(
+    createLlamaLibraryPath('/app/llama-b11425/llama-server',
+      ['/app/llama-b11425', '/app/llama-b11425/lib'],
+      '/usr/local/lib:/app/llama-b11425'),
+    '/app/llama-b11425:/app/llama-b11425/lib:/usr/local/lib',
+  );
+  assert.equal(
+    nativeLoaderFailure('/app/llama-server: error while loading shared libraries: libllama-common.so.0: cannot open shared object file: No such file or directory', 1),
+    'embedded-shared-library-unresolved: libllama-common.so.0 (verify extracted release libraries and LD_LIBRARY_PATH)',
+  );
 });

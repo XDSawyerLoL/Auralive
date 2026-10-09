@@ -143,3 +143,29 @@ AURA_OPENROUTER_FREE_MODELS=openrouter/free
 ```
 
 Le catalogue OpenRouter `/api/v1/models` est relu périodiquement. AURA ne cible directement qu'un modèle `:free` dont les prix courants `prompt` et `completion` valent exactement zéro ; sinon elle retombe sur `openrouter/free`. Le ledger MySQL `aura_free_provider_usage` conserve le budget quotidien et `aura_free_model_scorecards` mémorise les succès, échecs et latences par modèle/rôle. Les clés ne sont jamais stockées dans ces tables.
+
+
+## AURA 3.0 — français intégré automatiquement au même hébergement Node.js
+
+**Mode par défaut : aucune intervention de l'utilisateur, aucune clé OpenRouter, aucun autre serveur.**
+Au démarrage du serveur Node.js, `EmbeddedLanguage` tente, en tâche de fond, d'installer une version vérifiée de `llama.cpp` (b11425) et de télécharger les poids publics `Qwen/Qwen3-0.6B-GGUF:Q8_0` sur le disque de l'application. Un processus d'inférence enfant, lié **uniquement à localhost:18080**, sert alors la génération en français ; AURA Cloud conserve la cognition, la mémoire et les décisions. Ces téléchargements nécessitent Internet une seule fois si le cache de l'hébergeur est persistant.
+
+Le ZIP de déploiement est compact : les poids et le binaire, lourds, sont obtenus automatiquement au premier lancement. Aucune facturation de requêtes de modèle distant, aucune dépendance à OpenRouter. Les ressources RAM, CPU, stockage et éventuel coût du plan d'hébergement restent nécessaires. **Le mode automatique ne crée pas de RAM** et **Hostinger Web Apps peut refuser l'exécution d'un binaire natif** : dans ce cas l'état `unavailable` et la cause réelle apparaissent dans `GET /api/ai/runtime` -> `self_hosted_language.embedded`. Cette installation **n'est pas une preuve de bon fonctionnement sur le compte Hostinger avant test en direct**.
+
+Le mode est activé automatiquement sur l'hébergement (hors tests CI), et la fédération distante est désactivée par défaut. Si les variables anciennes de Hostinger forcent `AURA_SELF_HOSTED_BASE_URL` ou `AURA_FREE_FEDERATION_ENABLED=true`, leurs valeurs explicites priment ; désactiver la fédération dans Hostinger pour garantir l'indépendance totale.
+
+Les options ci-dessous sont facultatives et uniquement nécessaires pour désactiver cette fonctionnalité ou privilégier un moteur déjà installé :
+
+```env
+AURA_EMBEDDED_LANGUAGE_ENABLED=true
+AURA_SELF_HOSTED_LANGUAGE_ENABLED=true
+AURA_SELF_HOSTED_MODEL=aura-fr
+AURA_FREE_FEDERATION_ENABLED=false
+AURA_ZERO_COST_MODE=true
+AI_MODE=off
+```
+
+`GET /api/ai/runtime` affiche `self_hosted_language.embedded.stage` : `pending`, `downloading-engine`, `installing-engine`, `loading-model`, `ready` ou `unavailable`, avec diagnostic d'échec sans clés en clair. `self_hosted_language.ready` n'est vrai qu'après génération linguistique réussie. Il faut une base MySQL opérationnelle pour la persistance et le chat AURA, indépendamment du modèle. Le benchmark de neuf tâches reste volontairement manuel et ne mesure ni l'entraînement des poids ni la conscience.
+
+**Mode de compatibilité avancé (sans démarrage automatique) :** si un modèle GGUF tourne déjà sur un serveur contrôlé, définir `AURA_EMBEDDED_LANGUAGE_ENABLED=false`, `AURA_SELF_HOSTED_BASE_URL=http://127.0.0.1:8080/v1` pour une instance colocale, ou une URL privée HTTPS authentifiée avec `AURA_SELF_HOSTED_CONFIRMED=true` et `AURA_SELF_HOSTED_API_KEY` pour un hôte différent. Aucun fournisseur payant n'est autorisé comme substitut.
+

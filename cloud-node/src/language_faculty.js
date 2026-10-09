@@ -63,7 +63,7 @@ export class LanguageFaculty {
     if (!config.zeroCostMode || !this.ai?.enabled) return false;
     const provider = String(this.ai.provider || '');
     // Benchmark execution is limited to local and explicitly zero-cost routing.
-    return provider.includes('zero-cost-federation') || provider.startsWith('aura-runtime-local');
+    return provider === 'aura-self-hosted' || provider.includes('zero-cost-federation') || provider.startsWith('aura-runtime-local');
   }
 
   async rememberCorrection({ sessionId, discourse, userText }) {
