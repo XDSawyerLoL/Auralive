@@ -269,3 +269,39 @@ test('embedded language signals execution restrictions rather than continuing re
   assert.ok(engine.snapshot().retry_after);
   assert.equal(await engine.start(), false);
 });
+
+
+test('llama-server library search finds bundled .so and symlinked sonames in nested directories', async () => {
+  const { findLlamaLibraryDirectories } = await import('../src/embedded_language.js');
+  const { mkdtemp, mkdir, writeFile, symlink, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const root = await mkdtemp(join(tmpdir(), 'aura-llama-libs-'));
+  try {
+    const inner = join(root, 'llama-b11425');
+    const nested = join(inner, 'lib');
+    await mkdir(nested, { recursive: true });
+    await writeFile(join(inner, 'llama-server'), '');
+    await writeFile(join(nested, 'libllama-common.so.0.0.11425'), '');
+    await symlink('libllama-common.so.0.0.11425', join(nested, 'libllama-common.so.0'));
+    await writeFile(join(inner, 'libggml.so.0'), '');
+    const found = await findLlamaLibraryDirectories(root);
+    assert.deepEqual(found, [inner, nested]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('llama-server loader path includes all bundled library locations before inherited locations', async () => {
+  const { createLlamaLibraryPath, nativeLoaderFailure } = await import('../src/embedded_language.js');
+  assert.equal(
+    createLlamaLibraryPath('/app/llama-b11425/llama-server',
+      ['/app/llama-b11425', '/app/llama-b11425/lib'],
+      '/usr/local/lib:/app/llama-b11425'),
+    '/app/llama-b11425:/app/llama-b11425/lib:/usr/local/lib',
+  );
+  assert.equal(
+    nativeLoaderFailure('/app/llama-server: error while loading shared libraries: libllama-common.so.0: cannot open shared object file: No such file or directory', 1),
+    'embedded-shared-library-unresolved: libllama-common.so.0 (verify extracted release libraries and LD_LIBRARY_PATH)',
+  );
+});
