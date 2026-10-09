@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { access, chmod, mkdir, readdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
@@ -97,6 +97,40 @@ async function findBinary(dir, depth = 0) {
     }
   }
   return '';
+}
+
+// Official llama.cpp release assets place their .so dependencies beside llama-server
+// (sometimes within nested lib/). Linux does not automatically search that folder.
+export async function findLlamaLibraryDirectories(root, depth = 0) {
+  if (depth > 5) return [];
+  const entries = await readdir(root, { withFileTypes: true });
+  const libraries = entries.some((entry) =>
+    (entry.isFile() || entry.isSymbolicLink())
+    && /^lib(?:llama|ggml|mtmd)[^/]*\.so(?:\..*)?$/i.test(entry.name));
+  const directories = libraries ? [root] : [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    directories.push(...await findLlamaLibraryDirectories(join(root, entry.name), depth + 1));
+  }
+  return [...new Set(directories)];
+}
+
+export function createLlamaLibraryPath(binary, discovered = [], inherited = '') {
+  return [...new Set([
+    dirname(binary),
+    ...discovered,
+    ...String(inherited || '').split(':'),
+  ].filter(Boolean))].join(':');
+}
+
+export function nativeLoaderFailure(stderr, code) {
+  const clean = String(stderr || '').replace(/\s+/g, ' ').trim();
+  const missing = clean.match(/error while loading shared libraries:\s*([^\s:]+)/i);
+  if (missing) return 'embedded-shared-library-unresolved: ' + missing[1]
+    + ' (verify extracted release libraries and LD_LIBRARY_PATH)';
+  const version = clean.match(/(GLIBC(?:XX)?_[0-9.]+)[^ ]*[^]*?not found/i);
+  if (version) return 'embedded-linux-runtime-incompatible: ' + version[1];
+  return 'embedded-engine-exited-' + code + ': ' + clean.slice(0, 280);
 }
 
 async function downloadChecked(url, destination, expectedSha256) {
@@ -235,13 +269,24 @@ export class EmbeddedLanguage {
     }
     if (!binary) throw new Error('embedded-llama-server-not-found');
     await chmod(binary, 0o700);
+    // Resolve bundled shared libraries without installing anything system-wide or
+    // invoking ldconfig/root. The location can vary between llama.cpp releases.
+    const libraryDirs = await findLlamaLibraryDirectories(binDir);
+    if (!libraryDirs.length) {
+      throw new Error('embedded-release-missing-shared-libraries; package extraction incomplete');
+    }
+    const libraryPath = createLlamaLibraryPath(binary, libraryDirs, process.env.LD_LIBRARY_PATH);
     this.stage = 'loading-model';
     const child = spawn(binary, [
       '--host', '127.0.0.1', '--port', String(PORT), '--alias', 'aura-fr',
       '--threads', '2', '-c', '1024', '--parallel', '1', '-hf', MODEL,
     ], {
       cwd: this.cacheDir,
-      env: { ...process.env, LLAMA_CACHE: join(this.cacheDir, 'models') },
+      env: {
+        ...process.env,
+        LLAMA_CACHE: join(this.cacheDir, 'models'),
+        LD_LIBRARY_PATH: libraryPath,
+      },
       stdio: ['ignore', 'ignore', 'pipe'],
     });
     this.worker = child;
@@ -256,7 +301,7 @@ export class EmbeddedLanguage {
         this.worker = null;
         if (this.stage !== 'disabled') {
           this.stage = 'unavailable';
-          this.error = 'embedded-engine-exited-' + code + ': ' + errTail.slice(-180);
+          this.error = nativeLoaderFailure(errTail, code);
         }
       }
     });
