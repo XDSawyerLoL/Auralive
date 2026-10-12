@@ -14,7 +14,7 @@ export function routeReflex({ tier = 'native', difficulty = 0, risk = 0, novelty
   if (safeRisk >= 0.75 || (safeRisk >= 0.5 && safeUncertainty >= 0.7)) {
     required = 'verified';
     reason = 'high-risk-or-risk-and-uncertainty';
-  } else if (safeNovelty >= 0.85 || safeUncertainty >= 0.9) {
+  } else if (safeNovelty >= 0.85 || (safeNovelty >= 0.35 && safeUncertainty >= 0.9)) {
     required = 'deep';
     reason = 'novel-or-uncertain';
   }
