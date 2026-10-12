@@ -101,3 +101,29 @@ test('restores executable bit only on a managed AURA runtime binary',()=>{
     assert.equal(restricted.repairExecutable(),false);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('provisioner can recover a missing native model without allowing implicit downloads in tests',async()=>{
+  let installs=0;
+  const provisioner={
+    enabled:true,
+    async ensure(){installs++;return {executable:'/tmp/test/bin/llama-server',gguf:'/tmp/test/model.gguf',
+      binFound:true,modelFound:true,executableAllowed:true,installed:true};},
+    snapshot(){return {stage:'installed-verified',enabled:true};},
+  };
+  const previous=process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED;
+  process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED='true';
+  const runner=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:false,binFound:false,modelFound:false,executableAllowed:false}),
+    provisioner,spawnProcess:()=>{throw new Error('no fake process');},
+    allocatePort:async()=>54321,
+  });
+  try{
+    assert.equal(await runner.start(),false);
+    assert.equal(installs,1);
+    assert.equal(runner.inspect().modelFound,true);
+    assert.equal(runner.canonicalSource,true);
+  }finally{
+    if(previous===undefined)delete process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED;
+    else process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED=previous;
+  }
+});

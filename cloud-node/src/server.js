@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
+import { embeddedLanguageRuntime } from './embedded_language.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -405,6 +406,15 @@ async function startRuntime() {
     // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
     // The founder can explicitly invoke the authenticated evaluation endpoint.
     app.log.info('AURA Cloud: noyau persistant démarré.');
+    // Always non-blocking: the first verified GGUF install can take minutes.
+    // Production-only to avoid downloading model weights during CI/test runs.
+    if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
+      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false') {
+      void embeddedLanguageRuntime.start().catch((error) => {
+        app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
+          'AURA: local French engine warmup failed');
+      });
+    }
 
     try {
       await horizon.start();

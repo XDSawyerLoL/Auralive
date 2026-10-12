@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
+import { embeddedProvisioner } from './embedded_provisioner.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -95,16 +96,24 @@ function freePort(){
 }
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=fetch,
-    allocatePort=freePort,delay=pause,bootTimeoutMs=60_000}={}){
-    Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs});
+    allocatePort=freePort,delay=pause,bootTimeoutMs=60_000,
+    provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
+    Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
+    this.provisionedPaths=null;this.canonicalSource=false;
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
     this.cachedDiscovery=null;this.lastDiscoveryAt=0;
   }
   inspect(){
+    if(this.provisionedPaths)return this.provisionedPaths;
     if(this.cachedDiscovery && Date.now()-this.lastDiscoveryAt<5000)return this.cachedDiscovery;
     this.cachedDiscovery=this.discover();this.lastDiscoveryAt=Date.now();
     return this.cachedDiscovery;
+  }
+  canProvision(){
+    return Boolean(this.provisioner?.enabled
+      && (process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
+        || (process.env.NODE_ENV==='production' && process.env.CI!=='true')));
   }
   installed(){
     const found=this.inspect();
@@ -145,6 +154,7 @@ export class EmbeddedLanguageRuntime {
           :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
+      provisioning:this.provisioner?.snapshot?.() || {enabled:false},
       paid_model_api_required:false};
   }
   fail(error){
@@ -154,12 +164,33 @@ export class EmbeddedLanguageRuntime {
   async start(){
     if(this.ready && this.child?.exitCode===null)return true;
     if(this.booting)return this.booting;
-    if(Date.now()<this.cooldownUntil || !this.installed())return false;
-    if(!this.repairExecutable())return false;
-    this.booting=this.boot();
+    if(Date.now()<this.cooldownUntil)return false;
+    const hasInstallation=this.installed();
+    const unresolvedLibraries=this.lastFailure
+      && classifyEmbeddedFailure(this.lastFailure).code==='embedded-shared-library-unresolved';
+    const needsCanonical = this.canProvision()
+      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource));
+    if(!hasInstallation && !needsCanonical)return false;
+    this.booting=needsCanonical ? this.installAndBoot() : this.bootWithExecutable();
     try{return await this.booting;}
     catch(error){this.fail(error);return false;}
     finally{this.booting=null;}
+  }
+  async installAndBoot(){
+    const result=await this.provisioner.ensure();
+    if(!result){
+      this.fail(this.provisioner.snapshot().error_code || 'embedded-installation-unavailable');
+      return false;
+    }
+    this.provisionedPaths=result;
+    this.canonicalSource=true;
+    this.cooldownUntil=0;
+    this.lastFailure='';
+    return this.bootWithExecutable();
+  }
+  async bootWithExecutable(){
+    if(!this.repairExecutable())return false;
+    return this.boot();
   }
   async boot(){
     const {executable,gguf}=this.inspect();
@@ -193,6 +224,13 @@ export class EmbeddedLanguageRuntime {
     return this.ready;
   }
   async generate(prompt,system,maxTokens=600){
+    // Initial model installation may transfer hundreds of MB. Do not keep a
+    // public chat request open until the first download finishes.
+    if(this.booting && !this.ready)return '';
+    if(!this.installed() && this.canProvision()){
+      void this.start().catch(error=>this.fail(error));
+      return '';
+    }
     if(!await this.start())return '';
     const started=Date.now();
     try{
