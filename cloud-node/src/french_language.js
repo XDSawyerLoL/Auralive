@@ -208,7 +208,7 @@ export class FrenchLanguageFaculty {
     this.lastError = '';
     // Prefer real on-host inference. Remote free federation remains a last
     // resort only if the local binary or model cannot generate a reply.
-    if (this.embedded.installed()) {
+    if (this.embedded.installed() || this.embedded.canProvision?.()) {
       const answer = normalize(await this.embedded.generate(prompt, system, maxTokens));
       if (answer) {
         this.lastMode = 'hostinger-embedded';
