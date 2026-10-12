@@ -4,6 +4,7 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner } from './embedded_provisioner.js';
 import { nativeLoopbackRequest,nativeListenerEvidence } from './embedded_loopback.js';
+import { nativeSocketEvidence } from './native_socket_evidence.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -402,6 +403,7 @@ export class EmbeddedLanguageRuntime {
     this.healthProbeCount=0;this.healthLastResult='not-requested';
     this.lastProcessObserved=null;
     this.nativeListener={matching_port:null,family:'not-reported'};
+    this.lastSocketEvidence=null;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -442,6 +444,8 @@ export class EmbeddedLanguageRuntime {
     const running=Boolean(this.child&&this.child.exitCode===null&&this.child.signalCode===null);
     const snapshot=running?nativeProcessSnapshot(this.child.pid):null;
     if(snapshot)this.lastProcessObserved=snapshot;
+    const kernelSocket=running?nativeSocketEvidence(this.child.pid,this.port):null;
+    if(kernelSocket?.inspection==='ok')this.lastSocketEvidence=kernelSocket;
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
@@ -483,6 +487,8 @@ export class EmbeddedLanguageRuntime {
       health_probe_count:this.healthProbeCount,
       health_last_result:this.healthLastResult,
       native_listener_report:this.nativeListener,
+      native_socket:kernelSocket,
+      last_native_socket:this.lastSocketEvidence,
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -503,6 +509,7 @@ export class EmbeddedLanguageRuntime {
       last.health_last_result=this.healthLastResult;
       last.native_process=this.lastProcessObserved;
       last.native_listener_report=this.nativeListener;
+      last.native_socket=this.lastSocketEvidence;
     }
   }
   fail(error){
@@ -572,6 +579,7 @@ export class EmbeddedLanguageRuntime {
     this.healthProbeCount=0;this.healthLastResult='not-requested';
     this.lastProcessObserved=null;
     this.nativeListener={matching_port:null,family:'not-reported'};
+    this.lastSocketEvidence=null;
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
@@ -691,10 +699,14 @@ export class EmbeddedLanguageRuntime {
         }
       }catch(error){this.healthLastResult=healthProbeResult(error);}
       this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
+      const socket=nativeSocketEvidence(child.pid,this.port);
+      if(socket.inspection==='ok')this.lastSocketEvidence=socket;
       await this.delay(400);
     }
     if(!this.ready && !this.lastFailure){
       this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
+      const socket=nativeSocketEvidence(child.pid,this.port);
+      if(socket.inspection==='ok')this.lastSocketEvidence=socket;
       this.failureStage='health-timeout';
       this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
       this.recordAttempt('health-timeout');
