@@ -651,3 +651,13 @@ test('failed Hostinger health polling exposes safe counts and preserves both att
   assert.equal(state.boot_attempts[1].profile,'low-memory');
   assert.doesNotMatch(JSON.stringify(state),/\/home\/sensitive|secret-model|private host/);
 });
+
+test('normal llama_model_loader progress must never misclassify a health timeout',()=>{
+  const progress='llama_model_loader: general.architecture=qwen3 loaded tensors';
+  assert.equal(classifyEmbeddedFailure(progress+' embedded-engine-startup-timeout').code,
+    'embedded-startup-timeout');
+  assert.deepEqual(embeddedLogSignals(progress),[]);
+  assert.equal(classifyEmbeddedFailure(progress+' failed to load model').code,
+    'embedded-model-load-failed');
+  assert.deepEqual(embeddedLogSignals('failed to load model'),['model-loader-failed']);
+});
