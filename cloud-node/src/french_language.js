@@ -84,9 +84,15 @@ export class FrenchLanguageFaculty {
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
     const embeddedInstalled = Boolean(embedded.installed);
+    const stage = embedded.provisioning?.stage || '';
+    const installing = embedded.provisioning?.enabled && !embedded.ready
+      && !['not-started','installed-verified','blocked'].includes(stage);
+    const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
     const ready = Boolean(embedded.ready || federation.enabled || local);
-    const blockingReason = embedded.failure_code && (embeddedInstalled || embedded.binary_found)
+    const blockingReason = installing ? 'embedded-language-installing'
+      : provisionFailed ? 'embedded-language-installation-blocked'
+      : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.failure_code
       : ready
@@ -104,7 +110,11 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = embedded.failure_code && (embeddedInstalled || embedded.binary_found)
+    const setupHint = installing
+      ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
+      : provisionFailed
+        ? 'Impossible d’installer le moteur libre : vérifier la mémoire, le disque, le réseau HTTPS et les permissions.'
+      : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
