@@ -68,3 +68,46 @@ export function nativeListenerEvidence(log,expectedPort){
   }
   return ports.at(-1)||{matching_port:null,family:'not-reported'};
 }
+
+
+// Local Unix-domain HTTP transport. This bypasses the TCP loopback path,
+// but still requires a genuine /health response and a real token-generation
+// proof before AURA can advertise language readiness.
+export function nativeUnixRequest(socketPath,endpoint,{
+  method='GET',headers={},body='',signal,
+}={}){
+  const route=String(endpoint||'');
+  const verb=String(method).toUpperCase();
+  if(typeof socketPath!=='string'||!socketPath.startsWith('/')
+     ||socketPath.length>106||!socketPath.endsWith('.sock')
+     ||socketPath.includes('\0'))throw Error('embedded-unix-socket-invalid');
+  if((route==='/health'&&verb!=='GET')
+    ||(route==='/v1/chat/completions'&&verb!=='POST'))
+    throw Error('embedded-unix-endpoint-rejected');
+  return new Promise((resolve,reject)=>{
+    const request=http.request({socketPath,path:route,
+      method:verb,headers,signal,agent:false},response=>{
+      const chunks=[];let size=0;
+      response.on('data',chunk=>{
+        size+=chunk.length;
+        if(size>1024*1024){
+          request.destroy(Error('embedded-unix-response-too-large'));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on('error',reject);
+      response.on('end',()=>{
+        const raw=Buffer.concat(chunks).toString('utf8');
+        resolve({
+          ok:response.statusCode>=200&&response.statusCode<300,
+          status:response.statusCode,
+          async json(){return JSON.parse(raw);},
+        });
+      });
+    });
+    request.on('error',reject);
+    if(body)request.write(body);
+    request.end();
+  });
+}
