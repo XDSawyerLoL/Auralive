@@ -231,8 +231,8 @@ test('dashboard no longer clutters the primary screen with download cards', () =
 });
 
 
-test('dashboard exposes the verifiable minimal conversation identity', () => {
-  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="minimal-conversation-v2"'), true);
+test('dashboard exposes the verifiable immersive conversation identity', () => {
+  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="immersive-cognition-v3"'), true);
   assert.equal(DASHBOARD_HTML.includes('Company OS'), true);
   assert.equal(DASHBOARD_HTML.includes('Parler à AURA'), true);
   for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
