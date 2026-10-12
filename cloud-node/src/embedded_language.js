@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner } from './embedded_provisioner.js';
-import { nativeLoopbackRequest,nativeListenerEvidence } from './embedded_loopback.js';
+import { nativeLoopbackRequest,nativeListenerEvidence,nativeUnixRequest } from './embedded_loopback.js';
 import { nativeSocketEvidence } from './native_socket_evidence.js';
 import { nativeNamespaceComparison,nativeTcpDial,ownNamespaceListener } from './native_connectivity.js';
 
@@ -328,6 +329,13 @@ export function healthProbeResult(error){
 }
 // llama.cpp b11425 defaults HTTP threads to hardware_concurrency()-1. On
 // shared hosting this can exceed the per-account pids quota even with -t=1.
+export function chooseNativeTransport({env=process.env,platform=process.platform}={}){
+  const selected=String(env.AURA_EMBEDDED_LANGUAGE_TRANSPORT||'').toLowerCase();
+  if(selected==='tcp')return 'tcp';
+  if(selected==='unix')return platform==='linux'?'unix':'tcp';
+  return platform==='linux'&&env.NODE_ENV==='production'&&env.CI!=='true'
+    ?'unix':'tcp';
+}
 export function nativeBootArgs(gguf,port,{lowMemory=false,threads=1}={}){
   const context=lowMemory?768:2048;
   // In Hostinger mode, ignore old overrides that can silently restore extra workers.
@@ -385,8 +393,10 @@ function freePort(){
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=nativeLoopbackRequest,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
+    transport=null,
     provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
     Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
+    this.transportPreference=transport;
     this.provisionedPaths=null;this.canonicalSource=false;
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
@@ -406,6 +416,8 @@ export class EmbeddedLanguageRuntime {
     this.nativeListener={matching_port:null,family:'not-reported'};
     this.lastSocketEvidence=null;
     this.lastRefusedSocket=null;this.lastNodeListener=null;this.lastTcpDial=null;
+    this.nativeTransport='tcp';this.unixSocketPath='';
+    this.transportFallback='';
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -490,10 +502,15 @@ export class EmbeddedLanguageRuntime {
       health_probe_count:this.healthProbeCount,
       health_last_result:this.healthLastResult,
       native_listener_report:this.nativeListener,
-      native_socket:kernelSocket,
+      native_socket:this.nativeTransport==='unix'?null:kernelSocket,
+      local_transport:this.nativeTransport,
+      unix_socket_present:this.nativeTransport==='unix'
+        ?Boolean(this.unixSocketPath&&fs.existsSync(this.unixSocketPath)):null,
+      transport_fallback:this.transportFallback,
       last_native_socket:this.lastSocketEvidence,
       network_namespace:networkNamespaces,
-      node_namespace_listener:running?ownNamespaceListener(this.port):this.lastNodeListener,
+      node_namespace_listener:this.nativeTransport==='tcp'
+        ?(running?ownNamespaceListener(this.port):this.lastNodeListener):null,
       socket_at_last_refusal:this.lastRefusedSocket,
       tcp_dial_after_refusal:this.lastTcpDial,
       paid_model_api_required:false};
@@ -584,7 +601,25 @@ export class EmbeddedLanguageRuntime {
   async boot(useElfLoader=false,lowMemory=false){
     const {executable,gguf}=this.inspect();
     this.lastFailure='';this.ready=false;this.lastProbeAt='';
-    this.healthSeen=false;this.lastProbeLatencyMs=0;this.port=await this.allocatePort();
+    this.healthSeen=false;this.lastProbeLatencyMs=0;
+    this.nativeTransport=this.transportPreference||chooseNativeTransport();
+    this.unixSocketPath='';this.transportFallback='';
+    let unixDir='';
+    if(this.nativeTransport==='unix'){
+      try{
+        unixDir=fs.mkdtempSync(path.join(os.tmpdir(),'aura-lang-'));
+        fs.chmodSync(unixDir,0o700);
+        this.unixSocketPath=path.join(unixDir,'model.sock');
+        if(this.unixSocketPath.length>106)throw Error('unix-path-too-long');
+        this.port=0;
+      }catch{
+        if(unixDir)try{fs.rmSync(unixDir,{recursive:true,force:true});}catch{}
+        unixDir='';this.unixSocketPath='';
+        this.nativeTransport='tcp';
+        this.transportFallback='unix-socket-unavailable';
+      }
+    }
+    if(this.nativeTransport==='tcp')this.port=await this.allocatePort();
     this.nativeOutputObserved=false;this.nativeMilestones=[];
     this.healthProbeCount=0;this.healthLastResult='not-requested';
     this.lastProcessObserved=null;
@@ -596,6 +631,7 @@ export class EmbeddedLanguageRuntime {
     this.bootProfile=lowMemory?'low-memory':'standard';
     this.bootStartedAt=Date.now();
     this.bootAttempts.push({id:this.bootStartedAt,profile:this.bootProfile,
+      transport:this.nativeTransport,
       outcome:'started',elapsed_ms:0,failure_code:'',
       exit_code:null,exit_signal:null,signals:[],failure_stage:'spawning-native-server',
       health_seen:false,inference_verified:false,
@@ -607,21 +643,30 @@ export class EmbeddedLanguageRuntime {
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
     this.pidsAfterFailure=null;
     let child;
+    const cleanupUnix=()=>{
+      if(unixDir)try{fs.rmSync(unixDir,{recursive:true,force:true});}catch{}
+    };
     try{
-      const spec=nativeLaunchSpec(executable,nativeBootArgs(gguf,this.port,{
+      const args=nativeBootArgs(gguf,this.port,{
         lowMemory,threads:Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||1,
-      }),useElfLoader);
+      });
+      if(this.nativeTransport==='unix'){
+        args[args.indexOf('--host')+1]=this.unixSocketPath;
+      }
+      const spec=nativeLaunchSpec(executable,args,useElfLoader);
       if(!spec)throw new Error('embedded-system-loader-unavailable');
       this.launchMode=spec.mode;
       child=this.spawnProcess(spec.command,spec.args,
         {cwd:path.dirname(executable),env:spec.env,
          stdio:['ignore','pipe','pipe'],shell:false});
     }catch(error){
+      cleanupUnix();
       this.failureStage='native-spawn-error';this.fail(error);
       this.recordAttempt('spawn-error');
       return false;
     }
     this.child=child;
+    if(unixDir)child.once('close',cleanupUnix);
     let stderr='',stdout='';
     child.stderr?.on('data',chunk=>{
       this.nativeOutputObserved=true;
@@ -666,7 +711,7 @@ export class EmbeddedLanguageRuntime {
       && child.signalCode===null && !this.lastFailure){
       try{
         this.healthProbeCount++;
-        const health=await this.request('http://127.0.0.1:'+this.port+'/health',{
+        const health=await this.localRequest('/health',{
           signal:AbortSignal.timeout(1500)});
         this.healthLastResult=health.ok?'ok':Number.isInteger(health.status)?'http-'+health.status:'http-error';
         if(health.ok){
@@ -674,7 +719,7 @@ export class EmbeddedLanguageRuntime {
           this.failureStage='verifying-inference';
           const started=Date.now();
           try{
-            const proof=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
+            const proof=await this.localRequest('/v1/chat/completions',{
               method:'POST',headers:{'content-type':'application/json'},
               body:JSON.stringify({model:'local',stream:false,temperature:0,max_tokens:48,
                 chat_template_kwargs:{enable_thinking:false},
@@ -717,26 +762,36 @@ export class EmbeddedLanguageRuntime {
           this.lastRefusedSocket=socket;
           this.lastNodeListener=ownNamespaceListener(this.port);
           if(socket.inspection==='ok')this.lastSocketEvidence=socket;
-          if(socket.expected_port===true&&!this.lastTcpDial){
+          if(this.nativeTransport==='tcp'&&socket.expected_port===true&&!this.lastTcpDial){
             this.lastTcpDial=await nativeTcpDial(this.port);
           }
         }
       }
       this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
-      const socket=nativeSocketEvidence(child.pid,this.port);
-      if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+      if(this.nativeTransport==='tcp'){
+        const socket=nativeSocketEvidence(child.pid,this.port);
+        if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+      }
       await this.delay(400);
     }
     if(!this.ready && !this.lastFailure){
       this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
-      const socket=nativeSocketEvidence(child.pid,this.port);
-      if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+      if(this.nativeTransport==='tcp'){
+        const socket=nativeSocketEvidence(child.pid,this.port);
+        if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+      }
       this.failureStage='health-timeout';
       this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
       this.recordAttempt('health-timeout');
     }
     if(!this.ready)try{child.kill('SIGTERM');}catch{}
     return this.ready;
+  }
+  localRequest(endpoint,options={}){
+    if(this.nativeTransport==='unix'&&this.unixSocketPath
+      &&this.request===nativeLoopbackRequest)
+      return nativeUnixRequest(this.unixSocketPath,endpoint,options);
+    return this.request('http://127.0.0.1:'+this.port+endpoint,options);
   }
   async generate(prompt,system,maxTokens=600){
     // Initial model installation may transfer hundreds of MB. Do not keep a
@@ -757,7 +812,7 @@ export class EmbeddedLanguageRuntime {
     }
     const started=Date.now();
     try{
-      const response=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
+      const response=await this.localRequest('/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({model:'local',stream:false,temperature:0.6,
           max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),
