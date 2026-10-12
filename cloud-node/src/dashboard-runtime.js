@@ -584,7 +584,14 @@ function renderLanguageEngine(state){
     'embedded-download-http-403':'Téléchargement refusé par le serveur source',
     'embedded-download-http-429':'Téléchargement limité par le serveur source',
     'embedded-download-http-404':'Fichier du modèle introuvable',
-    'host-disallows-native-execution':'Exécution native interdite sur cet hébergement'
+    'host-disallows-native-execution':'Exécution native interdite sur cet hébergement',
+    'embedded-insufficient-memory':'Mémoire Hostinger insuffisante · réessai allégé',
+    'embedded-startup-timeout':'Initialisation du modèle trop lente',
+    'embedded-model-load-failed':'Chargement du modèle GGUF refusé',
+    'embedded-unsupported-startup-option':'Option incompatible avec llama.cpp',
+    'embedded-cpu-instruction-unsupported':'Instruction CPU non prise en charge',
+    'embedded-native-segfault':'Arrêt anormal du moteur natif',
+    'embedded-loopback-port-in-use':'Port local du modèle déjà occupé'
   };
   $('engineTitle').textContent=healthy?'Français naturel opérationnel'
     :blocked?(titles[fail]||'Moteur français indisponible')
@@ -594,7 +601,13 @@ function renderLanguageEngine(state){
     :blocked
       ?'Étape échouée : '+String(install.failed_stage||stage)+
         '. Code : '+(fail||'échec du démarrage')+
-        '. Ce diagnostic provient du serveur, pas d’une simulation d’intelligence.'
+        '. Profil : '+String(state?.boot_profile||'non déterminé')+
+        '. Fin du processus : '+String(state?.process_exit?.signal||state?.process_exit?.code??'inconnue')+
+        '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length?state.log_signals.join(', '):'non classifiés')+
+        (state?.resource_before_start?.limit_mb!==null&&state?.resource_before_start?.limit_mb!==undefined
+          ? '. RAM allouée : '+String(state.resource_before_start.limit_mb)+' Mo':'')+
+        (state?.oom_kills_during_start>0 ? '. Arrêt mémoire confirmé par cgroup.':'')+
+        '. Aucun journal privé n’est exposé.'
       :'Le modèle est en cours de préparation. La barre représente une étape d’installation, pas un score d’apprentissage.';
   $('engineStage').textContent=labels[stage]||String(state&&state.status||'Moteur non démarré');
   $('engineProgress').style.width=healthy?'100%':(progress[stage]||0)+'%';
