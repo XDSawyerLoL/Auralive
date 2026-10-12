@@ -204,12 +204,12 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
         <div class="engine-kicker"><span>FACULTÉ LINGUISTIQUE · INFÉRENCE LOCALE</span><span class="engine-chip" id="engineChip">Diagnostic</span></div>
         <div class="engine-title" id="engineTitle">Connexion au moteur de français…</div>
         <div class="engine-description" id="engineDescription">Lecture de l’installation et de sa disponibilité réelle sur le serveur.</div>
-        <div class="engine-progress" aria-label="Étape de préparation du moteur"><span id="engineProgress"></span></div>
+        <div class="engine-progress" aria-label="Installation des fichiers uniquement, pas apprentissage du français"><span id="engineProgress"></span></div>
         <div class="engine-row"><span id="engineStage">État en attente</span><span id="engineCost">Modèle libre · aucun coût par requête</span></div>
         <div class="engine-foot"><span id="engineRevision">Révision moteur —</span><button type="button" id="engineRefresh">Actualiser l’état</button></div>
       </section>
-      <section class="panel language-card" aria-label="Progression mesurée du français">
-        <div class="language-head"><strong>Apprentissage du français</strong><span class="language-score" id="languageScore">—</span></div>
+      <section class="panel language-card" aria-label="Évaluation mesurée du français">
+        <div class="language-head"><strong>Qualité du français · tests réels</strong><span class="language-score" id="languageScore">—</span></div>
         <div class="language-track" id="languageTrack" role="progressbar" aria-label="Évaluation du langage" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Pas encore évalué"><div class="language-fill" id="languageProgressBar"></div></div>
         <div class="language-details"><span id="languageTrend">Premier test en attente</span><span id="languageTestDate">Tests comparables · 9 tâches</span></div>
         <p class="language-help" id="languageSetupHelp" hidden></p>

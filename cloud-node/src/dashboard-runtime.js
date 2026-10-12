@@ -553,71 +553,79 @@ function renderLanguageProgress(report){
 
 function renderLanguageEngine(state){
   const panel=$('enginePanel');if(!panel)return;
-  const install=state&&state.provisioning||{};
+  const install=state?.provisioning||{};
   const stage=String(install.stage||'not-started');
-  const fail=String(install.error_code||state&&state.failure_code||'');
-  const labels={
-    'not-started':'Préparation non démarrée',
-    'locating-existing-install':'Recherche du modèle local',
-    'downloading-cpu-runtime':'Téléchargement du moteur CPU',
-    'extracting-cpu-runtime':'Vérification des bibliothèques',
-    'downloading-open-model':'Téléchargement du modèle Qwen',
-    'installed-verified':'Fichiers du modèle vérifiés',
-    'blocked':'Installation interrompue'
-  };
-  const progress={
-    'not-started':0,'locating-existing-install':9,
-    'downloading-cpu-runtime':25,'extracting-cpu-runtime':44,
-    'downloading-open-model':70,'installed-verified':88,'blocked':0
-  };
-  const healthy=Boolean(state&&state.ready&&state.last_success_at);
-  const blocked=stage==='blocked'||!!fail;
-  const kind=healthy?'ready':blocked?'blocked':'loading';
+  const backend=String(state?.status||'');
+  const fail=String(install.error_code||state?.failure_code||'');
+  const installed=stage==='installed-verified'&&!!state?.installed;
+  const healthy=Boolean(state?.ready&&state?.last_success_at);
+  const booting=backend==='starting';
+  const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
+  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'À corriger':'En préparation';
-  $('railLanguage').textContent=healthy?'Conversation disponible':blocked?'Moteur bloqué':'Moteur en préparation';
+  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('railLanguage').textContent=healthy?'Conversation disponible'
+    :booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
-    'embedded-unsafe-redirect':'Téléchargement bloqué par une redirection HTTPS',
-    'embedded-sha256-mismatch':'Le fichier reçu a échoué au contrôle SHA-256',
-    'embedded-insufficient-cgroup-memory':'Mémoire serveur insuffisante pour le modèle',
-    'embedded-cache-unavailable-or-noexec':'Dossier de modèle inexécutable ou espace insuffisant',
-    'embedded-download-http-403':'Téléchargement refusé par le serveur source',
-    'embedded-download-http-429':'Téléchargement limité par le serveur source',
-    'embedded-download-http-404':'Fichier du modèle introuvable',
-    'host-disallows-native-execution':'Exécution native interdite sur cet hébergement',
-    'embedded-insufficient-memory':'Mémoire Hostinger insuffisante · réessai allégé',
-    'embedded-thread-capacity-exhausted':'Limite de threads Hostinger atteinte',
-    'embedded-startup-timeout':'Initialisation du modèle trop lente',
-    'embedded-model-load-failed':'Chargement du modèle GGUF refusé',
-    'embedded-unsupported-startup-option':'Option incompatible avec llama.cpp',
-    'embedded-cpu-instruction-unsupported':'Instruction CPU non prise en charge',
+    'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
+    'embedded-sha256-mismatch':'Le modèle ou moteur téléchargé a échoué au contrôle d’intégrité',
+    'embedded-insufficient-cgroup-memory':'Mémoire serveur insuffisante pour installer le modèle',
+    'embedded-cache-unavailable-or-noexec':'Cache inexécutable ou espace disque insuffisant',
+    'embedded-download-http-403':'Téléchargement refusé à la source',
+    'embedded-download-http-429':'Téléchargement temporairement limité',
+    'embedded-download-http-404':'Archive du moteur ou GGUF introuvable',
+    'embedded-thread-capacity-exhausted':'Limite de threads de Hostinger atteinte',
+    'embedded-process-exit-0':'Le moteur quitte sans servir le modèle',
+    'embedded-insufficient-memory':'Mémoire du serveur insuffisante',
+    'embedded-startup-timeout':'Démarrage du moteur trop long',
+    'embedded-model-load-failed':'Modèle GGUF impossible à charger',
     'embedded-native-segfault':'Arrêt anormal du moteur natif',
-    'embedded-loopback-port-in-use':'Port local du modèle déjà occupé'
+    'host-disallows-native-execution':'Exécution native interdite',
+    'embedded-cpu-instruction-unsupported':'Instructions du processeur incompatibles',
+    'embedded-shared-library-unresolved':'Bibliothèque native introuvable',
+    'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
   $('engineTitle').textContent=healthy?'Français naturel opérationnel'
     :blocked?(titles[fail]||'Moteur français indisponible')
-      :'Installation autonome du français';
+      :booting?'Chargement du moteur linguistique'
+        :'Fichiers installés · français non vérifié';
+  const attempts=Array.isArray(state?.boot_attempts)?state.boot_attempts:[];
+  const history=attempts.map(a=>a.profile+': '+a.outcome+
+    (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:''))
+    .join(' · ');
   $('engineDescription').textContent=healthy
-    ?'Une réponse a été générée par le modèle sur ce serveur, sans API linguistique payante.'
-    :blocked
-      ?'Étape échouée : '+String(install.failed_stage||stage)+
-        '. Code : '+(fail||'échec du démarrage')+
-        '. Profil : '+String(state?.boot_profile||'non déterminé')+
-        '. Fin du processus : '+String(state?.process_exit?.signal||(state?.process_exit?.code??'inconnue'))+
-        '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length?state.log_signals.join(', '):'non classifiés')+
-        (state?.resource_before_start?.limit_mb!==null&&state?.resource_before_start?.limit_mb!==undefined
-          ? '. RAM allouée : '+String(state.resource_before_start.limit_mb)+' Mo':'')+
-        (state?.pids_before_start?.max!==null && state?.pids_before_start?.max!==undefined
-          ? '. Threads/tâches : '+String(state.pids_before_start.current??'?')+
-             '/'+String(state.pids_before_start.max)+' autorisés':'')+
-        (state?.pids_after_failure?.failed_forks>state?.pids_before_start?.failed_forks
-          ? '. Limite de création de threads atteinte (cgroup).':'')+
-        (state?.oom_kills_during_start>0 ? '. Arrêt mémoire confirmé par cgroup.':'')+
-        '. Aucun journal privé n’est exposé.'
-      :'Le modèle est en cours de préparation. La barre représente une étape d’installation, pas un score d’apprentissage.';
-  $('engineStage').textContent=labels[stage]||String(state&&state.status||'Moteur non démarré');
-  $('engineProgress').style.width=healthy?'100%':(progress[stage]||0)+'%';
-  $('engineRevision').textContent='llama.cpp '+String(install.engine_revision||'local')+' · '+String(install.model||'GGUF');
+    ?'Une véritable réponse française a été produite sur ce serveur. Aucun entraînement des poids n’est présumé.'
+    :booting
+      ?'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée.'
+      :blocked
+        ?'Fichiers : '+(installed?'installés et vérifiés':'installation incomplète')+
+          '. Moteur : échec du démarrage'+(fail?' ('+fail+')':'')+
+          '. Dernier processus : '+String(state?.process_exit?.signal||(state?.process_exit?.code??'inconnu'))+
+          '. Tentatives : '+(history||'aucun historique')+
+          '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length
+            ?state.log_signals.join(', '):'aucun signal classifié')+
+          '. Aucun texte de réponse n’a été généré.'
+        :'Le modèle est installé, mais le moteur n’a pas encore répondu. La présence des fichiers ne mesure pas l’apprentissage.';
+  const stages={
+    'not-started':'Installation non démarrée',
+    'locating-existing-install':'Localisation des fichiers',
+    'downloading-cpu-runtime':'Téléchargement du runtime',
+    'extracting-cpu-runtime':'Vérification du runtime',
+    'downloading-open-model':'Téléchargement GGUF',
+    'installed-verified':'Fichiers GGUF et exécutable vérifiés',
+    'blocked':'Installation bloquée'
+  };
+  $('engineStage').textContent=stages[stage]||backend||'En attente';
+  // This bar measures file installation only, never linguistic learning.
+  const fileProgress={
+    'not-started':0,'locating-existing-install':10,'downloading-cpu-runtime':25,
+    'extracting-cpu-runtime':50,'downloading-open-model':70,
+    'installed-verified':100,'blocked':0
+  };
+  $('engineProgress').style.width=(fileProgress[stage]??0)+'%';
+  $('engineRevision').textContent='llama.cpp '+String(install.engine_revision||'local')+
+    ' · '+String(install.model||'GGUF')+
+    ' · '+String(install.engine_variant||'variante inconnue');
 }
 async function refreshEnginePanel(){
   try{renderLanguageEngine(await api('/api/language/embedded/status'));}

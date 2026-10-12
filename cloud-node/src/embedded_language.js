@@ -343,6 +343,7 @@ export class EmbeddedLanguageRuntime {
     this.lastLogSignals=[];this.failureStage='';this.memoryAtBoot=null;
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
     this.pidsAtBoot=null;this.pidsAfterFailure=null;
+    this.bootAttempts=[];this.bootStartedAt=0;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -407,7 +408,20 @@ export class EmbeddedLanguageRuntime {
       oom_kills_during_start:this.lastOomKillDelta,
       pids_before_start:this.pidsAtBoot,
       pids_after_failure:this.pidsAfterFailure,
+      boot_attempts:this.bootAttempts.slice(-4),
       paid_model_api_required:false};
+  }
+  recordAttempt(outcome,detail={}){
+    const last=this.bootAttempts[this.bootAttempts.length-1];
+    if(last && last.id===this.bootStartedAt && last.outcome==='started'){
+      last.outcome=outcome;
+      last.elapsed_ms=Math.max(0,Date.now()-this.bootStartedAt);
+      last.failure_code=outcome==='ready'?'':classifyEmbeddedFailure(this.lastFailure).code;
+      last.exit_code=detail.code??null;
+      last.exit_signal=detail.signal??null;
+      last.signals=this.lastLogSignals.slice();
+      last.failure_stage=this.failureStage;
+    }
   }
   fail(error){
     this.ready=false;this.lastFailure=errorText(error);
@@ -474,6 +488,11 @@ export class EmbeddedLanguageRuntime {
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
+    this.bootStartedAt=Date.now();
+    this.bootAttempts.push({id:this.bootStartedAt,profile:this.bootProfile,
+      outcome:'started',elapsed_ms:0,failure_code:'',
+      exit_code:null,exit_signal:null,signals:[],failure_stage:'spawning-native-server'});
+    this.bootAttempts=this.bootAttempts.slice(-4);
     this.memoryAtBoot=cgroupMemorySnapshot();
     this.pidsAtBoot=cgroupPidSnapshot();
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
@@ -488,7 +507,11 @@ export class EmbeddedLanguageRuntime {
       child=this.spawnProcess(spec.command,spec.args,
         {cwd:path.dirname(executable),env:spec.env,
          stdio:['ignore','pipe','pipe'],shell:false});
-    }catch(error){this.fail(error);return false;}
+    }catch(error){
+      this.failureStage='native-spawn-error';this.fail(error);
+      this.recordAttempt('spawn-error');
+      return false;
+    }
     this.child=child;
     let stderr='',stdout='';
     child.stderr?.on('data',chunk=>{
@@ -502,6 +525,7 @@ export class EmbeddedLanguageRuntime {
     child.on('error',error=>{
       if(this.child===child){
         this.failureStage='native-spawn-error';this.fail(error);
+        this.recordAttempt('spawn-error');
       }
     });
     child.on('exit',(code,signal)=>{
@@ -509,9 +533,11 @@ export class EmbeddedLanguageRuntime {
         this.lastProcessExit={code:code??null,signal:signal??null};
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
-        this.fail((stderr||stdout||'embedded-engine-exited-'+code)
-          +(signal?' exit.signal.'+signal.toLowerCase():'')
-          +(code===137?' exit.code.137':''));
+        this.fail((stderr||stdout||'')+
+          ' embedded-engine-exited-'+(code??'signal')+
+          (signal?' exit.signal.'+signal.toLowerCase():'')+
+          (code===137?' exit.code.137':''));
+        this.recordAttempt('exit',{code,signal});
       }
     });
     const deadline=Date.now()+this.bootTimeoutMs;
@@ -521,13 +547,17 @@ export class EmbeddedLanguageRuntime {
       try{
         const health=await this.request('http://127.0.0.1:'+this.port+'/health',{
           signal:AbortSignal.timeout(1500)});
-        if(health.ok){this.ready=true;this.failureStage='';return true;}
+        if(health.ok){
+          this.ready=true;this.failureStage='';
+          this.recordAttempt('ready');return true;
+        }
       }catch{}
       await this.delay(400);
     }
     if(!this.ready && !this.lastFailure){
       this.failureStage='health-timeout';
       this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
+      this.recordAttempt('health-timeout');
     }
     if(!this.ready)try{child.kill('SIGTERM');}catch{}
     return this.ready;
@@ -535,12 +565,20 @@ export class EmbeddedLanguageRuntime {
   async generate(prompt,system,maxTokens=600){
     // Initial model installation may transfer hundreds of MB. Do not keep a
     // public chat request open until the first download finishes.
-    if(this.booting && !this.ready)return '';
-    if(!this.installed() && this.canProvision()){
-      void this.start().catch(error=>this.fail(error));
+    // Never keep the user's HTTP chat request open while the on-host model
+    // installs or attempts 150s boot profiles. Initiate the optional engine
+    // asynchronously; its readiness is subsequently checked and reported.
+    if(!this.ready){
+      if(!this.booting && Date.now()>=this.cooldownUntil
+        && (this.installed()||this.canProvision())){
+        void this.start().catch(error=>this.fail(error));
+      }
       return '';
     }
-    if(!await this.start())return '';
+    if(this.child && (this.child.exitCode!==null||this.child.signalCode!==null)){
+      this.fail('embedded-model-process-exited-before-generation');
+      return '';
+    }
     const started=Date.now();
     try{
       const response=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
