@@ -86,7 +86,7 @@ test('runtime in forced Unix mode checks real HTTP responses before marking read
     assert.equal(state.unix_socket_present,true);
     assert.equal(state.health_seen,true);
     assert.equal(state.boot_attempts[0].transport,'unix');
-    assert.equal(args[args.indexOf('--port')+1],'0');
+    assert.equal(args.includes('--port'),false);
     assert.equal(await runtime.generate('Parle en français','Tu es AURA',64),'Bonjour');
   }finally{
     if(server?.listening){
