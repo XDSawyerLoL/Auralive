@@ -81,12 +81,18 @@ export class EmbeddedLanguageRuntime {
     Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs});
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
+    this.cachedDiscovery=null;this.lastDiscoveryAt=0;
+  }
+  inspect(){
+    if(this.cachedDiscovery && Date.now()-this.lastDiscoveryAt<5000)return this.cachedDiscovery;
+    this.cachedDiscovery=this.discover();this.lastDiscoveryAt=Date.now();
+    return this.cachedDiscovery;
   }
   installed(){
-    return process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false' && this.discover().installed;
+    return process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false' && this.inspect().installed;
   }
   status(){
-    const item=this.discover(),enabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
+    const item=this.inspect(),enabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
     const failure=this.lastFailure?classifyEmbeddedFailure(this.lastFailure):null;
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
@@ -95,9 +101,11 @@ export class EmbeddedLanguageRuntime {
         :!item.binFound?'binary-missing':!item.modelFound?'gguf-missing'
           :!item.executableAllowed?'permission-denied':this.booting?'starting'
             :failure?'startup-failed':'available-not-started',
-      failure_code:failure?.code||'',
+      failure_code:failure?.code||(!item.executableAllowed && item.binFound?'host-disallows-native-execution':''),
       setup_hint:failure?.hint||(!item.binFound?'Fournir AURA_EMBEDDED_LLAMA_BIN.'
-        :!item.modelFound?'Fournir AURA_EMBEDDED_LANGUAGE_MODEL vers un GGUF local.':''),
+        :!item.modelFound?'Fournir AURA_EMBEDDED_LANGUAGE_MODEL vers un GGUF local.'
+          :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
+
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
       paid_model_api_required:false};
   }
@@ -113,7 +121,7 @@ export class EmbeddedLanguageRuntime {
     try{return await this.booting;}finally{this.booting=null;}
   }
   async boot(){
-    const {executable,gguf}=this.discover();
+    const {executable,gguf}=this.inspect();
     this.lastFailure='';this.port=await this.allocatePort();
     let child;
     try{
@@ -160,7 +168,11 @@ export class EmbeddedLanguageRuntime {
       if(!answer)throw Error('embedded-empty-response');
       this.lastSuccessAt=new Date().toISOString();this.lastLatencyMs=Date.now()-started;
       this.lastFailure='';return answer;
-    }catch(error){this.fail(error);return '';}
+    }catch(error){
+      this.fail(error);
+      try{if(this.child?.exitCode===null)this.child.kill('SIGTERM');}catch{}
+      return '';
+    }
   }
 }
 export const embeddedLanguageRuntime=new EmbeddedLanguageRuntime();

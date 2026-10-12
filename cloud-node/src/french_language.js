@@ -85,7 +85,7 @@ export class FrenchLanguageFaculty {
     const embedded = this.embedded.status();
     const embeddedInstalled = Boolean(embedded.installed);
     const ready = Boolean(embeddedInstalled || federation.enabled || local);
-    const blockingReason = embeddedInstalled && embedded.failure_code
+    const blockingReason = embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       ? embedded.failure_code
       : ready
       ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
@@ -102,7 +102,7 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = embeddedInstalled && embedded.failure_code
+    const setupHint = embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
@@ -226,6 +226,7 @@ export class FrenchLanguageFaculty {
         const answer = normalize(result?.answer || '');
         if (answer) {
           this.lastMode = 'zero-cost-federation';
+          this.lastError = '';
           this.lastBackend = String(result?.provider || 'openrouter-free');
           this.lastModel = String(result?.model || '');
           this.lastLatencyMs = Date.now() - started;
@@ -246,6 +247,7 @@ export class FrenchLanguageFaculty {
         ));
         if (answer) {
           this.lastMode = 'runtime-local';
+          this.lastError = '';
           this.lastBackend = 'aura-runtime-local';
           this.lastModel = '';
           this.lastLatencyMs = Date.now() - started;

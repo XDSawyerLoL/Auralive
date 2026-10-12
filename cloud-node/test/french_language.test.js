@@ -172,3 +172,19 @@ test('local failure cannot masquerade successful explicitly free provider', asyn
   assert.equal(faculty.lastMode, 'zero-cost-federation');
   assert.equal((await faculty.status()).verified_ready, true);
 });
+
+test('host-native binary denial is reported instead of unrelated OpenRouter setup',async()=>{
+  const embedded={
+    installed:()=>false,
+    status:()=>({installed:false,binary_found:true,model_found:true,
+      executable_allowed:false,ready:false,failure_code:'host-disallows-native-execution',
+      setup_hint:'Le binaire est refusé par Hostinger.'}),
+  };
+  const faculty=new FrenchLanguageFaculty({
+    federation:{enabled:false,snapshot:()=>({enabled:false,zero_cost_mode:true,api_key_configured:false})},
+    bridge:null,
+  },{embedded});
+  const status=await faculty.status();
+  assert.equal(status.blocking_reason,'host-disallows-native-execution');
+  assert.match(status.setup_hint,/Hostinger/);
+});

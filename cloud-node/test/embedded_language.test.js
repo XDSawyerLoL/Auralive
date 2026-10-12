@@ -42,3 +42,12 @@ test('missing model refuses to launch and never claims readiness',async()=>{
   assert.equal(engine.status().status,'gguf-missing');
   assert.equal(engine.status().ready,false);
 });
+
+test('binary without execution rights produces an explicit Hostinger failure',()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:false,binFound:true,modelFound:true,executableAllowed:false}),
+  });
+  const status=runtime.status();
+  assert.equal(status.failure_code,'host-disallows-native-execution');
+  assert.equal(status.status,'permission-denied');
+});
