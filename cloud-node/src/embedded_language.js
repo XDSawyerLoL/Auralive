@@ -296,9 +296,9 @@ export function nativeProcessSnapshot(pid,{read=fs.readFileSync,platform=process
   if(platform!=='linux'||!Number.isSafeInteger(pid)||pid<=0||pid>2147483647)return null;
   let raw;
   try{raw=String(read('/proc/'+pid+'/status','utf8'));}catch{return null;}
-  const state=raw.match(/^State:\\s*([RSDZTIX])/m)?.[1]||'unknown';
-  const threads=Number(raw.match(/^Threads:\\s*(\\d+)/m)?.[1]);
-  const kb=Number(raw.match(/^VmRSS:\\s*(\\d+)\\s*kB/m)?.[1]);
+  const state=raw.match(/^State:\s*([RSDZTIX])/m)?.[1]||'unknown';
+  const threads=Number(raw.match(/^Threads:\s*(\d+)/m)?.[1]);
+  const kb=Number(raw.match(/^VmRSS:\s*(\d+)\s*kB/m)?.[1]);
   return {
     state,
     threads:Number.isSafeInteger(threads)&&threads>=0&&threads<1e6?threads:null,
