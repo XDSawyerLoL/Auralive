@@ -276,7 +276,8 @@ export function cgroupPidSnapshot({read=fs.readFileSync}={}){
 // shared hosting this can exceed the per-account pids quota even with -t=1.
 export function nativeBootArgs(gguf,port,{lowMemory=false,threads=1}={}){
   const context=lowMemory?768:2048;
-  const cpu=Math.max(1,Math.min(2,Number(threads)||1));
+  // In Hostinger mode, ignore old overrides that can silently restore extra workers.
+  const cpu=1;
   return ['-m',gguf,'--host','127.0.0.1','--port',String(port),
     '--ctx-size',String(context),'--threads',String(lowMemory?1:cpu),
     '--threads-batch','1','--threads-http','1','--parallel','1',
