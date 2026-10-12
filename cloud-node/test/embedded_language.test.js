@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
-  EmbeddedLanguageRuntime} from '../src/embedded_language.js';
+  EmbeddedLanguageRuntime,repairLlamaLibraryAliases} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -100,4 +100,23 @@ test('restores executable bit only on a managed AURA runtime binary',()=>{
     })});
     assert.equal(restricted.repairExecutable(),false);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('Hostinger managed runtime repairs a missing SONAME link but never touches foreign locations',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-native-libs-'));
+ try {
+  const managed=path.join(root,'.aura-language-runtime','llama-b11425');
+  fs.mkdirSync(managed,{recursive:true});
+  fs.writeFileSync(path.join(managed,'libllama-common.so.0.5'),'test');
+  const foreign=path.join(root,'foreign');
+  fs.mkdirSync(foreign);
+  fs.writeFileSync(path.join(foreign,'libllama-common.so.0.5'),'test');
+  assert.deepEqual(repairLlamaLibraryAliases(path.join(foreign,'llama-server')),[]);
+  assert.equal(fs.existsSync(path.join(foreign,'libllama-common.so.0')),false);
+  if (process.platform !== 'win32') {
+    assert.deepEqual(repairLlamaLibraryAliases(path.join(managed,'llama-server')),['libllama-common.so.0']);
+    assert.equal(fs.realpathSync(path.join(managed,'libllama-common.so.0')),
+      path.join(managed,'libllama-common.so.0.5'));
+  }
+ }finally{fs.rmSync(root,{force:true,recursive:true})}
 });
