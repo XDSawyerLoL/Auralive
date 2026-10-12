@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
-  EmbeddedLanguageRuntime,repairLlamaLibraryAliases} from '../src/embedded_language.js';
+  EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -140,9 +141,67 @@ test('Hostinger managed runtime repairs a missing SONAME link but never touches 
   assert.deepEqual(repairLlamaLibraryAliases(path.join(foreign,'llama-server')),[]);
   assert.equal(fs.existsSync(path.join(foreign,'libllama-common.so.0')),false);
   if (process.platform !== 'win32') {
-    assert.deepEqual(repairLlamaLibraryAliases(path.join(managed,'llama-server')),['libllama-common.so.0']);
+    assert.ok(repairLlamaLibraryAliases(path.join(managed,'llama-server')).includes('libllama-common.so.0'));
     assert.equal(fs.realpathSync(path.join(managed,'libllama-common.so.0')),
       path.join(managed,'libllama-common.so.0.5'));
   }
  }finally{fs.rmSync(root,{force:true,recursive:true})}
+});
+
+test('repairs authentic-style broken b11425 SONAME links including ggml and mtmd',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-real-tar-layout-'));
+  try {
+    const dir=path.join(root,'.aura-language-runtime','llama-b11425','llama-b11425');
+    fs.mkdirSync(dir,{recursive:true});
+    fs.writeFileSync(path.join(dir,'llama-server'),'ELF',{mode:0o755});
+    for(const [stem,leaf] of [
+      ['libllama-common','libllama-common.so.0.0.11425'],
+      ['libllama','libllama.so.0.0.11425'],
+      ['libggml','libggml.so.0.11.1'],
+      ['libmtmd','libmtmd.so.0.0.11425'],
+    ]){
+      fs.writeFileSync(path.join(dir,leaf),'binary');
+      fs.symlinkSync('llama-b11425ib'+stem.slice(3)+'.so.0.0.11425',path.join(dir,stem+'.so.0'));
+      fs.symlinkSync('llama-b11425ib'+stem.slice(3)+'.so.0',path.join(dir,stem+'.so'));
+    }
+    const before=nativeLibraryHealth(path.join(dir,'llama-server'));
+    assert.equal(before.common_soname_found,false);
+    assert.ok(before.dangling_links.includes('libllama-common.so.0'));
+    const repaired=repairLlamaLibraryAliases(path.join(dir,'llama-server'));
+    assert.ok(repaired.includes('libllama-common.so.0'));
+    assert.ok(repaired.includes('libllama-common.so'));
+    const after=nativeLibraryHealth(path.join(dir,'llama-server'));
+    assert.equal(after.common_soname_found,true);
+    assert.deepEqual(after.dangling_links,[]);
+    assert.ok(llamaLoaderEnv(path.join(dir,'llama-server'),{LD_LIBRARY_PATH:''}).LD_LIBRARY_PATH.includes(dir));
+  } finally {fs.rmSync(root,{force:true,recursive:true});}
+});
+
+test('actual Linux ELF starts after native SONAME symlink repair',{
+  skip: process.platform !== 'linux' || spawnSync('gcc',['--version']).status !== 0,
+},()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-elf-loader-'));
+  try {
+    const dir=path.join(root,'aura-language-runtime','llama-b11425');
+    fs.mkdirSync(dir,{recursive:true});
+    const library=path.join(dir,'libllama-common.so.0.0.11425');
+    const source=path.join(root,'library.c');
+    fs.writeFileSync(source,'int aura_native_hello(void) {return 42;}\n');
+    let cc=spawnSync('gcc',['-fPIC','-shared','-Wl,-soname,libllama-common.so.0','-o',library,source]);
+    assert.equal(cc.status,0,cc.stderr?.toString());
+    const main=path.join(root,'main.c');
+    fs.writeFileSync(main,'#include <stdio.h>\nint aura_native_hello(void);\nint main(void){if(aura_native_hello()!=42)return 1;puts("AURA_NATIVE_OK");return 0;}\n');
+    const binary=path.join(dir,'llama-server');
+    cc=spawnSync('gcc',['-o',binary,main,library]);
+    assert.equal(cc.status,0,cc.stderr?.toString());
+    fs.symlinkSync('llama-b11425ibllama-common.so.0.0.11425',path.join(dir,'libllama-common.so.0'));
+    const env=llamaLoaderEnv(binary,{LD_LIBRARY_PATH:''});
+    let run=spawnSync(binary,[],{env});
+    assert.notEqual(run.status,0);
+    assert.match(run.stderr.toString(),/libllama-common.so.0/);
+    repairLlamaLibraryAliases(binary);
+    run=spawnSync(binary,[],{env:llamaLoaderEnv(binary,{LD_LIBRARY_PATH:''})});
+    assert.equal(run.status,0,run.stderr.toString());
+    assert.match(run.stdout.toString(),/AURA_NATIVE_OK/);
+  } finally {fs.rmSync(root,{force:true,recursive:true});}
 });
