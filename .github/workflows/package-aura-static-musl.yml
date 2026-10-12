@@ -44,7 +44,7 @@ jobs:
             -DGGML_F16C=OFF -DGGML_BMI2=OFF \
             -DLLAMA_OPENSSL=OFF -DLLAMA_SUBPROCESS=OFF \
             -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
-            -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_TOOLS=ON \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
             -DLLAMA_BUILD_SERVER=ON
           cmake --build "$RUNNER_TEMP/build-static" --target llama-server --parallel 4
