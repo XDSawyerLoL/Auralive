@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
+import { selectNextMission } from './mission_scheduler.js';
 
 const now = () => new Date().toISOString();
 
@@ -69,6 +70,7 @@ export class LongHorizonMissionEngine {
     this.kernel = kernel;
     this.lastError = '';
     this.lastAdvanceAt = '';
+    this.lastScheduledMissionId = '';
   }
 
   async init() {
@@ -152,12 +154,17 @@ export class LongHorizonMissionEngine {
     };
   }
 
-  async activeMission() {
-    return one(
+  async activeMission({ advance = false } = {}) {
+    // Rotate cooperatively instead of starving lower-priority projects forever.
+    // No claim of cross-process leases or simultaneous multi-mission execution.
+    const rows = await query(
       `SELECT * FROM aura_missions
        WHERE status IN ('planning','running','waiting')
-       ORDER BY priority DESC,updated_at ASC LIMIT 1`,
+       ORDER BY priority DESC,updated_at ASC LIMIT 64`,
     );
+    const mission = selectNextMission(rows, this.lastScheduledMissionId);
+    if (advance && mission) this.lastScheduledMissionId = String(mission.id);
+    return mission;
   }
 
   async createMission(input = {}) {
@@ -380,7 +387,7 @@ export class LongHorizonMissionEngine {
   }
 
   async ensureAutonomousMission() {
-    const active = await this.activeMission();
+    const active = await this.activeMission({ advance: true });
     if (active) return active;
     if (!config.longHorizonAutoSeed) return null;
 
