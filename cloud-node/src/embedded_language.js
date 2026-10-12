@@ -290,6 +290,39 @@ export function cgroupPidSnapshot({read=fs.readFileSync}={}){
     current:readCounter(['/sys/fs/cgroup/pids.current','/sys/fs/cgroup/pids/pids.current']),
     failed_forks:getEvents()};
 }
+// Host-specific process diagnostics when cgroups are invisible.
+// Only expose a process state, thread count and resident memory; never /proc raw text.
+export function nativeProcessSnapshot(pid,{read=fs.readFileSync,platform=process.platform}={}){
+  if(platform!=='linux'||!Number.isSafeInteger(pid)||pid<=0||pid>2147483647)return null;
+  let raw;
+  try{raw=String(read('/proc/'+pid+'/status','utf8'));}catch{return null;}
+  const state=raw.match(/^State:\\s*([RSDZTIX])/m)?.[1]||'unknown';
+  const threads=Number(raw.match(/^Threads:\\s*(\\d+)/m)?.[1]);
+  const kb=Number(raw.match(/^VmRSS:\\s*(\\d+)\\s*kB/m)?.[1]);
+  return {
+    state,
+    threads:Number.isSafeInteger(threads)&&threads>=0&&threads<1e6?threads:null,
+    rss_mb:Number.isSafeInteger(kb)&&kb>=0&&kb<1e12?Math.round(kb/1024):null,
+  };
+}
+export function nativeStartupMilestones(log=''){
+  const value=String(log).toLowerCase();
+  return [
+    ['model-metadata',/llama_model_loader|gguf_init_from_file|general.architecture/],
+    ['model-tensors',/load_tensors|loading tensors|tensor data/],
+    ['model-context',/llama_new_context_with_model|llama_init_from_model|kv self size/],
+    ['http-listener',/server is listening|listening on http|starting the main loop/],
+  ].filter(([,regex])=>regex.test(value)).map(([name])=>name);
+}
+export function healthProbeResult(error){
+  const name=String(error?.name||'').toLowerCase();
+  const code=String(error?.cause?.code||error?.code||'').toUpperCase();
+  if(name==='aborterror'||name==='timeouterror'||code==='UND_ERR_CONNECT_TIMEOUT')
+    return 'timeout';
+  if(code==='ECONNREFUSED')return 'connection-refused';
+  if(code==='EHOSTUNREACH'||code==='ENETUNREACH')return 'network-unreachable';
+  return 'request-error';
+}
 // llama.cpp b11425 defaults HTTP threads to hardware_concurrency()-1. On
 // shared hosting this can exceed the per-account pids quota even with -t=1.
 export function nativeBootArgs(gguf,port,{lowMemory=false,threads=1}={}){
@@ -364,6 +397,9 @@ export class EmbeddedLanguageRuntime {
     this.bootAttempts=[];this.bootStartedAt=0;
     this.healthSeen=false;this.lastProbeAt='';this.lastProbeLatencyMs=0;
     this.probeTimeoutMs=30_000;
+    this.nativeOutputObserved=false;this.nativeMilestones=[];
+    this.healthProbeCount=0;this.healthLastResult='not-requested';
+    this.lastProcessObserved=null;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -401,6 +437,9 @@ export class EmbeddedLanguageRuntime {
   status(){
     const item=this.inspect(),enabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
     const failure=this.lastFailure?classifyEmbeddedFailure(this.lastFailure):null;
+    const running=Boolean(this.child&&this.child.exitCode===null&&this.child.signalCode===null);
+    const snapshot=running?nativeProcessSnapshot(this.child.pid):null;
+    if(snapshot)this.lastProcessObserved=snapshot;
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
@@ -433,6 +472,14 @@ export class EmbeddedLanguageRuntime {
       pids_before_start:this.pidsAtBoot,
       pids_after_failure:this.pidsAfterFailure,
       boot_attempts:this.bootAttempts.slice(-4),
+      startup_elapsed_ms:this.booting&&this.bootStartedAt?Math.max(0,Date.now()-this.bootStartedAt):0,
+      native_process_running:running,
+      native_process:snapshot,
+      last_native_process:this.lastProcessObserved,
+      native_output_observed:this.nativeOutputObserved,
+      native_startup_milestones:this.nativeMilestones.slice(),
+      health_probe_count:this.healthProbeCount,
+      health_last_result:this.healthLastResult,
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -447,6 +494,11 @@ export class EmbeddedLanguageRuntime {
       last.failure_stage=this.failureStage;
       last.health_seen=this.healthSeen;
       last.inference_verified=Boolean(outcome==='ready' && this.lastProbeAt);
+      last.native_output_observed=this.nativeOutputObserved;
+      last.native_startup_milestones=this.nativeMilestones.slice();
+      last.health_probe_count=this.healthProbeCount;
+      last.health_last_result=this.healthLastResult;
+      last.native_process=this.lastProcessObserved;
     }
   }
   fail(error){
@@ -512,6 +564,9 @@ export class EmbeddedLanguageRuntime {
     const {executable,gguf}=this.inspect();
     this.lastFailure='';this.ready=false;this.lastProbeAt='';
     this.healthSeen=false;this.lastProbeLatencyMs=0;this.port=await this.allocatePort();
+    this.nativeOutputObserved=false;this.nativeMilestones=[];
+    this.healthProbeCount=0;this.healthLastResult='not-requested';
+    this.lastProcessObserved=null;
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
@@ -519,7 +574,9 @@ export class EmbeddedLanguageRuntime {
     this.bootAttempts.push({id:this.bootStartedAt,profile:this.bootProfile,
       outcome:'started',elapsed_ms:0,failure_code:'',
       exit_code:null,exit_signal:null,signals:[],failure_stage:'spawning-native-server',
-      health_seen:false,inference_verified:false});
+      health_seen:false,inference_verified:false,
+      native_output_observed:false,native_startup_milestones:[],
+      health_probe_count:0,health_last_result:'not-requested',native_process:null});
     this.bootAttempts=this.bootAttempts.slice(-4);
     this.memoryAtBoot=cgroupMemorySnapshot();
     this.pidsAtBoot=cgroupPidSnapshot();
@@ -543,11 +600,15 @@ export class EmbeddedLanguageRuntime {
     this.child=child;
     let stderr='',stdout='';
     child.stderr?.on('data',chunk=>{
+      this.nativeOutputObserved=true;
       stderr=(stderr+String(chunk)).slice(-4000);
+      this.nativeMilestones=[...new Set([...this.nativeMilestones,...nativeStartupMilestones(stderr)])];
       this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.stdout?.on('data',chunk=>{
+      this.nativeOutputObserved=true;
       stdout=(stdout+String(chunk)).slice(-1500);
+      this.nativeMilestones=[...new Set([...this.nativeMilestones,...nativeStartupMilestones(stdout)])];
       this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.on('error',error=>{
@@ -558,6 +619,7 @@ export class EmbeddedLanguageRuntime {
     });
     child.on('exit',(code,signal)=>{
       if(this.child===child){
+        this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
         this.lastProcessExit={code:code??null,signal:signal??null};
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
@@ -575,8 +637,10 @@ export class EmbeddedLanguageRuntime {
     while(Date.now()<deadline && this.child===child && child.exitCode===null
       && child.signalCode===null && !this.lastFailure){
       try{
+        this.healthProbeCount++;
         const health=await this.request('http://127.0.0.1:'+this.port+'/health',{
           signal:AbortSignal.timeout(1500)});
+        this.healthLastResult=health.ok?'ok':Number.isInteger(health.status)?'http-'+health.status:'http-error';
         if(health.ok){
           this.healthSeen=true;
           this.failureStage='verifying-inference';
@@ -616,10 +680,12 @@ export class EmbeddedLanguageRuntime {
             this.recordAttempt('probe-failed');break;
           }
         }
-      }catch{}
+      }catch(error){this.healthLastResult=healthProbeResult(error);}
+      this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
       await this.delay(400);
     }
     if(!this.ready && !this.lastFailure){
+      this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
       this.failureStage='health-timeout';
       this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
       this.recordAttempt('health-timeout');
