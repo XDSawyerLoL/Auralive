@@ -13,3 +13,11 @@ Optional host environment variables:
 **No binary/model files are bundled or downloaded**. They must be present on the deployment server with matching architecture and versioned .so symlinks. Hostinger hbuilds/version folders change on redeploy: avoid pointing to an obsolete build path. A shared hosting plan might forbid native subprocesses or lack RAM. EACCES cannot be bypassed; a permitted hosting runtime or tested WASM alternative is necessary.
 
 The status endpoint must report \`verified-responsive\` after a *real* successful inference. Code and CI alone do not demonstrate on-host operation.
+
+
+## Hostinger hardening
+
+- The loader searches nested sibling directories for versioned `.so` files, including `libllama-common.so.0`, and constructs `LD_LIBRARY_PATH` without using a shell.
+- When a ZIP extraction drops the execute bit, AURA may restore it **only** on its managed runtime binary, never an arbitrary host path. Host-level `noexec` restrictions still cannot be bypassed.
+- Binary/model presence is no longer reported as a successfully started language engine. Availability requires an actual localhost health check and a successful inference.
+- No model, native binary or model file is downloaded or bundled by this patch.

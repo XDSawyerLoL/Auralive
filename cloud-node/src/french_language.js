@@ -84,8 +84,10 @@ export class FrenchLanguageFaculty {
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
     const embeddedInstalled = Boolean(embedded.installed);
-    const ready = Boolean(embeddedInstalled || federation.enabled || local);
+    // Native files alone do not establish that a model is operational.
+    const ready = Boolean(embedded.ready || federation.enabled || local);
     const blockingReason = embedded.failure_code && (embeddedInstalled || embedded.binary_found)
+      && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.failure_code
       : ready
       ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
@@ -103,6 +105,7 @@ export class FrenchLanguageFaculty {
       : null;
     const failureCode = failed?.code || blockingReason;
     const setupHint = embedded.failure_code && (embeddedInstalled || embedded.binary_found)
+      && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
@@ -120,7 +123,9 @@ export class FrenchLanguageFaculty {
       ready,
       verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: embeddedInstalled ? 'hostinger-embedded' : federation.enabled ? 'zero-cost-federation' : (local ? 'runtime-local' : 'unavailable'),
+      primary: embedded.ready ? 'hostinger-embedded'
+        : federation.enabled ? 'zero-cost-federation'
+          : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
