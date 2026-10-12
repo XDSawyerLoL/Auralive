@@ -606,6 +606,18 @@ function renderLanguageEngine(state){
     :socket.expected_port?'socket IPv4 attendu en écoute'
     :socket.listening?'socket présent mais pas sur le port IPv4 attendu'
     :'aucun socket TCP en écoute attribué au moteur';
+  const ns=state?.network_namespace?.same_network_namespace;
+  const nsText=ns===true?'même espace réseau'
+    :ns===false?'espaces réseau différents':'espace réseau non vérifiable';
+  const dial=String(state?.tcp_dial_after_refusal?.result||'non effectué');
+  const refusedSocket=state?.socket_at_last_refusal?.expected_port;
+  const refusedSocketText=refusedSocket===true?'écoute confirmée pendant un refus'
+    :refusedSocket===false?'aucune écoute attendue pendant le refus'
+    :'écoute non déterminée pendant le refus';
+  const nodeListener=state?.node_namespace_listener?.ipv4_listening;
+  const nodeListenerText=nodeListener===true?'port visible côté Node'
+    :nodeListener===false?'port non visible côté Node'
+    :'visibilité Node inconnue';
   const native=state?.native_process||state?.last_native_process||{};
   const trace='Sonde locale : '+String(state?.health_last_result||'inconnue')+
     ' ('+Number(state?.health_probe_count||0)+' essais). '+
@@ -616,7 +628,9 @@ function renderLanguageEngine(state){
     '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+
     '. Port déclaré par le moteur : '+(state?.native_listener_report?.matching_port===true?'conforme'
       :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+
-     '. Vérification noyau : '+socketDesc+'.';
+     '. Vérification noyau : '+socketDesc+
+    '. Réseau : '+nsText+', '+nodeListenerText+'. Au dernier refus : '+
+    refusedSocketText+'. Essai TCP indépendant : '+dial+'.';
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
     :booting
