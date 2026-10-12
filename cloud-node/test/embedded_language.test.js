@@ -607,7 +607,7 @@ test('proc Linux snapshot reports bounded RSS and threads but no sensitive proce
 });
 test('startup milestones and HTTP errors preserve only allowlisted state',()=>{
   const message='llama_model_loader: general.architecture=qwen3\nload_tensors done\n'
-    +'private-password=/home/private/secret.gguf\nstarting the main loop\n';
+    + 'private-password=/home/private/secret.gguf\nmain: server is listening on http://127.0.0.1:24112 - starting the main loop\n';
   const stages=nativeStartupMilestones(message);
   assert.deepEqual(stages,['model-metadata','model-tensors','http-listener']);
   assert.doesNotMatch(JSON.stringify(stages),/private|home|secret/);
