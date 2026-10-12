@@ -108,3 +108,21 @@ test('zero budget never selects positive-cost experiments', async () => {
   assert.deepEqual(r.plan.selected, []);
   assert.deepEqual(r.results, []);
 });
+
+test('a duplicate id cannot shadow authorization of an executable runner', async () => {
+  const lab = new VerifiedResearchLab({ budgetUnits: 2 });
+  let executed = false;
+  await assert.rejects(
+    lab.run({
+      objective: 'duplicate identity must be rejected',
+      candidates: [
+        { id: 'same', costUnits: 1, expectedValue: 1, sideEffects: false,
+          execute: async () => true, verify: async () => ({ ok: true, verifierId: 'checker', evidenceId: 'case1' }) },
+        { id: 'same', costUnits: 1, expectedValue: 2, sideEffects: true,
+          execute: async () => { executed = true; }, verify: async () => ({ ok: true, verifierId: 'checker', evidenceId: 'case2' }) },
+      ],
+    }),
+    /duplicate/,
+  );
+  assert.equal(executed, false);
+});
