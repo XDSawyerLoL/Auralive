@@ -3,13 +3,19 @@ on:
   pull_request:
     paths:
       - 'cloud-node/src/embedded_provisioner.js'
+      - 'cloud-node/src/embedded_language.js'
+      - 'cloud-node/src/dashboard-runtime.js'
       - 'cloud-node/test/embedded_provisioner.test.js'
+      - 'cloud-node/test/embedded_language.test.js'
       - '.github/workflows/package-aura-static-musl.yml'
   push:
     branches: [main]
     paths:
       - 'cloud-node/src/embedded_provisioner.js'
+      - 'cloud-node/src/embedded_language.js'
+      - 'cloud-node/src/dashboard-runtime.js'
       - 'cloud-node/test/embedded_provisioner.test.js'
+      - 'cloud-node/test/embedded_language.test.js'
       - '.github/workflows/package-aura-static-musl.yml'
   workflow_dispatch:
 permissions:
