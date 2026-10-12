@@ -42,10 +42,10 @@ test('native transport does not permit outbound requests, redirects or method co
     'http://127.0.0.1:19001/health?token=secret',
     'http://admin:pass@127.0.0.1:19001/health',
   ]){
-    await assert.rejects(()=>nativeLoopbackRequest(dest),/destination-rejected/);
+    assert.throws(()=>nativeLoopbackRequest(dest),/destination-rejected/);
   }
-  await assert.rejects(()=>nativeLoopbackRequest('http://127.0.0.1:19001/health',{method:'POST'}),/method-rejected/);
-  await assert.rejects(()=>nativeLoopbackRequest('http://127.0.0.1:19001/v1/chat/completions',{method:'GET'}),/method-rejected/);
+  assert.throws(()=>nativeLoopbackRequest('http://127.0.0.1:19001/health',{method:'POST'}),/method-rejected/);
+  assert.throws(()=>nativeLoopbackRequest('http://127.0.0.1:19001/v1/chat/completions',{method:'GET'}),/method-rejected/);
 });
 
 test('native transport reports direct ECONNREFUSED without a global dispatcher or proxy',async()=>{
