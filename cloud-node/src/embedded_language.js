@@ -40,6 +40,9 @@ export function classifyEmbeddedFailure(error) {
   if (/eaddrinuse|failed to bind|address already in use/.test(reason))
     return {code:'embedded-loopback-port-in-use',
       hint:'Le port local du moteur est déjà occupé sur Hostinger.'};
+  if (/embedded-native-stopped-after-serving/.test(reason))
+    return {code:'embedded-native-stopped-after-serving',
+      hint:'Le serveur a généré un texte puis s’est arrêté ; il doit être redémarré avant une nouvelle conversation.'};
   if (/embedded-clean-exit-before-inference/.test(reason))
     return {code:'embedded-clean-exit-before-inference',
       hint:'Le processus s’est arrêté avec le code 0 avant de produire du texte.'};
@@ -559,7 +562,8 @@ export class EmbeddedLanguageRuntime {
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
         this.fail((stderr||stdout||'')+
-          (code===0?' embedded-clean-exit-before-inference':'')+
+          (code===0?(this.ready?' embedded-native-stopped-after-serving'
+            :' embedded-clean-exit-before-inference'):'')+
           ' embedded-engine-exited-'+(code??'signal')+
           (signal?' exit.signal.'+signal.toLowerCase():'')+
           (code===137?' exit.code.137':''));
@@ -590,6 +594,11 @@ export class EmbeddedLanguageRuntime {
             const answer=String(payload?.choices?.[0]?.message?.content||'')
               .replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
             if(!answer)throw Error('embedded-inference-probe-empty');
+            // llama.cpp OpenAI-compatible responses include actual generation usage.
+            // Do not mistake an HTTP JSON stub or echo page for a model answer.
+            const generated=Number(payload?.usage?.completion_tokens);
+            if(!Number.isFinite(generated)||generated<1)
+              throw Error('embedded-inference-probe-invalid');
             if(this.child!==child||child.exitCode!==null||child.signalCode!==null||this.lastFailure)
               throw Error('embedded-inference-probe-invalid');
             this.lastProbeAt=new Date().toISOString();
