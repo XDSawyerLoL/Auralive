@@ -308,7 +308,7 @@ test('native llama server caps every CPU and HTTP worker pool even with many vis
     assert.equal(args[args.indexOf(arg)+1],count,arg);
   }
   const configured=nativeBootArgs('/models/qwen.gguf',12600,{threads:96});
-  assert.equal(configured[configured.indexOf('--threads')+1],'2');
+  assert.equal(configured[configured.indexOf('--threads')+1],'1');
   assert.equal(configured[configured.indexOf('--threads-http')+1],'1');
   const fallback=nativeBootArgs('/models/qwen.gguf',12600,{lowMemory:true,threads:96});
   assert.equal(fallback[fallback.indexOf('--threads')+1],'1');
