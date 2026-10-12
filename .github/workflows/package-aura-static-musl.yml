@@ -1,0 +1,122 @@
+name: Package AURA Hostinger standalone musl French
+on:
+  pull_request:
+    paths:
+      - 'cloud-node/src/embedded_provisioner.js'
+      - 'cloud-node/test/embedded_provisioner.test.js'
+      - '.github/workflows/package-aura-static-musl.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'cloud-node/src/embedded_provisioner.js'
+      - 'cloud-node/test/embedded_provisioner.test.js'
+      - '.github/workflows/package-aura-static-musl.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-static:
+    name: Build standalone llama-server without shared libraries
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    container:
+      image: alpine:3.21
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install musl build dependencies
+        run: apk add --no-cache bash build-base cmake ninja git curl linux-headers binutils
+      - name: Fetch pinned llama.cpp source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch b11425 https://github.com/ggml-org/llama.cpp "$RUNNER_TEMP/llama.cpp"
+          test "$(git -C "$RUNNER_TEMP/llama.cpp" rev-parse HEAD)" = "e117148a41d8e9bedb72e4c6c3f003ab0fe7f857"
+      - name: Build static CPU-only llama-server
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/llama.cpp" -B "$RUNNER_TEMP/build-static" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_STATIC=ON -DGGML_NATIVE=OFF \
+            -DGGML_OPENMP=OFF -DGGML_LLAMAFILE=OFF \
+            -DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF \
+            -DGGML_F16C=OFF -DGGML_BMI2=OFF \
+            -DLLAMA_OPENSSL=OFF -DLLAMA_SUBPROCESS=OFF \
+            -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF \
+            -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_TOOLS=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=ON
+          cmake --build "$RUNNER_TEMP/build-static" --target llama-server --parallel 4
+      - name: Prove no ELF interpreter nor dynamic .so dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$RUNNER_TEMP/build-static/bin/llama-server"
+          test -x "$BIN"
+          ! readelf -l "$BIN" | grep -q INTERP
+          ! readelf -d "$BIN" | grep -q 'NEEDED'
+          "$BIN" --version
+          echo 'ELF_STANDALONE_NO_SO_OK'
+      - name: Bundle static native engine with canonical Hostinger project
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/aura-hostinger-static"
+          mkdir -p "$ROOT/native/linux-x64"
+          cp -R cloud-node/src cloud-node/test cloud-node/scripts "$ROOT/"
+          cp cloud-node/server.js cloud-node/package.json cloud-node/package-lock.json \
+             cloud-node/.env.example cloud-node/.gitignore cloud-node/README.md \
+             cloud-node/HOSTINGER-QUICKSTART.txt cloud-node/STABLE.json "$ROOT/"
+          cp "$RUNNER_TEMP/build-static/bin/llama-server" "$ROOT/native/linux-x64/llama-server"
+          sha256sum "$ROOT/native/linux-x64/llama-server" | cut -d ' ' -f1 \
+             > "$ROOT/native/linux-x64/llama-server.sha256"
+          cp "$RUNNER_TEMP/llama.cpp/LICENSE" "$ROOT/native/linux-x64/LLAMA-LICENSE.txt"
+          cat > "$ROOT/DEPLOYMENT.json" <<EOF
+          {
+            "product": "AURA Cloud",
+            "version": "3.1.2",
+            "runtime": "Node.js 22 / Fastify / MySQL",
+            "canonical_source": "cloud-node",
+            "git_sha": "$GITHUB_SHA",
+            "language_engine": "musl-static-llama-server-b11425",
+            "architecture": "linux-x64",
+            "no_shared_libraries": true,
+            "model": "Qwen3-0.6B-Q8_0.gguf verified cached or downloaded",
+            "model_weights_included": false,
+            "paid_api_required": false
+          }
+          EOF
+          test -f "$ROOT/server.js"
+          test -f "$ROOT/package.json"
+          test -f "$ROOT/native/linux-x64/llama-server"
+          test ! -d "$ROOT/cloud-node"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aura-hostinger-static-musl
+          path: ${{ runner.temp }}/aura-hostinger-static/
+          retention-days: 14
+          if-no-files-found: error
+          include-hidden-files: true
+  verify-glibc-host:
+    name: Verify standalone musl on Ubuntu/glibc
+    runs-on: ubuntu-latest
+    needs: build-static
+    timeout-minutes: 4
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: aura-hostinger-static-musl
+          path: aura-zip-root
+      - name: Confirm Linux cross-distro binary and root package
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=aura-zip-root/native/linux-x64/llama-server
+          chmod u+x "$BIN"
+          ! readelf -l "$BIN" | grep -q INTERP
+          ! readelf -d "$BIN" | grep -q NEEDED
+          "$BIN" --version
+          test -f aura-zip-root/package.json
+          test -f aura-zip-root/server.js
+          test ! -d aura-zip-root/cloud-node
