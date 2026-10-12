@@ -600,6 +600,12 @@ function renderLanguageEngine(state){
     (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:'')+
     (a.health_seen?' santé OK':'')+(a.inference_verified?' inférence vérifiée':''))
     .join(' · ');
+  const socket=state?.native_socket?.inspection==='ok'
+    ?state.native_socket:state?.last_native_socket||{};
+  const socketDesc=socket?.inspection!=='ok'?'socket Linux non lisible'
+    :socket.expected_port?'socket IPv4 attendu en écoute'
+    :socket.listening?'socket présent mais pas sur le port IPv4 attendu'
+    :'aucun socket TCP en écoute attribué au moteur';
   const native=state?.native_process||state?.last_native_process||{};
   const trace='Sonde locale : '+String(state?.health_last_result||'inconnue')+
     ' ('+Number(state?.health_probe_count||0)+' essais). '+
@@ -609,7 +615,8 @@ function renderLanguageEngine(state){
     '. Sortie native : '+(state?.native_output_observed?'oui':'non')+
     '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+
     '. Port déclaré par le moteur : '+(state?.native_listener_report?.matching_port===true?'conforme'
-      :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+'.';
+      :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+
+     '. Vérification noyau : '+socketDesc+'.';
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
     :booting
