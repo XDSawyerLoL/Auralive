@@ -50,6 +50,46 @@ export function llamaLoaderEnv(binary, original = process.env) {
   return {...original,LD_LIBRARY_PATH:[
     ...folders,...String(original.LD_LIBRARY_PATH||'').split(':').filter(Boolean)].join(':')};
 }
+// Hostinger archives may unpack the actual versioned .so but lose the
+// SONAME symlink (e.g. libllama-common.so.0 -> libllama-common.so.0.0.5).
+// Repair only aliases beside real files UNDER our managed runtime directory.
+// Missing native binaries, incompatible glibc and noexec remain real failures.
+export function repairLlamaLibraryAliases(binary) {
+  const full = safePath(binary).replace(/\\/g,'/');
+  const marker = '/.aura-language-runtime/';
+  const fallback = '/aura-language-runtime/';
+  const pos = full.indexOf(marker)>=0 ? full.indexOf(marker) : full.indexOf(fallback);
+  const foundMarker = full.includes(marker) ? marker : fallback;
+  if (pos < 0) return [];
+  const managedRoot = path.resolve(full.slice(0, pos + foundMarker.length - 1));
+  const dirs = llamaLoaderEnv(binary,{ LD_LIBRARY_PATH: '' }).LD_LIBRARY_PATH.split(':');
+  const changed = [];
+  for (const rawDir of dirs) {
+    const dir = path.resolve(rawDir);
+    if (dir !== managedRoot && !dir.startsWith(managedRoot + path.sep)) continue;
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const name of names) {
+      if (!/^lib(?:llama|ggml)[\w.-]*\.so\.0\.\d+(?:\.\d+)*$/i.test(name)) continue;
+      const target = path.join(dir,name);
+      try { if (!fs.statSync(target).isFile()) continue; } catch { continue; }
+      const alias = name.replace(/(\.so\.0)\..+$/, '$1');
+      const aliasPath = path.join(dir,alias);
+      try {
+        if (fs.existsSync(aliasPath)) continue;
+        // A dangling unpacked symlink can be replaced safely within the
+        // managed runtime. A real file is never overwritten.
+        try {
+          if (fs.lstatSync(aliasPath).isSymbolicLink()) fs.unlinkSync(aliasPath);
+          else continue;
+        } catch (e) { if (e?.code !== 'ENOENT') continue; }
+        fs.symlinkSync(name,aliasPath);
+        changed.push(alias);
+      } catch { /* read-only hosting: diagnosed by the normal loader */ }
+    }
+  }
+  return changed;
+}
 export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
@@ -100,6 +140,7 @@ export class EmbeddedLanguageRuntime {
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
     this.cachedDiscovery=null;this.lastDiscoveryAt=0;
+    this.repairedLibraryAliases=[];
   }
   inspect(){
     if(this.cachedDiscovery && Date.now()-this.lastDiscoveryAt<5000)return this.cachedDiscovery;
@@ -145,6 +186,7 @@ export class EmbeddedLanguageRuntime {
           :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
+      repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       paid_model_api_required:false};
   }
   fail(error){
@@ -156,6 +198,7 @@ export class EmbeddedLanguageRuntime {
     if(this.booting)return this.booting;
     if(Date.now()<this.cooldownUntil || !this.installed())return false;
     if(!this.repairExecutable())return false;
+    this.repairedLibraryAliases=repairLlamaLibraryAliases(this.inspect().executable);
     this.booting=this.boot();
     try{return await this.booting;}
     catch(error){this.fail(error);return false;}
