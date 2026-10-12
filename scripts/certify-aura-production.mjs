@@ -20,6 +20,7 @@ async function request(path, {
   method = 'GET',
   body = undefined,
   headers = {},
+  optional = false,
 } = {}) {
   const url = base + path;
   const started = Date.now();
@@ -45,14 +46,15 @@ async function request(path, {
     const statusOk = Array.isArray(expected) ? expected.includes(status) : status === expected;
     const predicateOk = !predicate || predicate(parsed, response);
     const ok = statusOk && predicateOk;
-    if (!ok) failures += 1;
-    results.push({ path, ok, status, elapsed_ms: Date.now() - started, body: parsed });
+    if (!ok && !optional) failures += 1;
+    results.push({ path, ok, optional, status, elapsed_ms: Date.now() - started, body: parsed });
     return { ok, status, body: parsed };
   } catch (cause) {
-    failures += 1;
+    if (!optional) failures += 1;
     results.push({
       path,
       ok: false,
+      optional,
       status,
       elapsed_ms: Date.now() - started,
       error: String(cause?.message || cause),
@@ -127,6 +129,15 @@ await request('/api/command/status', {
   ),
 });
 
+// Diagnostic-only: an old live build may not expose this new endpoint yet.
+// Its absence is recorded; the end-to-end French conversation is still required.
+await request('/api/language/embedded/status', {
+  optional: true,
+  predicate: (body) => Boolean(body && typeof body.status === 'string'
+    && typeof body.binary_found === 'boolean'
+    && typeof body.model_found === 'boolean'),
+});
+
 await request('/api/chat', {
   method: 'POST',
   body: { text: 'Que fais-tu en ce moment ?' },
@@ -135,6 +146,7 @@ await request('/api/chat', {
     && typeof body.answer === 'string'
     && body.answer.trim().length >= 8
     && !/Je te suis\. Je reste sur ce que tu viens de dire\.?/i.test(body.answer)
+    && !/Ma faculté de français naturel est indisponible|embedded-engine-exited|no-free-provider-connected/i.test(body.answer)
   ),
 });
 
@@ -152,7 +164,7 @@ for (const path of [
 
 const report = {
   product: 'AURA Cloud',
-  certification_version: '2.0-production-truth',
+  certification_version: '2.1-production-truth-language',
   base_url: base,
   expected_git_sha: expectedSha,
   deployed_git_sha: String(build.body?.git_sha || ''),

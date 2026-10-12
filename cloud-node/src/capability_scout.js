@@ -91,6 +91,7 @@ const SCOUT_THEMES = Object.freeze([
       'local vector graph memory',
     ],
     signals: ['memory','graph','knowledge','vector','retrieval','rag','persistent'],
+    priority_repos: ['thedotmack/claude-mem'],
   },
   {
     id: 'edge-distributed',
@@ -111,6 +112,37 @@ const SCOUT_THEMES = Object.freeze([
       'video avatar diffusion open source',
     ],
     signals: ['avatar','video','audio','talking','identity','diffusion','realtime'],
+  },
+  {
+    id: 'agent-organization',
+    label: 'Organisation de missions et équipes multi-agents',
+    queries: ['paperclip autonomous agent company', 'multi agent orchestration tasks persistent', 'ai agent supervisor task scheduler'],
+    priority_repos: ['PaperclipAI/paperclip'],
+    signals: ['agent','organization','mission','orchestration','multi-agent','scheduler','persistent'],
+  },
+  {
+    id: 'engineering-skills',
+    label: 'Compétences d’ingénierie, revue et tests logiciels',
+    queries: ['engineering agent reusable skills', 'coding agent skills code review', 'software quality autonomous code audit'],
+    signals: ['skills','testing','engineering','security','review','ci','agent','software'],
+  },
+  {
+    id: 'document-diagrams',
+    label: 'Schémas, présentations et documents structurés',
+    queries: ['mermaid diagram generator markdown open source', 'pptxgenjs editable powerpoint diagrams', 'automated presentations pptx generator'],
+    signals: ['diagram','mermaid','pptx','presentation','design','document','export'],
+  },
+  {
+    id: 'reverse-engineering',
+    label: 'Analyse et rétro-ingénierie logicielle en sandbox',
+    queries: ['binary reverse engineering static analysis open source', 'ghidra automation analysis ai', 'malware analysis sandbox open source'],
+    signals: ['reverse','binary','analysis','ghidra','static','sandbox','security'],
+  },
+  {
+    id: 'geo-reasoning',
+    label: 'Observation géospatiale et interprétation cartographique',
+    queries: ['open source geospatial satellite image analysis', 'geospatial reasoning spatial data python', 'satellite imagery segmentation open source'],
+    signals: ['geo','spatial','satellite','imagery','vision','mapping','geolocation'],
   },
 ]);
 
@@ -402,6 +434,21 @@ export class CapabilityScout {
           if (!key || OWN_REPOSITORIES.has(key) || found.has(key)) continue;
           found.set(key, repo);
         }
+      } catch (error) {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+      }
+    }
+    // Curated architectural references enter the SAME licence/risk gates as
+    // every discovered repository; they are not automatically imported.
+    for (const fullName of (theme.priority_repos || []).slice(0, 2)) {
+      if (!/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(fullName)) continue;
+      const key = fullName.toLowerCase();
+      if (OWN_REPOSITORIES.has(key) || found.has(key)) continue;
+      try {
+        const result = await this.commandCenter.github('/repos/' + fullName);
+        const repo = result?.data;
+        if (repo && String(repo.full_name || '').toLowerCase() === key
+          && !repo.private && !repo.archived) found.set(key, repo);
       } catch (error) {
         this.lastError = String(error?.message || error).slice(0, 1000);
       }

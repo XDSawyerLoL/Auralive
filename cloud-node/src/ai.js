@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { ZeroCostFederation } from './free_federation.js';
+import { embeddedLanguageRuntime } from './embedded_language.js';
 import { freeTierModelAllowed, markConfirmedFreeTier, reserveConfirmedFreeTier } from './gemini_free_tier.js';
 
 function completionUrl() {
@@ -81,6 +82,7 @@ export class AiClient {
   }
 
   get provider() {
+    if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
       return this.federation.enabled
         ? 'aura-runtime-local+zero-cost-federation'
@@ -93,6 +95,7 @@ export class AiClient {
   }
 
   get enabled() {
+    if (embeddedLanguageRuntime.installed()) return true;
     if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (remoteFallbackBlocked()) return false;
@@ -119,6 +122,7 @@ export class AiClient {
       gemini_free_tier_model_allowed: freeTierModelAllowed(geminiModel(), 'text'),
       gemini_free_tier_daily_cap: Number(config.geminiFreeTierTextMaxPerDay),
       free_federation: this.federation.snapshot(),
+      embedded_language: embeddedLanguageRuntime.status(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
@@ -218,6 +222,16 @@ export class AiClient {
     const started = Date.now();
     let localError = null;
     try {
+      if (embeddedLanguageRuntime.installed()) {
+        const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
+        if (answer) {
+          this.lastBackend = 'hostinger-embedded-llama';
+          this.lastError = '';
+          this.lastLatencyMs = Date.now() - started;
+          return answer;
+        }
+        localError = new Error(embeddedLanguageRuntime.status().failure_code || 'embedded-unavailable');
+      }
       const wantsLocal = Boolean(
         this.bridge?.enabled
         && (this.bridge.preferLocalAi || config.aiMode === 'bridge'),

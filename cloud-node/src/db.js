@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 13;
+export const LATEST_SCHEMA_VERSION = 16;
 
 export function getDb() {
   if (pool) return pool;
@@ -618,6 +618,69 @@ async function applyMigrations(db) {
       ['cross-context-skill-learning', new Date().toISOString()],
     );
     current = 13;
+  }
+
+  if (current < 14) {
+    // Atomic, database-clock leases prevent duplicate mission dispatch on
+    // horizontally scaled instances. No local machine/paid service required.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mission_leases (
+      mission_id CHAR(36) PRIMARY KEY,
+      lease_owner VARCHAR(80) NOT NULL DEFAULT '',
+      lease_until DATETIME(6) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mission_leases_until(lease_until)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(14,?,?)',
+      ['atomic-mission-leases', new Date().toISOString()],
+    );
+    current = 14;
+  }
+
+  if (current < 15) {
+    // Evidence-linked observations; no generated labels passed off as learning.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reflex_observations (
+      id CHAR(36) PRIMARY KEY,
+      decision_id CHAR(36) NOT NULL,
+      compute_tier VARCHAR(24) NOT NULL,
+      difficulty DOUBLE NOT NULL,
+      risk DOUBLE NOT NULL,
+      novelty DOUBLE NOT NULL,
+      uncertainty DOUBLE NOT NULL,
+      outcome_ok TINYINT NOT NULL,
+      evidence_level VARCHAR(40) NOT NULL DEFAULT 'reported',
+      source VARCHAR(120) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reflex_decision(decision_id),
+      INDEX idx_aura_reflex_created(created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(15,?,?)',
+      ['evidence-linked-reflex-observations', new Date().toISOString()],
+    );
+    current = 15;
+  }
+
+  if (current < 16) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_agent_runs (
+      id CHAR(36) PRIMARY KEY,
+      mission_id CHAR(36) NOT NULL DEFAULT '',
+      role VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL,
+      task_sha256 CHAR(64) NOT NULL,
+      provider VARCHAR(120) NOT NULL DEFAULT '',
+      latency_ms BIGINT NOT NULL DEFAULT 0,
+      error_code VARCHAR(64) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      finished_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_agent_runs_mission(mission_id,created_at),
+      INDEX idx_aura_agent_runs_status(status,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(16,?,?)',
+      ['persistent-agent-role-runs', new Date().toISOString()],
+    );
+    current = 16;
   }
 }
 

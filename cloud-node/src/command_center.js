@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
 import { LongHorizonMissionEngine } from './long_horizon.js';
+import { classifyInitiativeResult } from './outcome_truth.js';
 
 const now = () => new Date().toISOString();
 
@@ -1600,14 +1601,9 @@ export class CommandCenter {
       return { id, status: 'waiting', reason: 'auto execution disabled' };
     }
 
-    if (initiative.kind === 'operator' && !bridgeOnline) {
-      await this.updateInitiative(id, {
-        status: 'waiting',
-        execution_mode: 'waiting-local-worker',
-        result: { reason: 'AURA Runtime worker offline' },
-      });
-      return { id, status: 'waiting', reason: 'worker offline' };
-    }
+    // Operator execution can use AURA's typed Cloud Workspace when the local
+    // worker is offline. kernel.operate() still denies arbitrary shell/network
+    // effects and truth classification keeps plan-only actions in waiting.
 
     const targetRepository = String(initiative.action_payload?.repository || '').trim();
     const crossProductEvolution = initiative.kind === 'evolution'
@@ -1635,6 +1631,12 @@ export class CommandCenter {
       "UPDATE aura_initiatives SET status='running',updated_at=? WHERE id=?",
       [now(), id],
     );
+    // Correlate one native Reflex assessment with this actual initiative.
+    // These tier inputs are a conservative heuristic, NOT calibrated labels.
+    const reflexDecision = this.kernel.inferenceAssessment({
+      novelty: ['research', 'evolution'].includes(String(initiative.kind)) ? 0.65 : 0.2,
+      risk: ['operator', 'github', 'evolution'].includes(String(initiative.kind)) ? 0.7 : 0.2,
+    });
 
     try {
       let result;
@@ -1660,6 +1662,7 @@ export class CommandCenter {
           await this.kernel.recordOutcome({
             automation_id: `command-center:${initiative.domain}`,
             event_type: 'aura.initiative.github',
+            reflex_decision_id: reflexDecision.decision_id,
             ok: true,
             signature: 'success',
             report: { initiative_id: id, title: initiative.title, result },
@@ -1733,14 +1736,9 @@ export class CommandCenter {
       if (initiative.kind === 'evolution' && returnedStatus === 'waiting-local-worker') {
         executionMode = 'waiting-local-worker';
       }
-      const waiting = Boolean(result?.queued)
-        || ['queued', 'leased'].includes(returnedStatus)
-        || returnedStatus.startsWith('waiting');
-      const failed = ['error', 'cancelled', 'canceled'].includes(returnedStatus)
-        || returnedStatus.endsWith('-rejected');
-      const executed = !waiting && !failed
-        && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
-      const status = waiting ? 'waiting' : (failed ? 'failed' : 'completed');
+      const classification = classifyInitiativeResult(initiative.kind, result);
+      if (classification.waiting_for_worker) executionMode = 'waiting-local-worker';
+      const { status, executed } = classification;
       await this.updateInitiative(id, {
         status,
         execution_mode: executionMode,
@@ -1751,11 +1749,12 @@ export class CommandCenter {
         'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
         [id, 'initiative-result', JSON.stringify({ status, executionMode, result }).slice(0, 30000), now()],
       );
-      if (status === 'completed') {
+      if (status === 'completed' || status === 'failed') {
         await this.kernel.recordOutcome({
+          reflex_decision_id: reflexDecision.decision_id,
           automation_id: `command-center:${initiative.domain}`,
           event_type: `aura.initiative.${initiative.kind}`,
-          ok: Boolean(executed),
+          ok: status === 'completed' && Boolean(executed),
           signature: executed ? 'success' : (result?.reason || 'not-executed'),
           report: { initiative_id: id, title: initiative.title, result, capabilities: usedCapabilities },
           capabilities: usedCapabilities,
@@ -1780,6 +1779,7 @@ export class CommandCenter {
       await this.kernel.recordOutcome({
         automation_id: `command-center:${initiative.domain}`,
         event_type: `aura.initiative.${initiative.kind}`,
+        reflex_decision_id: reflexDecision.decision_id,
         ok: false,
         signature: message,
         report: { initiative_id: id, title: initiative.title, error: message },
@@ -1828,17 +1828,13 @@ export class CommandCenter {
 
       if (job.status === 'completed') {
         const payload = job.result || {};
+        // Transport completion is not proof that the underlying action worked.
+        const classification = classifyInitiativeResult('worker', payload);
+        const executionRejected = classification.status !== 'completed';
         const payloadStatus = String(payload?.status || '').toLowerCase();
-        const evolutionRejected = row.kind === 'evolution'
-          && (
-            payload?.ok === false
-            || payloadStatus === 'error'
-            || payloadStatus === 'no-safe-patch'
-            || payloadStatus.endsWith('-rejected')
-          );
-        const finalStatus = evolutionRejected ? 'failed' : 'completed';
-        const finalError = evolutionRejected
-          ? String(payload?.error || payload?.reason || payloadStatus || 'evolution rejected').slice(0, 5000)
+        const finalStatus = executionRejected ? 'failed' : 'completed';
+        const finalError = executionRejected
+          ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed').slice(0, 5000)
           : '';
         await query(
           `UPDATE aura_initiatives
@@ -1857,8 +1853,8 @@ export class CommandCenter {
         await this.kernel.recordOutcome({
           automation_id: `command-center:${row.domain}`,
           event_type: `aura.initiative.${row.kind}`,
-          ok: !evolutionRejected && payload?.ok !== false,
-          signature: evolutionRejected || payload?.ok === false
+          ok: !executionRejected,
+          signature: executionRejected
             ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed')
             : 'success',
           report: { initiative_id: row.id, job_id: jobId, result: payload },
@@ -2382,6 +2378,15 @@ export class CommandCenter {
         return { enabled: true, error: this.lastError };
       });
       if (missionAdvance?.candidate && missionAdvance?.step?.id) {
+        // Keep the atomic claim alive during slow inference, research or
+        // execution. Releasing requires the original unique lease token.
+        const leaseHeartbeat = setInterval(() => {
+          void this.longHorizon.renewLease(missionAdvance.lease).catch((error) => {
+            this.lastError = String(error?.message || error).slice(0, 1000);
+          });
+        }, 60_000);
+        leaseHeartbeat.unref?.();
+        try {
         const missionCandidate = this.candidate(missionAdvance.candidate);
         const persisted = await this.persistInitiative(missionCandidate);
         const initiative = await one(
@@ -2411,6 +2416,13 @@ export class CommandCenter {
           mission_step: missionAdvance.step,
           initiative: missionResult,
         };
+        } finally {
+          clearInterval(leaseHeartbeat);
+          // The lease is held through persistence + execution, including errors.
+          await this.longHorizon.releaseLease(missionAdvance.lease).catch((error) => {
+            this.lastError = String(error?.message || error).slice(0, 1000);
+          });
+        }
       }
       const expertCandidates = await this.consultFailedInitiatives(2).catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);

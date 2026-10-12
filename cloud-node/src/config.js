@@ -169,6 +169,7 @@ export const config = Object.freeze({
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
   frenchLanguageRequired: bool('AURA_FRENCH_LANGUAGE_REQUIRED', true),
+  embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', true),
 
   // AURA 2.2: remote inference may run in zero-cost mode only through model IDs
   // whose endpoint is intrinsically free. No paid fallback is ever enabled here.

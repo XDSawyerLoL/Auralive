@@ -1252,6 +1252,11 @@ async function publicOperationalSnapshot() {
 
 app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
 
+app.get('/api/language/embedded/status', async () => ({
+  // Public, path-free diagnostics. Does not disclose server folders or secrets.
+  ...kernel.expression.language.embedded.status(),
+}));
+
 app.get('/api/language/progress', async () => {
   if (!bootstrap.runtimeReady) return { status: 'not-evaluated', score: null, delta: null, evaluated_at: null };
   return kernel.language.progress();

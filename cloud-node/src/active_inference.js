@@ -1,3 +1,5 @@
+import { routeReflex } from './reflex_policy.js';
+
 function clamp(value, low = 0, high = 1) {
   return Math.max(low, Math.min(high, Number(value || 0)));
 }
@@ -108,7 +110,17 @@ export class ActiveInferenceEngine {
       tokenBudget = 180;
     }
 
+    const reflex = routeReflex({
+      tier: computeTier, difficulty, risk: safeRisk, novelty: safeNovelty, uncertainty,
+    });
+    computeTier = reflex.tier;
+    if (reflex.escalated) {
+      modelRole = computeTier === 'verified' ? 'critic' : 'reasoning';
+      tokenBudget = computeTier === 'verified' ? 1000 : 700;
+    }
+
     return {
+      reflex,
       version: ActiveInferenceEngine.VERSION,
       uncertainty: Number(uncertainty.toFixed(4)),
       belief_clarity: Number((1 - uncertainty).toFixed(4)),
