@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 15;
+export const LATEST_SCHEMA_VERSION = 16;
 
 export function getDb() {
   if (pool) return pool;
@@ -659,6 +659,28 @@ async function applyMigrations(db) {
       ['evidence-linked-reflex-observations', new Date().toISOString()],
     );
     current = 15;
+  }
+
+  if (current < 16) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_agent_runs (
+      id CHAR(36) PRIMARY KEY,
+      mission_id CHAR(36) NOT NULL DEFAULT '',
+      role VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL,
+      task_sha256 CHAR(64) NOT NULL,
+      provider VARCHAR(120) NOT NULL DEFAULT '',
+      latency_ms BIGINT NOT NULL DEFAULT 0,
+      error_code VARCHAR(64) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      finished_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_agent_runs_mission(mission_id,created_at),
+      INDEX idx_aura_agent_runs_status(status,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(16,?,?)',
+      ['persistent-agent-role-runs', new Date().toISOString()],
+    );
+    current = 16;
   }
 }
 

@@ -258,7 +258,7 @@ export class LongHorizonMissionEngine {
 
     let parsed = {};
     try {
-      const answer = await this.kernel.runAgent('planner', prompt);
+      const answer = await this.kernel.runAgent('planner', prompt, { missionId: mission.id });
       parsed = parseJsonObject(answer?.answer);
     } catch {
       parsed = {};

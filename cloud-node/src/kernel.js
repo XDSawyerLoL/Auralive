@@ -10,6 +10,7 @@ import { ActiveInferenceEngine } from './active_inference.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { SkillLearningEngine } from './skill_learning.js';
+import { AgentRunLedger } from './agent_runs.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -70,6 +71,7 @@ export class CognitiveKernel {
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
+    this.agentRuns = new AgentRunLedger();
     this.lastInferenceAssessment = {};
     this.recentReflexDecisions = [];
     this.started = false;
@@ -895,7 +897,7 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
-  async runAgent(name, task) {
+  async runAgent(name, task, { missionId = '' } = {}) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
     const taskRole = ({
       planner: 'reasoning',
@@ -905,14 +907,24 @@ export class CognitiveKernel {
       operator: 'tools',
       critic: 'critic',
     })[name] || 'general';
-    const answer = await this.ai.generate(
-      `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
-      AGENT_ROLES[name],
-      700,
-      taskRole,
-    );
-    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000), task_role: taskRole });
-    return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
+    const run = await this.agentRuns.execute({
+      role: name,
+      missionId,
+      task,
+      provider: () => this.ai.lastBackend || this.ai.provider,
+      invoke: () => this.ai.generate(
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${this.soulCache?.current_intention || ''}`,
+        AGENT_ROLES[name],
+        700,
+        taskRole,
+      ),
+    });
+    await this.trace('agent', name, String(run.answer).slice(0, 4000), {
+      task_sha256_recorded: true, mission_id: missionId, run_id: run.id,
+      outcome: run.status, task_role: taskRole,
+    });
+    return { agent: name, answer: run.answer || 'IA non configurée sur AURA Cloud.',
+      status: run.status, run_id: run.id };
   }
 
   async swarm(task, names) {
@@ -1747,6 +1759,7 @@ export class CognitiveKernel {
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
       skill_learning: await this.skillLearning.status(),
+      agent_runs: await this.agentRuns.status(),
       reflex_evidence: summarizeReflexObservations(
         await query('SELECT compute_tier,outcome_ok,evidence_level FROM aura_reflex_observations ORDER BY created_at DESC LIMIT 200'),
       ),
