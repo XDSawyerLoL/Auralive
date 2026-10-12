@@ -8,6 +8,7 @@ import {
   needsExternalEvidence,
   safeGithubChangePath,
 } from '../src/command_center.js';
+import { classifyInitiativeResult } from '../src/outcome_truth.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const commandSource = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
@@ -161,16 +162,17 @@ test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
 test('offline Fleet evolution remains waiting instead of recording false success', () => {
   assert.match(commandSource, /crossProductEvolution && !bridgeOnline/);
   assert.match(commandSource, /execution_mode: 'waiting-local-worker'/);
-  assert.match(commandSource, /returnedStatus\.startsWith\('waiting'\)/);
-  assert.match(commandSource, /\['queued', 'leased'\]\.includes\(returnedStatus\)/);
-  assert.match(commandSource, /const status = waiting \? 'waiting'/);
+  assert.match(commandSource, /classifyInitiativeResult\(initiative\.kind, result\)/);
+  assert.equal(classifyInitiativeResult('evolution', { status: 'waiting-local-worker' }).status, 'waiting');
+  assert.equal(classifyInitiativeResult('evolution', { status: 'queued' }).status, 'waiting');
 });
 
 test('reconciliation records rejected or no-safe-patch Fleet worker results as failed', () => {
-  assert.match(commandSource, /payloadStatus\.endsWith\('-rejected'\)/);
-  assert.match(commandSource, /payloadStatus === 'no-safe-patch'/);
-  assert.match(commandSource, /const finalStatus = evolutionRejected \? 'failed' : 'completed'/);
-  assert.match(commandSource, /ok: !evolutionRejected/);
+  assert.equal(classifyInitiativeResult('worker', { status: 'no-safe-patch' }).status, 'failed');
+  assert.equal(classifyInitiativeResult('worker', { status: 'security-rejected' }).status, 'failed');
+  assert.equal(classifyInitiativeResult('worker', { ok: false, reason: 'worker denied' }).status, 'failed');
+  assert.match(commandSource, /const finalStatus = executionRejected \? 'failed' : 'completed'/);
+  assert.match(commandSource, /ok: !executionRejected/);
 });
 
 test('Director mode creates rotating portfolio Evolution initiatives', () => {
