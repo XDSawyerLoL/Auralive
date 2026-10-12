@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { allowedArtifactRedirect, noexecMount, nativeProvisionSupported,
-  EmbeddedProvisioner, hasLibraries } from '../src/embedded_provisioner.js';
+  EmbeddedProvisioner, hasLibraries, installBundledStaticServer } from '../src/embedded_provisioner.js';
 
 test('trusts official HTTPS release / model hosts and forbids other endpoints',()=>{
   assert.equal(allowedArtifactRedirect('https://github.com/ggml-org/llama.cpp/releases','binary'),true);
@@ -64,5 +65,33 @@ test('provisioning never counts a dangling library symlink as a verified native 
     fs.writeFileSync(path.join(root,'libllama-common.so.0.0.11425'),'native-file');
     fs.writeFileSync(path.join(root,'libggml.so.0.11.1'),'native-file');
     assert.equal(await hasLibraries(root),true);
+  }finally{fs.rmSync(root,{force:true,recursive:true});}
+});
+
+test('standalone musl Linux payload is copied, verified, and executable without any .so',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-musl-fixture-'));
+  try{
+    const packageDir=path.join(root,'node','native','linux-x64');
+    const cache=path.join(root,'cache');
+    fs.mkdirSync(packageDir,{recursive:true});
+    fs.mkdirSync(cache);
+    const binary=path.join(packageDir,'llama-server');
+    fs.writeFileSync(binary,'#!/bin/sh\nprintf "STATIC_OK\\n"\n',{mode:0o644});
+    const expected=createHash('sha256').update(fs.readFileSync(binary)).digest('hex');
+    fs.writeFileSync(path.join(packageDir,'llama-server.sha256'),expected+'\n');
+    const result=await installBundledStaticServer(cache,{
+      root:path.join(root,'node'),platform:'linux',arch:'x64',
+    });
+    assert.ok(result.includes('standalone-musl-b11425'));
+    assert.equal(fs.readFileSync(result,'utf8'),fs.readFileSync(binary,'utf8'));
+    assert.equal(fs.statSync(result).mode&0o100,0o100);
+    assert.equal(fs.existsSync(path.join(path.dirname(result),'libllama-common.so.0')),false);
+    assert.equal(await installBundledStaticServer(cache,{
+      root:path.join(root,'node'),platform:'win32',arch:'x64',
+    }),'');
+    fs.writeFileSync(binary,'tampered');
+    await assert.rejects(()=>installBundledStaticServer(cache,{
+      root:path.join(root,'node'),platform:'linux',arch:'x64',
+    }),/embedded-static-sha256-mismatch/);
   }finally{fs.rmSync(root,{force:true,recursive:true});}
 });
