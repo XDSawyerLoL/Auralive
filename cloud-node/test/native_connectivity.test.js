@@ -39,7 +39,7 @@ test('kernel listing in Node namespace confirms expected IPv4 LISTEN port',()=>{
 });
 
 test('direct IPv4 dial succeeds to a real local TCP listener',async()=>{
-  const server=net.createServer(socket=>socket.end('OK'));
+  const server=net.createServer(socket=>{socket.on('error',()=>{});socket.resume();});
   server.listen(0,'127.0.0.1');await once(server,'listening');
   try{
     assert.deepEqual(await nativeTcpDial(server.address().port),{result:'connected'});
