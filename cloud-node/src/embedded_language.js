@@ -652,6 +652,8 @@ export class EmbeddedLanguageRuntime {
       });
       if(this.nativeTransport==='unix'){
         args[args.indexOf('--host')+1]=this.unixSocketPath;
+        const portArg=args.indexOf('--port');
+        if(portArg>=0)args.splice(portArg,2);
       }
       const spec=nativeLaunchSpec(executable,args,useElfLoader);
       if(!spec)throw new Error('embedded-system-loader-unavailable');
@@ -755,7 +757,7 @@ export class EmbeddedLanguageRuntime {
         }
       }catch(error){
         this.healthLastResult=healthProbeResult(error);
-        if(this.healthLastResult==='connection-refused'){
+        if(this.nativeTransport==='tcp'&&this.healthLastResult==='connection-refused'){
           // Capture socket, namespace and client connectivity close to the SAME
           // failed HTTP attempt; a later status sample alone cannot prove overlap.
           const socket=nativeSocketEvidence(child.pid,this.port);
