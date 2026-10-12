@@ -13,13 +13,14 @@ export function classifyInitiativeResult(kind, candidate = {}) {
     .filter(Boolean);
   const queued = Boolean(result.queued || nested.queued);
   const waitingStatus = statuses.some((status) => WAITING.has(status) || status.startsWith('waiting-'));
+  const failure = result.ok === false || nested.ok === false
+    || statuses.some((status) => FAILED.has(status) || status.endsWith('-rejected'));
   const planOnly = kind === 'operator'
     && (result.executed === false || nested.executed === false)
     && !queued
-    && !waitingStatus;
-  const waiting = queued || waitingStatus || planOnly;
-  const failure = result.ok === false || nested.ok === false
-    || statuses.some((status) => FAILED.has(status) || status.endsWith('-rejected'));
+    && !waitingStatus
+    && !failure;
+  const waiting = !failure && (queued || waitingStatus || planOnly);
   const actualExecution = result.executed === true || nested.executed === true;
   const hasResult = Object.keys(result).length > 0;
   const completed = !waiting && !failure && hasResult
