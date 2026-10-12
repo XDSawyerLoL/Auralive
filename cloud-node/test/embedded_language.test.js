@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
-  EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec} from '../src/embedded_language.js';
+  EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
+  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -221,4 +223,71 @@ test('system ELF loader fallback is restricted to trusted system paths and uses 
     assert.equal(spec.mode,'system-elf-loader');
     assert.equal(spec.args[3],'--version');
   }
+});
+
+test('Hostinger boot failure classification identifies kernel kill, CPU incompatibility and model errors',()=>{
+  assert.equal(classifyEmbeddedFailure('exit.signal.sigkill').code,'embedded-insufficient-memory');
+  assert.equal(classifyEmbeddedFailure('out of memory').code,'embedded-insufficient-memory');
+  assert.equal(classifyEmbeddedFailure('exit.signal.sigill').code,'embedded-cpu-instruction-unsupported');
+  assert.equal(classifyEmbeddedFailure('exit.signal.sigsegv').code,'embedded-native-segfault');
+  assert.equal(classifyEmbeddedFailure('failed to load model').code,'embedded-model-load-failed');
+  assert.equal(classifyEmbeddedFailure('error parsing arguments').code,'embedded-unsupported-startup-option');
+  assert.equal(classifyEmbeddedFailure('embedded-engine-startup-timeout').code,'embedded-startup-timeout');
+  assert.equal(classifyEmbeddedFailure('embedded-engine-exited-127').code,'embedded-process-exit-127');
+});
+test('native boot profiles use valid upstream flags and reduced memory on retry',()=>{
+  const standard=nativeBootArgs('/model.gguf',47621);
+  const low=nativeBootArgs('/model.gguf',47621,{lowMemory:true});
+  assert.ok(standard.includes('--no-warmup'));
+  assert.ok(standard.includes('--parallel'));
+  assert.ok(standard.includes('--ubatch-size'));
+  assert.ok(standard.includes('--batch-size'));
+  assert.equal(standard[standard.indexOf('--ctx-size')+1],'2048');
+  assert.equal(low[low.indexOf('--ctx-size')+1],'768');
+  assert.equal(low[low.indexOf('--batch-size')+1],'32');
+});
+test('path-free language diagnostics do not expose stderr, model path or tokens',()=>{
+  const raw='failed to load model /home/customer/private.gguf?token=MY_PRIVATE_TOKEN; bad_alloc';
+  const flags=embeddedLogSignals(raw);
+  assert.deepEqual(flags,['memory-allocation-failed','model-loader-failed']);
+  assert.doesNotMatch(JSON.stringify(flags),/customer|MY_PRIVATE_TOKEN|private\.gguf/);
+});
+test('memory snapshot reports only rounded resources and OOM counts',()=>{
+  const files={
+    '/sys/fs/cgroup/memory.max':String(1536*1048576),
+    '/sys/fs/cgroup/memory.current':String(730*1048576),
+    '/sys/fs/cgroup/memory.events':'low 0\nhigh 0\nmax 0\noom 2\noom_kill 1\n',
+  };
+  const result=cgroupMemorySnapshot({read:(file)=>{if(!(file in files))throw Error('missing');return files[file];}});
+  assert.deepEqual(result,{limit_mb:1536,current_mb:730,oom_events:2,oom_kills:1});
+});
+test('SIGKILL before native health reattempts with a smaller context instead of looping forever',async()=>{
+  const launches=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/test-model.gguf',binFound:true,modelFound:true,executableAllowed:true,installed:true}),
+    provisioner:null,allocatePort:async()=>19098,
+    request:async()=>({ok:launches.length>=2}),
+    delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
+    bootTimeoutMs:1000,
+    spawnProcess:(command,args)=>{
+      launches.push({command,args});
+      const child=new EventEmitter();
+      child.exitCode=null;child.signalCode=null;
+      child.stderr=new EventEmitter();
+      child.kill=()=>{};
+      if(launches.length===1){
+        setImmediate(()=>{
+          child.signalCode='SIGKILL';
+          child.emit('exit',null,'SIGKILL');
+        });
+      }
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),true);
+  assert.equal(launches.length,2);
+  assert.equal(launches[1].args[launches[1].args.indexOf('--ctx-size')+1],'768');
+  assert.equal(runtime.status().boot_profile,'low-memory');
+  assert.equal(runtime.status().ready,true);
 });
