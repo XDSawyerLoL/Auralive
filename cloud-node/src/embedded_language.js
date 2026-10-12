@@ -43,7 +43,7 @@ export function llamaLoaderEnv(binary, original = process.env) {
   const folders=directories.filter(folder=>{
     if(seen.has(folder) || !fs.existsSync(folder))return false;
     seen.add(folder);
-    if(folder===dir)return true;
+    if(folder===dir || folder===path.join(dir,'lib') || folder===path.join(dir,'lib64'))return true;
     try{return fs.readdirSync(folder).some(name=>/^lib(?:llama|ggml).*\.so(?:\.\d+)*$/i.test(name));}
     catch{return false;}
   });
