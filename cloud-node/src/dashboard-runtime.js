@@ -558,8 +558,8 @@ function renderLanguageEngine(state){
   const backend=String(state?.status||'');
   const fail=String(install.error_code||state?.failure_code||'');
   const installed=stage==='installed-verified'&&!!state?.installed;
-  const healthy=Boolean(state?.ready&&state?.last_success_at);
-  const booting=backend==='starting';
+  const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at);
+  const booting=backend==='starting'||backend==='verifying-inference';
   const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
   const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
   panel.dataset.state=kind;
@@ -576,6 +576,12 @@ function renderLanguageEngine(state){
     'embedded-download-http-404':'Archive du moteur ou GGUF introuvable',
     'embedded-thread-capacity-exhausted':'Limite de threads de Hostinger atteinte',
     'embedded-process-exit-0':'Le moteur quitte sans servir le modèle',
+    'embedded-clean-exit-before-inference':'Le moteur quitte avant toute génération',
+    'embedded-native-stopped-after-serving':'Le moteur s’est arrêté après une réponse',
+    'embedded-inference-probe-timeout':'Le modèle ne produit pas de texte dans les délais',
+    'embedded-inference-probe-http':'L’inférence locale renvoie une erreur HTTP',
+    'embedded-inference-probe-empty':'L’inférence ne renvoie aucun texte',
+    'embedded-inference-probe-invalid':'La preuve de génération est absente',
     'embedded-insufficient-memory':'Mémoire du serveur insuffisante',
     'embedded-startup-timeout':'Démarrage du moteur trop long',
     'embedded-model-load-failed':'Modèle GGUF impossible à charger',
@@ -585,18 +591,20 @@ function renderLanguageEngine(state){
     'embedded-shared-library-unresolved':'Bibliothèque native introuvable',
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
-  $('engineTitle').textContent=healthy?'Français naturel opérationnel'
+  $('engineTitle').textContent=healthy?'Génération locale vérifiée'
     :blocked?(titles[fail]||'Moteur français indisponible')
       :booting?'Chargement du moteur linguistique'
         :'Fichiers installés · français non vérifié';
   const attempts=Array.isArray(state?.boot_attempts)?state.boot_attempts:[];
   const history=attempts.map(a=>a.profile+': '+a.outcome+
-    (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:''))
+    (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:'')+
+    (a.health_seen?' santé OK':'')+(a.inference_verified?' inférence vérifiée':''))
     .join(' · ');
   $('engineDescription').textContent=healthy
-    ?'Une véritable réponse française a été produite sur ce serveur. Aucun entraînement des poids n’est présumé.'
+    ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
     :booting
-      ?'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée.'
+      ?backend==='verifying-inference'?'Le modèle a répondu au contrôle de santé. AURA vérifie maintenant la production réelle de tokens.'
+         :'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée.'
       :blocked
         ?'Fichiers : '+(installed?'installés et vérifiés':'installation incomplète')+
           '. Moteur : échec du démarrage'+(fail?' ('+fail+')':'')+

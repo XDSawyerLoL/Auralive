@@ -40,6 +40,24 @@ export function classifyEmbeddedFailure(error) {
   if (/eaddrinuse|failed to bind|address already in use/.test(reason))
     return {code:'embedded-loopback-port-in-use',
       hint:'Le port local du moteur est déjà occupé sur Hostinger.'};
+  if (/embedded-native-stopped-after-serving/.test(reason))
+    return {code:'embedded-native-stopped-after-serving',
+      hint:'Le serveur a généré un texte puis s’est arrêté ; il doit être redémarré avant une nouvelle conversation.'};
+  if (/embedded-clean-exit-before-inference/.test(reason))
+    return {code:'embedded-clean-exit-before-inference',
+      hint:'Le processus s’est arrêté avec le code 0 avant de produire du texte.'};
+  if (/embedded-inference-probe-timeout/.test(reason))
+    return {code:'embedded-inference-probe-timeout',
+      hint:'Le contrôle de santé répond, mais le modèle ne génère pas de texte dans le délai prévu.'};
+  if (/embedded-inference-probe-empty/.test(reason))
+    return {code:'embedded-inference-probe-empty',
+      hint:'Le moteur est chargé, mais ne fournit aucun texte pendant le test d’inférence.'};
+  if (/embedded-inference-probe-http/.test(reason))
+    return {code:'embedded-inference-probe-http',
+      hint:'Le contrôle de santé répond mais la requête de génération échoue.'};
+  if (/embedded-inference-probe-invalid/.test(reason))
+    return {code:'embedded-inference-probe-invalid',
+      hint:'La requête a retourné une réponse invalide ou non vérifiable.'};
   if (/startup.timeout|timeout waiting for health/.test(reason))
     return {code:'embedded-startup-timeout',
       hint:'Le modèle ne devient pas disponible avant le délai de démarrage.'};
@@ -344,6 +362,8 @@ export class EmbeddedLanguageRuntime {
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
     this.pidsAtBoot=null;this.pidsAfterFailure=null;
     this.bootAttempts=[];this.bootStartedAt=0;
+    this.healthSeen=false;this.lastProbeAt='';this.lastProbeLatencyMs=0;
+    this.probeTimeoutMs=30_000;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -384,7 +404,9 @@ export class EmbeddedLanguageRuntime {
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
-      status:this.ready ? (this.lastSuccessAt ? 'verified-responsive' : 'model-loaded-unverified')
+      status:this.ready && this.lastProbeAt ? 'verified-responsive'
+         :this.healthSeen && this.booting ? 'verifying-inference'
+         :this.ready ? 'model-loaded-unverified'
         :!enabled?'disabled'
         :!item.binFound?'binary-missing':!item.modelFound?'gguf-missing'
           :!item.executableAllowed?'permission-denied':this.booting?'starting'
@@ -395,6 +417,8 @@ export class EmbeddedLanguageRuntime {
           :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
+       last_probe_at:this.lastProbeAt,probe_verified:Boolean(this.ready&&this.lastProbeAt),
+       probe_latency_ms:this.lastProbeLatencyMs,health_seen:this.healthSeen,
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
@@ -421,10 +445,12 @@ export class EmbeddedLanguageRuntime {
       last.exit_signal=detail.signal??null;
       last.signals=this.lastLogSignals.slice();
       last.failure_stage=this.failureStage;
+      last.health_seen=this.healthSeen;
+      last.inference_verified=Boolean(outcome==='ready' && this.lastProbeAt);
     }
   }
   fail(error){
-    this.ready=false;this.lastFailure=errorText(error);
+    this.ready=false;this.lastProbeAt='';this.lastFailure=errorText(error);
     this.memoryAfterFailure=cgroupMemorySnapshot();
     this.pidsAfterFailure=cgroupPidSnapshot();
     if(this.memoryAtBoot?.oom_kills!==null && this.memoryAtBoot?.oom_kills!==undefined
@@ -484,14 +510,16 @@ export class EmbeddedLanguageRuntime {
   }
   async boot(useElfLoader=false,lowMemory=false){
     const {executable,gguf}=this.inspect();
-    this.lastFailure='';this.port=await this.allocatePort();
+    this.lastFailure='';this.ready=false;this.lastProbeAt='';
+    this.healthSeen=false;this.lastProbeLatencyMs=0;this.port=await this.allocatePort();
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
     this.bootStartedAt=Date.now();
     this.bootAttempts.push({id:this.bootStartedAt,profile:this.bootProfile,
       outcome:'started',elapsed_ms:0,failure_code:'',
-      exit_code:null,exit_signal:null,signals:[],failure_stage:'spawning-native-server'});
+      exit_code:null,exit_signal:null,signals:[],failure_stage:'spawning-native-server',
+      health_seen:false,inference_verified:false});
     this.bootAttempts=this.bootAttempts.slice(-4);
     this.memoryAtBoot=cgroupMemorySnapshot();
     this.pidsAtBoot=cgroupPidSnapshot();
@@ -534,6 +562,8 @@ export class EmbeddedLanguageRuntime {
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
         this.fail((stderr||stdout||'')+
+          (code===0?(this.ready?' embedded-native-stopped-after-serving'
+            :' embedded-clean-exit-before-inference'):'')+
           ' embedded-engine-exited-'+(code??'signal')+
           (signal?' exit.signal.'+signal.toLowerCase():'')+
           (code===137?' exit.code.137':''));
@@ -548,8 +578,43 @@ export class EmbeddedLanguageRuntime {
         const health=await this.request('http://127.0.0.1:'+this.port+'/health',{
           signal:AbortSignal.timeout(1500)});
         if(health.ok){
-          this.ready=true;this.failureStage='';
-          this.recordAttempt('ready');return true;
+          this.healthSeen=true;
+          this.failureStage='verifying-inference';
+          const started=Date.now();
+          try{
+            const proof=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
+              method:'POST',headers:{'content-type':'application/json'},
+              body:JSON.stringify({model:'local',stream:false,temperature:0,max_tokens:48,
+                chat_template_kwargs:{enable_thinking:false},
+                messages:[{role:'user',content:'Réponds en français en un mot : bonjour.'}]}),
+              signal:AbortSignal.timeout(this.probeTimeoutMs),
+            });
+            if(!proof?.ok)throw Error('embedded-inference-probe-http');
+            const payload=await proof.json();
+            const answer=String(payload?.choices?.[0]?.message?.content||'')
+              .replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
+            if(!answer)throw Error('embedded-inference-probe-empty');
+            // llama.cpp OpenAI-compatible responses include actual generation usage.
+            // Do not mistake an HTTP JSON stub or echo page for a model answer.
+            const generated=Number(payload?.usage?.completion_tokens);
+            if(!Number.isFinite(generated)||generated<1)
+              throw Error('embedded-inference-probe-invalid');
+            if(this.child!==child||child.exitCode!==null||child.signalCode!==null||this.lastFailure)
+              throw Error('embedded-inference-probe-invalid');
+            this.lastProbeAt=new Date().toISOString();
+            this.lastProbeLatencyMs=Date.now()-started;
+            this.ready=true;this.failureStage='';this.recordAttempt('ready');
+            return true;
+          }catch(error){
+            const msg=String(error?.message||'');
+            const timedOut=/abort|timeout/i.test(String(error?.name||'')+' '+msg);
+            const code=timedOut?'embedded-inference-probe-timeout'
+              :msg.startsWith('embedded-inference-probe-')?msg
+                :'embedded-inference-probe-invalid';
+            if(!this.lastFailure)this.fail(code);
+            this.failureStage='inference-verification-failed';
+            this.recordAttempt('probe-failed');break;
+          }
         }
       }catch{}
       await this.delay(400);
@@ -584,10 +649,11 @@ export class EmbeddedLanguageRuntime {
       const response=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({model:'local',stream:false,temperature:0.6,
-          max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),messages:[
+          max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),
+          chat_template_kwargs:{enable_thinking:false},messages:[
             {role:'system',content:String(system).slice(0,9000)},
             {role:'user',content:String(prompt).slice(0,14000)}]}),
-        signal:AbortSignal.timeout(90_000)});
+        signal:AbortSignal.timeout(30_000)});
       if(!response.ok)throw Error('embedded HTTP '+response.status);
       const json=await response.json();
       const answer=String(json?.choices?.[0]?.message?.content||'').trim();

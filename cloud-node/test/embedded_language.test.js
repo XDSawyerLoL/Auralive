@@ -63,6 +63,8 @@ test('startup cannot claim successful language generation from health alone', as
   runtime.lastSuccessAt='';
   assert.equal(runtime.status().status,'model-loaded-unverified');
   runtime.lastSuccessAt='2026-10-12T12:00:00Z';
+  assert.equal(runtime.status().status,'model-loaded-unverified');
+  runtime.lastProbeAt='2026-10-12T12:00:01Z';
   assert.equal(runtime.status().status,'verified-responsive');
 });
 test('blocked network port allocation is a recoverable runtime failure',async()=>{
@@ -267,7 +269,9 @@ test('SIGKILL before native health reattempts with a smaller context instead of 
     discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
       gguf:'/tmp/test-model.gguf',binFound:true,modelFound:true,executableAllowed:true,installed:true}),
     provisioner:null,allocatePort:async()=>19098,
-    request:async()=>({ok:launches.length>=2}),
+    request:async(url,opts)=>opts?.method==='POST'
+      ? {ok:launches.length>=2,json:async()=>({usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}
+      : {ok:launches.length>=2},
     delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
     bootTimeoutMs:1000,
     spawnProcess:(command,args)=>{
@@ -337,7 +341,9 @@ test('thread creation abort retries once under low-memory single-thread profile'
     discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
       gguf:'/tmp/installed.gguf',binFound:true,modelFound:true,executableAllowed:true,installed:true}),
     provisioner:null,allocatePort:async()=>19099,
-    request:async()=>({ok:launches.length>=2}),
+    request:async(url,opts)=>opts?.method==='POST'
+      ? {ok:launches.length>=2,json:async()=>({usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}
+      : {ok:launches.length>=2},
     delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
     bootTimeoutMs:1000,
     spawnProcess:(cmd,args,opts)=>{
@@ -404,7 +410,7 @@ test('a process exiting with code 0 before health is ready is still a failure',a
   assert.equal(await runtime.start(),false);
   const status=runtime.status();
   assert.equal(status.ready,false);
-  assert.equal(status.failure_code,'embedded-process-exit-0');
+  assert.equal(status.failure_code,'embedded-clean-exit-before-inference');
   assert.equal(status.boot_attempts.length,1);
   assert.equal(status.boot_attempts[0].exit_code,0);
   assert.equal(status.boot_attempts[0].outcome,'exit');
@@ -443,4 +449,137 @@ test('failed low-memory retry keeps both attempts and original SIGABRT evidence'
   assert.equal(status.boot_attempts[1].profile,'low-memory');
   assert.equal(status.boot_attempts[1].exit_code,0);
   assert.equal(status.ready,false);
+});
+
+test('health 200 alone does not count as completed French inference',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/installed.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>21001,bootTimeoutMs:500,
+    delay:async()=>{},
+    request:async(url,opts)=>opts?.method==='POST'?{ok:false,status:503}:{ok:true},
+    spawnProcess:()=>{
+      const child=new EventEmitter();child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    }
+  });
+  assert.equal(await runtime.start(),false);
+  const state=runtime.status();
+  assert.equal(state.ready,false);
+  assert.equal(state.health_seen,true);
+  assert.equal(state.probe_verified,false);
+  assert.equal(state.failure_code,'embedded-inference-probe-http');
+  assert.equal(state.boot_attempts[0].outcome,'probe-failed');
+  assert.equal(state.boot_attempts[0].health_seen,true);
+  assert.equal(state.boot_attempts[0].inference_verified,false);
+});
+
+test('a nonempty real response on chat endpoint authorizes readiness',async()=>{
+  const seen=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/installed.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>21002,bootTimeoutMs:1000,
+    delay:async()=>{},
+    request:async(url,opts)=>{
+      seen.push({url,opts});
+      if(opts?.method==='POST')return {ok:true,json:async()=>({
+        usage:{completion_tokens:2},choices:[{message:{content:'Bonjour.'}}]})};
+      return {ok:true};
+    },
+    spawnProcess:()=>{
+      const child=new EventEmitter();child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),true);
+  const state=runtime.status();
+  assert.equal(state.probe_verified,true);
+  assert.equal(state.status,'verified-responsive');
+  assert.equal(state.boot_attempts[0].inference_verified,true);
+  assert.ok(state.last_probe_at);
+  assert.equal(state.last_success_at,''); // proof does not simulate a user conversation
+  const probe=seen.find(x=>x.opts?.method==='POST');
+  assert.ok(probe?.url.endsWith('/v1/chat/completions'));
+  assert.equal(JSON.parse(probe.opts.body).chat_template_kwargs.enable_thinking,false);
+  assert.equal(JSON.parse(probe.opts.body).max_tokens,48);
+});
+
+test('empty content and reasoning-only responses are not verified',async()=>{
+  for(const message of [{content:''},{content:'<think>internal reasoning</think>'},{reasoning_content:'hidden'}]){
+    const runtime=new EmbeddedLanguageRuntime({
+      discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/installed.gguf',
+        installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+      provisioner:null,allocatePort:async()=>21003,bootTimeoutMs:500,
+      delay:async()=>{},
+      request:async(url,opts)=>opts?.method==='POST'
+        ? {ok:true,json:async()=>({choices:[{message}]})}:{ok:true},
+      spawnProcess:()=>{
+        const child=new EventEmitter();child.exitCode=null;child.signalCode=null;
+        child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+        return child;
+      },
+    });
+    assert.equal(await runtime.start(),false);
+    assert.equal(runtime.status().failure_code,'embedded-inference-probe-empty');
+  }
+});
+
+test('an AbortError in the inference probe is separately diagnosed',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/model.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>21004,bootTimeoutMs:500,delay:async()=>{},
+    request:async(url,opts)=>{
+      if(opts?.method==='POST'){const error=new Error('This operation was aborted');error.name='AbortError';throw error;}
+      return {ok:true};
+    },
+    spawnProcess:()=>{
+      const child=new EventEmitter();child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),false);
+  assert.equal(runtime.status().failure_code,'embedded-inference-probe-timeout');
+});
+
+test('a completed probe never prevents reporting native post-start termination',async()=>{
+  let child;
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/model.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>21005,bootTimeoutMs:1000,
+    request:async(url,opts)=>opts?.method==='POST'
+      ? {ok:true,json:async()=>({usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}:{ok:true},
+    spawnProcess:()=>{
+      child=new EventEmitter();child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    }
+  });
+  assert.equal(await runtime.start(),true);
+  child.exitCode=0;child.emit('exit',0,null);
+  assert.equal(runtime.status().ready,false);
+  assert.equal(runtime.status().probe_verified,false);
+  assert.equal(runtime.status().failure_code,'embedded-native-stopped-after-serving');
+});
+
+test('a textual stub with no positive completion_tokens is never proof of inference',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/model.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>21006,bootTimeoutMs:500,
+    request:async(url,opts)=>opts?.method==='POST'
+      ? {ok:true,json:async()=>({choices:[{message:{content:'Bonjour'}}]})}:{ok:true},
+    spawnProcess:()=>{
+      const child=new EventEmitter();child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),false);
+  assert.equal(runtime.status().failure_code,'embedded-inference-probe-invalid');
 });
