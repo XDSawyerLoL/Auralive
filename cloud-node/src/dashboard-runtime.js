@@ -567,6 +567,13 @@ function renderLanguageEngine(state){
   $('railLanguage').textContent=healthy?'Conversation disponible'
     :booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
+    'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
+    'embedded-sha256-mismatch':'Le modèle ou moteur téléchargé a échoué au contrôle d’intégrité',
+    'embedded-insufficient-cgroup-memory':'Mémoire serveur insuffisante pour installer le modèle',
+    'embedded-cache-unavailable-or-noexec':'Cache inexécutable ou espace disque insuffisant',
+    'embedded-download-http-403':'Téléchargement refusé à la source',
+    'embedded-download-http-429':'Téléchargement temporairement limité',
+    'embedded-download-http-404':'Archive du moteur ou GGUF introuvable',
     'embedded-thread-capacity-exhausted':'Limite de threads de Hostinger atteinte',
     'embedded-process-exit-0':'Le moteur quitte sans servir le modèle',
     'embedded-insufficient-memory':'Mémoire du serveur insuffisante',
