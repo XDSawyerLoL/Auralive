@@ -1,9 +1,11 @@
-# AURA autonomy phase II — mission leasing
+# AURA autonomy phase II — mission leasing and truthful outcomes
 Date: 2026-10-12
 
-* Database migration 14: MySQL atomic leases bound to mission UUIDs, DB-clock expiry, renewable with unique per-claim tokens.
-* Scheduler rotates eligible missions and skips leased ones, allowing several Node instances to process distinct missions cooperatively. No local PC is required.
-* One mission step can acquire only one initiative via atomic compare-and-set.
-* Command Center releases the lease on success or failure. Tasks hold the lease until their first initiative execution finishes.
-* Remaining limitation: lease TTL is 300s, and no heartbeat renew occurs during a long-running step. The compare-and-set gate prevents a second initiative from binding, but pathological long-running work needs duration-bound lease renewal and eventual cancellation of abandoned queued duplicates.
-* Validate MySQL migration on staging, long-running timeouts, duplicate jobs, and multi-instance contention before production.
+- MySQL atomic lease acquisition/release/renewal for each active mission, database-clock TTL and unique fencing tokens.
+- Cooperative scheduling rotates all eligible projects, and skips concurrently leased missions. No PC is required for safe Cloud Workspace operations.
+- Renew the lease while a mission initiative is dispatched. Each mission step is also bound via compare-and-set to one initiative. Note: this is not an exactly-once guarantee for arbitrary side effects after network partitions; durable capability receipts are still required.
+- The shared outcome_truth classifier is merged from the tested #198 work into this feature branch, rejecting plan-only and failed payloads, including worker transports marked complete.
+- Command Center permits typed Cloud Workspace operators without a local bridge, but no unrestricted host shell; plan-only responses remain waiting.
+- Native Reflex decisions for real initiatives are tracked by explicit decision ID in the existing outcome ledger and the new v15 observation table.
+- This feature PR is stacked on #199 and overlaps #198; merge order must be coordinated to avoid duplicate classifier changes.
+- Needs all CI green and real staging MySQL/multiple Node instances with failover before production merge.

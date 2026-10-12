@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
+import { classifyInitiativeResult } from './outcome_truth.js';
 import { selectNextMission, missionRotation } from './mission_scheduler.js';
 import { MissionLeaseManager } from './mission_leases.js';
 
@@ -53,15 +54,7 @@ function likelyNeedsResearch(value) {
 }
 
 function resultLooksSuccessful(kind, storedResult) {
-  const result = parseJson(storedResult, {});
-  const returnedStatus = String(result?.status || result?.result?.status || '').toLowerCase();
-  if (['error', 'failed', 'cancelled', 'canceled', 'no-safe-patch'].includes(returnedStatus)) {
-    return false;
-  }
-  if (returnedStatus.endsWith('-rejected')) return false;
-  if (kind === 'operator' && result?.executed === false && !result?.queued) return false;
-  if (result?.ok === false) return false;
-  return true;
+  return classifyInitiativeResult(kind, parseJson(storedResult, {})).status === 'completed';
 }
 
 export class LongHorizonMissionEngine {
@@ -716,6 +709,10 @@ export class LongHorizonMissionEngine {
 
   async releaseLease(lease) {
     return this.leases.release(lease);
+  }
+
+  async renewLease(lease) {
+    return this.leases.renew(lease);
   }
 
   async evaluateMissionCandidate(mission) {
