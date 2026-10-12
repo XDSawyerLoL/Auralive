@@ -200,7 +200,7 @@ jobs:
             assert.equal(chat.status,200,'chat/completions HTTP failed');
             const payload=await chat.json();
             const content=String(payload?.choices?.[0]?.message?.content||'')
-              .replace(/<think>[\\s\\S]*?<\\/think>/gi,'').trim();
+              .replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
             const generated=Number(payload?.usage?.completion_tokens);
             assert.ok(content.length>0,'chat/completions generated no visible text');
             assert.ok(Number.isFinite(generated)&&generated>=1,'chat/completions did not prove token generation');
