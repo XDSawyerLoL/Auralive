@@ -24,13 +24,31 @@ export function classifyEmbeddedFailure(error) {
   return { code: 'embedded-engine-failed',
     hint: 'Le moteur intégré ne démarre pas. Examiner les journaux de l’hébergement.' };
 }
+// Hostinger releases sometimes place libllama-common.so.0 in a sibling or
+// nested lib/ directory. Linux does not search those directories recursively.
 export function llamaLoaderEnv(binary, original = process.env) {
   const dir = path.dirname(safePath(binary));
-  const folders = [dir, path.join(dir,'lib'),path.join(dir,'lib64'),
-    path.join(path.dirname(dir),'lib'),path.join(path.dirname(dir),'lib64')]
-    .filter((v,i,a)=>a.indexOf(v)===i && fs.existsSync(v));
-  return {...original,
-    LD_LIBRARY_PATH:[...folders,...String(original.LD_LIBRARY_PATH || '').split(':').filter(Boolean)].join(':')};
+  const parent = path.dirname(dir);
+  const directories = [dir,path.join(dir,'lib'),path.join(dir,'lib64'),
+    path.join(parent,'lib'),path.join(parent,'lib64')];
+  for (const base of [dir,parent]) {
+    let children=[];try{children=fs.readdirSync(base,{withFileTypes:true});}catch{}
+    for(const child of children.slice(0,80)){
+      if(!child.isDirectory() || /^(?:node_modules|cache|\.git)$/i.test(child.name))continue;
+      const folder=path.join(base,child.name);
+      directories.push(folder,path.join(folder,'lib'),path.join(folder,'lib64'));
+    }
+  }
+  const seen=new Set();
+  const folders=directories.filter(folder=>{
+    if(seen.has(folder) || !fs.existsSync(folder))return false;
+    seen.add(folder);
+    if(folder===dir)return true;
+    try{return fs.readdirSync(folder).some(name=>/^lib(?:llama|ggml).*\.so(?:\.\d+)*$/i.test(name));}
+    catch{return false;}
+  });
+  return {...original,LD_LIBRARY_PATH:[
+    ...folders,...String(original.LD_LIBRARY_PATH||'').split(':').filter(Boolean)].join(':')};
 }
 export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
@@ -89,7 +107,26 @@ export class EmbeddedLanguageRuntime {
     return this.cachedDiscovery;
   }
   installed(){
-    return process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false' && this.inspect().installed;
+    const found=this.inspect();
+    // Installed means binary and model detected, even if the archive lost +x.
+    return process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
+      && Boolean(found.binFound && found.modelFound);
+  }
+  repairExecutable(){
+    const item=this.inspect();
+    if(!item.binFound)return false;
+    if(item.executableAllowed)return true;
+    const filename=safePath(item.executable).replace(/\\/g,'/');
+    // Never chmod binaries outside AURA's own runtime directories.
+    if(!filename.includes('/.aura-language-runtime/')
+      && !filename.includes('/aura-language-runtime/'))return false;
+    try{
+      const current=fs.statSync(item.executable).mode;
+      fs.chmodSync(item.executable,current|0o100);
+      fs.accessSync(item.executable,fs.constants.X_OK);
+      this.cachedDiscovery=null;
+      return true;
+    }catch(error){this.fail(error);return false;}
   }
   status(){
     const item=this.inspect(),enabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
@@ -118,6 +155,7 @@ export class EmbeddedLanguageRuntime {
     if(this.ready && this.child?.exitCode===null)return true;
     if(this.booting)return this.booting;
     if(Date.now()<this.cooldownUntil || !this.installed())return false;
+    if(!this.repairExecutable())return false;
     this.booting=this.boot();
     try{return await this.booting;}
     catch(error){this.fail(error);return false;}

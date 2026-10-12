@@ -70,3 +70,34 @@ test('blocked network port allocation is a recoverable runtime failure',async()=
   assert.equal(await runtime.start(),false);
   assert.equal(runtime.status().failure_code,'host-disallows-native-execution');
 });
+
+test('loader finds .so in sibling nested release subdirectory',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-llama-libs-'));
+  try{
+    fs.mkdirSync(path.join(root,'bin'),{recursive:true});
+    fs.mkdirSync(path.join(root,'support','lib'),{recursive:true});
+    fs.writeFileSync(path.join(root,'support','lib','libllama-common.so.0'),'');
+    const env=llamaLoaderEnv(path.join(root,'bin','llama-server'),{LD_LIBRARY_PATH:''});
+    assert.ok(env.LD_LIBRARY_PATH.split(path.delimiter).includes(path.join(root,'support','lib')));
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+test('restores executable bit only on a managed AURA runtime binary',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-llama-exec-'));
+  try{
+    const dir=path.join(root,'.aura-language-runtime','llama');
+    fs.mkdirSync(dir,{recursive:true});
+    const exe=path.join(dir,'llama-server');
+    fs.writeFileSync(exe,'test',{mode:0o644});
+    fs.writeFileSync(path.join(dir,'model.gguf'),'model');
+    const runtime=new EmbeddedLanguageRuntime({discover:()=>locateEmbeddedRuntime({root,home:''})});
+    assert.equal(runtime.installed(),true);
+    assert.equal(runtime.repairExecutable(),true);
+    assert.equal(runtime.inspect().executableAllowed,true);
+    const other=path.join(root,'foreign-server');
+    fs.writeFileSync(other,'test',{mode:0o644});
+    const restricted=new EmbeddedLanguageRuntime({discover:()=>({
+      executable:other,gguf:'model',binFound:true,modelFound:true,executableAllowed:false,installed:false,
+    })});
+    assert.equal(restricted.repairExecutable(),false);
+  }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
