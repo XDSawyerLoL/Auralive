@@ -49,7 +49,7 @@ jobs:
           set -euo pipefail
           node --input-type=module <<'NODE'
           import { spawnSync } from 'node:child_process';
-          import { repairLlamaLibraryAliases, nativeLibraryHealth, llamaLoaderEnv } from './cloud-node/src/embedded_language.js';
+          import { repairLlamaLibraryAliases, nativeLibraryHealth, llamaLoaderEnv, nativeLaunchSpec } from './cloud-node/src/embedded_language.js';
           const binary = process.env.AURA_NATIVE_BIN;
           const before = nativeLibraryHealth(binary);
           const repaired = repairLlamaLibraryAliases(binary);
@@ -68,5 +68,18 @@ jobs:
           }));
           if (result.error || result.status!==0) {
             throw new Error('Official llama-server failed real Linux ELF launch');
+          }
+          const fallback = nativeLaunchSpec(binary,['--version'],true);
+          if (!fallback) throw new Error('Linux dynamic interpreter unavailable');
+          const viaInterpreter = spawnSync(fallback.command,fallback.args,{
+            env:fallback.env,encoding:'utf8',timeout:20000,
+          });
+          console.log(JSON.stringify({
+            alternate_loader:fallback.command,
+            alternate_status:viaInterpreter.status,
+            alternate_output:String(viaInterpreter.stderr||viaInterpreter.stdout||'').slice(0,500),
+          }));
+          if (viaInterpreter.error || viaInterpreter.status!==0) {
+            throw new Error('Official llama-server failed direct ELF interpreter launch');
           }
           NODE
