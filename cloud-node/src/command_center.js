@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
 import { LongHorizonMissionEngine } from './long_horizon.js';
+import { classifyInitiativeResult } from './outcome_truth.js';
 
 const now = () => new Date().toISOString();
 
@@ -1733,14 +1734,9 @@ export class CommandCenter {
       if (initiative.kind === 'evolution' && returnedStatus === 'waiting-local-worker') {
         executionMode = 'waiting-local-worker';
       }
-      const waiting = Boolean(result?.queued)
-        || ['queued', 'leased'].includes(returnedStatus)
-        || returnedStatus.startsWith('waiting');
-      const failed = ['error', 'cancelled', 'canceled'].includes(returnedStatus)
-        || returnedStatus.endsWith('-rejected');
-      const executed = !waiting && !failed
-        && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
-      const status = waiting ? 'waiting' : (failed ? 'failed' : 'completed');
+      const classification = classifyInitiativeResult(initiative.kind, result);
+      if (classification.waiting_for_worker) executionMode = 'waiting-local-worker';
+      const { status, executed } = classification;
       await this.updateInitiative(id, {
         status,
         execution_mode: executionMode,
@@ -1828,17 +1824,14 @@ export class CommandCenter {
 
       if (job.status === 'completed') {
         const payload = job.result || {};
+        // A completed transport job can still contain a rejected/failed action.
+        // The worker has already executed; validate the returned payload, not a plan-only flag.
+        const classification = classifyInitiativeResult('worker', payload);
+        const executionRejected = classification.status !== 'completed';
         const payloadStatus = String(payload?.status || '').toLowerCase();
-        const evolutionRejected = row.kind === 'evolution'
-          && (
-            payload?.ok === false
-            || payloadStatus === 'error'
-            || payloadStatus === 'no-safe-patch'
-            || payloadStatus.endsWith('-rejected')
-          );
-        const finalStatus = evolutionRejected ? 'failed' : 'completed';
-        const finalError = evolutionRejected
-          ? String(payload?.error || payload?.reason || payloadStatus || 'evolution rejected').slice(0, 5000)
+        const finalStatus = executionRejected ? 'failed' : 'completed';
+        const finalError = executionRejected
+          ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed').slice(0, 5000)
           : '';
         await query(
           `UPDATE aura_initiatives
@@ -1857,8 +1850,8 @@ export class CommandCenter {
         await this.kernel.recordOutcome({
           automation_id: `command-center:${row.domain}`,
           event_type: `aura.initiative.${row.kind}`,
-          ok: !evolutionRejected && payload?.ok !== false,
-          signature: evolutionRejected || payload?.ok === false
+          ok: !executionRejected,
+          signature: executionRejected
             ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed')
             : 'success',
           report: { initiative_id: row.id, job_id: jobId, result: payload },
