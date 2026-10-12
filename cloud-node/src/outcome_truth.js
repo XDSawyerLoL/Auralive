@@ -22,8 +22,9 @@ export function classifyInitiativeResult(kind, candidate = {}) {
     && !failure;
   const waiting = !failure && (queued || waitingStatus || planOnly);
   const actualExecution = result.executed === true || nested.executed === true;
+  const explicitlyNotExecuted = result.executed === false || nested.executed === false;
   const hasResult = Object.keys(result).length > 0;
-  const completed = !waiting && !failure && hasResult
+  const completed = !waiting && !failure && hasResult && !explicitlyNotExecuted
     && (kind !== 'operator' || actualExecution);
 
   return {
