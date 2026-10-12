@@ -62,9 +62,80 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 @media(max-width:900px){.main{grid-template-columns:1fr}.side{order:-1}.aura-card{min-height:250px}.map-wrap{height:220px}.chat{min-height:72svh}.side .mini-card:nth-of-type(n+3){display:none}}
 @media(max-width:640px){.shell{padding:7px}.topbar{height:54px;padding:7px 9px}.brand-sub{display:none}.status-compact .pill:nth-child(n+2){display:none}.main{margin-top:7px}.side{display:block}.aura-card{margin-bottom:7px}.mini-card{display:none}.chat{min-height:calc(100svh - 68px)}.messages{padding:13px}.msg{font-size:15px;max-width:92%}.composer textarea{font-size:16px}.map-wrap{height:165px}.organism-hud,.map-badge{display:none}.map-foot{font-size:7px}}
+
+/* AURA 3.1 — immersive, readable operational cockpit. */
+:root{--bg:#090809;--panel:rgba(17,14,18,.91);--line:rgba(253,214,180,.13);--text:#fff6f1;--muted:#b7a4a0;--gold:#ffc68b;--violet:#b898ff;--pink:#ff879e}
+body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),transparent 68%),radial-gradient(720px 660px at -4% 50%,rgba(209,125,90,.085),transparent 62%),linear-gradient(145deg,#110c13,#080708 65%,#0b080a);background-attachment:fixed}
+.shell{max-width:1660px;padding:20px 22px 30px}
+.topbar{height:72px;border-radius:24px;padding:12px 21px;background:rgba(18,14,19,.68);box-shadow:0 16px 70px rgba(0,0,0,.28);top:12px}
+.brand-orb{width:43px;height:43px;background:radial-gradient(circle at 33% 24%,#fff 0 5%,#ffe1be 13%,#ffa46e 29%,#a04a75 50%,#271532 76%,#140f18 100%);box-shadow:0 0 32px rgba(237,120,156,.22),inset 0 -6px 18px rgba(54,19,42,.4)}
+.brand-name{font-size:22px;letter-spacing:.28em;font-weight:720}
+.brand-sub{font-size:9px;letter-spacing:.21em;color:#bc9d9b}
+.pill{font-size:11px;padding:9px 12px;border:1px solid rgba(255,255,255,.085);background:rgba(255,255,255,.025)}
+.status-compact .pill:nth-child(n+3){display:flex}
+.icon-btn{font-size:12px;padding:9px 12px;border-radius:13px}
+.aura-intro{display:flex;align-items:end;justify-content:space-between;gap:16px;padding:32px 8px 20px}
+.intro-caption{display:inline-block;letter-spacing:.2em;text-transform:uppercase;font-size:10px;color:#e0ab8f}
+.aura-intro h1{margin:8px 0 9px;line-height:1.07;letter-spacing:-.055em;font-weight:580;font-size:clamp(28px,3.3vw,48px)}
+.aura-intro h1 em{font-style:normal;color:#f4b8b7}
+.intro-copy{margin:0;font-size:13px;color:#ac9b9e;line-height:1.5}
+.build-version{font-size:11px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.028);border-radius:20px;padding:12px 15px;color:#b8a8ae;white-space:nowrap}
+.status-rail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 16px}
+.rail-item{border:1px solid rgba(255,255,255,.075);border-radius:18px;background:linear-gradient(140deg,rgba(34,25,34,.75),rgba(14,11,15,.83));padding:14px 17px;display:flex;align-items:center;gap:13px;min-height:74px}
+.rail-sigil{width:36px;height:36px;flex:none;border-radius:13px;display:grid;place-items:center;background:rgba(255,188,145,.08);color:#ffd6ac;font-size:19px}
+.rail-label{font-size:10px;text-transform:uppercase;letter-spacing:.11em;color:#a58d91}
+.rail-value{font-size:13px;color:#f9ebe8;font-weight:640;margin-top:5px}
+.main{grid-template-columns:minmax(0,1fr) minmax(340px,450px);gap:18px;margin-top:0;min-height:calc(100svh - 290px)}
+.panel{border-radius:26px;background:linear-gradient(150deg,rgba(32,23,30,.83),rgba(12,10,14,.95) 70%);box-shadow:inset 0 1px rgba(255,255,255,.045),0 22px 70px rgba(0,0,0,.22)}
+.chat{min-height:calc(100svh - 288px)}
+.chat-head{padding:22px 25px;border-bottom-color:rgba(255,255,255,.065)}
+.chat-title{font-size:19px;letter-spacing:-.025em}
+.chat-sub{font-size:11px;color:#ad9399;margin-top:5px}
+.chat-head-state{font-size:11px}
+.messages{padding:28px;gap:18px;background:radial-gradient(circle at 60% 0%,rgba(255,155,117,.047),transparent 42%)}
+.msg{max-width:81%;font-size:15px;line-height:1.68;padding:16px 19px;border-radius:22px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.023)}
+.msg.user{background:linear-gradient(130deg,rgba(236,148,117,.16),rgba(176,91,128,.11));border-color:rgba(255,180,157,.13);border-bottom-right-radius:8px}
+.msg.aura{border-bottom-left-radius:8px}
+.msg.service-msg{max-width:92%;border-color:rgba(255,177,131,.25);background:rgba(237,145,85,.055);color:#f9d2b0}
+.who{font-size:10px;letter-spacing:.14em;color:#ad9b9c;margin-bottom:8px}
+.msg.aura .who{color:#ffcb9d}
+.composer{padding:17px 20px;gap:12px;background:rgba(12,9,14,.83)}
+.composer textarea{min-height:64px;border-radius:20px;background:rgba(255,255,255,.038);font-size:16px;padding:17px 18px}
+.composer button{width:53px;height:53px;border-radius:16px;font-size:20px}
+.composer .send{background:linear-gradient(135deg,#ffcca0,#ed9c89 55%,#de89ad);box-shadow:0 7px 24px rgba(234,133,128,.19)}
+.chat-hint{font-size:10px;color:#827079;background:rgba(12,9,14,.83);padding:0 20px 13px}
+.side{gap:12px}
+.aura-card{min-height:unset}
+.side-head{padding:17px 17px}
+.side-head strong{font-size:15px}.side-head span{font-size:11px}
+.map-wrap{height:380px;background:radial-gradient(circle at 50% 47%,rgba(237,126,117,.16),transparent 28%),radial-gradient(circle at 66% 30%,rgba(145,88,177,.12),transparent 52%),linear-gradient(140deg,#170c17,#090709 85%)}
+.organism-hud,.map-badge,.map-foot{font-size:10px;padding:9px 12px;border-radius:12px}
+.engine-panel{padding:19px;display:grid;gap:13px;border-color:rgba(255,192,148,.14)}
+.engine-kicker{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:10px;color:#bda2a5;letter-spacing:.1em;text-transform:uppercase}
+.engine-chip{font-size:10px;letter-spacing:0;text-transform:none;border-radius:100px;padding:5px 9px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035)}
+.engine-title{font-size:18px;font-weight:700;line-height:1.25}
+.engine-description{font-size:12px;line-height:1.6;color:#b9a7ad}
+.engine-row{display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:11px;color:#a999a0}
+.engine-progress{height:6px;background:rgba(255,255,255,.07);overflow:hidden;border-radius:100px}
+.engine-progress>span{display:block;height:100%;width:0%;background:linear-gradient(90deg,#e99990,#ffcf8a,#af8fdf);transition:width .5s ease}
+.engine-panel[data-state="ready"]{border-color:rgba(107,233,177,.3)}
+.engine-panel[data-state="blocked"]{border-color:rgba(255,145,127,.29)}
+.engine-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#8f7f85;font-size:10px}
+.engine-foot button{border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.035);color:#edddd9;border-radius:10px;padding:8px 11px;font-size:11px}
+.language-card{padding:17px;gap:10px}
+.language-head strong{font-size:13px}.language-score{font-size:20px}
+.language-details{font-size:11px}
+.language-help{font-size:11px}
+.mini-card{padding:17px}.mini-label{font-size:10px}.mini-value{font-size:16px}.mini-copy{font-size:11px}
+.details summary{padding:14px 18px;font-size:11px}
+@media(max-width:1100px){.main{grid-template-columns:minmax(0,1fr) 360px}.status-compact .pill:nth-child(n+3){display:none}}
+@media(max-width:900px){.shell{padding:12px}.aura-intro{padding:22px 4px 17px}.main{grid-template-columns:minmax(0,1fr)}.side{display:grid;grid-template-columns:1fr 1fr;order:0}.aura-card{grid-row:span 2}.map-wrap{height:330px}.chat{min-height:65svh}.side .mini-card:nth-of-type(n+3){display:block}}
+@media(max-width:640px){.shell{padding:8px}.topbar{height:62px;padding:9px 12px;top:5px;border-radius:19px}.brand-name{font-size:19px}.aura-intro{padding:22px 6px 15px}.aura-intro h1{font-size:30px}.intro-copy{font-size:12px}.build-version{display:none}.status-rail{grid-template-columns:1fr 1fr;gap:8px}.rail-item{min-height:70px;padding:11px}.rail-item:last-child{grid-column:1 / -1}.rail-value{font-size:12px}.main{gap:9px}.chat{min-height:calc(100svh - 68px)}.chat-head{padding:16px}.messages{padding:14px;gap:12px}.msg{font-size:15px;max-width:92%;padding:13px 15px}.composer{padding:10px}.composer textarea{font-size:16px}.chat-hint{padding:0 12px 10px}.side{grid-template-columns:1fr;gap:9px}.map-wrap{height:250px}.organism-hud,.map-badge{display:flex}.map-foot{font-size:10px}.engine-panel{padding:15px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+
 </style>
 </head>
-<body data-aura-ui="minimal-conversation-v2">
+<body data-aura-ui="immersive-cognition-v3">
 <div class="shell">
   <div class="sr-only" aria-hidden="true">Company OS · AURA vivante · Parler à AURA · Produits Quantic · Workstreams actifs · Preuve de travail · Mémoire et leçons · Télémétrie · Homeostasie</div>
 
@@ -83,6 +154,18 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
 
   <section class="setup-banner" id="setupBanner"><div class="setup-title">AURA se reconnecte</div><div id="setupSummary">Initialisation…</div><ul id="setupIssues" class="setup-list"></ul></section>
 
+  <section class="aura-intro" aria-label="Présentation AURA 3.1">
+    <div><span class="intro-caption">Intelligence native · Quantic Sillage</span>
+      <h1>Une présence qui <em>réfléchit.</em></h1>
+      <p class="intro-copy">Mémoire, missions et raisonnement continus. Capacités vérifiées en temps réel.</p>
+    </div>
+    <span id="serverRevision" class="build-version">Version serveur : vérification…</span>
+  </section>
+  <section class="status-rail" aria-label="État des trois fonctions centrales">
+    <div class="rail-item"><span class="rail-sigil">✺</span><div><div class="rail-label">Noyau cognitif</div><div id="railBrain" class="rail-value">Vérification…</div></div></div>
+    <div class="rail-item"><span class="rail-sigil">◈</span><div><div class="rail-label">Langage vivant</div><div id="railLanguage" class="rail-value">Vérification…</div></div></div>
+    <div class="rail-item"><span class="rail-sigil">⟡</span><div><div class="rail-label">Missions autonomes</div><div id="railMissions" class="rail-value">Vérification…</div></div></div>
+  </section>
   <main class="main">
     <section class="panel chat">
       <div class="chat-head"><div><div class="chat-title">Parler à AURA</div><div class="chat-sub">Conversation principale</div></div><div id="chatState" class="chat-head-state">Connexion…</div></div>
@@ -117,6 +200,14 @@ body.aura-speaking #core{filter:url(#coreBloom) drop-shadow(0 0 20px rgba(255,16
         </div>
       </section>
 
+      <section class="panel engine-panel" id="enginePanel" data-state="loading" aria-label="Moteur français réel">
+        <div class="engine-kicker"><span>FACULTÉ LINGUISTIQUE · INFÉRENCE LOCALE</span><span class="engine-chip" id="engineChip">Diagnostic</span></div>
+        <div class="engine-title" id="engineTitle">Connexion au moteur de français…</div>
+        <div class="engine-description" id="engineDescription">Lecture de l’installation et de sa disponibilité réelle sur le serveur.</div>
+        <div class="engine-progress" aria-label="Étape de préparation du moteur"><span id="engineProgress"></span></div>
+        <div class="engine-row"><span id="engineStage">État en attente</span><span id="engineCost">Modèle libre · aucun coût par requête</span></div>
+        <div class="engine-foot"><span id="engineRevision">Révision moteur —</span><button type="button" id="engineRefresh">Actualiser l’état</button></div>
+      </section>
       <section class="panel language-card" aria-label="Progression mesurée du français">
         <div class="language-head"><strong>Apprentissage du français</strong><span class="language-score" id="languageScore">—</span></div>
         <div class="language-track" id="languageTrack" role="progressbar" aria-label="Évaluation du langage" aria-valuemin="0" aria-valuemax="100" aria-valuetext="Pas encore évalué"><div class="language-fill" id="languageProgressBar"></div></div>
