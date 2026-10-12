@@ -1,3 +1,5 @@
+import { embeddedLanguageRuntime } from './embedded_language.js';
+
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -55,8 +57,9 @@ function compactContext(rows = []) {
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
-  constructor(ai) {
+  constructor(ai, { embedded = embeddedLanguageRuntime } = {}) {
     this.ai = ai;
+    this.embedded = embedded;
     this.lastError = '';
     this.lastBackend = '';
     this.lastModel = '';
@@ -79,8 +82,12 @@ export class FrenchLanguageFaculty {
   async status() {
     const federation = this.federation?.snapshot?.() || {};
     const local = await this.localAvailable();
-    const ready = Boolean(federation.enabled || local);
-    const blockingReason = ready
+    const embedded = this.embedded.status();
+    const embeddedInstalled = Boolean(embedded.installed);
+    const ready = Boolean(embeddedInstalled || federation.enabled || local);
+    const blockingReason = embeddedInstalled && embedded.failure_code
+      ? embedded.failure_code
+      : ready
       ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
       : (!federation.api_key_configured
         ? 'openrouter-free-key-missing'
@@ -95,7 +102,9 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = blockingReason === 'openrouter-free-key-missing'
+    const setupHint = embeddedInstalled && embedded.failure_code
+      ? embedded.setup_hint
+      : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
@@ -109,8 +118,10 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: federation.enabled ? 'zero-cost-federation' : (local ? 'runtime-local' : 'unavailable'),
+      verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+        || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
+      primary: embeddedInstalled ? 'hostinger-embedded' : federation.enabled ? 'zero-cost-federation' : (local ? 'runtime-local' : 'unavailable'),
+      embedded,
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
@@ -190,6 +201,19 @@ export class FrenchLanguageFaculty {
     const system = this.system();
     const started = Date.now();
     this.lastError = '';
+    // Prefer real on-host inference. Remote free federation remains a last
+    // resort only if the local binary or model cannot generate a reply.
+    if (this.embedded.installed()) {
+      const answer = normalize(await this.embedded.generate(prompt, system, maxTokens));
+      if (answer) {
+        this.lastMode = 'hostinger-embedded';
+        this.lastBackend = 'hostinger-embedded-llama';
+        this.lastModel = 'local-gguf';
+        this.lastLatencyMs = Date.now() - started;
+        return answer;
+      }
+      this.lastError = this.embedded.status().failure_code || 'embedded-engine-unavailable';
+    }
 
     if (this.federation?.enabled) {
       try {

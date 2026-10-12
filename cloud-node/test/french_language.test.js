@@ -134,3 +134,41 @@ test('failed configured federation advertises true root cause and never pretends
   assert.equal(status.verified_ready, false);
   assert.match(status.setup_hint, /Quota/);
 });
+
+test('embedded model precedes external providers when verified operational', async () => {
+  const calls = [];
+  const embedded = {
+    installed: () => true,
+    status: () => ({ installed: true, ready: true, failure_code: '', setup_hint: '' }),
+    async generate() { calls.push('embedded'); return 'Je parle depuis mon propre serveur.'; },
+  };
+  const faculty = new FrenchLanguageFaculty({
+    federation: {
+      enabled: true,
+      snapshot: () => ({ enabled: true, zero_cost_mode: true }),
+      async generate() { calls.push('remote'); return { answer: 'Texte distant' }; },
+    },
+    bridge: null,
+  }, { embedded });
+  assert.equal(await faculty.generate({ user_text: 'bonjour' }), 'Je parle depuis mon propre serveur.');
+  assert.deepEqual(calls, ['embedded']);
+  assert.equal((await faculty.status()).verified_ready, true);
+  assert.equal((await faculty.status()).primary, 'hostinger-embedded');
+});
+
+test('local failure cannot masquerade successful explicitly free provider', async () => {
+  const embedded = {
+    installed: () => true,
+    status: () => ({ installed: true, ready: false, failure_code: 'embedded-shared-library-unresolved', setup_hint: 'Bibliothèque manquante' }),
+    async generate() { return ''; },
+  };
+  const faculty = new FrenchLanguageFaculty({
+    federation: {
+      enabled: true, snapshot: () => ({ enabled: true, zero_cost_mode: true }),
+      async generate() { return { answer: 'Réponse gratuite.', model: 'free:model', provider: 'openrouter' }; },
+    }, bridge: null,
+  }, { embedded });
+  assert.equal(await faculty.generate({ user_text: 'bonjour' }), 'Réponse gratuite.');
+  assert.equal(faculty.lastMode, 'zero-cost-federation');
+  assert.equal((await faculty.status()).verified_ready, true);
+});
