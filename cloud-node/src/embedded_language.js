@@ -31,7 +31,7 @@ export function classifyEmbeddedFailure(error) {
   if (/sigsegv|segmentation fault|exit.signal.sigsegv/.test(reason))
     return {code:'embedded-native-segfault',
       hint:'Le moteur natif a rencontré une erreur mémoire (SIGSEGV) pendant son lancement.'};
-  if (/invalid.gguf|invalid magic|unknown architecture|unsupported model|failed to load model|error loading model|llama_model_load|model_load.*failed|gguf_init_from_file.*failed/.test(reason))
+  if (/invalid.gguf|invalid magic|unknown architecture|unsupported model|failed to load model|error loading model|model_load.*failed|gguf_init_from_file.*failed/.test(reason))
     return {code:'embedded-model-load-failed',
       hint:'llama.cpp ne parvient pas à charger le modèle GGUF. Vérifier le modèle et la compatibilité du moteur.'};
   if (/unrecognized argument|invalid argument|unknown option|invalid value for|error parsing arguments/.test(reason))
@@ -231,7 +231,7 @@ export function embeddedLogSignals(stderr=''){
   const source=String(stderr).toLowerCase();
   const patterns=[
     ['memory-allocation-failed',/out of memory|failed to allocate|bad.alloc|cannot allocate memory|oom/i],
-    ['model-loader-failed',/failed to load model|error loading model|llama_model_load|gguf_init_from_file|unknown architecture/i],
+    ['model-loader-failed',/failed to load model|error loading model|model_load.*failed|gguf_init_from_file.*failed|unknown architecture/i],
     ['unsupported-argument',/unknown option|unrecognized argument|invalid argument|invalid value for/i],
     ['cpu-instruction',/illegal instruction|sigill/i],
     ['network-bind',/failed to bind|address already in use|eaddrinuse/i],
