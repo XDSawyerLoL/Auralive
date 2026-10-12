@@ -70,3 +70,43 @@ test('blocked network port allocation is a recoverable runtime failure',async()=
   assert.equal(await runtime.start(),false);
   assert.equal(runtime.status().failure_code,'host-disallows-native-execution');
 });
+
+test('self-hosted runner launches a real loopback process and produces verified text', {
+  skip: process.platform === 'win32',
+  timeout: 15000,
+}, async () => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-llama-e2e-'));
+  const binary=path.join(root,'llama-server');
+  const model=path.join(root,'tiny.gguf');
+  fs.writeFileSync(model,'test fixture, no real model');
+  fs.writeFileSync(binary, [
+    '#!/usr/bin/env node',
+    "const http=require('node:http');",
+    "const ix=process.argv.indexOf('--port');",
+    "const port=Number(process.argv[ix+1]);",
+    "http.createServer((req,res)=>{",
+    " res.setHeader('Content-Type','application/json');",
+    " if(req.url==='/health'){res.end(JSON.stringify({status:'ok'}));return;}",
+    " if(req.url==='/v1/chat/completions'){",
+    "  let body='';req.on('data',p=>body+=p);req.on('end',()=>{",
+    "   const question=JSON.parse(body).messages[1].content;",
+    "   res.end(JSON.stringify({choices:[{message:{content:'Réponse locale vérifiée : '+question}}]}));",
+    "  });return;}",
+    " res.statusCode=404;res.end('{}');",
+    "}).listen(port,'127.0.0.1');",
+  ].join('\n'),{mode:0o755});
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,
+      executableAllowed:true,executable:binary,gguf:model}),
+    bootTimeoutMs:7000,
+  });
+  try {
+    const answer=await runtime.generate('Bonjour depuis AURA','Réponds en français',80);
+    assert.match(answer,/Réponse locale vérifiée : Bonjour/);
+    assert.equal(runtime.status().status,'verified-responsive');
+    assert.equal(runtime.status().paid_model_api_required,false);
+  } finally {
+    if(runtime.child && runtime.child.exitCode===null)runtime.child.kill('SIGTERM');
+    fs.rmSync(root,{recursive:true,force:true});
+  }
+});
