@@ -104,13 +104,25 @@ async function locateFile(folder, filename, depth=0){
   return '';
 }
 async function hasLibraries(folder){
-  let dirs=[];
-  try{dirs=await readdir(folder,{withFileTypes:true});}catch{return false;}
-  for(const entry of dirs){
-    if((entry.isFile()||entry.isSymbolicLink()) && /^lib(?:llama|ggml).*\.so(?:\..*)?$/i.test(entry.name))return true;
-    if(entry.isDirectory() && await hasLibraries(join(folder,entry.name)))return true;
+  // A symlink listed by tar does not prove that its target exists. In some
+  // official llama.cpp releases, the SONAME links are dangling.
+  let common=false, ggml=false;
+  const queue=[{dir:folder,depth:0}];
+  let scanned=0;
+  while(queue.length && scanned<240 && !(common&&ggml)){
+    const {dir,depth}=queue.shift();
+    let entries=[];try{entries=await readdir(dir,{withFileTypes:true});}catch{}
+    for(const entry of entries){
+      if(++scanned>240)break;
+      if(entry.isFile()){
+        if(/^libllama-common\.so\.\d+(?:\.\d+)+$/.test(entry.name))common=true;
+        if(/^libggml(?:-cpu)?\.so(?:\.\d+)*$/.test(entry.name))ggml=true;
+      }else if(entry.isDirectory() && depth<6){
+        queue.push({dir:join(dir,entry.name),depth:depth+1});
+      }
+    }
   }
-  return false;
+  return common&&ggml;
 }
 async function streamChecked(url,destination,sha256,maxBytes,type,request){
   if(!allowedArtifactRedirect(url,type))throw new Error('embedded-untrusted-origin');
