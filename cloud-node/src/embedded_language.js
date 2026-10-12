@@ -97,7 +97,8 @@ export class EmbeddedLanguageRuntime {
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
-      status:this.ready?'verified-responsive':!enabled?'disabled'
+      status:this.ready ? (this.lastSuccessAt ? 'verified-responsive' : 'model-loaded-unverified')
+        :!enabled?'disabled'
         :!item.binFound?'binary-missing':!item.modelFound?'gguf-missing'
           :!item.executableAllowed?'permission-denied':this.booting?'starting'
             :failure?'startup-failed':'available-not-started',
@@ -118,7 +119,9 @@ export class EmbeddedLanguageRuntime {
     if(this.booting)return this.booting;
     if(Date.now()<this.cooldownUntil || !this.installed())return false;
     this.booting=this.boot();
-    try{return await this.booting;}finally{this.booting=null;}
+    try{return await this.booting;}
+    catch(error){this.fail(error);return false;}
+    finally{this.booting=null;}
   }
   async boot(){
     const {executable,gguf}=this.inspect();

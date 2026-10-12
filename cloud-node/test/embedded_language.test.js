@@ -51,3 +51,22 @@ test('binary without execution rights produces an explicit Hostinger failure',()
   assert.equal(status.failure_code,'host-disallows-native-execution');
   assert.equal(status.status,'permission-denied');
 });
+
+test('startup cannot claim successful language generation from health alone', async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+  });
+  runtime.ready=true;
+  runtime.lastSuccessAt='';
+  assert.equal(runtime.status().status,'model-loaded-unverified');
+  runtime.lastSuccessAt='2026-10-12T12:00:00Z';
+  assert.equal(runtime.status().status,'verified-responsive');
+});
+test('blocked network port allocation is a recoverable runtime failure',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    allocatePort:async()=>{throw new Error('EACCES loopback');},
+  });
+  assert.equal(await runtime.start(),false);
+  assert.equal(runtime.status().failure_code,'host-disallows-native-execution');
+});
