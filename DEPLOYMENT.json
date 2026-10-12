@@ -1,12 +1,12 @@
 {
   "product": "AURA Cloud",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "runtime": "Node.js 22 / Fastify / MySQL",
   "target": "Hostinger Node.js Web App",
   "canonical_source": "cloud-node",
-  "git_sha": "0b6047663db102d5c6ce2037707f8b6585b7eacb",
-  "built_at": "2026-10-12T20:57:54.731Z",
+  "git_sha": "9070b29dab82136a36850531cefd41e0049af3c9",
+  "built_at": "2026-10-12T21:16:00Z",
   "language_bootstrap": "gguf-qwen3-0.6b-sha256",
   "zero_cost_guard": true,
-  "direct_dashboard_chat": true
+  "ui_identity": "immersive-cognition-v3"
 }

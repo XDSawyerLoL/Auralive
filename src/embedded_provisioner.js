@@ -35,8 +35,17 @@ export function allowedArtifactRedirect(value, type) {
     const url=new URL(value);
     if(url.protocol!=='https:' || url.username || url.password)return false;
     const name=url.hostname.toLowerCase();
-    if(type==='binary') return ['github.com','release-assets.githubusercontent.com','objects.githubusercontent.com'].includes(name);
-    return name==='huggingface.co' || name==='cdn-lfs.hf.co' || name.endsWith('.xethub.hf.co');
+    if(type==='binary') {
+      return ['github.com','release-assets.githubusercontent.com',
+        'objects.githubusercontent.com',
+        'github-production-release-asset-2e65be.s3.amazonaws.com'].includes(name)
+        || name.endsWith('.githubusercontent.com');
+    }
+    // HF's signed Xet/LFS redirects use region-specific CDN and object-store
+    // hosts. The pinned SHA-256 still authenticates the downloaded bytes.
+    return name==='huggingface.co' || name.endsWith('.hf.co')
+      || name.endsWith('.storage.googleapis.com')
+      || name==='storage.googleapis.com';
   } catch { return false; }
 }
 export function noexecMount(folder, mountinfo='') {
@@ -107,7 +116,11 @@ async function streamChecked(url,destination,sha256,maxBytes,type,request){
   if(!allowedArtifactRedirect(url,type))throw new Error('embedded-untrusted-origin');
   const response=await request(url,{redirect:'follow',signal:AbortSignal.timeout(180000)});
   if(!response.ok || !response.body)throw new Error('embedded-download-http-'+response.status);
-  if(!allowedArtifactRedirect(response.url,type))throw new Error('embedded-unsafe-redirect');
+  if(!allowedArtifactRedirect(response.url,type)){
+    const error=new Error('embedded-unsafe-redirect');
+    try { error.redirectOrigin=new URL(response.url).hostname; } catch {}
+    throw error;
+  }
   let bytes=0;const hash=createHash('sha256');
   const guard=new Transform({
     transform(buffer,encoding,done){
@@ -132,6 +145,7 @@ export class EmbeddedProvisioner {
   constructor({request=fetch,spawnProcess=spawn,settings={}}={}){
     Object.assign(this,{request,spawnProcess,settings});
     this.inflight=null;this.paths=null;this.stage='not-started';this.lastError='';this.retryAfter=0;
+    this.failedStage='';this.failureOrigin='';
   }
   get enabled(){
     return process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false'
@@ -139,6 +153,7 @@ export class EmbeddedProvisioner {
   }
   snapshot(){
     return {enabled:this.enabled,stage:this.stage,error_code:this.lastError,
+      failed_stage:this.failedStage,redirect_origin:this.failureOrigin,
       engine_revision:REVISION,model:'Qwen3-0.6B Q8_0',no_paid_api:true,
       retry_after:this.retryAfter>Date.now()?new Date(this.retryAfter).toISOString():null};
   }
@@ -150,6 +165,8 @@ export class EmbeddedProvisioner {
     this.inflight=this.#prepare().catch(error=>{
       // Only stable error codes; no absolute paths, internal URLs or secrets.
       this.lastError=String(error?.message||error).split(':')[0].slice(0,100);
+      this.failedStage=this.stage;
+      this.failureOrigin=String(error?.redirectOrigin||'').slice(0,96);
       this.stage='blocked';this.retryAfter=Date.now()+600000;
       return null;
     }).finally(()=>{this.inflight=null;});
@@ -207,6 +224,7 @@ export class EmbeddedProvisioner {
     }
     this.paths={executable:binary,gguf:model,binFound:true,modelFound:true,executableAllowed:true,installed:true};
     this.stage='installed-verified';this.lastError='';
+    this.failedStage='';this.failureOrigin='';
     return this.paths;
   }
 }
