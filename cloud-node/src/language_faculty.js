@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { retrieveExperiences } from './memory_retrieval.js';
+import { consolidateLessons } from './memory_consolidation.js';
 
 const VERSION = 'aura-language-faculty-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -110,6 +111,13 @@ export class LanguageFaculty {
     const beliefs = await this.store.query(
       'SELECT domain_key,observations,successes,failures,last_signature,updated_at FROM aura_world_beliefs WHERE observations>=2 ORDER BY observations DESC LIMIT 4',
     );
+    const globalLessons = queryText
+      ? await this.store.query(
+        'SELECT lesson_key,content,confidence,evidence_count,source,updated_at FROM aura_lessons ORDER BY updated_at DESC LIMIT 120',
+      ).catch(() => [])
+      : [];
+    // Only the authenticated founder session can retrieve cross-session lessons.
+    // Public sessions are returned above without querying this private ledger.
     return [...memories, ...beliefs.map((row) => ({
       kind: 'operational-belief',
       note: clean('Domaine ' + row.domain_key + ' : ' + Number(row.successes)
@@ -118,7 +126,7 @@ export class LanguageFaculty {
         + Math.round(100 * (Number(row.successes) + 1) / (Number(row.observations) + 2)) + ' %.', 900),
       evidence_status: 'statistical-estimate-from-reported-outcomes',
       at: row.updated_at,
-    }))];
+    })), ...consolidateLessons(globalLessons, queryText, 4)];
   }
 
   async progress() {

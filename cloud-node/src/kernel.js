@@ -7,6 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
+import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { SkillLearningEngine } from './skill_learning.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
@@ -70,6 +71,7 @@ export class CognitiveKernel {
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
     this.lastInferenceAssessment = {};
+    this.recentReflexDecisions = [];
     this.started = false;
     this.timer = null;
     this.soulCache = null;
@@ -169,8 +171,11 @@ export class CognitiveKernel {
   inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
     const organism = this.organism.migrate(this.soulCache || {});
     const policy = this.nativeLearning.inferenceParams(this.soulCache?.native_learning);
-    const assessment = this.activeInference.assess(organism, { novelty, risk, policy });
+    const assessment = { ...this.activeInference.assess(organism, { novelty, risk, policy }),
+      decision_id: randomUUID() };
     this.lastInferenceAssessment = assessment;
+    this.recentReflexDecisions.push(assessment);
+    if (this.recentReflexDecisions.length > 100) this.recentReflexDecisions.shift();
     return assessment;
   }
 
@@ -755,7 +760,23 @@ export class CognitiveKernel {
     );
     this.soulCache.organism = organ.state;
     this.syncLegacyFromOrganism();
-    const inferenceBeforeLearning = this.lastInferenceAssessment || {};
+    // Correlation is explicit. The last unrelated decision is never credited
+    // with a success merely because an outcome arrived later.
+    const matchedDecision = this.recentReflexDecisions.find(
+      item => item.decision_id === String(payload.reflex_decision_id || ''),
+    );
+    const reflexObservation = reflexOutcomeRecord(matchedDecision, payload);
+    if (reflexObservation) {
+      await query(
+        'INSERT INTO aura_reflex_observations(id,decision_id,compute_tier,difficulty,risk,novelty,uncertainty,outcome_ok,evidence_level,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+        [randomUUID(), reflexObservation.decision_id, reflexObservation.compute_tier,
+          reflexObservation.difficulty, reflexObservation.risk,
+          reflexObservation.novelty, reflexObservation.uncertainty,
+          reflexObservation.outcome_ok, reflexObservation.evidence_level,
+          reflexObservation.source, timestamp],
+      );
+    }
+    const inferenceBeforeLearning = reflexObservation ? matchedDecision : {};
     this.soulCache.native_learning = this.nativeLearning.update(
       this.soulCache.native_learning,
       {
@@ -1726,6 +1747,9 @@ export class CognitiveKernel {
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
       skill_learning: await this.skillLearning.status(),
+      reflex_evidence: summarizeReflexObservations(
+        await query('SELECT compute_tier,outcome_ok,evidence_level FROM aura_reflex_observations ORDER BY created_at DESC LIMIT 200'),
+      ),
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,

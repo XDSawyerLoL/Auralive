@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 14;
+export const LATEST_SCHEMA_VERSION = 15;
 
 export function getDb() {
   if (pool) return pool;
@@ -635,6 +635,30 @@ async function applyMigrations(db) {
       ['atomic-mission-leases', new Date().toISOString()],
     );
     current = 14;
+  }
+
+  if (current < 15) {
+    // Evidence-linked observations; no generated labels passed off as learning.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reflex_observations (
+      id CHAR(36) PRIMARY KEY,
+      decision_id CHAR(36) NOT NULL,
+      compute_tier VARCHAR(24) NOT NULL,
+      difficulty DOUBLE NOT NULL,
+      risk DOUBLE NOT NULL,
+      novelty DOUBLE NOT NULL,
+      uncertainty DOUBLE NOT NULL,
+      outcome_ok TINYINT NOT NULL,
+      evidence_level VARCHAR(40) NOT NULL DEFAULT 'reported',
+      source VARCHAR(120) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reflex_decision(decision_id),
+      INDEX idx_aura_reflex_created(created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(15,?,?)',
+      ['evidence-linked-reflex-observations', new Date().toISOString()],
+    );
+    current = 15;
   }
 }
 
