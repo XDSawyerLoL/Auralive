@@ -1,0 +1,85 @@
+name: AURA native French Linux loader smoke
+
+on:
+  pull_request:
+    paths:
+      - 'cloud-node/src/embedded_language.js'
+      - 'cloud-node/src/embedded_provisioner.js'
+      - '.github/workflows/aura-native-french-linux.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'cloud-node/src/embedded_language.js'
+      - 'cloud-node/src/embedded_provisioner.js'
+      - '.github/workflows/aura-native-french-linux.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  llama-native-loader:
+    name: Real llama.cpp Linux shared libraries
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact official CPU archive checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="$RUNNER_TEMP/llama-b11425-bin-ubuntu-x64.tar.gz"
+          curl -fL --retry 2 --connect-timeout 20 --max-time 160 \
+            "https://github.com/ggml-org/llama.cpp/releases/download/b11425/llama-b11425-bin-ubuntu-x64.tar.gz" \
+            -o "$ARCHIVE"
+          echo "6a47856d08ecc4030b2fa8b8bf761c96d142d689567f69a0f75e42de430dc34c  $ARCHIVE" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/aura-language-runtime"
+          tar -xzf "$ARCHIVE" --no-same-owner --no-same-permissions \
+            -C "$RUNNER_TEMP/aura-language-runtime"
+          BIN=$(find "$RUNNER_TEMP/aura-language-runtime" -type f -name llama-server -print -quit)
+          test -n "$BIN"
+          chmod u+x "$BIN"
+          echo "AURA_NATIVE_BIN=$BIN" >> "$GITHUB_ENV"
+      - name: Repair SONAME aliases and launch actual ELF binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { spawnSync } from 'node:child_process';
+          import { repairLlamaLibraryAliases, nativeLibraryHealth, llamaLoaderEnv, nativeLaunchSpec } from './cloud-node/src/embedded_language.js';
+          const binary = process.env.AURA_NATIVE_BIN;
+          const before = nativeLibraryHealth(binary);
+          const repaired = repairLlamaLibraryAliases(binary);
+          const after = nativeLibraryHealth(binary);
+          if (!after.common_soname_found || after.dangling_links.length) {
+            throw new Error('Missing or dangling native ELF loader dependencies after repair: '+JSON.stringify(after));
+          }
+          const result = spawnSync(binary,['--version'],{
+            env: llamaLoaderEnv(binary), encoding:'utf8', timeout:20000,
+          });
+          console.log(JSON.stringify({
+            before, fixed_links:repaired, after,
+            process_status:result.status,
+            stdout:String(result.stdout||'').slice(0,550),
+            stderr:String(result.stderr||'').slice(0,550),
+          }));
+          if (result.error || result.status!==0) {
+            throw new Error('Official llama-server failed real Linux ELF launch');
+          }
+          const fallback = nativeLaunchSpec(binary,['--version'],true);
+          if (!fallback) throw new Error('Linux dynamic interpreter unavailable');
+          const viaInterpreter = spawnSync(fallback.command,fallback.args,{
+            env:fallback.env,encoding:'utf8',timeout:20000,
+          });
+          console.log(JSON.stringify({
+            alternate_loader:fallback.command,
+            alternate_status:viaInterpreter.status,
+            alternate_output:String(viaInterpreter.stderr||viaInterpreter.stdout||'').slice(0,500),
+          }));
+          if (viaInterpreter.error || viaInterpreter.status!==0) {
+            throw new Error('Official llama-server failed direct ELF interpreter launch');
+          }
+          NODE
