@@ -586,6 +586,7 @@ function renderLanguageEngine(state){
     'embedded-download-http-404':'Fichier du modèle introuvable',
     'host-disallows-native-execution':'Exécution native interdite sur cet hébergement',
     'embedded-insufficient-memory':'Mémoire Hostinger insuffisante · réessai allégé',
+    'embedded-thread-capacity-exhausted':'Limite de threads Hostinger atteinte',
     'embedded-startup-timeout':'Initialisation du modèle trop lente',
     'embedded-model-load-failed':'Chargement du modèle GGUF refusé',
     'embedded-unsupported-startup-option':'Option incompatible avec llama.cpp',
@@ -606,6 +607,11 @@ function renderLanguageEngine(state){
         '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length?state.log_signals.join(', '):'non classifiés')+
         (state?.resource_before_start?.limit_mb!==null&&state?.resource_before_start?.limit_mb!==undefined
           ? '. RAM allouée : '+String(state.resource_before_start.limit_mb)+' Mo':'')+
+        (state?.pids_before_start?.max!==null && state?.pids_before_start?.max!==undefined
+          ? '. Threads/tâches : '+String(state.pids_before_start.current??'?')+
+             '/'+String(state.pids_before_start.max)+' autorisés':'')+
+        (state?.pids_after_failure?.failed_forks>state?.pids_before_start?.failed_forks
+          ? '. Limite de création de threads atteinte (cgroup).':'')+
         (state?.oom_kills_during_start>0 ? '. Arrêt mémoire confirmé par cgroup.':'')+
         '. Aucun journal privé n’est exposé.'
       :'Le modèle est en cours de préparation. La barre représente une étape d’installation, pas un score d’apprentissage.';
