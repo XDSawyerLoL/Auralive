@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 13;
+export const LATEST_SCHEMA_VERSION = 14;
 
 export function getDb() {
   if (pool) return pool;
@@ -618,6 +618,23 @@ async function applyMigrations(db) {
       ['cross-context-skill-learning', new Date().toISOString()],
     );
     current = 13;
+  }
+
+  if (current < 14) {
+    // Atomic, database-clock leases prevent duplicate mission dispatch on
+    // horizontally scaled instances. No local machine/paid service required.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mission_leases (
+      mission_id CHAR(36) PRIMARY KEY,
+      lease_owner VARCHAR(80) NOT NULL DEFAULT '',
+      lease_until DATETIME(6) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mission_leases_until(lease_until)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(14,?,?)',
+      ['atomic-mission-leases', new Date().toISOString()],
+    );
+    current = 14;
   }
 }
 

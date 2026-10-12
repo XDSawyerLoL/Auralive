@@ -2382,6 +2382,7 @@ export class CommandCenter {
         return { enabled: true, error: this.lastError };
       });
       if (missionAdvance?.candidate && missionAdvance?.step?.id) {
+        try {
         const missionCandidate = this.candidate(missionAdvance.candidate);
         const persisted = await this.persistInitiative(missionCandidate);
         const initiative = await one(
@@ -2411,6 +2412,12 @@ export class CommandCenter {
           mission_step: missionAdvance.step,
           initiative: missionResult,
         };
+        } finally {
+          // The lease is held through persistence + execution, including errors.
+          await this.longHorizon.releaseLease(missionAdvance.lease).catch((error) => {
+            this.lastError = String(error?.message || error).slice(0, 1000);
+          });
+        }
       }
       const expertCandidates = await this.consultFailedInitiatives(2).catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);

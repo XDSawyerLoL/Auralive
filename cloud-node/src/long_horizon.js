@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
-import { selectNextMission } from './mission_scheduler.js';
+import { selectNextMission, missionRotation } from './mission_scheduler.js';
+import { MissionLeaseManager } from './mission_leases.js';
 
 const now = () => new Date().toISOString();
 
@@ -71,6 +72,7 @@ export class LongHorizonMissionEngine {
     this.lastError = '';
     this.lastAdvanceAt = '';
     this.lastScheduledMissionId = '';
+    this.leases = new MissionLeaseManager();
   }
 
   async init() {
@@ -387,7 +389,7 @@ export class LongHorizonMissionEngine {
   }
 
   async ensureAutonomousMission() {
-    const active = await this.activeMission({ advance: true });
+    const active = await this.activeMission();
     if (active) return active;
     if (!config.longHorizonAutoSeed) return null;
 
@@ -684,9 +686,39 @@ export class LongHorizonMissionEngine {
 
   async nextCandidate() {
     if (!config.longHorizonEnabled) return { enabled: false };
-    let mission = await this.ensureAutonomousMission();
-    if (!mission) return { enabled: true, idle: true, reason: 'no mission candidate' };
+    // Seed when no active mission exists, but do not let one waiting mission
+    // starve all other projects. Every candidate receives an atomic DB lease.
+    await this.ensureAutonomousMission();
+    const rows = await query(
+      `SELECT * FROM aura_missions
+       WHERE status IN ('planning','running','waiting')
+       ORDER BY priority DESC,updated_at ASC LIMIT 64`,
+    );
+    let idle = { enabled: true, idle: true, reason: 'no mission candidate' };
+    for (const row of missionRotation(rows, this.lastScheduledMissionId)) {
+      const lease = await this.leases.claim(row.id);
+      if (!lease) continue;
+      this.lastScheduledMissionId = String(row.id);
+      let retained = false;
+      try {
+        const result = await this.evaluateMissionCandidate(row);
+        if (result?.candidate && result?.step?.id) {
+          retained = true;
+          return { ...result, lease };
+        }
+        idle = result || idle;
+      } finally {
+        if (!retained) await this.leases.release(lease);
+      }
+    }
+    return idle;
+  }
 
+  async releaseLease(lease) {
+    return this.leases.release(lease);
+  }
+
+  async evaluateMissionCandidate(mission) {
     if (String(mission.status || '') === 'planning') {
       await this.planMission(mission.id, { reason: 'resume-planning-state' });
       mission = await one('SELECT * FROM aura_missions WHERE id=?', [mission.id]);
@@ -770,13 +802,21 @@ export class LongHorizonMissionEngine {
   async bindInitiative(stepId, initiativeId) {
     const step = await one('SELECT * FROM aura_mission_steps WHERE id=?', [String(stepId)]);
     if (!step) throw new Error('Étape de mission inconnue');
-    if (step.initiative_id) return step;
-    await query(
+    if (step.initiative_id) {
+      if (String(step.initiative_id) !== String(initiativeId)) throw new Error('mission-step-already-bound');
+      return step;
+    }
+    // Compare-and-set prevents two expired/stale lease holders from attaching
+    // different initiatives to the same mission step.
+    const changed = await query(
       `UPDATE aura_mission_steps
        SET initiative_id=?,status='queued',started_at=IF(started_at='',?,started_at),updated_at=?
-       WHERE id=?`,
+       WHERE id=? AND initiative_id='' AND status='pending'`,
       [String(initiativeId), now(), now(), step.id],
     );
+    if (Number(changed?.affectedRows || 0) !== 1) {
+      throw new Error('mission-step-already-bound');
+    }
     await query(
       `UPDATE aura_missions SET status='running',updated_at=? WHERE id=?`,
       [now(), step.mission_id],
