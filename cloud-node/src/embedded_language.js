@@ -3,6 +3,7 @@ import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner } from './embedded_provisioner.js';
+import { nativeLoopbackRequest,nativeListenerEvidence } from './embedded_loopback.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -311,7 +312,7 @@ export function nativeStartupMilestones(log=''){
     ['model-metadata',/llama_model_loader|gguf_init_from_file|general.architecture/],
     ['model-tensors',/load_tensors|loading tensors|tensor data/],
     ['model-context',/llama_new_context_with_model|llama_init_from_model|kv self size/],
-    ['http-listener',/server is listening|listening on http|starting the main loop/],
+    ['http-listener',/server is listening on http/],
   ].filter(([,regex])=>regex.test(value)).map(([name])=>name);
 }
 export function healthProbeResult(error){
@@ -380,7 +381,7 @@ function freePort(){
   });
 }
 export class EmbeddedLanguageRuntime {
-  constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=fetch,
+  constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=nativeLoopbackRequest,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
     provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
     Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
@@ -400,6 +401,7 @@ export class EmbeddedLanguageRuntime {
     this.nativeOutputObserved=false;this.nativeMilestones=[];
     this.healthProbeCount=0;this.healthLastResult='not-requested';
     this.lastProcessObserved=null;
+    this.nativeListener={matching_port:null,family:'not-reported'};
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -480,6 +482,7 @@ export class EmbeddedLanguageRuntime {
       native_startup_milestones:this.nativeMilestones.slice(),
       health_probe_count:this.healthProbeCount,
       health_last_result:this.healthLastResult,
+      native_listener_report:this.nativeListener,
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -499,6 +502,7 @@ export class EmbeddedLanguageRuntime {
       last.health_probe_count=this.healthProbeCount;
       last.health_last_result=this.healthLastResult;
       last.native_process=this.lastProcessObserved;
+      last.native_listener_report=this.nativeListener;
     }
   }
   fail(error){
@@ -567,6 +571,7 @@ export class EmbeddedLanguageRuntime {
     this.nativeOutputObserved=false;this.nativeMilestones=[];
     this.healthProbeCount=0;this.healthLastResult='not-requested';
     this.lastProcessObserved=null;
+    this.nativeListener={matching_port:null,family:'not-reported'};
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
@@ -603,12 +608,16 @@ export class EmbeddedLanguageRuntime {
       this.nativeOutputObserved=true;
       stderr=(stderr+String(chunk)).slice(-4000);
       this.nativeMilestones=[...new Set([...this.nativeMilestones,...nativeStartupMilestones(stderr)])];
+      const listener=nativeListenerEvidence(stderr,this.port);
+      if(listener.matching_port!==null)this.nativeListener=listener;
       this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.stdout?.on('data',chunk=>{
       this.nativeOutputObserved=true;
       stdout=(stdout+String(chunk)).slice(-1500);
       this.nativeMilestones=[...new Set([...this.nativeMilestones,...nativeStartupMilestones(stdout)])];
+      const listener=nativeListenerEvidence(stdout,this.port);
+      if(listener.matching_port!==null)this.nativeListener=listener;
       this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.on('error',error=>{
