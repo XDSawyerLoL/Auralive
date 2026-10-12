@@ -458,6 +458,7 @@ export class EmbeddedLanguageRuntime {
     child.on('exit',(code,signal)=>{
       if(this.child===child){
         this.lastProcessExit={code:code??null,signal:signal??null};
+        if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
         this.fail((stderr||'embedded-engine-exited-'+code)
           +(signal?' exit.signal.'+signal.toLowerCase():'')
