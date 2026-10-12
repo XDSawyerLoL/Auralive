@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { embeddedProvisioner } from './embedded_provisioner.js';
 import { nativeLoopbackRequest,nativeListenerEvidence } from './embedded_loopback.js';
 import { nativeSocketEvidence } from './native_socket_evidence.js';
+import { nativeNamespaceComparison,nativeTcpDial,ownNamespaceListener } from './native_connectivity.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -404,6 +405,7 @@ export class EmbeddedLanguageRuntime {
     this.lastProcessObserved=null;
     this.nativeListener={matching_port:null,family:'not-reported'};
     this.lastSocketEvidence=null;
+    this.lastRefusedSocket=null;this.lastNodeListener=null;this.lastTcpDial=null;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -446,6 +448,7 @@ export class EmbeddedLanguageRuntime {
     if(snapshot)this.lastProcessObserved=snapshot;
     const kernelSocket=running?nativeSocketEvidence(this.child.pid,this.port):null;
     if(kernelSocket?.inspection==='ok')this.lastSocketEvidence=kernelSocket;
+    const networkNamespaces=running?nativeNamespaceComparison(this.child.pid):null;
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
@@ -489,6 +492,10 @@ export class EmbeddedLanguageRuntime {
       native_listener_report:this.nativeListener,
       native_socket:kernelSocket,
       last_native_socket:this.lastSocketEvidence,
+      network_namespace:networkNamespaces,
+      node_namespace_listener:running?ownNamespaceListener(this.port):this.lastNodeListener,
+      socket_at_last_refusal:this.lastRefusedSocket,
+      tcp_dial_after_refusal:this.lastTcpDial,
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -510,6 +517,9 @@ export class EmbeddedLanguageRuntime {
       last.native_process=this.lastProcessObserved;
       last.native_listener_report=this.nativeListener;
       last.native_socket=this.lastSocketEvidence;
+      last.node_namespace_listener=this.lastNodeListener;
+      last.tcp_dial_after_refusal=this.lastTcpDial;
+      last.socket_at_last_refusal=this.lastRefusedSocket;
     }
   }
   fail(error){
@@ -580,6 +590,7 @@ export class EmbeddedLanguageRuntime {
     this.lastProcessObserved=null;
     this.nativeListener={matching_port:null,family:'not-reported'};
     this.lastSocketEvidence=null;
+    this.lastRefusedSocket=null;this.lastNodeListener=null;this.lastTcpDial=null;
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
@@ -697,7 +708,20 @@ export class EmbeddedLanguageRuntime {
             this.recordAttempt('probe-failed');break;
           }
         }
-      }catch(error){this.healthLastResult=healthProbeResult(error);}
+      }catch(error){
+        this.healthLastResult=healthProbeResult(error);
+        if(this.healthLastResult==='connection-refused'){
+          // Capture socket, namespace and client connectivity close to the SAME
+          // failed HTTP attempt; a later status sample alone cannot prove overlap.
+          const socket=nativeSocketEvidence(child.pid,this.port);
+          this.lastRefusedSocket=socket;
+          this.lastNodeListener=ownNamespaceListener(this.port);
+          if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+          if(socket.expected_port===true&&!this.lastTcpDial){
+            this.lastTcpDial=await nativeTcpDial(this.port);
+          }
+        }
+      }
       this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
       const socket=nativeSocketEvidence(child.pid,this.port);
       if(socket.inspection==='ok')this.lastSocketEvidence=socket;
