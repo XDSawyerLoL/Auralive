@@ -602,7 +602,7 @@ function renderLanguageEngine(state){
       ?'Étape échouée : '+String(install.failed_stage||stage)+
         '. Code : '+(fail||'échec du démarrage')+
         '. Profil : '+String(state?.boot_profile||'non déterminé')+
-        '. Fin du processus : '+String(state?.process_exit?.signal||state?.process_exit?.code??'inconnue')+
+        '. Fin du processus : '+String(state?.process_exit?.signal||(state?.process_exit?.code??'inconnue'))+
         '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length?state.log_signals.join(', '):'non classifiés')+
         (state?.resource_before_start?.limit_mb!==null&&state?.resource_before_start?.limit_mb!==undefined
           ? '. RAM allouée : '+String(state.resource_before_start.limit_mb)+' Mo':'')+
