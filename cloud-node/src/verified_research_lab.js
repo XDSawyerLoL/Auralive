@@ -86,6 +86,12 @@ export class VerifiedResearchLab {
   async run({ objective, candidates, approvedSideEffects = [] } = {}) {
     if (typeof objective !== 'string' || !objective.trim()) throw new Error('research objective required');
     if (!Array.isArray(candidates)) throw new Error('research candidates required');
+    // Validate identities before applying approval rules: duplicates must not
+    // allow an unapproved runner to replace a permitted one in the index.
+    const candidateIds = candidates.map((candidate) => normalize(candidate).id);
+    if (new Set(candidateIds).size !== candidateIds.length) {
+      throw new Error('duplicate research candidate');
+    }
     const approvals = new Set(approvedSideEffects);
     const permitted = [];
     const blocked = [];
