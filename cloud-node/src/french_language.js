@@ -25,6 +25,10 @@ export function classifyFreeLanguageFailure(message = '') {
     return { code: 'free-model-rate-limited',
       hint: 'Quota gratuit dépassé ou fournisseur saturé (429). Vérifier les requêtes restantes sur OpenRouter ; réessayer après réinitialisation ou utiliser un modèle local gratuit.' };
   }
+  if (/embedded-engine-exited|libllama|\.so(?:\.\d+)?\b|\beacces\b|\bspawn\b|shared.library|error.while.loading.shared/.test(reason)) {
+    return { code: 'embedded-language-runtime-unavailable',
+      hint: 'Le moteur linguistique natif a échoué au démarrage. Vérifier les permissions du binaire, les dépendances Linux (ldd), le chemin des bibliothèques et la mémoire sur Hostinger. Activer un moteur libre alternatif compatible si nécessaire.' };
+  }
   if (/aborterror|aborted|timed?.out|timeout|fetch.failed|econn|enotfound|network|dns/.test(reason)) {
     return { code: 'provider-network-timeout',
       hint: 'La requête vers OpenRouter n’aboutit pas. Vérifier la connexion HTTPS sortante de Hostinger vers openrouter.ai et le délai de réponse.' };

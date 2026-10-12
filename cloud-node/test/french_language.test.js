@@ -103,6 +103,7 @@ test('free provider failures identify actual cause without exposing the provider
     ['OpenRouter free HTTP 403: forbidden', 'openrouter-access-denied', /refuse/],
     ['OpenRouter free HTTP 429: Rate limit exceeded', 'free-model-rate-limited', /Quota/],
     ['Request aborted by AbortError: timed out', 'provider-network-timeout', /HTTPS/],
+    ['embedded-engine-exited-1: /hbuilds/versions/nodejs/.aura-language-runtime/libllama-common.so.0', 'embedded-language-runtime-unavailable', /dépendances Linux/],
     ['OpenRouter free response empty', 'free-model-empty-response', /sans texte/],
     ['ZERO_COST_INVARIANT_VIOLATION', 'free-model-safety-blocked', /zéro coût/],
   ];
