@@ -25,71 +25,135 @@ export function classifyEmbeddedFailure(error) {
   return { code: 'embedded-engine-failed',
     hint: 'Le moteur intégré ne démarre pas. Examiner les journaux de l’hébergement.' };
 }
-// Hostinger releases sometimes place libllama-common.so.0 in a sibling or
-// nested lib/ directory. Linux does not search those directories recursively.
-export function llamaLoaderEnv(binary, original = process.env) {
-  const dir = path.dirname(safePath(binary));
-  const parent = path.dirname(dir);
-  const directories = [dir,path.join(dir,'lib'),path.join(dir,'lib64'),
-    path.join(parent,'lib'),path.join(parent,'lib64')];
-  for (const base of [dir,parent]) {
-    let children=[];try{children=fs.readdirSync(base,{withFileTypes:true});}catch{}
-    for(const child of children.slice(0,80)){
-      if(!child.isDirectory() || /^(?:node_modules|cache|\.git)$/i.test(child.name))continue;
-      const folder=path.join(base,child.name);
-      directories.push(folder,path.join(folder,'lib'),path.join(folder,'lib64'));
+// The pinned upstream tarball can contain broken SONAME symlinks. Never
+// modify other applications; inspect only AURA-managed runtime directories.
+const nativeLibraryName = /^lib(?:llama|ggml|mtmd)[a-z0-9_.-]*\.so(?:\.\d+)*$/i;
+
+function managedNativeRoot(binary) {
+  const full = safePath(binary).replace(/\\/g, '/');
+  for (const marker of ['/.aura-language-runtime/', '/aura-language-runtime/']) {
+    const pos = full.indexOf(marker);
+    if (pos >= 0) return path.resolve(full.slice(0, pos + marker.length - 1));
+  }
+  return '';
+}
+
+function nativeLibraryDirs(binary) {
+  const binDir = path.dirname(safePath(binary));
+  const managed = managedNativeRoot(binary);
+  // For manually configured binary locations, keep conventional sibling paths.
+  if (!managed) {
+    const parent = path.dirname(binDir);
+    const dirs = [binDir, path.join(binDir, 'lib'), path.join(binDir, 'lib64'),
+      path.join(parent, 'lib'), path.join(parent, 'lib64')];
+    let children = [];
+    try { children = fs.readdirSync(parent, { withFileTypes: true }); } catch {}
+    for (const child of children.slice(0, 80)) {
+      if (!child.isDirectory() || /^(?:node_modules|\.git)$/i.test(child.name)) continue;
+      const folder = path.join(parent, child.name);
+      dirs.push(folder, path.join(folder, 'lib'), path.join(folder, 'lib64'));
+    }
+    return dirs.filter(folder => fs.existsSync(folder));
+  }
+  const visited = new Set();
+  const matches = [];
+  const queue = [{ dir: managed, depth: 0 }];
+  while (queue.length && visited.size < 180) {
+    const { dir, depth } = queue.shift();
+    if (visited.has(dir) || (dir !== managed && !dir.startsWith(managed + path.sep))) continue;
+    visited.add(dir);
+    let stat;
+    try { stat = fs.lstatSync(dir); } catch { continue; }
+    if (!stat.isDirectory()) continue; // Never traverse a symlink to another directory.
+    let items;
+    try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    if (dir === binDir || items.some(x => nativeLibraryName.test(x.name))) matches.push(dir);
+    if (depth >= 6) continue;
+    for (const item of items.slice(0, 220)) {
+      if (!item.isDirectory() || /^(?:node_modules|\.git|cache|models)$/i.test(item.name)) continue;
+      queue.push({ dir: path.join(dir, item.name), depth: depth + 1 });
     }
   }
-  const seen=new Set();
-  const folders=directories.filter(folder=>{
-    if(seen.has(folder) || !fs.existsSync(folder))return false;
-    seen.add(folder);
-    if(folder===dir || folder===path.join(dir,'lib') || folder===path.join(dir,'lib64'))return true;
-    try{return fs.readdirSync(folder).some(name=>/^lib(?:llama|ggml).*\.so(?:\.\d+)*$/i.test(name));}
-    catch{return false;}
-  });
-  return {...original,LD_LIBRARY_PATH:[
-    ...folders,...String(original.LD_LIBRARY_PATH||'').split(':').filter(Boolean)].join(':')};
+  if (!matches.includes(binDir) && fs.existsSync(binDir)) matches.unshift(binDir);
+  return matches;
 }
-// Hostinger archives may unpack the actual versioned .so but lose the
-// SONAME symlink (e.g. libllama-common.so.0 -> libllama-common.so.0.0.5).
-// Repair only aliases beside real files UNDER our managed runtime directory.
-// Missing native binaries, incompatible glibc and noexec remain real failures.
+
+export function llamaLoaderEnv(binary, original = process.env) {
+  const folders = nativeLibraryDirs(binary);
+  return { ...original, LD_LIBRARY_PATH: [
+    ...folders, ...String(original.LD_LIBRARY_PATH || '').split(':').filter(Boolean),
+  ].filter((v, i, all) => all.indexOf(v) === i).join(':') };
+}
+
+// Repair both the bare .so and every SONAME link (.so.0, .so.0.N, ...),
+// including dangling links whose targets were corrupted in upstream tar files.
 export function repairLlamaLibraryAliases(binary) {
-  const full = safePath(binary).replace(/\\/g,'/');
-  const marker = '/.aura-language-runtime/';
-  const fallback = '/aura-language-runtime/';
-  const pos = full.indexOf(marker)>=0 ? full.indexOf(marker) : full.indexOf(fallback);
-  const foundMarker = full.includes(marker) ? marker : fallback;
-  if (pos < 0) return [];
-  const managedRoot = path.resolve(full.slice(0, pos + foundMarker.length - 1));
-  const dirs = llamaLoaderEnv(binary,{ LD_LIBRARY_PATH: '' }).LD_LIBRARY_PATH.split(':');
+  if (!managedNativeRoot(binary)) return [];
   const changed = [];
-  for (const rawDir of dirs) {
-    const dir = path.resolve(rawDir);
-    if (dir !== managedRoot && !dir.startsWith(managedRoot + path.sep)) continue;
-    let names = [];
-    try { names = fs.readdirSync(dir); } catch { continue; }
-    for (const name of names) {
-      if (!/^lib(?:llama|ggml)[\w.-]*\.so\.0\.\d+(?:\.\d+)*$/i.test(name)) continue;
-      const target = path.join(dir,name);
-      try { if (!fs.statSync(target).isFile()) continue; } catch { continue; }
-      const alias = name.replace(/(\.so\.0)\..+$/, '$1');
-      const aliasPath = path.join(dir,alias);
+  for (const dir of nativeLibraryDirs(binary)) {
+    let names;
+    try { names = fs.readdirSync(dir).filter(name => nativeLibraryName.test(name)); }
+    catch { continue; }
+    const realFiles = names.filter(name => {
+      try { return fs.lstatSync(path.join(dir, name)).isFile(); }
+      catch { return false; }
+    });
+    const links = names.filter(name => {
+      try { return fs.lstatSync(path.join(dir, name)).isSymbolicLink(); }
+      catch { return false; }
+    });
+    const desired = new Set(links);
+    for (const name of realFiles) {
+      const version = name.match(/^(lib(?:llama|ggml|mtmd)[a-z0-9_.-]*\.so)\.(\d+)\.(\d+(?:\.\d+)*)$/i);
+      if (version) {
+        desired.add(version[1]);
+        desired.add(version[1] + '.' + version[2]);
+      }
+    }
+    for (const alias of [...desired].sort((x, y) => y.length - x.length)) {
+      const aliasFile = path.join(dir, alias);
+      try { if (fs.statSync(aliasFile).isFile()) continue; } catch {}
+      // Only use a real, adjacent file from the verified release. No external
+      // paths, no symlink chains, and no unexpected lib names.
+      const target = realFiles.filter(name => name.startsWith(alias + '.'))
+        .sort((x, y) => x.length - y.length || x.localeCompare(y))[0];
+      if (!target) continue;
       try {
-        if (fs.existsSync(aliasPath)) continue;
-        // A dangling unpacked symlink can be replaced safely within the
-        // managed runtime. A real file is never overwritten.
         try {
-          if (fs.lstatSync(aliasPath).isSymbolicLink()) fs.unlinkSync(aliasPath);
-          else continue;
-        } catch (e) { if (e?.code !== 'ENOENT') continue; }
-        fs.symlinkSync(name,aliasPath);
-        changed.push(alias);
-      } catch { /* read-only hosting: diagnosed by the normal loader */ }
+          if (fs.lstatSync(aliasFile).isSymbolicLink()) fs.unlinkSync(aliasFile);
+          else continue; // Existing real files or directories are protected.
+        } catch (error) { if (error?.code !== 'ENOENT') continue; }
+        fs.symlinkSync(target, aliasFile);
+        if (fs.statSync(aliasFile).isFile()) changed.push(alias);
+      } catch { /* Host restrictions remain visible as startup failures. */ }
     }
   }
   return changed;
+}
+
+// Public path-free facts; presence of GGUF is not evidence of working inference.
+export function nativeLibraryHealth(binary) {
+  const dirs = managedNativeRoot(binary) ? nativeLibraryDirs(binary) : [];
+  const names = new Set();
+  const dangling = [];
+  for (const dir of dirs) {
+    let files = [];
+    try { files = fs.readdirSync(dir).filter(n => nativeLibraryName.test(n)); } catch {}
+    for (const name of files) {
+      try {
+        if (fs.statSync(path.join(dir, name)).isFile()) names.add(name);
+      } catch {
+        try {
+          if (fs.lstatSync(path.join(dir, name)).isSymbolicLink()) dangling.push(name);
+        } catch {}
+      }
+    }
+  }
+  const present = [...names];
+  return { library_directories: dirs.length, library_files: present.length,
+    dangling_links: [...new Set(dangling)].slice(0, 16),
+    common_soname_found: present.some(n => /^libllama-common\.so\.0$/.test(n)),
+  };
 }
 export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
@@ -197,6 +261,7 @@ export class EmbeddedLanguageRuntime {
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
+      native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
       paid_model_api_required:false};
   }
   fail(error){
