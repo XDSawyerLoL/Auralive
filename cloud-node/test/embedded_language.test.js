@@ -364,3 +364,83 @@ test('thread creation abort retries once under low-memory single-thread profile'
   }
   assert.equal(runtime.status().boot_profile,'low-memory');
 });
+
+test('a user chat never waits for slow installation, a blocked native boot, or 150s model load',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/qwen.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  let launches=0;
+  runtime.start=()=>{
+    launches++;
+    return new Promise(()=>{}); // simulates a non-responding booting server
+  };
+  const start=Date.now();
+  assert.equal(await runtime.generate('salut','français'), '');
+  assert.ok(Date.now()-start<150,'chat waited for an unresponsive model');
+  assert.equal(launches,1);
+  // Still no bogus answer if the model has not produced any tokens.
+  assert.equal(runtime.status().ready,false);
+  assert.equal(runtime.status().last_success_at,'');
+});
+test('a process exiting with code 0 before health is ready is still a failure',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/qwen.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>12233,
+    request:async()=>{throw Error('not listening')},
+    delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
+    bootTimeoutMs:500,
+    spawnProcess:()=>{
+      const child=new EventEmitter();
+      child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();
+      child.kill=()=>{};
+      setImmediate(()=>{child.exitCode=0;child.emit('exit',0,null)});
+      return child;
+    }
+  });
+  assert.equal(await runtime.start(),false);
+  const status=runtime.status();
+  assert.equal(status.ready,false);
+  assert.equal(status.failure_code,'embedded-process-exit-0');
+  assert.equal(status.boot_attempts.length,1);
+  assert.equal(status.boot_attempts[0].exit_code,0);
+  assert.equal(status.boot_attempts[0].outcome,'exit');
+});
+test('failed low-memory retry keeps both attempts and original SIGABRT evidence',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',gguf:'/tmp/qwen.gguf',
+      installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>12234,
+    request:async()=>{throw Error('not listening')},
+    delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
+    bootTimeoutMs:500,
+    spawnProcess:()=>{
+      const child=new EventEmitter();
+      child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();
+      child.kill=()=>{};
+      const nth=++runtime._testLaunches;
+      setImmediate(()=>{
+        if(nth===1){
+          child.stderr.emit('data','pthread_create: Resource temporarily unavailable');
+          child.signalCode='SIGABRT';child.emit('exit',null,'SIGABRT');
+        }else{
+          child.exitCode=0;child.emit('exit',0,null);
+        }
+      });
+      return child;
+    }
+  });
+  runtime._testLaunches=0;
+  assert.equal(await runtime.start(),false);
+  const status=runtime.status();
+  assert.equal(status.boot_attempts.length,2);
+  assert.equal(status.boot_attempts[0].failure_code,'embedded-thread-capacity-exhausted');
+  assert.equal(status.boot_attempts[0].exit_signal,'SIGABRT');
+  assert.equal(status.boot_attempts[1].profile,'low-memory');
+  assert.equal(status.boot_attempts[1].exit_code,0);
+  assert.equal(status.ready,false);
+});
