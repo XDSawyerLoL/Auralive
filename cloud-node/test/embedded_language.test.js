@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
-  EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth} from '../src/embedded_language.js';
+  EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -204,4 +204,21 @@ test('actual Linux ELF starts after native SONAME symlink repair',{
     assert.equal(run.status,0,run.stderr.toString());
     assert.match(run.stdout.toString(),/AURA_NATIVE_OK/);
   } finally {fs.rmSync(root,{force:true,recursive:true});}
+});
+
+test('system ELF loader fallback is restricted to trusted system paths and uses no shell',()=>{
+  assert.equal(systemElfLoader('x64','win32'),'');
+  assert.equal(systemElfLoader('mips','linux'),'');
+  const filename='/tmp/aura-language-runtime/llama-b11425/llama-server';
+  const direct=nativeLaunchSpec(filename,['--version']);
+  assert.equal(direct.command,filename);
+  assert.equal(direct.mode,'direct');
+  if(process.platform==='linux' && systemElfLoader()){
+    const spec=nativeLaunchSpec(filename,['--version'],true);
+    assert.equal(spec.command,systemElfLoader());
+    assert.equal(spec.args[0],'--library-path');
+    assert.equal(spec.args[2],filename);
+    assert.equal(spec.mode,'system-elf-loader');
+    assert.equal(spec.args[3],'--version');
+  }
 });
