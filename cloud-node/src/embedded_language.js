@@ -155,6 +155,30 @@ export function nativeLibraryHealth(binary) {
     common_soname_found: present.some(n => /^libllama-common\.so\.0$/.test(n)),
   };
 }
+// Explicit loader launch is a controlled fallback if a managed host filters
+// LD_LIBRARY_PATH. Never run through a shell or a downloaded interpreter.
+export function systemElfLoader(arch=process.arch, platform=process.platform) {
+  if (platform !== 'linux') return '';
+  const choices=arch==='x64'
+    ? ['/lib64/ld-linux-x86-64.so.2','/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2']
+    : arch==='arm64'
+      ? ['/lib/ld-linux-aarch64.so.1','/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1']
+      : [];
+  for (const pathname of choices) {
+    try { if (fs.statSync(pathname).isFile()) return pathname; } catch {}
+  }
+  return '';
+}
+
+export function nativeLaunchSpec(executable, args=[], useElfLoader=false) {
+  const env=llamaLoaderEnv(executable);
+  const loader=useElfLoader ? systemElfLoader() : '';
+  if (useElfLoader && !loader) return null;
+  return loader
+    ? {command:loader,args:['--library-path',env.LD_LIBRARY_PATH,executable,...args],env,mode:'system-elf-loader'}
+    : {command:executable,args,env,mode:'direct'};
+}
+
 export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
@@ -208,6 +232,7 @@ export class EmbeddedLanguageRuntime {
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
     this.cachedDiscovery=null;this.lastDiscoveryAt=0;
     this.repairedLibraryAliases=[];
+    this.launchMode='not-started';
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -262,6 +287,7 @@ export class EmbeddedLanguageRuntime {
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
+      launch_mode:this.launchMode,
       paid_model_api_required:false};
   }
   fail(error){
@@ -298,19 +324,29 @@ export class EmbeddedLanguageRuntime {
   async bootWithExecutable(){
     if(!this.repairExecutable())return false;
     this.repairedLibraryAliases=repairLlamaLibraryAliases(this.inspect().executable);
-    return this.boot();
+    const direct=await this.boot();
+    if(direct || classifyEmbeddedFailure(this.lastFailure).code!=='embedded-shared-library-unresolved'
+      || !systemElfLoader())return direct;
+    // AURA controls the interpreter path, binary, model and library roots;
+    // Linux resolves the loader's --library-path without relying on the
+    // hosting platform preserving LD_LIBRARY_PATH in the child environment.
+    this.cooldownUntil=0;
+    return this.boot(true);
   }
-  async boot(){
+  async boot(useElfLoader=false){
     const {executable,gguf}=this.inspect();
     this.lastFailure='';this.port=await this.allocatePort();
     let child;
     try{
-      child=this.spawnProcess(executable,[
+      const spec=nativeLaunchSpec(executable,[
         '-m',gguf,'--host','127.0.0.1','--port',String(this.port),
         '--ctx-size','2048','--threads',String(Math.max(1,Math.min(4,
-          Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||2)))],
-      {cwd:path.dirname(executable),env:llamaLoaderEnv(executable),
-       stdio:['ignore','ignore','pipe'],shell:false});
+          Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||2)))],useElfLoader);
+      if(!spec)throw new Error('embedded-system-loader-unavailable');
+      this.launchMode=spec.mode;
+      child=this.spawnProcess(spec.command,spec.args,
+        {cwd:path.dirname(executable),env:spec.env,
+         stdio:['ignore','ignore','pipe'],shell:false});
     }catch(error){this.fail(error);return false;}
     this.child=child;
     let stderr='';
