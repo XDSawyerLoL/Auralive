@@ -103,7 +103,7 @@ async function locateFile(folder, filename, depth=0){
   }
   return '';
 }
-async function hasLibraries(folder){
+export async function hasLibraries(folder){
   // A symlink listed by tar does not prove that its target exists. In some
   // official llama.cpp releases, the SONAME links are dangling.
   let common=false, ggml=false;
