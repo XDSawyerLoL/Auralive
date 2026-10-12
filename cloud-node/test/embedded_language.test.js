@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
-  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot} from '../src/embedded_language.js';
+  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot,
+  nativeProcessSnapshot,nativeStartupMilestones,healthProbeResult} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -582,4 +583,71 @@ test('a textual stub with no positive completion_tokens is never proof of infere
   });
   assert.equal(await runtime.start(),false);
   assert.equal(runtime.status().failure_code,'embedded-inference-probe-invalid');
+});
+
+test('proc Linux snapshot reports bounded RSS and threads but no sensitive process strings',()=>{
+  const sample=[
+    'Name: sensitive-model-path',
+    'State: S (sleeping)',
+    'Threads:\t3',
+    'VmRSS:\t409600 kB',
+    'Uid:\t1111',
+  ].join('\n');
+  const seen=[];
+  const result=nativeProcessSnapshot(4321,{
+    platform:'linux',
+    read:(name)=>{seen.push(name);return sample;},
+  });
+  assert.deepEqual(result,{state:'S',threads:3,rss_mb:400});
+  assert.deepEqual(seen,['/proc/4321/status']);
+  assert.doesNotMatch(JSON.stringify(result),/sensitive-model|Uid|proc|4321/);
+  assert.equal(nativeProcessSnapshot(-1,{platform:'linux',read:()=>sample}),null);
+  assert.equal(nativeProcessSnapshot(4321,{platform:'win32',read:()=>sample}),null);
+  assert.equal(nativeProcessSnapshot(4321,{platform:'linux',read:()=>{throw Error('access denied');}}),null);
+});
+test('startup milestones and HTTP errors preserve only allowlisted state',()=>{
+  const message='llama_model_loader: general.architecture=qwen3\nload_tensors done\n'
+    +'private-password=/home/private/secret.gguf\nstarting the main loop\n';
+  const stages=nativeStartupMilestones(message);
+  assert.deepEqual(stages,['model-metadata','model-tensors','http-listener']);
+  assert.doesNotMatch(JSON.stringify(stages),/private|home|secret/);
+  assert.equal(healthProbeResult({cause:{code:'ECONNREFUSED'}}),'connection-refused');
+  assert.equal(healthProbeResult({name:'TimeoutError'}),'timeout');
+  assert.equal(healthProbeResult({cause:{code:'EHOSTUNREACH'}}),'network-unreachable');
+  assert.equal(healthProbeResult(new Error('/home/private/secret.gguf')),'request-error');
+});
+test('failed Hostinger health polling exposes safe counts and preserves both attempts',async()=>{
+  let starts=0;
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/secret-model.gguf',installed:true,binFound:true,
+      modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>23312,bootTimeoutMs:35,
+    request:async()=>{const err=new Error('private host/path');err.cause={code:'ECONNREFUSED'};throw err;},
+    delay:async()=>{await new Promise(resolve=>setTimeout(resolve,2));},
+    spawnProcess:()=>{
+      starts++;
+      const child=new EventEmitter();
+      child.pid=99999999;child.exitCode=null;child.signalCode=null;
+      child.stderr=new EventEmitter();child.stdout=new EventEmitter();
+      child.kill=()=>{child.signalCode='SIGTERM';return true;};
+      setImmediate(()=>child.stderr.emit('data',Buffer.from(
+        'llama_model_loader: general.architecture=qwen3 private /home/sensitive.gguf')));
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),false);
+  const state=runtime.status();
+  assert.equal(starts,2);
+  assert.equal(state.ready,false);
+  assert.equal(state.probe_verified,false);
+  assert.equal(state.health_last_result,'connection-refused');
+  assert.ok(state.health_probe_count>=1);
+  assert.equal(state.native_output_observed,true);
+  assert.ok(state.native_startup_milestones.includes('model-metadata'));
+  assert.equal(state.boot_attempts.length,2);
+  assert.equal(state.boot_attempts[0].health_last_result,'connection-refused');
+  assert.equal(state.boot_attempts[0].native_output_observed,true);
+  assert.equal(state.boot_attempts[1].profile,'low-memory');
+  assert.doesNotMatch(JSON.stringify(state),/\/home\/sensitive|secret-model|private host/);
 });
