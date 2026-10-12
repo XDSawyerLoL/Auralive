@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { allowedArtifactRedirect, noexecMount, nativeProvisionSupported,
-  EmbeddedProvisioner } from '../src/embedded_provisioner.js';
+  EmbeddedProvisioner, hasLibraries } from '../src/embedded_provisioner.js';
 
 test('trusts official HTTPS release / model hosts and forbids other endpoints',()=>{
   assert.equal(allowedArtifactRedirect('https://github.com/ggml-org/llama.cpp/releases','binary'),true);
@@ -48,4 +51,18 @@ test('official region-specific CDN and object-store redirects remain SHA-256 che
   assert.equal(allowedArtifactRedirect('https://attacker-hf.co/asset','model'),false);
   assert.equal(allowedArtifactRedirect('http://storage.googleapis.com/asset','model'),false);
   assert.equal(allowedArtifactRedirect('https://evil.amazonaws.com/asset','binary'),false);
+});
+
+test('provisioning never counts a dangling library symlink as a verified native runtime',async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'aura-native-provision-'));
+  try{
+    fs.symlinkSync('llama-b11425ibllama-common.so.0.0.11425',
+      path.join(root,'libllama-common.so.0'));
+    fs.symlinkSync('llama-b11425ibggml.so.0.11.1',
+      path.join(root,'libggml.so.0'));
+    assert.equal(await hasLibraries(root),false);
+    fs.writeFileSync(path.join(root,'libllama-common.so.0.0.11425'),'native-file');
+    fs.writeFileSync(path.join(root,'libggml.so.0.11.1'),'native-file');
+    assert.equal(await hasLibraries(root),true);
+  }finally{fs.rmSync(root,{force:true,recursive:true});}
 });
