@@ -56,3 +56,9 @@ test('explicit failures outrank waiting/plan-only markers', () => {
     status: 'queued', result: { ok: false },
   }).status, 'failed');
 });
+
+test('a completed transport job that only planned is not completed work', () => {
+  assert.equal(classifyInitiativeResult('worker', {
+    ok: true, executed: false, plan: 'Non exécuté',
+  }).status, 'failed');
+});
