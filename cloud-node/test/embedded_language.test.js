@@ -270,7 +270,7 @@ test('SIGKILL before native health reattempts with a smaller context instead of 
       gguf:'/tmp/test-model.gguf',binFound:true,modelFound:true,executableAllowed:true,installed:true}),
     provisioner:null,allocatePort:async()=>19098,
     request:async(url,opts)=>opts?.method==='POST'
-      ? {ok:launches.length>=2,json:async()=>({usage:{completion_tokens:2},usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}
+      ? {ok:launches.length>=2,json:async()=>({usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}
       : {ok:launches.length>=2},
     delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
     bootTimeoutMs:1000,
@@ -342,7 +342,7 @@ test('thread creation abort retries once under low-memory single-thread profile'
       gguf:'/tmp/installed.gguf',binFound:true,modelFound:true,executableAllowed:true,installed:true}),
     provisioner:null,allocatePort:async()=>19099,
     request:async(url,opts)=>opts?.method==='POST'
-      ? {ok:launches.length>=2,json:async()=>({usage:{completion_tokens:2},usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}
+      ? {ok:launches.length>=2,json:async()=>({usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}
       : {ok:launches.length>=2},
     delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
     bootTimeoutMs:1000,
@@ -553,7 +553,7 @@ test('a completed probe never prevents reporting native post-start termination',
       installed:true,binFound:true,modelFound:true,executableAllowed:true}),
     provisioner:null,allocatePort:async()=>21005,bootTimeoutMs:1000,
     request:async(url,opts)=>opts?.method==='POST'
-      ? {ok:true,json:async()=>({usage:{completion_tokens:2},usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}:{ok:true},
+      ? {ok:true,json:async()=>({usage:{completion_tokens:2},choices:[{message:{content:'Bonjour'}}]})}:{ok:true},
     spawnProcess:()=>{
       child=new EventEmitter();child.exitCode=null;child.signalCode=null;
       child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
