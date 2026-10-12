@@ -607,7 +607,9 @@ function renderLanguageEngine(state){
     (native.rss_mb!=null?', RAM '+Number(native.rss_mb)+' Mo':'')+
     (native.threads!=null?', '+Number(native.threads)+' threads':'')+
     '. Sortie native : '+(state?.native_output_observed?'oui':'non')+
-    '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+'.';
+    '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+
+    '. Port déclaré par le moteur : '+(state?.native_listener_report?.matching_port===true?'conforme'
+      :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+'.';
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
     :booting
