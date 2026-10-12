@@ -186,5 +186,25 @@ jobs:
             assert.ok(reply.length>0, 'No real generated text');
             console.log('REAL_GGUF_GENERATED_TOKENS='+(json.tokens_predicted??'unknown'));
             console.log('REAL_GGUF_NONEMPTY_RESPONSE=true');
+            // Production AURA speaks through OpenAI-style chat/completions, not /completion.
+            // Require real model token accounting to prevent a false healthy result.
+            const chat = await fetch('http://127.0.0.1:19473/v1/chat/completions', {
+              method:'POST',headers:{'content-type':'application/json'},
+              body:JSON.stringify({
+                model:'local',stream:false,temperature:0,max_tokens:48,
+                chat_template_kwargs:{enable_thinking:false},
+                messages:[{role:'user',content:'Réponds en français en un mot : bonjour.'}]
+              }),
+              signal:AbortSignal.timeout(90000)
+            });
+            assert.equal(chat.status,200,'chat/completions HTTP failed');
+            const payload=await chat.json();
+            const content=String(payload?.choices?.[0]?.message?.content||'')
+              .replace(/<think>[\\s\\S]*?<\\/think>/gi,'').trim();
+            const generated=Number(payload?.usage?.completion_tokens);
+            assert.ok(content.length>0,'chat/completions generated no visible text');
+            assert.ok(Number.isFinite(generated)&&generated>=1,'chat/completions did not prove token generation');
+            console.log('REAL_GGUF_CHAT_COMPLETION_TOKENS='+generated);
+            console.log('REAL_GGUF_CHAT_VERIFIED=true');
           })().catch(e=>{console.error(e.message);process.exitCode=1;});
           NODE
