@@ -289,3 +289,15 @@ test('unconfigured Mairaiy is a warning, not a false runtime failure', () => {
   assert.match(DASHBOARD_SCRIPT, /Mairaiy · à configurer/);
   assert.match(DASHBOARD_SCRIPT, /voiceReady\?'good':'warn'/);
 });
+
+test('AURA immersive cockpit exposes visible live language-engine diagnosis and version',()=>{
+  for(const mark of ['immersive-cognition-v3','class="aura-intro"','id="serverRevision"',
+    'id="railBrain"','id="railLanguage"','id="railMissions"','id="enginePanel"',
+    'id="engineStage"','id="engineRefresh"','id="engineProgress"']){
+    assert.ok(DASHBOARD_HTML.includes(mark),mark);
+  }
+  assert.match(DASHBOARD_SCRIPT,/api\('\/api\/language\/embedded\/status'\)/);
+  assert.match(DASHBOARD_SCRIPT,/function renderLanguageEngine\(state\)/);
+  assert.match(DASHBOARD_SCRIPT,/embedded-unsafe-redirect/);
+  assert.match(DASHBOARD_SCRIPT,/if\(!unavailable\)speakAura/);
+});

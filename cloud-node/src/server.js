@@ -28,6 +28,7 @@ import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
+import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';

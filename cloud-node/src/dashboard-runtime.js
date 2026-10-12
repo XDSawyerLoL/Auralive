@@ -550,9 +550,73 @@ function renderLanguageProgress(report){
   }
 }
 
+
+function renderLanguageEngine(state){
+  const panel=$('enginePanel');if(!panel)return;
+  const install=state&&state.provisioning||{};
+  const stage=String(install.stage||'not-started');
+  const fail=String(install.error_code||state&&state.failure_code||'');
+  const labels={
+    'not-started':'Préparation non démarrée',
+    'locating-existing-install':'Recherche du modèle local',
+    'downloading-cpu-runtime':'Téléchargement du moteur CPU',
+    'extracting-cpu-runtime':'Vérification des bibliothèques',
+    'downloading-open-model':'Téléchargement du modèle Qwen',
+    'installed-verified':'Fichiers du modèle vérifiés',
+    'blocked':'Installation interrompue'
+  };
+  const progress={
+    'not-started':0,'locating-existing-install':9,
+    'downloading-cpu-runtime':25,'extracting-cpu-runtime':44,
+    'downloading-open-model':70,'installed-verified':88,'blocked':0
+  };
+  const healthy=Boolean(state&&state.ready&&state.last_success_at);
+  const blocked=stage==='blocked'||!!fail;
+  const kind=healthy?'ready':blocked?'blocked':'loading';
+  panel.dataset.state=kind;
+  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'À corriger':'En préparation';
+  $('railLanguage').textContent=healthy?'Conversation disponible':blocked?'Moteur bloqué':'Moteur en préparation';
+  const titles={
+    'embedded-unsafe-redirect':'Téléchargement bloqué par une redirection HTTPS',
+    'embedded-sha256-mismatch':'Le fichier reçu a échoué au contrôle SHA-256',
+    'embedded-insufficient-cgroup-memory':'Mémoire serveur insuffisante pour le modèle',
+    'embedded-cache-unavailable-or-noexec':'Dossier de modèle inexécutable ou espace insuffisant',
+    'embedded-download-http-403':'Téléchargement refusé par le serveur source',
+    'embedded-download-http-429':'Téléchargement limité par le serveur source',
+    'embedded-download-http-404':'Fichier du modèle introuvable',
+    'host-disallows-native-execution':'Exécution native interdite sur cet hébergement'
+  };
+  $('engineTitle').textContent=healthy?'Français naturel opérationnel'
+    :blocked?(titles[fail]||'Moteur français indisponible')
+      :'Installation autonome du français';
+  $('engineDescription').textContent=healthy
+    ?'Une réponse a été générée par le modèle sur ce serveur, sans API linguistique payante.'
+    :blocked
+      ?'Étape échouée : '+String(install.failed_stage||stage)+
+        '. Code : '+(fail||'échec du démarrage')+
+        '. Ce diagnostic provient du serveur, pas d’une simulation d’intelligence.'
+      :'Le modèle est en cours de préparation. La barre représente une étape d’installation, pas un score d’apprentissage.';
+  $('engineStage').textContent=labels[stage]||String(state&&state.status||'Moteur non démarré');
+  $('engineProgress').style.width=healthy?'100%':(progress[stage]||0)+'%';
+  $('engineRevision').textContent='llama.cpp '+String(install.engine_revision||'local')+' · '+String(install.model||'GGUF');
+}
+async function refreshEnginePanel(){
+  try{renderLanguageEngine(await api('/api/language/embedded/status'));}
+  catch(error){
+    renderLanguageEngine({provisioning:{stage:'blocked',error_code:'diagnostic-unavailable'},failure_code:'diagnostic-unavailable'});
+    $('engineDescription').textContent='Le diagnostic du moteur est inaccessible ('+String(error.status||'réseau')+'). La génération n’est pas vérifiée.';
+  }
+}
+
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
+    $('railBrain').textContent=boot.runtime_ready?'Mémoire et cognition actives':'Noyau en démarrage';
+    try{
+      const info=await api('/healthz');
+      $('serverRevision').textContent='Serveur · '+String(info?.build?.git_sha_short||'révision inconnue');
+    }catch(_){$('serverRevision').textContent='Serveur · connexion partielle';}
+    await refreshEnginePanel();
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -623,6 +687,9 @@ async function refresh(){
     $('evolutionText').title=phase;
 
     const commandStatus=publicState.command||null;
+    $('railMissions').textContent=commandStatus?.enabled
+      ? (commandStatus?.running?'Missions en cours':'Orchestration activée')
+      : 'Missions en veille';
     const curiosityStatus=publicState.curiosity||null;
     const scoutStatus=publicState.scout||null;
 
@@ -794,9 +861,11 @@ async function sendMessage(text){
   $('messages').scrollTop=$('messages').scrollHeight;
   try{
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
+    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
+    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
-    speakAura(out.answer||'',out.voice_ticket||'');
+    if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
+    if(unavailable)void refreshEnginePanel();
     refresh();
   }catch(error){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
@@ -807,6 +876,7 @@ $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shift
 document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
 $('refreshMap').onclick=refresh;
 $('modeBtn').onclick=refresh;
+$('engineRefresh').onclick=refreshEnginePanel;
 $('voiceBtn').onclick=function(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){$('message').placeholder='Reconnaissance vocale non disponible sur ce navigateur.';return;}

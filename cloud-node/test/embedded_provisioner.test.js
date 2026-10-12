@@ -38,3 +38,14 @@ test('explicit opt-out refuses installation and cannot contact paid providers',a
     else process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED=prior;
   }
 });
+
+test('official region-specific CDN and object-store redirects remain SHA-256 checked',()=>{
+  assert.equal(allowedArtifactRedirect('https://cdn-lfs-us-1.hf.co/path','model'),true);
+  assert.equal(allowedArtifactRedirect('https://cas-bridge.xethub.hf.co/blob','model'),true);
+  assert.equal(allowedArtifactRedirect('https://hf-bucket.storage.googleapis.com/x','model'),true);
+  assert.equal(allowedArtifactRedirect('https://github-production-release-asset-2e65be.s3.amazonaws.com/asset','binary'),true);
+  assert.equal(allowedArtifactRedirect('https://release-assets.githubusercontent.com/asset','binary'),true);
+  assert.equal(allowedArtifactRedirect('https://attacker-hf.co/asset','model'),false);
+  assert.equal(allowedArtifactRedirect('http://storage.googleapis.com/asset','model'),false);
+  assert.equal(allowedArtifactRedirect('https://evil.amazonaws.com/asset','binary'),false);
+});
