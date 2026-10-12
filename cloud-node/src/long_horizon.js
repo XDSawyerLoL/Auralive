@@ -445,6 +445,7 @@ export class LongHorizonMissionEngine {
             result,
           }).slice(0, 9000)}`,
         ].join('\n'),
+        { missionId: mission.id },
       );
       const parsed = parseJsonObject(response?.answer);
       const verdict = String(parsed.verdict || '').toLowerCase();

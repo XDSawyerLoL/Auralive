@@ -912,8 +912,8 @@ export class CognitiveKernel {
       missionId,
       task,
       provider: () => this.ai.lastBackend || this.ai.provider,
-      invoke: () => this.ai.generate(
-        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${this.soulCache?.current_intention || ''}`,
+      invoke: async () => this.ai.generate(
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
         AGENT_ROLES[name],
         700,
         taskRole,
