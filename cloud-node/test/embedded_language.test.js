@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
-  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot} from '../src/embedded_language.js';
+  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -290,4 +290,77 @@ test('SIGKILL before native health reattempts with a smaller context instead of 
   assert.equal(launches[1].args[launches[1].args.indexOf('--ctx-size')+1],'768');
   assert.equal(runtime.status().boot_profile,'low-memory');
   assert.equal(runtime.status().ready,true);
+});
+
+test('Hostinger thread-limit abort has its own diagnostic, not a generic engine error',()=>{
+  for(const message of [
+    'pthread_create failed: Resource temporarily unavailable',
+    'cannot create thread EAGAIN exit.signal.sigabrt',
+    'failed to create thread']) {
+    assert.equal(classifyEmbeddedFailure(message).code,'embedded-thread-capacity-exhausted');
+  }
+  assert.equal(classifyEmbeddedFailure('exit.signal.sigill').code,'embedded-cpu-instruction-unsupported');
+});
+test('native llama server caps every CPU and HTTP worker pool even with many visible CPUs',()=>{
+  const args=nativeBootArgs('/models/qwen.gguf',12600);
+  for(const [arg,count] of [['--threads','1'],['--threads-batch','1'],
+    ['--threads-http','1'],['--parallel','1']]){
+    assert.equal(args[args.indexOf(arg)+1],count,arg);
+  }
+  const configured=nativeBootArgs('/models/qwen.gguf',12600,{threads:96});
+  assert.equal(configured[configured.indexOf('--threads')+1],'1');
+  assert.equal(configured[configured.indexOf('--threads-http')+1],'1');
+  const fallback=nativeBootArgs('/models/qwen.gguf',12600,{lowMemory:true,threads:96});
+  assert.equal(fallback[fallback.indexOf('--threads')+1],'1');
+  assert.equal(fallback[fallback.indexOf('--threads-http')+1],'1');
+  const spec=nativeLaunchSpec('/tmp/aura-language-runtime/llama-server',args);
+  assert.equal(spec.env.OMP_NUM_THREADS,'1');
+  assert.equal(spec.env.OPENBLAS_NUM_THREADS,'1');
+  assert.equal(spec.env.LLAMA_ARG_THREADS_HTTP,'1');
+});
+test('cgroup v2 pid counters reveal task limit without filesystem details',()=>{
+  const fixture={
+    '/sys/fs/cgroup/pids.max':'64\n',
+    '/sys/fs/cgroup/pids.current':'60\n',
+    '/sys/fs/cgroup/pids.events':'max 11\n',
+  };
+  const snapshot=cgroupPidSnapshot({read:(p)=>{
+    if(!(p in fixture))throw Error('unavailable');
+    return fixture[p];
+  }});
+  assert.deepEqual(snapshot,{max:64,current:60,failed_forks:11});
+  assert.doesNotMatch(JSON.stringify(snapshot),/sys\/fs|customer/);
+});
+test('thread creation abort retries once under low-memory single-thread profile',async()=>{
+  const launches=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/installed.gguf',binFound:true,modelFound:true,executableAllowed:true,installed:true}),
+    provisioner:null,allocatePort:async()=>19099,
+    request:async()=>({ok:launches.length>=2}),
+    delay:async()=>{await new Promise(resolve=>setImmediate(resolve));},
+    bootTimeoutMs:1000,
+    spawnProcess:(cmd,args,opts)=>{
+      launches.push({cmd,args,opts});
+      const child=new EventEmitter();
+      child.exitCode=null;child.signalCode=null;
+      child.stderr=new EventEmitter();child.stdout=new EventEmitter();
+      child.kill=()=>{};
+      if(launches.length===1){
+        setImmediate(()=>{
+          child.stderr.emit('data',Buffer.from('pthread_create: Resource temporarily unavailable'));
+          child.signalCode='SIGABRT';child.emit('exit',null,'SIGABRT');
+        });
+      }
+      return child;
+    }
+  });
+  assert.equal(await runtime.start(),true);
+  assert.equal(launches.length,2);
+  for(const run of launches){
+    assert.equal(run.args[run.args.indexOf('--threads-http')+1],'1');
+    assert.equal(run.args[run.args.indexOf('--threads-batch')+1],'1');
+    assert.equal(run.opts.env.OMP_NUM_THREADS,'1');
+  }
+  assert.equal(runtime.status().boot_profile,'low-memory');
 });

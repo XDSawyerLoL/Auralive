@@ -19,6 +19,9 @@ export function classifyEmbeddedFailure(error) {
   if (/exec format|enoexec|glibc|wrong elf class/.test(reason))
     return { code: 'embedded-incompatible-binary',
       hint: 'Le binaire llama-server est incompatible avec le système Linux de cet hébergement.' };
+  if (/pthread_create|cannot create thread|failed to create thread|resource temporarily unavailable|thread.create.failed|exit.signal.sigabrt/.test(reason))
+    return {code:'embedded-thread-capacity-exhausted',
+      hint:'Le serveur Hostinger refuse la création de threads (SIGABRT/EAGAIN). AURA limite strictement les threads HTTP, calcul et batch ; vérifier la limite pids du compte.'};
   if (/sigkill|exit.signal.sigkill|enomem|out of memory|killed|bad.alloc|cannot allocate memory|failed to allocate|oom.kill|exit.code.137/i.test(reason))
     return { code: 'embedded-insufficient-memory',
       hint: 'Le processus a probablement dépassé la mémoire disponible. AURA tente un contexte et des lots plus petits.' };
@@ -193,6 +196,10 @@ export function systemElfLoader(arch=process.arch, platform=process.platform) {
 
 export function nativeLaunchSpec(executable, args=[], useElfLoader=false) {
   const env=llamaLoaderEnv(executable);
+  Object.assign(env,{OMP_NUM_THREADS:'1',OMP_THREAD_LIMIT:'1',
+    OPENBLAS_NUM_THREADS:'1',MKL_NUM_THREADS:'1',BLIS_NUM_THREADS:'1',
+    VECLIB_MAXIMUM_THREADS:'1',NUMEXPR_NUM_THREADS:'1',
+    LLAMA_ARG_THREADS_HTTP:'1',LLAMA_ARG_N_PARALLEL:'1'});
   const loader=useElfLoader ? systemElfLoader() : '';
   if (useElfLoader && !loader) return null;
   return loader
@@ -239,12 +246,43 @@ export function cgroupMemorySnapshot({
     current_mb:mb(num('/sys/fs/cgroup/memory.current')??num('/sys/fs/cgroup/memory/memory.usage_in_bytes')),
     oom_events:events.oom??null,oom_kills:events.oom_kill??null};
 }
-export function nativeBootArgs(gguf, port, {lowMemory=false,threads=2}={}){
+// Linux counts pthreads as cgroup tasks, independently of the memory quota.
+export function cgroupPidSnapshot({read=fs.readFileSync}={}){
+  const readCounter=paths=>{
+    for(const file of paths){
+      try {
+        const raw=String(read(file,'utf8')).trim();
+        if(raw==='max')return null;
+        const n=Number(raw);
+        if(Number.isSafeInteger(n)&&n>=0&&n<1000000000)return n;
+      }catch{}
+    }
+    return null;
+  };
+  const getEvents=()=>{
+    for(const p of ['/sys/fs/cgroup/pids.events','/sys/fs/cgroup/pids/pids.events']){
+      try {
+        const m=String(read(p,'utf8')).match(/(?:^|\n)max\s+(\d+)/);
+        if(m)return Number(m[1]);
+      }catch{}
+    }
+    return null;
+  };
+  return {max:readCounter(['/sys/fs/cgroup/pids.max','/sys/fs/cgroup/pids/pids.max']),
+    current:readCounter(['/sys/fs/cgroup/pids.current','/sys/fs/cgroup/pids/pids.current']),
+    failed_forks:getEvents()};
+}
+// llama.cpp b11425 defaults HTTP threads to hardware_concurrency()-1. On
+// shared hosting this can exceed the per-account pids quota even with -t=1.
+export function nativeBootArgs(gguf,port,{lowMemory=false,threads=1}={}){
   const context=lowMemory?768:2048;
+  // In Hostinger mode, ignore old overrides that can silently restore extra workers.
+  const cpu=1;
   return ['-m',gguf,'--host','127.0.0.1','--port',String(port),
-    '--ctx-size',String(context),'--threads',String(Math.max(1,Math.min(4,Number(threads)||2))),
-    '--parallel','1','--batch-size',lowMemory?'32':'96',
-    '--ubatch-size',lowMemory?'16':'48','--no-warmup'];
+    '--ctx-size',String(context),'--threads',String(lowMemory?1:cpu),
+    '--threads-batch','1','--threads-http','1','--parallel','1',
+    '--batch-size',lowMemory?'32':'96','--ubatch-size',lowMemory?'16':'48',
+    '--no-warmup'];
 }
 
 export function locateEmbeddedRuntime({
@@ -304,6 +342,7 @@ export class EmbeddedLanguageRuntime {
     this.bootProfile='standard';this.lastProcessExit={code:null,signal:null};
     this.lastLogSignals=[];this.failureStage='';this.memoryAtBoot=null;
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
+    this.pidsAtBoot=null;this.pidsAfterFailure=null;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -366,11 +405,14 @@ export class EmbeddedLanguageRuntime {
       resource_before_start:this.memoryAtBoot,
       resource_after_failure:this.memoryAfterFailure,
       oom_kills_during_start:this.lastOomKillDelta,
+      pids_before_start:this.pidsAtBoot,
+      pids_after_failure:this.pidsAfterFailure,
       paid_model_api_required:false};
   }
   fail(error){
     this.ready=false;this.lastFailure=errorText(error);
     this.memoryAfterFailure=cgroupMemorySnapshot();
+    this.pidsAfterFailure=cgroupPidSnapshot();
     if(this.memoryAtBoot?.oom_kills!==null && this.memoryAtBoot?.oom_kills!==undefined
       && this.memoryAfterFailure.oom_kills!==null)
       this.lastOomKillDelta=Math.max(0,this.memoryAfterFailure.oom_kills-this.memoryAtBoot.oom_kills);
@@ -413,7 +455,8 @@ export class EmbeddedLanguageRuntime {
     // Reduce model memory requirements for process OOM, SIGKILL or a stalled
     // first warmup. No recursive retry loops or background orphan servers.
     const firstFailure=classifyEmbeddedFailure(this.lastFailure).code;
-    if(['embedded-insufficient-memory','embedded-startup-timeout'].includes(firstFailure)){
+    if(['embedded-insufficient-memory','embedded-startup-timeout',
+      'embedded-thread-capacity-exhausted'].includes(firstFailure)){
       this.cooldownUntil=0;
       success=await this.boot(false,true);
       if(success)return true;
@@ -432,11 +475,13 @@ export class EmbeddedLanguageRuntime {
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
     this.memoryAtBoot=cgroupMemorySnapshot();
+    this.pidsAtBoot=cgroupPidSnapshot();
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
+    this.pidsAfterFailure=null;
     let child;
     try{
       const spec=nativeLaunchSpec(executable,nativeBootArgs(gguf,this.port,{
-        lowMemory,threads:Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||2,
+        lowMemory,threads:Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||1,
       }),useElfLoader);
       if(!spec)throw new Error('embedded-system-loader-unavailable');
       this.launchMode=spec.mode;
