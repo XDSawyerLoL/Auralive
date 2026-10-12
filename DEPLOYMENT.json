@@ -1,0 +1,12 @@
+{
+  "product": "AURA Cloud",
+  "version": "3.0.0",
+  "runtime": "Node.js 22 / Fastify / MySQL",
+  "target": "Hostinger Node.js Web App",
+  "canonical_source": "cloud-node",
+  "git_sha": "f5d50a0c93706e0953fcd7ab0ee31e06da404ac3",
+  "built_at": "2026-10-12T20:55:00.000Z",
+  "language_bootstrap": "gguf-qwen3-0.6b-sha256",
+  "zero_cost_guard": true,
+  "direct_dashboard_chat": true
+}

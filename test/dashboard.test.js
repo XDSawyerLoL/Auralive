@@ -3,17 +3,14 @@ import assert from 'node:assert/strict';
 import { DASHBOARD_HTML } from '../src/dashboard.js';
 import { DASHBOARD_SCRIPT } from '../src/dashboard-runtime.js';
 
-test('AURA operational consciousness interface exposes core product surfaces', () => {
+test('AURA minimal interface exposes only the essential surfaces by default', () => {
   for (const label of [
-    'Interface de conscience opérationnelle',
-    'Dialogue',
-    'Carte d’intérêt',
-    'Pensée dominante',
-    'Travail en cours',
-    'Intentions actives',
-    'Ce qu’elle fait maintenant',
-    'Centre de commande',
-    'Mémoire et leçons',
+    'Company OS',
+    'AURA vivante',
+    'Parler à AURA',
+    'Ce qu’elle fait',
+    'État',
+    'Détails techniques',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
@@ -21,14 +18,9 @@ test('AURA operational consciousness interface exposes core product surfaces', (
 
 test('dashboard is wired to live AURA APIs', () => {
   for (const endpoint of [
-    '/api/kernel/soul',
-    '/api/kernel/intentions',
-    '/api/kernel/lessons',
-    '/api/kernel/activity',
-    '/api/kernel/work',
-    '/api/kernel/attention',
+    '/api/dashboard/public',
     '/api/chat',
-    '/api/command/status',
+    '/api/capabilities',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(endpoint), true, endpoint);
   }
@@ -42,14 +34,14 @@ test('dashboard includes dynamic attention map without a manual token gate', () 
 });
 
 
-test('desktop dashboard keeps the reference composition', () => {
-  assert.equal(DASHBOARD_HTML.includes('grid-template-areas:'), true);
-  assert.equal(DASHBOARD_HTML.includes('"chat map side"'), true);
-  assert.equal(DASHBOARD_HTML.includes('"chat bottom bottom"'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:chat'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:map'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:side'), true);
-  assert.equal(DASHBOARD_HTML.includes('grid-area:bottom'), true);
+test('desktop dashboard keeps conversation dominant and AURA compact', () => {
+  assert.equal(DASHBOARD_HTML.includes('grid-template-columns:minmax(0,1fr) 330px'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="main"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="panel chat"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="side"'), true);
+  assert.equal(DASHBOARD_HTML.includes('class="composer"'), true);
+  assert.equal(DASHBOARD_HTML.includes('id="message"'), true);
+  assert.equal(DASHBOARD_HTML.includes('id="send"'), true);
   assert.equal(DASHBOARD_HTML.includes("setLive(true,boot.runtime_ready?'En ligne · '+mood"), true);
 });
 
@@ -79,18 +71,22 @@ test('dashboard speaks through the tokenless Mairaiy voice ticket bridge', () =>
 });
 
 
-test('living AURA visuals are driven by the organism state', () => {
+test('living AURA visuals are driven by Homeostasis v9 state', () => {
   for (const token of [
     'id="organismMood"',
     'id="organismDot"',
     'scene.organism',
     'const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}',
-    'const tension=Number(o.tension||0)',
+    'const dynamics=o.dynamics||{}',
+    'const agitation=Number(dynamics.agitation||0)',
+    'const activation=Number(dynamics.activation||0)',
+    'const recovery=Number(dynamics.recovery||0)',
     'const dream=Number(o.pression_de_reve||0)',
-    'const fatigue=Number(o.fatigue_cognitive||0)',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
   }
+  assert.equal(DASHBOARD_HTML.includes('fatigue_cognitive'), false);
+  assert.equal(DASHBOARD_HTML.includes('o.tension'), false);
 });
 
 
@@ -128,15 +124,15 @@ test('dashboard exposes exact Mairaiy readiness without a generic TTS escape hat
   assert.equal(DASHBOARD_HTML.includes('id="voiceDot"'), true);
   assert.equal(DASHBOARD_HTML.includes('id="voiceText"'), true);
   assert.equal(DASHBOARD_SCRIPT.includes("api('/api/capabilities')"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · ff_siwis"), true);
-  assert.equal(DASHBOARD_SCRIPT.includes("Kokoro ff_siwis · fr-fr"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Mairaiy · Aoede"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("Gemini TTS · Aoede · fr-fr"), true);
   assert.equal(DASHBOARD_SCRIPT.includes('browserVoiceAvailable()'), false);
 });
 
 
-test('dashboard exposes a dedicated emotional state surface', () => {
+test('dashboard keeps full Homeostasis v9 available in the collapsed detail surface', () => {
   for (const token of [
-    'État émotionnel',
+    'État d’AURA',
     'id="emotionMood"',
     'id="emotionReason"',
     'id="emotion-stability"',
@@ -157,19 +153,25 @@ test('dashboard exposes a dedicated emotional state surface', () => {
   assert.equal(DASHBOARD_SCRIPT.includes('renderEmotion(organism)'), true);
 });
 
-test('mobile dashboard uses readable phone typography and viewport-sized panels', () => {
-  assert.equal(DASHBOARD_HTML.includes('@media(max-width:480px)'), true);
+test('mobile dashboard keeps chat readable and primary', () => {
+  assert.equal(DASHBOARD_HTML.includes('@media(max-width:640px)'), true);
   assert.equal(DASHBOARD_HTML.includes('.composer textarea{font-size:16px'), true);
   assert.equal(DASHBOARD_HTML.includes('.msg{font-size:15px'), true);
-  assert.equal(DASHBOARD_HTML.includes('.chat-panel{min-height:70svh}'), true);
-  assert.equal(DASHBOARD_HTML.includes('.top-actions{width:100%'), true);
+  assert.equal(DASHBOARD_HTML.includes('.chat{min-height:calc(100svh - 68px)}'), true);
+  assert.equal(DASHBOARD_HTML.includes('.map-wrap{height:165px}'), true);
 });
 
 test('mobile voice primes audio but never substitutes a device TTS for Mairaiy', () => {
   assert.equal(DASHBOARD_SCRIPT.includes('primeVoice();'), true);
   assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), false);
   assert.equal(DASHBOARD_SCRIPT.includes('SpeechSynthesisUtterance'), false);
-  assert.equal(DASHBOARD_SCRIPT.includes('aucun TTS générique utilisé'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('aucun autre timbre utilisé'), true);
+});
+
+test('chat send path cannot be blocked by voice priming', () => {
+  assert.match(DASHBOARD_SCRIPT, /function primeVoice\(\)/);
+  assert.match(DASHBOARD_SCRIPT, /try\{primeVoice\(\);\}catch\(_\)\{\}/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat',\{method:'POST'/);
 });
 
 
@@ -186,10 +188,26 @@ test('living visualization uses calmer motion and a 30fps stability cap', () => 
 });
 
 
-test('dashboard refresh falls back to redacted public kernel state', () => {
-  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/auth\/session'\)/);
-  assert.match(DASHBOARD_SCRIPT, /privateView\?'\/api\/kernel\/soul':'\/api\/kernel\/public'/);
-  assert.match(DASHBOARD_SCRIPT, /Détails privés/);
+test('dashboard renders the public operational projection without locked placeholders', () => {
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/dashboard\/public'\)/);
+  assert.equal(DASHBOARD_SCRIPT.includes('/api/auth/session'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('Détails privés'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('Mémoire privée'), false);
+  assert.equal(DASHBOARD_SCRIPT.includes('Travail détaillé privé'), false);
+});
+
+
+
+test('dashboard keeps autonomous capability scouting available in technical details', () => {
+  for (const token of [
+    'Veille',
+    'id="scoutMeta"',
+    'id="scoutList"',
+    'renderScout(scoutStatus)',
+    'Sans prompt',
+  ]) {
+    assert.equal(DASHBOARD_HTML.includes(token) || DASHBOARD_SCRIPT.includes(token), true, token);
+  }
 });
 
 test('dashboard exposes operational command-center state instead of decorative autonomy', () => {
@@ -198,7 +216,7 @@ test('dashboard exposes operational command-center state instead of decorative a
     'id="commandFleet"',
     'id="commandMode"',
     'id="commandCount"',
-    "api('/api/command/status')",
+    'const commandStatus=publicState.command||null',
     'renderCommandCenter(commandStatus',
   ]) {
     assert.equal(DASHBOARD_HTML.includes(token), true, token);
@@ -207,25 +225,67 @@ test('dashboard exposes operational command-center state instead of decorative a
 });
 
 
-test('dashboard exposes Quantic Glide Windows and Android downloads', () => {
-  for (const token of [
-    'Télécharger Quantic Glide',
-    'Windows x64',
-    'Android',
-    'href="/downloads/glide/windows"',
-    'href="/downloads/glide/android"',
-    'Télécharger .exe',
-    'Télécharger .apk',
-  ]) {
-    assert.equal(DASHBOARD_HTML.includes(token), true, token);
+test('dashboard no longer clutters the primary screen with download cards', () => {
+  assert.equal(DASHBOARD_HTML.includes('download-grid'), false);
+  assert.equal(DASHBOARD_HTML.includes('class="download-panel"'), false);
+});
+
+
+test('dashboard exposes the verifiable minimal conversation identity', () => {
+  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="minimal-conversation-v2"'), true);
+  assert.equal(DASHBOARD_HTML.includes('Company OS'), true);
+  assert.equal(DASHBOARD_HTML.includes('Parler à AURA'), true);
+  for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
+    assert.equal(DASHBOARD_HTML.includes(label), true, label);
   }
 });
 
 
-test('dashboard exposes the verifiable 2.2.1 living build identity', () => {
-  assert.equal(DASHBOARD_HTML.includes('data-aura-ui="living-2.2.1"'), true);
-  assert.equal(DASHBOARD_HTML.includes('AURA 2.2.1 · LONG HORIZON'), true);
-  for (const label of ['Énergie','Curiosité','Pression','Continuité','Introspection','Réactivité']) {
-    assert.equal(DASHBOARD_HTML.includes(label), true, label);
-  }
+test('browser audio is unlocked through Web Audio before the asynchronous TTS request', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes('window.AudioContext||window.webkitAudioContext'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('voiceAudioContext.resume()'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('decodeAudioData(copy)'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('createBufferSource()'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("error.name==='NotAllowedError'"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('Le navigateur bloque le son'), true);
+});
+
+test('dashboard exposes the exact Cloud voice blocker instead of a generic offline label', () => {
+  assert.equal(DASHBOARD_SCRIPT.includes("voice.cloud_reason"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("free-tier-unconfirmed"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("missing-api-key"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("garde-fou zéro-coût"), true);
+});
+
+
+test('conversation remains directly usable without opening technical details', () => {
+  const chatIndex = DASHBOARD_HTML.indexOf('class="panel chat"');
+  const detailsIndex = DASHBOARD_HTML.indexOf('<details class="panel details">');
+  const composerIndex = DASHBOARD_HTML.indexOf('class="composer"', chatIndex);
+  assert.ok(chatIndex >= 0);
+  assert.ok(composerIndex > chatIndex);
+  assert.ok(detailsIndex > composerIndex);
+  assert.match(DASHBOARD_SCRIPT, /\$\('send'\)\.onclick=function\(\)\{sendMessage\(\$\('message'\)\.value\);\};/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat',\{method:'POST'/);
+});
+
+test('technical information is collapsed by default', () => {
+  assert.match(DASHBOARD_HTML, /<details class="panel details">/);
+  assert.doesNotMatch(DASHBOARD_HTML, /<details class="panel details" open>/);
+});
+
+
+test('dashboard distinguishes learned French faculty from strict language unavailability', () => {
+  assert.match(DASHBOARD_SCRIPT, /Français · modèle libre/);
+  assert.match(DASHBOARD_SCRIPT, /Français · indisponible/);
+  assert.match(DASHBOARD_SCRIPT, /natural-language-unavailable/);
+  assert.match(DASHBOARD_SCRIPT, /réponses non scriptées/);
+  assert.match(DASHBOARD_SCRIPT, /refuse de simuler une conversation/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT, /Dialogue · secours/);
+});
+
+test('unconfigured Mairaiy is a warning, not a false runtime failure', () => {
+  assert.match(DASHBOARD_HTML, /live-dot\.warn/);
+  assert.match(DASHBOARD_SCRIPT, /Mairaiy · à configurer/);
+  assert.match(DASHBOARD_SCRIPT, /voiceReady\?'good':'warn'/);
 });

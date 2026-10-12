@@ -6,6 +6,7 @@ import {
   sourcePrior,
   WebSubstrate,
 } from '../src/web_substrate.js';
+import { requiresExternalKnowledge } from '../src/kernel.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
@@ -102,4 +103,11 @@ test('open-web search interleaves sources instead of starving later providers', 
   ];
   const rows = await substrate.search('test', 4);
   assert.deepEqual(rows.map((row) => row.engine), ['wikipedia', 'crossref', 'github', 'hackernews']);
+});
+
+
+test('casual conversation containing aujourd hui does not trigger Web research', () => {
+  assert.equal(requiresExternalKnowledge("Comment va tu aujourd'hui ?"), false);
+  assert.equal(requiresExternalKnowledge("Salut, comment ça va aujourd'hui ?"), false);
+  assert.equal(requiresExternalKnowledge("Quelle est l'actualité tech aujourd'hui ?"), true);
 });

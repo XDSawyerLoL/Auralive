@@ -4,9 +4,13 @@ import { one, query } from './db.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
+import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
+import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
+import { SkillLearningEngine } from './skill_learning.js';
+import { AgentRunLedger } from './agent_runs.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -23,10 +27,20 @@ function intentionKey(value) {
 }
 
 export function requiresExternalKnowledge(value) {
-  const text = String(value || '').toLowerCase();
+  const text = ` ${String(value || '').toLowerCase().replace(/\s+/g, ' ').trim()} `;
+
+  // Casual / relational turns must never launch Web research merely because
+  // they contain words such as "aujourd'hui" or "actuellement".
+  if (
+    /\b(comment\s+(vas|va)[- ]?tu|comment\s+(ça|ca)\s+va|ça\s+va|ca\s+va|tu\s+te\s+sens)\b/.test(text)
+    || /\b(salut|bonjour|bonsoir|coucou|hello)\b/.test(text)
+  ) {
+    return false;
+  }
+
   return [
-    'internet',' web ','aujourd','actuel','actuelle','dernière','derniere','récent','recent',
-    'marché','marche','concurrent','documentation',' api ','version','prix','actualité','actualite',
+    ' internet ',' web ','actualité','actualite','dernière version','derniere version',
+    'récent','recent','marché','marche','concurrent','documentation',' api ','prix',
     'source','vérifie','verifie','cherche','recherche','technolog','benchmark','norme','standard',
     'licence','compatib','sortie','release','mise à jour','mise a jour',
   ].some((token) => text.includes(token));
@@ -42,7 +56,7 @@ const AGENT_ROLES = {
 };
 
 export class CognitiveKernel {
-  static VERSION = 'aura-unified-kernel-node-v3';
+  static VERSION = 'aura-unified-kernel-node-v3.1';
 
   constructor(ai, horizon, bridge = null, webSubstrate = null, fabric = null) {
     this.ai = ai;
@@ -52,15 +66,20 @@ export class CognitiveKernel {
     this.fabric = fabric;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
+    this.language = new LanguageFaculty({ ai, cognition: this.cognition, expression: this.expression, soul: () => this.soulCache });
     this.organism = new AuraOrganism();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
+    this.skillLearning = new SkillLearningEngine({ fabric });
+    this.agentRuns = new AgentRunLedger();
     this.lastInferenceAssessment = {};
+    this.recentReflexDecisions = [];
     this.started = false;
     this.timer = null;
     this.soulCache = null;
     this.stimuli = [];
     this.lastReflectionAtMs = 0;
+    this.lastContinuityReflectionAtMs = 0;
     this.tickRunning = false;
     this.lastError = '';
     this.lastTickAt = '';
@@ -93,6 +112,13 @@ export class CognitiveKernel {
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
+      existence: {
+        mode: 'continuous',
+        current_focus: 'Observer, décider, agir, vérifier et apprendre.',
+        last_autonomous_reflection_at: '',
+        last_reason: 'genesis',
+        unfinished_work: false,
+      },
     };
   }
 
@@ -147,14 +173,21 @@ export class CognitiveKernel {
   inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
     const organism = this.organism.migrate(this.soulCache || {});
     const policy = this.nativeLearning.inferenceParams(this.soulCache?.native_learning);
-    const assessment = this.activeInference.assess(organism, { novelty, risk, policy });
+    const assessment = { ...this.activeInference.assess(organism, { novelty, risk, policy }),
+      decision_id: randomUUID() };
     this.lastInferenceAssessment = assessment;
+    this.recentReflexDecisions.push(assessment);
+    if (this.recentReflexDecisions.length > 100) this.recentReflexDecisions.shift();
     return assessment;
   }
 
   async importOrganismState(candidate) {
     if (!candidate || typeof candidate !== 'object') return false;
     const current = this.organism.migrate(this.soulCache || {});
+    const currentRevision = Number(current.schema_revision || 9);
+    const candidateRevision = Number(candidate.schema_revision || 0);
+    if (candidateRevision < currentRevision) return false;
+    if (String(candidate.authority || '') && String(candidate.authority) !== 'cloud-canonical') return false;
     const currentAt = Date.parse(String(current.updated_at || ''));
     const candidateAt = Date.parse(String(candidate.updated_at || ''));
     if (Number.isFinite(currentAt) && Number.isFinite(candidateAt) && candidateAt <= currentAt) return false;
@@ -174,6 +207,9 @@ export class CognitiveKernel {
     this.soulCache.kernel_version = CognitiveKernel.VERSION;
     this.soulCache.organism = this.organism.migrate(this.soulCache);
     this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
+    await this.skillLearning.hydrate().catch((error) => {
+      this.lastError = String(error?.message || error).slice(0, 1000);
+    });
     const legacyIntention = 'Observer, comprendre, anticiper et n’agir qu’avec une autorité suffisante.';
     if (String(this.soulCache.current_intention || '').trim() === legacyIntention) {
       this.soulCache.current_intention = 'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.';
@@ -184,6 +220,11 @@ export class CognitiveKernel {
       ).catch(() => {});
     }
     this.syncLegacyFromOrganism();
+    if (!this.soulCache.existence || typeof this.soulCache.existence !== 'object') {
+      this.soulCache.existence = this.defaultSoul().existence;
+    }
+    const persistedContinuityAt = Date.parse(String(this.soulCache.existence.last_autonomous_reflection_at || ''));
+    if (Number.isFinite(persistedContinuityAt)) this.lastContinuityReflectionAtMs = persistedContinuityAt;
     await this.saveSoul();
     await this.dedupeActiveIntentions();
   }
@@ -300,7 +341,7 @@ export class CognitiveKernel {
   async dedupeActiveIntentions() {
     const rows = await query(
       `SELECT id,statement,priority,source,context,created_at,updated_at
-       FROM aura_intentions WHERE status='active'
+       FROM aura_intentions WHERE status IN ('active','working','waiting','blocked')
        ORDER BY priority DESC,updated_at DESC LIMIT 200`,
     );
     const keepers = new Map();
@@ -329,7 +370,7 @@ export class CognitiveKernel {
     const key = intentionKey(normalizedStatement);
     const existingRows = await query(
       `SELECT id,statement,priority,source,context,created_at,updated_at
-       FROM aura_intentions WHERE status='active'
+       FROM aura_intentions WHERE status IN ('active','working','waiting','blocked')
        ORDER BY priority DESC,updated_at DESC LIMIT 120`,
     );
     const existing = existingRows.find((row) => intentionKey(row.statement) === key);
@@ -379,14 +420,41 @@ export class CognitiveKernel {
   async intentions(limit = 30) {
     return query(
       `SELECT id,statement,priority,status,source,context,created_at,updated_at FROM aura_intentions
-       WHERE status='active' ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+       WHERE status IN ('active','working','waiting','blocked')
+       ORDER BY
+         CASE status
+           WHEN 'working' THEN 0
+           WHEN 'active' THEN 1
+           WHEN 'waiting' THEN 2
+           WHEN 'blocked' THEN 3
+           ELSE 4
+         END,
+         priority DESC,updated_at DESC LIMIT ?`,
       [Math.max(1, Math.min(Number(limit) || 30, 100))],
     );
   }
 
-  async completeIntention(id) {
-    const result = await query("UPDATE aura_intentions SET status='completed',updated_at=? WHERE id=?", [now(), String(id)]);
+  async setIntentionStatus(id, status, contextPatch = {}) {
+    const allowed = new Set(['active','working','waiting','blocked','completed','abandoned','superseded']);
+    const normalized = String(status || '').trim().toLowerCase();
+    if (!allowed.has(normalized)) throw new Error(`Statut d'intention inconnu: ${normalized}`);
+    const row = await one('SELECT context FROM aura_intentions WHERE id=?', [String(id)]);
+    if (!row) return false;
+    const currentContext = parseJsonObject(row.context);
+    const context = {
+      ...currentContext,
+      ...(contextPatch && typeof contextPatch === 'object' ? contextPatch : {}),
+      lifecycle_updated_at: now(),
+    };
+    const result = await query(
+      'UPDATE aura_intentions SET status=?,context=?,updated_at=? WHERE id=?',
+      [normalized, JSON.stringify(context).slice(0,12000), now(), String(id)],
+    );
     return Number(result.affectedRows || 0) > 0;
+  }
+
+  async completeIntention(id) {
+    return this.setIntentionStatus(id, 'completed', { completion_source: 'kernel' });
   }
 
   async addRoutine(name, prompt, everySeconds, mode = 'reflect') {
@@ -453,6 +521,117 @@ export class CognitiveKernel {
     return Number(row?.total || 0);
   }
 
+  async continuityReflectionCountLastHour() {
+    const threshold = new Date(Date.now() - 3600_000).toISOString();
+    const row = await one(
+      "SELECT COUNT(*) AS total FROM aura_reflections WHERE created_at>=? AND trigger_name LIKE 'continuity:%'",
+      [threshold],
+    );
+    return Number(row?.total || 0);
+  }
+
+  async continuitySnapshot() {
+    const [intentions, missions, initiatives, recentActivity] = await Promise.all([
+      this.intentions(6).catch(() => []),
+      query(
+        `SELECT id,title,objective,status,priority,updated_at
+         FROM aura_missions
+         WHERE status IN ('running','waiting','paused')
+         ORDER BY priority DESC,updated_at ASC LIMIT 4`,
+      ).catch(() => []),
+      query(
+        `SELECT id,domain,kind,title,objective,status,priority,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at ASC LIMIT 6`,
+      ).catch(() => []),
+      one(
+        `SELECT kind,title,created_at
+         FROM aura_cognitive_traces
+         WHERE kind NOT IN ('reflection','continuity')
+         ORDER BY id DESC LIMIT 1`,
+      ).catch(() => null),
+    ]);
+
+    const topIntention = intentions[0] || null;
+    const topMission = missions[0] || null;
+    const topInitiative = initiatives[0] || null;
+    const unfinishedWork = Boolean(topIntention || topMission || topInitiative);
+    const focus = String(
+      topInitiative?.title
+      || topMission?.title
+      || topMission?.objective
+      || topIntention?.statement
+      || this.soulCache?.current_intention
+      || 'Observer le système et rechercher la prochaine action utile.',
+    ).replace(/\s+/g, ' ').trim().slice(0, 700);
+
+    return {
+      unfinished_work: unfinishedWork,
+      active_intentions: intentions.length,
+      active_missions: missions.length,
+      pending_initiatives: initiatives.length,
+      focus,
+      top_intention: topIntention ? {
+        id: topIntention.id,
+        statement: String(topIntention.statement || '').slice(0, 1200),
+        priority: Number(topIntention.priority || 0),
+      } : null,
+      top_mission: topMission ? {
+        id: topMission.id,
+        title: String(topMission.title || topMission.objective || '').slice(0, 800),
+        status: String(topMission.status || ''),
+        priority: Number(topMission.priority || 0),
+      } : null,
+      top_initiative: topInitiative ? {
+        id: topInitiative.id,
+        title: String(topInitiative.title || topInitiative.objective || '').slice(0, 800),
+        status: String(topInitiative.status || ''),
+        priority: Number(topInitiative.priority || 0),
+      } : null,
+      recent_activity_at: String(recentActivity?.created_at || ''),
+    };
+  }
+
+  async prepareContinuityStimulus() {
+    if (!config.continuityEnabled) return { due: false, reason: 'continuity-disabled' };
+    const lastPersisted = Date.parse(String(this.soulCache?.existence?.last_autonomous_reflection_at || ''));
+    const lastAt = Math.max(
+      Number(this.lastContinuityReflectionAtMs || 0),
+      Number.isFinite(lastPersisted) ? lastPersisted : 0,
+    );
+    const due = Date.now() - lastAt >= config.continuityReflectionSeconds * 1000;
+    if (!due) return { due: false, reason: 'continuity-not-due' };
+    if (await this.continuityReflectionCountLastHour() >= config.continuityMaxReflectionsPerHour) {
+      return { due: false, reason: 'continuity-hourly-budget' };
+    }
+
+    const snapshot = await this.continuitySnapshot();
+    const reason = snapshot.unfinished_work ? 'unfinished-work' : 'scheduled-self-review';
+    const stimulus = {
+      type: 'aura.continuity.self',
+      source: 'cognitive-continuity',
+      occurred_at: now(),
+      payload: {
+        reason,
+        focus: snapshot.focus,
+        unfinished_work: snapshot.unfinished_work,
+        active_intentions: snapshot.active_intentions,
+        active_missions: snapshot.active_missions,
+        pending_initiatives: snapshot.pending_initiatives,
+      },
+    };
+    this.pushStimulus(stimulus);
+    this.soulCache.existence = {
+      ...(this.soulCache.existence || {}),
+      mode: 'continuous',
+      current_focus: snapshot.focus,
+      last_reason: reason,
+      unfinished_work: snapshot.unfinished_work,
+    };
+    return { due: true, reason, snapshot };
+  }
+
   async tick({ trigger = 'ambient', text = '', force = false } = {}) {
     if (!config.cognitiveEnabled && !force) return { ok: false, skipped: true, reason: 'noyau cognitif désactivé' };
     if (this.tickRunning) return { ok: true, skipped: true, reason: 'un cycle cognitif est déjà en cours' };
@@ -479,14 +658,31 @@ export class CognitiveKernel {
 
       const dueByTime = Date.now() - this.lastReflectionAtMs >= config.cognitiveReflectionSeconds * 1000;
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
-      const shouldReflect = force || Boolean(String(text).trim()) || (dueByTime && this.stimuli.length > 0 && underLimit);
+      const continuity = (!force && !String(text).trim() && underLimit)
+        ? await this.prepareContinuityStimulus()
+        : { due: false, reason: 'direct-or-budgeted-cycle' };
+      const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
+      const shouldReflect = force
+        || Boolean(String(text).trim())
+        || (dueByTime && this.stimuli.length > 0 && underLimit)
+        || (continuity.due && underLimit);
       await this.saveSoul();
-      if (!shouldReflect) return { ok: true, skipped: true, reason: 'aucun stimulus nécessitant une réflexion', soul: await this.soul() };
+      if (!shouldReflect) {
+        return {
+          ok: true,
+          skipped: true,
+          reason: continuity.reason === 'continuity-hourly-budget'
+            ? 'budget de continuité atteint'
+            : 'cycle de présence sans réflexion requise',
+          continuity,
+          soul: await this.soul(),
+        };
+      }
 
       const bundle = await this.contextBundle(text);
       // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
       // les intentions ne dépendent d’aucun fournisseur de langage.
-      const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger, text });
+      const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger: effectiveTrigger, text });
       const confidence = clamp(parsed.confidence ?? 0.5);
       const id = randomUUID();
       const title = String(parsed.title || 'Réflexion AURA').slice(0, 240);
@@ -495,7 +691,8 @@ export class CognitiveKernel {
       const nextAction = String(parsed.next_action || '').slice(0, 4000);
       const restrictedAuthority = Boolean(parsed?.basis?.restricted_authority);
       const context = {
-        trigger,
+        trigger: effectiveTrigger,
+        continuity: continuity.due ? continuity.snapshot : null,
         cognition_version: CognitionEngine.VERSION,
         language_model_used_for_decision: false,
         horizon_used: Boolean(bundle.horizon),
@@ -506,9 +703,20 @@ export class CognitiveKernel {
       };
       await query(
         'INSERT INTO aura_reflections(id,trigger_name,title,summary,hypothesis,next_action,confidence,context,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
-        [id, String(trigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
+        [id, String(effectiveTrigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
       );
       this.lastReflectionAtMs = Date.now();
+      if (continuity.due) {
+        this.lastContinuityReflectionAtMs = Date.now();
+        this.soulCache.existence = {
+          ...(this.soulCache.existence || {}),
+          mode: 'continuous',
+          current_focus: (nextAction || summary || continuity.snapshot?.focus || '').slice(0, 700),
+          last_autonomous_reflection_at: timestamp,
+          last_reason: continuity.reason,
+          unfinished_work: Boolean(continuity.snapshot?.unfinished_work),
+        };
+      }
       this.lastReflectionAt = timestamp;
       this.soulCache.last_reflection_at = timestamp;
       this.soulCache.dominant_thought = (summary || title).slice(0, 500);
@@ -522,7 +730,7 @@ export class CognitiveKernel {
       this.stimuli = [];
       const reflection = {
         id,
-        trigger,
+        trigger: effectiveTrigger,
         title,
         summary,
         hypothesis,
@@ -546,13 +754,31 @@ export class CognitiveKernel {
     const signature = String(payload.signature || (ok ? 'success' : payload.error || 'failure')).replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 500);
     const timestamp = String(payload.created_at || now());
     await query('INSERT INTO aura_outcomes(automation_id,event_type,ok,signature,report,created_at) VALUES(?,?,?,?,?,?)', [automationId, eventType, ok ? 1 : 0, signature, JSON.stringify(payload).slice(0, 20000), timestamp]);
+    await this.language.rememberOutcome({ automationId, eventType, ok, signature })
+      .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     const organ = this.organism.applyOutcome(
       this.organism.migrate(this.soulCache || {}),
       ok,
     );
     this.soulCache.organism = organ.state;
     this.syncLegacyFromOrganism();
-    const inferenceBeforeLearning = this.lastInferenceAssessment || {};
+    // Correlation is explicit. The last unrelated decision is never credited
+    // with a success merely because an outcome arrived later.
+    const matchedDecision = this.recentReflexDecisions.find(
+      item => item.decision_id === String(payload.reflex_decision_id || ''),
+    );
+    const reflexObservation = reflexOutcomeRecord(matchedDecision, payload);
+    if (reflexObservation) {
+      await query(
+        'INSERT INTO aura_reflex_observations(id,decision_id,compute_tier,difficulty,risk,novelty,uncertainty,outcome_ok,evidence_level,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+        [randomUUID(), reflexObservation.decision_id, reflexObservation.compute_tier,
+          reflexObservation.difficulty, reflexObservation.risk,
+          reflexObservation.novelty, reflexObservation.uncertainty,
+          reflexObservation.outcome_ok, reflexObservation.evidence_level,
+          reflexObservation.source, timestamp],
+      );
+    }
+    const inferenceBeforeLearning = reflexObservation ? matchedDecision : {};
     this.soulCache.native_learning = this.nativeLearning.update(
       this.soulCache.native_learning,
       {
@@ -562,6 +788,7 @@ export class CognitiveKernel {
       },
     );
     const nativeLearning = this.nativeLearning.diagnostic(this.soulCache.native_learning);
+    const learnedSkill = await this.skillLearning.observe({ ...payload, ok }).catch(() => null);
     await this.recordOrganismEvent('outcome', ok ? 'action réussie' : 'action échouée', {
       automation_id: automationId,
       event_type: eventType,
@@ -573,9 +800,10 @@ export class CognitiveKernel {
         success_rate: nativeLearning.success_rate,
         last_signal: nativeLearning.last_signal,
       },
+      learned_skill: learnedSkill,
     });
     await this.saveSoul();
-    if (ok) return { ok: true, learned: true, native_learning: nativeLearning };
+    if (ok) return { ok: true, learned: true, native_learning: nativeLearning, learned_skill: learnedSkill };
 
     this.pushStimulus({ type: 'automation.failure', source: 'automation', occurred_at: timestamp, payload: { automation_id: automationId, event_type: eventType, signature } });
     const countRow = await one('SELECT COUNT(*) AS total FROM aura_outcomes WHERE automation_id=? AND ok=0 AND signature=?', [automationId, signature]);
@@ -595,6 +823,7 @@ export class CognitiveKernel {
       learned: true,
       failures: count,
       native_learning: this.nativeLearning.diagnostic(this.soulCache.native_learning),
+      learned_skill: learnedSkill,
     };
   }
 
@@ -668,7 +897,7 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
-  async runAgent(name, task) {
+  async runAgent(name, task, { missionId = '' } = {}) {
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
     const taskRole = ({
       planner: 'reasoning',
@@ -678,14 +907,24 @@ export class CognitiveKernel {
       operator: 'tools',
       critic: 'critic',
     })[name] || 'general';
-    const answer = await this.ai.generate(
-      `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
-      AGENT_ROLES[name],
-      700,
-      taskRole,
-    );
-    await this.trace('agent', name, String(answer).slice(0, 4000), { task: String(task).slice(0, 2000), task_role: taskRole });
-    return { agent: name, answer: answer || 'IA non configurée sur AURA Cloud.' };
+    const run = await this.agentRuns.execute({
+      role: name,
+      missionId,
+      task,
+      provider: () => this.ai.lastBackend || this.ai.provider,
+      invoke: async () => this.ai.generate(
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
+        AGENT_ROLES[name],
+        700,
+        taskRole,
+      ),
+    });
+    await this.trace('agent', name, String(run.answer).slice(0, 4000), {
+      task_sha256_recorded: true, mission_id: missionId, run_id: run.id,
+      outcome: run.status, task_role: taskRole,
+    });
+    return { agent: name, answer: run.answer || 'IA non configurée sur AURA Cloud.',
+      status: run.status, run_id: run.id };
   }
 
   async swarm(task, names) {
@@ -709,49 +948,51 @@ export class CognitiveKernel {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
 
-    const normalizedRisks = Array.isArray(requestedRisks)
-      ? requestedRisks.map((item) => String(item || '').trim()).filter(Boolean)
-      : [];
-    const localRiskSet = new Set(['local-control', 'local-write', 'process', 'browser-control']);
-    const explicitlyLocal = normalizedRisks.some((risk) => localRiskSet.has(risk));
+    if (this.bridge?.enabled && await this.bridge.workerOnline()) {
+      const result = await this.bridge.operate(mission, requestedRisks);
+      await this.trace('operator', 'Quantic Studio execution', mission, {
+        delegated: true,
+        executed: Boolean(result?.executed),
+        job_id: result?.job_id || '',
+      });
+      return {
+        ok: true,
+        task: mission,
+        execution_mode: 'quantic-studio-real',
+        ...result,
+      };
+    }
 
-    // 1) Cloud first. AURA tries its own typed Cloud capabilities before
-    // considering any local worker.
     if (this.fabric) {
       try {
-        const cloudCapabilities = this.fabric.list()
+        const sandboxCapabilities = this.fabric.list()
           .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
-        if (cloudCapabilities.length) {
+        if (sandboxCapabilities.length) {
           const compiler = new DagCompiler({ enabled: false });
-          const graph = await compiler.compile(mission, cloudCapabilities, {
+          const graph = await compiler.compile(mission, sandboxCapabilities, {
             maxNodes: 8,
             maxParallel: 2,
             budgetMicrounits: 0,
           });
-          const cloudOnly = graph.nodes.length > 0
+          const sandboxOnly = graph.nodes.length > 0
             && graph.nodes.every((node) => String(node.capability || '').startsWith('cloud.workspace.'));
-          if (cloudOnly) {
+          if (sandboxOnly) {
             const executor = new TaskGraphExecutor(this.fabric);
             const result = await executor.execute(graph, {
-              trigger: 'cloud-first-operator',
+              trigger: 'cloud-sandbox-operator',
               allowSideEffects: true,
             });
             if (result.ok) {
-              await this.trace('operator', 'AURA Cloud execution', mission, {
+              await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
                 delegated: false,
                 executed: true,
                 graph_id: result.graph_id,
                 capabilities: graph.nodes.map((node) => node.capability),
-                execution_policy: 'cloud-first-local-optional',
               });
               return {
                 ok: true,
-                status: 'completed',
                 task: mission,
-                execution_mode: 'aura-cloud-first',
-                execution_policy: 'cloud-first-local-optional',
-                cloud_operator_ready: true,
-                local_worker_required: false,
+                execution_mode: 'aura-cloud-sandbox',
                 executed: true,
                 authority: 'typed-reversible-cloud-workspace',
                 graph,
@@ -761,62 +1002,27 @@ export class CognitiveKernel {
           }
         }
       } catch (error) {
-        await this.trace('operator', 'AURA Cloud capability miss', mission, {
+        await this.trace('operator', 'AURA Cloud sandbox refused', mission, {
           delegated: false,
           executed: false,
           error: String(error?.message || error).slice(0, 1000),
-          execution_policy: 'cloud-first-local-optional',
         }).catch(() => {});
       }
     }
 
-    // 2) Local execution is optional and only considered for missions that
-    // explicitly request local-machine side effects.
-    const localOnline = Boolean(
-      this.bridge?.enabled && await this.bridge.workerOnline().catch(() => false)
-    );
-    if (explicitlyLocal && localOnline) {
-      const result = await this.bridge.operate(mission, normalizedRisks);
-      await this.trace('operator', 'AURA optional local execution', mission, {
-        delegated: true,
-        executed: Boolean(result?.executed),
-        job_id: result?.job_id || '',
-        execution_policy: 'cloud-first-local-optional',
-      });
-      return {
-        ok: true,
-        task: mission,
-        execution_mode: 'aura-local-specialized',
-        execution_policy: 'cloud-first-local-optional',
-        cloud_operator_ready: false,
-        local_worker_required: true,
-        local_worker_online: true,
-        ...result,
-      };
-    }
-
-    // 3) No silent substitution. If AURA lacks the typed Cloud capability,
-    // she records the missing capability instead of pretending the local
-    // worker is her primary execution authority.
     const plan = await this.runAgent(
       'operator',
-      `${mission}\n\nAucune capacité Cloud typée ne correspond encore à cette mission. Décris uniquement la capacité manquante, un plan réversible et un critère de réussite. Le worker local n'est pas une dépendance générale.`,
+      `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
     );
     return {
-      ok: false,
-      status: 'waiting-cloud-capability',
+      ok: true,
       task: mission,
-      execution_mode: 'cloud-capability-missing',
-      execution_policy: 'cloud-first-local-optional',
-      cloud_operator_ready: false,
-      local_worker_required: explicitlyLocal,
-      local_worker_online: localOnline,
+      execution_mode: 'plan-only-fallback',
       executed: false,
       plan: plan.answer,
-      authority: 'AURA Cloud first; local worker optional for explicit local side effects only',
+      authority: 'Quantic Studio worker offline; no typed cloud capability matched',
     };
   }
-
 
   async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
     const content = String(text || '').replace(/\s+/g, ' ').trim();
@@ -888,11 +1094,13 @@ export class CognitiveKernel {
           ),
         };
 
-    const [intentions, lessons, reflections, work, recentMessages] = await Promise.all([
+    const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
       privateView ? this.intentions(6) : Promise.resolve([]),
       privateView ? this.lessons(6) : Promise.resolve([]),
       privateView ? this.reflections(4) : Promise.resolve([]),
-      privateView ? this.workItems(5) : Promise.resolve([]),
+      privateView ? this.workItems(5) : this.publicWorkItems(5),
+      privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot(),
+      privateView ? this.activitySinceLastConversation(conversationSession) : Promise.resolve({}),
       query(
         privateView
           ? `SELECT author,role,content,created_at FROM aura_cloud_messages
@@ -912,9 +1120,20 @@ export class CognitiveKernel {
       lessons,
       reflections,
       work,
+      agenda,
+      continuityReport,
       recentMessages: [...recentMessages].reverse(),
       privateView,
     });
+
+    // Scope corrections to the current conversation; reported observations are not independent evidence.
+    await this.language.rememberCorrection({
+      sessionId: conversationSession, discourse: plan.discourse, userText: content,
+    }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
+    plan = {
+      ...plan,
+      experiential_memory: await this.language.contextFor(conversationSession, content).catch(() => []),
+    };
 
     // Allocation adaptative : le noyau choisit combien de calcul externe
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
@@ -950,13 +1169,8 @@ export class CognitiveKernel {
           external_epistemic_status: externalResearch?.epistemic_status || 'unverified',
           external_confidence: Number(externalResearch?.confidence || 0),
           external_evidence_count: Number(externalResearch?.evidence_count || 0),
-          facts: [
-            ...(plan.facts || []),
-            'Recherche Web effectuée avant réponse: statut='
-              + String(externalResearch?.epistemic_status || 'unverified')
-              + ', confiance=' + Number(externalResearch?.confidence || 0).toFixed(2)
-              + ', preuves=' + Number(externalResearch?.evidence_count || 0) + '.',
-          ],
+          facts: [...(plan.facts || [])],
+          external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
         await this.trace(
           'web-research',
@@ -976,10 +1190,8 @@ export class CognitiveKernel {
           external_epistemic_status: 'unavailable',
           external_confidence: 0,
           external_evidence_count: 0,
-          facts: [
-            ...(plan.facts || []),
-            'La vérification Web nécessaire à cette question est indisponible; ne pas présenter de connaissance externe comme vérifiée.',
-          ],
+          facts: [...(plan.facts || [])],
+          external_research_summary: '',
         };
         await this.trace(
           'web-research-error',
@@ -1060,6 +1272,217 @@ export class CognitiveKernel {
        ORDER BY id DESC LIMIT ?`,
       [Math.max(1, Math.min(Number(limit) || 12, 50))],
     );
+  }
+
+  async agendaSnapshot() {
+    const [mission, initiative, intention, reflection] = await Promise.all([
+      one(
+        `SELECT id,title,objective,status,priority,progress,last_error,started_at,updated_at
+         FROM aura_missions
+         WHERE status IN ('planning','running','waiting','paused')
+         ORDER BY priority DESC,updated_at ASC LIMIT 1`,
+      ).catch(() => null),
+      one(
+        `SELECT id,domain,kind,title,objective,status,priority,confidence,execution_mode,updated_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         ORDER BY priority DESC,updated_at ASC LIMIT 1`,
+      ).catch(() => null),
+      one(
+        `SELECT id,statement,priority,source,created_at,updated_at
+         FROM aura_intentions
+         WHERE status='active'
+         ORDER BY priority DESC,updated_at DESC LIMIT 1`,
+      ).catch(() => null),
+      one(
+        `SELECT id,title,summary,next_action,confidence,created_at
+         FROM aura_reflections
+         ORDER BY created_at DESC LIMIT 1`,
+      ).catch(() => null),
+    ]);
+
+    const current = String(
+      initiative?.title || mission?.title || mission?.objective || intention?.statement
+      || this.soulCache?.existence?.current_focus || this.soulCache?.current_intention || '',
+    ).replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const since = String(
+      initiative?.updated_at || mission?.started_at || mission?.updated_at
+      || intention?.created_at || intention?.updated_at || '',
+    );
+    const blocker = String(
+      mission?.last_error
+      || (mission?.status === 'waiting' ? 'Mission en attente d’un signal ou d’une dépendance.' : '')
+      || (initiative?.status === 'waiting' ? 'Initiative en attente d’un signal ou d’une dépendance.' : ''),
+    ).replace(/\s+/g, ' ').trim().slice(0, 1200);
+    const nextAction = String(
+      reflection?.next_action || initiative?.objective || mission?.objective
+      || intention?.statement || '',
+    ).replace(/\s+/g, ' ').trim().slice(0, 1600);
+    const why = String(
+      mission?.objective || initiative?.objective || intention?.statement
+      || this.soulCache?.current_intention || '',
+    ).replace(/\s+/g, ' ').trim().slice(0, 1600);
+
+    return {
+      current,
+      why,
+      since,
+      next_action: nextAction,
+      blocker,
+      status: String(initiative?.status || mission?.status || (intention ? 'active' : 'idle')),
+      mission_id: mission?.id || '',
+      initiative_id: initiative?.id || '',
+      intention_id: intention?.id || '',
+      reflection_id: reflection?.id || '',
+    };
+  }
+
+  async publicAgendaSnapshot() {
+    const initiative = await one(
+      `SELECT id,domain,kind,title,status,priority,confidence,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+         AND kind IN ('github','evolution','research')
+       ORDER BY priority DESC,updated_at DESC LIMIT 1`,
+    ).catch(() => null);
+    if (!initiative) {
+      const focus = String(
+        this.soulCache?.existence?.current_focus || this.soulCache?.current_intention || '',
+      ).replace(/\s+/g, ' ').trim().slice(0, 500);
+      return {
+        current: focus,
+        why: focus ? 'Foyer autonome actuellement enregistré par AURA.' : '',
+        since: '',
+        next_action: focus ? `Poursuivre et réévaluer : ${focus}` : '',
+        blocker: '',
+        status: focus ? 'active' : 'idle',
+      };
+    }
+    const title = String(initiative.title || 'initiative active').replace(/\s+/g, ' ').trim().slice(0, 500);
+    const domain = String(initiative.domain || 'AURA').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const status = String(initiative.status || 'queued');
+    return {
+      current: title,
+      why: `Priorité opérationnelle publique de ${domain}.`,
+      since: String(initiative.updated_at || ''),
+      next_action: status === 'waiting'
+        ? `Réévaluer le blocage public de ${title}`
+        : `Faire avancer ${title}`,
+      blocker: status === 'waiting' ? 'En attente d’une dépendance ou d’un signal.' : '',
+      status,
+      initiative_id: String(initiative.id || ''),
+    };
+  }
+
+  async publicWorkItems(limit = 5) {
+    const max = Math.max(1, Math.min(Number(limit) || 5, 8));
+    const rows = await query(
+      `SELECT domain,kind,title,priority,confidence,status,updated_at
+       FROM aura_initiatives
+       WHERE status IN ('queued','running','waiting')
+         AND kind IN ('github','evolution','research')
+       ORDER BY priority DESC,updated_at DESC LIMIT ?`,
+      [max],
+    ).catch(() => []);
+    return rows.map((row) => ({
+      kind: String(row.kind || 'initiative'),
+      title: String(row.title || '').replace(/\s+/g, ' ').trim().slice(0, 180),
+      detail: `${String(row.domain || 'AURA')} · ${String(row.status || '')}`,
+      priority: clamp(Math.max(Number(row.priority || 0.5), Number(row.confidence || 0.5) * 0.75)),
+      updated_at: row.updated_at,
+    })).filter((row) => row.title);
+  }
+
+  async activitySinceLastConversation(sessionId = 'private-founder') {
+    const session = String(sessionId || 'private-founder').slice(0, 96);
+    const previous = await one(
+      `SELECT created_at FROM aura_cloud_messages
+       WHERE session_id=? AND role='assistant'
+       ORDER BY id DESC LIMIT 1`,
+      [session],
+    ).catch(() => null);
+    const since = String(previous?.created_at || this.soulCache?.born_at || '1970-01-01T00:00:00.000Z');
+
+    const [traces, reflections, outcomes, missions, initiatives] = await Promise.all([
+      query(
+        `SELECT kind,title,content,created_at FROM aura_cognitive_traces
+         WHERE created_at>? ORDER BY id ASC LIMIT 40`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT trigger_name,title,summary,next_action,created_at FROM aura_reflections
+         WHERE created_at>? ORDER BY created_at ASC LIMIT 24`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT automation_id,event_type,ok,signature,created_at FROM aura_outcomes
+         WHERE created_at>? ORDER BY created_at ASC LIMIT 24`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT id,title,status,progress,last_error,updated_at FROM aura_missions
+         WHERE updated_at>? ORDER BY updated_at ASC LIMIT 16`,
+        [since],
+      ).catch(() => []),
+      query(
+        `SELECT id,domain,title,status,execution_mode,updated_at FROM aura_initiatives
+         WHERE updated_at>? ORDER BY updated_at ASC LIMIT 20`,
+        [since],
+      ).catch(() => []),
+    ]);
+
+    const events = [
+      ...reflections.map((row) => ({
+        type: 'reflection',
+        at: row.created_at,
+        title: row.title,
+        detail: row.summary,
+        next_action: row.next_action,
+        autonomous: String(row.trigger_name || '').startsWith('continuity:'),
+      })),
+      ...outcomes.map((row) => ({
+        type: 'outcome',
+        at: row.created_at,
+        title: `${row.automation_id}: ${row.ok ? 'réussi' : 'échec'}`,
+        detail: row.signature,
+        autonomous: true,
+      })),
+      ...missions.map((row) => ({
+        type: 'mission',
+        at: row.updated_at,
+        title: row.title,
+        detail: `${row.status} · progression ${Math.round(Number(row.progress || 0) * 100)}%${row.last_error ? ` · blocage: ${row.last_error}` : ''}`,
+        autonomous: true,
+      })),
+      ...initiatives.map((row) => ({
+        type: 'initiative',
+        at: row.updated_at,
+        title: row.title,
+        detail: `${row.domain || 'AURA'} · ${row.status || ''} · ${row.execution_mode || ''}`,
+        autonomous: true,
+      })),
+      ...traces
+        .filter((row) => !['reflection','expression'].includes(String(row.kind || '')))
+        .map((row) => ({
+          type: String(row.kind || 'activity'),
+          at: row.created_at,
+          title: row.title,
+          detail: row.content,
+          autonomous: true,
+        })),
+    ]
+      .filter((row) => row.at && row.title)
+      .sort((a,b) => String(a.at).localeCompare(String(b.at)))
+      .slice(-60);
+
+    return {
+      since,
+      until: now(),
+      event_count: events.length,
+      autonomous_event_count: events.filter((row) => row.autonomous).length,
+      events,
+      has_real_activity: events.length > 0,
+    };
   }
 
   async workItems(limit = 6) {
@@ -1312,18 +1735,34 @@ export class CognitiveKernel {
       tick_seconds: config.cognitiveTickSeconds,
       reflection_seconds: config.cognitiveReflectionSeconds,
       max_reflections_per_hour: config.cognitiveMaxReflectionsPerHour,
+      continuity: {
+        enabled: config.continuityEnabled,
+        reflection_seconds: config.continuityReflectionSeconds,
+        max_reflections_per_hour: config.continuityMaxReflectionsPerHour,
+        state: {
+          mode: String(this.soulCache?.existence?.mode || 'continuous'),
+          last_autonomous_reflection_at: String(this.soulCache?.existence?.last_autonomous_reflection_at || ''),
+          last_reason: String(this.soulCache?.existence?.last_reason || ''),
+          unfinished_work: Boolean(this.soulCache?.existence?.unfinished_work),
+        },
+      },
       operator_mode: config.cloudOperatorMode,
       cognition: {
         version: CognitionEngine.VERSION,
         independent_from_language_model: true,
       },
-      expression: this.expression.diagnostic(),
+      expression: await this.expression.diagnostic(),
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
       active_inference: {
         ...this.inferenceAssessment(),
         version: ActiveInferenceEngine.VERSION,
       },
       native_learning: this.nativeLearning.diagnostic(this.soulCache?.native_learning),
+      skill_learning: await this.skillLearning.status(),
+      agent_runs: await this.agentRuns.status(),
+      reflex_evidence: summarizeReflexObservations(
+        await query('SELECT compute_tier,outcome_ok,evidence_level FROM aura_reflex_observations ORDER BY created_at DESC LIMIT 200'),
+      ),
       bridge: this.bridge ? await this.bridge.status() : { enabled: false, worker_online: false },
       ai_enabled: this.ai.enabled,
       last_tick_at: this.lastTickAt,

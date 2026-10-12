@@ -60,6 +60,18 @@ export const CORE_QUANTIC_PRODUCTS = Object.freeze([
     aura_bridge: 'required',
   },
   {
+    id: 'identity-vault',
+    name: 'Identity Vault',
+    repository: 'XDSawyerLoL/QuanticMail',
+    objective: 'Coffre d’identité Quantic : identité persistante, récupération chiffrée, portabilité et autorisation locale.',
+    criticality: 0.93,
+    role: 'product',
+    parent: 'aura',
+    specialization: 'identity-and-credentials-vault',
+    capabilities: ['identity','vault','recovery','portable-identity','device-trust','encryption'],
+    aura_bridge: 'required',
+  },
+  {
     id: 'zoon',
     name: 'ZOON',
     repository: 'XDSawyerLoL/QuanticSillage',
@@ -153,6 +165,10 @@ export async function seedQuanticProducts(commandCenter) {
         writable_by_aura: true,
         modification_policy: 'branch-test-canary-promote',
         ecosystem: 'quantic-sillage',
+        product_identity_required: product.id !== 'aura',
+        allowed_bridge_scopes: product.id === 'aura'
+          ? []
+          : ['product:register-self','product:observe','product:event'],
       },
     }));
   }

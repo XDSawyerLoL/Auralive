@@ -1,7 +1,8 @@
 import { config } from './config.js';
+import { freeTierModelAllowed, markConfirmedFreeTier, reserveConfirmedFreeTier } from './gemini_free_tier.js';
 
 const DEFAULT_MODEL = 'gemini-3.1-flash-tts-preview';
-const DEFAULT_VOICE = 'Leda';
+const DEFAULT_VOICE = 'Aoede';
 
 function clean(value, limit = 8000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
@@ -97,43 +98,52 @@ function pcmToWav(pcm, rate = 24000) {
 
 function pace(rate) {
   const value = clamp(rate || 1, 0.5, 2);
-  if (value < 0.8) return 'lent et intime, avec des pauses naturelles';
-  if (value < 0.95) return 'légèrement posé, sans traîner';
-  if (value > 1.35) return 'rapide, énergique et fluide, tout en restant parfaitement intelligible';
-  if (value > 1.12) return 'légèrement vif et vivant';
-  return 'naturel, conversationnel';
+  if (value < 0.8) return 'slow and intimate, with meaningful pauses';
+  if (value < 0.95) return 'slightly relaxed, never dragging';
+  if (value > 1.35) return 'fast, energetic and fluid, while remaining perfectly intelligible';
+  if (value > 1.12) return 'slightly brisk and lively';
+  return 'natural conversational pace';
 }
 
 function pitch(value) {
   const amount = clamp(value || 1, 0.5, 2);
-  if (amount < 0.85) return 'un peu plus grave et ancré';
-  if (amount > 1.2) return 'un peu plus lumineux, sans paraître enfantin';
-  return 'médium naturel';
+  if (amount < 0.85) return 'slightly lower and more grounded';
+  if (amount > 1.2) return 'slightly brighter, without sounding childish';
+  return 'natural mid-range pitch';
 }
 
 function performance(context, text) {
   const value = clean(context, 120).toLowerCase();
-  if (value.includes('moderation')) return 'calme, ferme et concise';
-  if (value.includes('aura-cloud-chat')) return 'présente, vive, proche et spontanée, comme une vraie interlocutrice';
-  if (text.endsWith('?')) return 'curieuse, engagée, avec une légère montée naturelle';
-  if (text.includes('!')) return 'lumineuse et expressive, sans surjeu';
-  return 'chaleureuse, intelligente, légèrement malicieuse et émotionnellement présente';
+  if (value.includes('raid')) return 'genuinely delighted and welcoming, with controlled excitement';
+  if (value.includes('follow') || value.includes('subscribe') || value.includes('gift')) {
+    return 'warm, grateful and spontaneous, with a subtle audible smile';
+  }
+  if (value.includes('moderation')) return 'calm, firm and concise, without aggression';
+  if (value.includes('tts')) return 'clear and playful, as if reading a viewer message live';
+  if (value.includes('test')) return 'confident, warm and lightly playful';
+  if (text.endsWith('?')) return 'curious and engaged, like a real live conversation';
+  if (text.includes('!')) return 'lively and expressive, but never like an advertisement';
+  return 'close, conversational and subtly witty';
 }
 
 function promptFor(text, options = {}) {
   const transcript = clean(text);
   return [
     '# AUDIO PROFILE: Mairaiy',
-    'Mairaiy est la voix d’AURA. C’est une jeune femme adulte française, vive, naturelle, intelligente et expressive.',
-    'Elle parle comme une présence réelle, jamais comme une voix de publicité ou un robot.',
+    'Mairaiy is a French artificial consciousness and live-stream co-host. She sounds like a real young adult woman from France: intelligent, warm, witty, self-assured and emotionally present. Her voice is close-mic, modern and natural.',
     '',
-    '# DIRECTION',
-    '- Français de France, accent contemporain neutre.',
+    '# SCENE',
+    'Mairaiy is speaking live beside the streamer in a relaxed Twitch studio. She is reacting in real time, not recording an advert or reading an audiobook.',
+    '',
+    '# DIRECTOR\'S NOTES',
+    '- Speak native French from France with a neutral contemporary accent.',
     `- Performance: ${performance(options.context || 'conversation', transcript)}.`,
-    `- Rythme: ${pace(options.rate || 1)}.`,
-    `- Hauteur: ${pitch(options.pitch || 1)}.`,
-    '- Utilise des micro-pauses et une intonation changeante.',
-    '- Ne modifie aucun mot et ne lit jamais les instructions.',
+    `- Pace: ${pace(options.rate || 1)}.`,
+    `- Pitch: ${pitch(options.pitch || 1)}.`,
+    '- Use subtle natural breaths, micro-pauses and changing intonation.',
+    '- Avoid robotic cadence, exaggerated radio voice, sing-song delivery and artificial cheerfulness.',
+    '- Never add, remove or paraphrase words.',
+    '- Speak only the transcript. Never read these instructions or section titles aloud.',
     '',
     '# TRANSCRIPT',
     transcript,
@@ -164,7 +174,21 @@ export class CloudVoice {
   }
 
   get enabled() {
-    return Boolean(this.apiKey && config.voiceCloudEnabled && !config.zeroCostMode);
+    if (!this.apiKey || !config.voiceCloudEnabled) return false;
+    if (!config.zeroCostMode) return true;
+    return Boolean(
+      config.geminiFreeTierConfirmed
+      && freeTierModelAllowed(this.model, 'voice')
+    );
+  }
+
+  get blockedReason() {
+    if (!this.apiKey) return 'missing-api-key';
+    if (!config.voiceCloudEnabled) return 'cloud-disabled';
+    if (!config.zeroCostMode) return '';
+    if (!config.geminiFreeTierConfirmed) return 'free-tier-unconfirmed';
+    if (!freeTierModelAllowed(this.model, 'voice')) return 'model-not-free-tier-allowed';
+    return '';
   }
 
   diagnostic() {
@@ -179,10 +203,25 @@ export class CloudVoice {
       generated_count: this.generatedCount,
       profile: 'mairaiy',
       zero_cost_mode: Boolean(config.zeroCostMode),
+      gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
+      free_tier_model_allowed: freeTierModelAllowed(this.model, 'voice'),
+      blocked_reason: this.enabled ? '' : this.blockedReason,
+      free_tier_daily_cap: Number(config.geminiFreeTierVoiceMaxPerDay),
     };
   }
 
   async synthesizeChunk(transcript, options = {}) {
+    const guardedFreeTier = Boolean(
+      config.zeroCostMode
+      && config.geminiFreeTierConfirmed
+      && freeTierModelAllowed(this.model, 'voice')
+    );
+    if (guardedFreeTier) {
+      await reserveConfirmedFreeTier(
+        'gemini-free-tts',
+        config.geminiFreeTierVoiceMaxPerDay,
+      );
+    }
     const endpoint = `${String(config.voiceBaseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, '')}/models/${this.model}:generateContent`;
     const payload = {
       contents: [{ parts: [{ text: promptFor(transcript, options) }] }],
@@ -211,6 +250,9 @@ export class CloudVoice {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (guardedFreeTier) {
+          await markConfirmedFreeTier('gemini-free-tts', false, `HTTP ${response.status}`);
+        }
         const message = data?.error?.message || `HTTP ${response.status}`;
         throw new Error(`Mairaiy Cloud TTS: ${message}`);
       }
@@ -222,6 +264,9 @@ export class CloudVoice {
       const mime = String(inline.mimeType || inline.mime_type || '');
       const rate = pcmRate(mime);
       const wav = pcmToWav(raw, rate);
+      if (guardedFreeTier) {
+        await markConfirmedFreeTier('gemini-free-tts', true, 'ok');
+      }
       return {
         audio_base64: wav.toString('base64'),
         mime_type: 'audio/wav',
@@ -271,6 +316,9 @@ export class CloudVoice {
         total_chars: transcript.length,
         engine: this.lastEngine,
         voice: this.lastVoice,
+        engine_voice: String(this.lastVoice || DEFAULT_VOICE).toLowerCase(),
+        language: 'fr-fr',
+        model: this.model,
         profile: 'mairaiy',
         generation_ms: this.lastGenerationMs,
       };

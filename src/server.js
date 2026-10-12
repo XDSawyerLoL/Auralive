@@ -1,9 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
+import { embeddedLanguageRuntime } from './embedded_language.js';
 import { ExecutionBridge } from './bridge.js';
+import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
 import { CuriosityEngine } from './curiosity.js';
+import { CapabilityScout } from './capability_scout.js';
 import { CapabilityFabric } from './capability_fabric.js';
 import {
   config,
@@ -26,7 +29,6 @@ import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { RuntimeMetrics } from './metrics.js';
-import { releaseInfo } from './release.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';
 import { CloudVoice } from './voice.js';
@@ -125,7 +127,7 @@ function ensureChatSession(request, reply) {
   const created = createChatSession();
   reply.header(
     'Set-Cookie',
-    `aura_chat_session=${encodeURIComponent(created.value)}; Path=/; Max-Age=${created.maxAgeSeconds}; HttpOnly; Secure; SameSite=Lax`,
+    `aura_chat_session=${encodeURIComponent(created.value)}; Path=/; Max-Age=${created.maxAgeSeconds}; HttpOnly; Secure; SameSite=None`,
   );
   return created.id;
 }
@@ -159,12 +161,83 @@ function isPrivate(request) {
   return validPrivateSession(cookies(request).aura_session);
 }
 
+function requestOrigin(request) {
+  return String(request.headers.origin || '').trim().replace(/\/$/, '');
+}
+
+function sameOrigin(request) {
+  const origin = requestOrigin(request);
+  if (!origin) return false;
+  const forwardedProto = String(request.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || request.protocol || 'https';
+  const host = String(request.headers.host || '').trim();
+  return Boolean(host && origin === `${protocol}://${host}`);
+}
+
 function requirePrivate(request, reply) {
-  if (!isPrivate(request)) {
+  const token = bearer(request);
+  if (tokenEquals(token, config.cloudToken)) return true;
+
+  const sessionValid = validPrivateSession(cookies(request).aura_session);
+  if (!sessionValid) {
     reply.code(401).send({ error: 'Accès privé AURA requis' });
     return false;
   }
+
+  const method = String(request.method || 'GET').toUpperCase();
+  const mutating = !['GET','HEAD','OPTIONS'].includes(method);
+  if (mutating) {
+    const origin = requestOrigin(request);
+    if (!origin || (!sameOrigin(request) && !corsOrigins.has(origin))) {
+      reply.code(403).send({ error: 'Origine admin non autorisée', code: 'AURA_CSRF_ORIGIN_REJECTED' });
+      return false;
+    }
+  }
   return true;
+}
+
+function requireBridge(request, reply) {
+  const token = bearer(request);
+  if (config.bridgeToken && tokenEquals(token, config.bridgeToken)) return true;
+  if (
+    config.allowLegacyBridgeAdminToken
+    && config.cloudToken
+    && tokenEquals(token, config.cloudToken)
+  ) return true;
+  reply.code(config.bridgeToken ? 401 : 503).send({
+    error: config.bridgeToken
+      ? 'Identité AURA Runtime invalide'
+      : 'AURA_BRIDGE_TOKEN non configuré',
+    code: config.bridgeToken ? 'AURA_BRIDGE_UNAUTHORIZED' : 'AURA_BRIDGE_IDENTITY_NOT_CONFIGURED',
+  });
+  return false;
+}
+
+function requireProduct(request, reply, productId) {
+  const id = String(productId || '').trim().toLowerCase();
+  const token = bearer(request);
+  const expected = String(config.productTokens?.[id] || '');
+  if (expected && tokenEquals(token, expected)) {
+    return { ok: true, mode: 'scoped-product-token', product_id: id };
+  }
+  if (
+    config.allowLegacyProductAdminToken
+    && config.cloudToken
+    && tokenEquals(token, config.cloudToken)
+  ) {
+    return { ok: true, mode: 'legacy-admin-token', product_id: id };
+  }
+  if (tokenEquals(token, config.cloudToken) || validPrivateSession(cookies(request).aura_session)) {
+    if (!requirePrivate(request, reply)) return null;
+    return { ok: true, mode: 'founder-admin', product_id: id };
+  }
+  reply.code(expected ? 401 : 503).send({
+    error: expected
+      ? 'Identité produit AURA invalide'
+      : `Identité produit non configurée pour ${id}`,
+    code: expected ? 'AURA_PRODUCT_UNAUTHORIZED' : 'AURA_PRODUCT_IDENTITY_NOT_CONFIGURED',
+  });
+  return null;
 }
 
 function requireCanary(request, reply) {
@@ -236,6 +309,12 @@ const app = Fastify({
   bodyLimit: 1_048_576,
   trustProxy: config.trustProxyHops > 0 ? config.trustProxyHops : false,
 });
+const corsOrigins = new Set(
+  String(process.env.AURA_CORS_ORIGINS || 'https://xdsawyerlol.github.io')
+    .split(',')
+    .map((value) => value.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+);
 const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
 const voiceStudio = new VoiceStudioProvider();
@@ -271,6 +350,13 @@ const curiosity = new CuriosityEngine({
   webSubstrate,
   commandCenter,
   ai,
+});
+const capabilityScout = new CapabilityScout({
+  kernel,
+  commandCenter,
+  webSubstrate,
+  fabric,
+  evolution,
 });
 const fallbackSoul = kernel.defaultSoul();
 
@@ -317,7 +403,18 @@ async function startRuntime() {
     await kernel.start();
     bootstrap.runtimeReady = true;
     bootstrap.lastReadyAt = new Date().toISOString();
+    // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
+    // The founder can explicitly invoke the authenticated evaluation endpoint.
     app.log.info('AURA Cloud: noyau persistant démarré.');
+    // Always non-blocking: the first verified GGUF install can take minutes.
+    // Production-only to avoid downloading model weights during CI/test runs.
+    if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
+      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false') {
+      void embeddedLanguageRuntime.start().catch((error) => {
+        app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
+          'AURA: local French engine warmup failed');
+      });
+    }
 
     try {
       await horizon.start();
@@ -343,6 +440,11 @@ async function startRuntime() {
       await curiosity.start();
     } catch (error) {
       app.log.warn({ err: error }, 'AURA Cloud: moteur de curiosité indisponible, noyau maintenu actif.');
+    }
+    try {
+      await capabilityScout.start();
+    } catch (error) {
+      app.log.warn({ err: error }, 'AURA Cloud: Capability Scout indisponible, noyau maintenu actif.');
     }
     startMaintenance();
   } catch (error) {
@@ -379,7 +481,21 @@ function publicFallbackSoul(privateView) {
   return safe;
 }
 
-app.addHook('onRequest', async (request) => {
+app.addHook('onRequest', async (request, reply) => {
+  const origin = String(request.headers.origin || '').trim().replace(/\/$/, '');
+  if (origin && corsOrigins.has(origin)) {
+    reply.header('Access-Control-Allow-Origin', origin);
+    reply.header('Vary', 'Origin');
+    reply.header('Access-Control-Allow-Credentials', 'true');
+    reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  if (request.method === 'OPTIONS') {
+    if (origin && !corsOrigins.has(origin)) {
+      return reply.code(403).send({ error: 'Origin CORS non autorisée' });
+    }
+    return reply.code(204).send();
+  }
   metrics.begin(request);
 });
 
@@ -460,7 +576,7 @@ app.post('/api/auth/session', async (request, reply) => {
   const session = createPrivateSession(maxAge);
   reply.header(
     'Set-Cookie',
-    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`,
+    `aura_session=${encodeURIComponent(session)}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`,
   );
   return {
     authenticated: true,
@@ -472,16 +588,13 @@ app.post('/api/auth/session', async (request, reply) => {
 app.delete('/api/auth/session', async (_request, reply) => {
   reply.header(
     'Set-Cookie',
-    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict',
+    'aura_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
   );
   return { authenticated: false };
 });
 
 app.get('/api/bootstrap/status', async () => ({
-  product: 'AURA Cloud',
-  runtime: 'Node.js/Fastify',
-  version: '2.2.1',
-  node: process.version,
+  ...buildInfo(),
   server_ready: true,
   db_configured: bootstrap.dbConfigured,
   db_ready: bootstrap.dbReady,
@@ -492,6 +605,10 @@ app.get('/api/bootstrap/status', async () => ({
   last_attempt_at: bootstrap.lastAttemptAt,
   last_ready_at: bootstrap.lastReadyAt,
   cloud_token_configured: Boolean(config.cloudToken),
+  bridge_token_configured: Boolean(config.bridgeToken),
+  product_identity_tokens_configured: Object.keys(config.productTokens || {}).length,
+  legacy_bridge_admin_token_allowed: Boolean(config.allowLegacyBridgeAdminToken),
+  legacy_product_admin_token_allowed: Boolean(config.allowLegacyProductAdminToken),
   canary_required: Boolean(config.evolutionCanaryRequired),
   canary_token_configured: Boolean(config.canaryToken),
   ai_mode: config.aiMode,
@@ -512,6 +629,16 @@ app.get('/api/bootstrap/status', async () => ({
   fabric_capabilities: fabric.list().length,
   fabric_discovery_configured: Boolean(config.fabricDiscoveryUrls.length),
   peer_mesh_enabled: Boolean(config.meshP2pEnabled),
+  capability_scout_enabled: Boolean(config.capabilityScoutEnabled),
+  capability_scout_prompt_required: false,
+}));
+
+app.get('/api/build', async () => ({
+  ...buildInfo(),
+  homeostasis: 'homeostasie_v9_unified',
+  cognition: CognitionEngine.VERSION,
+  kernel: CognitiveKernel.VERSION,
+  production_truth: true,
 }));
 
 app.get('/api/ai/runtime', async () => ai.diagnostic());
@@ -522,29 +649,34 @@ app.get('/api/bridge/status', async (request, reply) => {
 });
 
 app.post('/api/bridge/heartbeat', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   const result = await bridge.heartbeat(workerId, request.body || {});
   await fabric.refreshMesh().catch(() => {});
-  if (request.body?.organism && typeof request.body.organism === 'object') {
-    await kernel.importOrganismState(request.body.organism);
-  }
+  const organism = await kernel.organismState({ publicView: false });
   return {
     ...result,
-    organism: await kernel.organismState({ publicView: false }),
+    organism,
+    organism_sync: {
+      mode: 'cloud-authoritative',
+      schema_revision: Number(organism?.schema_revision || 9),
+      version: String(organism?.version || ''),
+      worker_version: String(request.body?.organism_version || ''),
+      accepted_worker_state: false,
+    },
   };
 });
 
 app.post('/api/bridge/claim', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   return { job: await bridge.claim(workerId) };
 });
 
 app.post('/api/bridge/jobs/:id/renew', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   try {
@@ -558,7 +690,7 @@ app.post(
   '/api/bridge/jobs/:id/complete',
   { bodyLimit: 24 * 1024 * 1024 },
   async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireBridge(request, reply) || !requireRuntime(reply)) return;
   const workerId = String(request.body?.worker_id || '').trim();
   if (!workerId) return reply.code(422).send({ error: 'worker_id requis' });
   try {
@@ -583,18 +715,44 @@ app.post(
 
 app.get('/api/voice/status', async (request) => {
   const privateView = isPrivate(request);
-  const localOnline = await bridge.workerOnline().catch(() => false);
+  const discovery = await voiceStudio.discover().catch((error) => ({
+    ok: false,
+    reason: String(error?.message || error).slice(0, 300),
+  }));
+  const fabricReady = Boolean(
+    voiceStudio.enabled
+    && discovery?.ok
+    && discovery?.capabilities?.ready !== false
+  );
   return {
     profile: 'mairaiy',
-    ready: Boolean(voiceStudio.enabled || cloudVoice.enabled || localOnline),
-    primary: voiceStudio.enabled ? 'aura-voice-fabric' : (cloudVoice.enabled ? 'legacy-gemini' : (localOnline ? 'runtime-local' : 'offline')),
-    strict_identity: Boolean(config.voiceFabricStrictIdentity),
+    ready: Boolean(fabricReady || cloudVoice.enabled),
+    primary: fabricReady
+      ? 'aura-voice-fabric-historical-aoede'
+      : (cloudVoice.enabled ? 'direct-gemini-aoede' : 'offline'),
+    strict_identity: true,
+    expected_engine_voice: 'aoede',
+    expected_language: 'fr-fr',
+    historical_profile: 'aura-live-2.0.7-natural',
+    generic_fallback_allowed: false,
+    fabric_ready: fabricReady,
+    fabric_configured: Boolean(voiceStudio.enabled),
+    fabric_reason: fabricReady
+      ? ''
+      : String(
+          discovery?.capabilities?.ready === false
+            ? 'provider-not-ready'
+            : (discovery?.reason || '')
+        ).slice(0, 300),
     fabric: voiceStudio.diagnostic({ publicView: !privateView }),
-    legacy_cloud: privateView ? cloudVoice.diagnostic() : {
+    direct_gemini: privateView ? cloudVoice.diagnostic() : {
       enabled: Boolean(cloudVoice.enabled),
       engine: cloudVoice.enabled ? 'gemini-cloud-tts' : 'unavailable',
+      voice: 'Aoede',
+      blocked_reason: cloudVoice.enabled ? '' : cloudVoice.blockedReason,
+      zero_cost_mode: Boolean(config.zeroCostMode),
+      gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
     },
-    runtime_local: Boolean(localOnline),
   };
 });
 
@@ -608,61 +766,56 @@ app.post('/api/voice/speak', async (request, reply) => {
   }
 
   const errors = [];
-  const endpoint = voiceStudio.endpoint;
 
-  // Once Voice Fabric is configured, it owns Mairaiy's identity. In strict mode,
-  // AURA never silently changes to another voice if the provider is unavailable.
-  if (endpoint.configured) {
-    if (voiceStudio.enabled) {
-      try {
-        return await voiceStudio.synthesize(text, request.body || {});
-      } catch (error) {
-        errors.push(`voice-fabric: ${String(error?.message || error)}`);
+  if (voiceStudio.enabled) {
+    try {
+      const discovery = await voiceStudio.discover();
+      if (!discovery?.ok || discovery?.capabilities?.ready === false) {
+        throw new Error(
+          discovery?.reason
+          || discovery?.capabilities?.reason
+          || 'service Mairaiy distant non prêt'
+        );
       }
-    } else {
-      const diagnostic = voiceStudio.diagnostic({ publicView: true });
-      errors.push(`voice-fabric: ${diagnostic.endpoint_reason || (diagnostic.zero_cost_mode && !diagnostic.zero_cost_confirmed ? 'zero-cost confirmation required' : 'provider unavailable')}`);
-    }
-
-    if (config.voiceFabricStrictIdentity) {
-      return reply.code(503).send({
-        error: errors.join(' | ') || 'Mairaiy Voice Fabric indisponible',
-        code: 'AURA_MAIRAIY_IDENTITY_UNAVAILABLE',
-        fabric: voiceStudio.diagnostic({ publicView: true }),
-        fallback_blocked: true,
-      });
+      const audio = await voiceStudio.synthesize(text, request.body || {});
+      if (
+        String(audio?.engine_voice || '').toLowerCase() !== 'aoede'
+        || String(audio?.language || '').toLowerCase() !== 'fr-fr'
+      ) {
+        throw new Error('Identité vocale Mairaiy Aoede non certifiée');
+      }
+      return audio;
+    } catch (error) {
+      errors.push(`voice-fabric: ${String(error?.message || error)}`);
     }
   }
 
-  // Legacy engines remain available only when Voice Fabric has not claimed the
-  // identity, or when strict identity has explicitly been disabled.
-  const preferLocal = request.body?.prefer_local === true;
-  const localOnline = await bridge.workerOnline().catch(() => false);
-  const attempts = preferLocal && localOnline ? ['local', 'cloud'] : ['cloud', 'local'];
-
-  for (const mode of attempts) {
-    if (mode === 'cloud' && cloudVoice.enabled) {
-      try {
-        return await cloudVoice.synthesize(text, request.body || {});
-      } catch (error) {
-        errors.push(`cloud: ${String(error?.message || error)}`);
+  // The only permitted fallback is the same historical Gemini/Aoede identity.
+  // No browser, Piper, Kokoro, Windows or alternate Gemini voice is accepted.
+  if (cloudVoice.enabled) {
+    try {
+      const audio = await cloudVoice.synthesize(text, request.body || {});
+      if (
+        String(audio?.engine_voice || '').toLowerCase() !== 'aoede'
+        || String(audio?.language || '').toLowerCase() !== 'fr-fr'
+      ) {
+        throw new Error('Identité vocale directe Aoede non certifiée');
       }
-    }
-    if (mode === 'local' && localOnline) {
-      try {
-        return await bridge.synthesize(text, request.body || {});
-      } catch (error) {
-        errors.push(`runtime: ${String(error?.message || error)}`);
-      }
+      return audio;
+    } catch (error) {
+      errors.push(`direct-gemini-aoede: ${String(error?.message || error)}`);
     }
   }
 
   return reply.code(503).send({
-    error: errors.join(' | ') || 'Voix Mairaiy indisponible',
-    code: 'AURA_VOICE_UNAVAILABLE',
-    fabric_ready: voiceStudio.enabled,
-    cloud_ready: cloudVoice.enabled,
-    runtime_ready: localOnline,
+    error: errors.join(' | ') || 'La voix historique Mairaiy Aoede est indisponible.',
+    code: 'AURA_MAIRAIY_EXACT_VOICE_UNAVAILABLE',
+    fabric: voiceStudio.diagnostic({ publicView: true }),
+    direct_gemini_ready: Boolean(cloudVoice.enabled),
+    direct_gemini_reason: cloudVoice.enabled ? '' : cloudVoice.blockedReason,
+    fallback_blocked: true,
+    expected_engine_voice: 'aoede',
+    expected_language: 'fr-fr',
   });
 });
 
@@ -682,9 +835,13 @@ app.post('/api/image/generate', async (request, reply) => {
 
 app.get('/api/capabilities', async (request) => {
   const privateView = isPrivate(request);
-  const [kernelStatus, bridgeStatus] = await Promise.all([
+  const [kernelStatus, bridgeStatus, voiceDiscovery] = await Promise.all([
     bootstrap.runtimeReady ? kernel.status() : Promise.resolve(null),
     bootstrap.dbReady ? bridge.status() : Promise.resolve({ enabled: bridge.enabled, worker_online: false }),
+    voiceStudio.discover().catch((error) => ({
+      ok: false,
+      reason: String(error?.message || error).slice(0, 300),
+    })),
   ]);
   const workerCapabilities = Array.isArray(bridgeStatus?.worker?.capabilities)
     ? bridgeStatus.worker.capabilities
@@ -692,18 +849,20 @@ app.get('/api/capabilities', async (request) => {
   const workerActionNames = new Set(
     workerCapabilities.map((item) => String(item?.name || '')),
   );
-  const cloudOperatorCapabilities = fabric.list()
-    .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
-  const cloudOperatorReady = Boolean(
-    bootstrap.runtimeReady
-    && config.fabricEnabled
-    && cloudOperatorCapabilities.length
+  const languageDiagnostic = ai.diagnostic();
+  const expressionDiagnostic = bootstrap.runtimeReady
+    ? await kernel.expression.diagnostic()
+    : {
+        natural_french_ready: false,
+        mode: 'unavailable',
+        language: { ready: false, primary: 'unavailable', last_error: '' },
+      };
+  const voiceFabricActuallyReady = Boolean(
+    voiceStudio.enabled
+    && voiceDiscovery?.ok
+    && voiceDiscovery?.capabilities?.ready !== false
   );
   return {
-    release: releaseInfo(),
-    execution_policy: 'cloud-first-local-optional',
-    cloud_operator_ready: cloudOperatorReady,
-    local_worker_required: false,
     cognition: { ready: Boolean(bootstrap.runtimeReady), native: true },
     organism: {
       ready: Boolean(bootstrap.runtimeReady),
@@ -711,30 +870,53 @@ app.get('/api/capabilities', async (request) => {
     },
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
-      ready: true,
-      final_authority: 'aura-native-cognition',
-      external_role: 'candidate-semantic-data-only',
-      provider: privateView ? ai.provider : 'replaceable-semantic-support',
-      external_provider_ready: Boolean(ai.enabled),
+      ready: Boolean(expressionDiagnostic.natural_french_ready),
+      native_dialogue_ready: Boolean(bootstrap.runtimeReady),
+      native_dialogue_version: CognitionEngine.VERSION,
+      faculty_version: String(expressionDiagnostic.language?.version || ''),
+      provider: String(expressionDiagnostic.language?.primary || 'unavailable'),
       local_worker: Boolean(bridgeStatus?.worker_online),
+      fallback_only: !expressionDiagnostic.natural_french_ready,
+      mode: String(expressionDiagnostic.mode || 'unavailable'),
+      normal_path_scripted: Boolean(expressionDiagnostic.scripted_normal_path),
+      emergency_fallback_only: true,
+      fallback_count: Number(expressionDiagnostic.fallback_count || 0),
+      blocking_reason: String(expressionDiagnostic.language?.blocking_reason || ''),
+      setup_hint: String(expressionDiagnostic.language?.setup_hint || ''),
+      last_backend: String(expressionDiagnostic.language?.last_backend || languageDiagnostic.last_backend || ''),
+      last_model: privateView ? String(expressionDiagnostic.language?.last_model || '') : '',
+      last_error: String(expressionDiagnostic.last_error || expressionDiagnostic.language?.last_error || languageDiagnostic.last_error || '').slice(0, 300),
+      zero_cost_mode: Boolean(expressionDiagnostic.language?.zero_cost ?? languageDiagnostic.zero_cost_mode),
+      remote_fallback_blocked: Boolean(languageDiagnostic.remote_fallback_blocked),
     },
     voice: {
       ready: Boolean(
-        voiceStudio.enabled
+        voiceFabricActuallyReady
         || cloudVoice.enabled
         || (bridgeStatus?.worker_online && bridgeStatus?.worker?.voice)
       ),
       profile: 'mairaiy',
-      mode: voiceStudio.enabled
+      mode: voiceFabricActuallyReady
         ? 'aura-voice-fabric'
         : (cloudVoice.enabled ? 'legacy-cloud' : (bridgeStatus?.worker_online ? 'runtime-local' : 'offline')),
-      engine: voiceStudio.enabled
+      engine: voiceFabricActuallyReady
         ? 'voicestudio-openai-compatible'
         : (cloudVoice.enabled
           ? 'gemini-cloud-tts'
           : (privateView ? String(bridgeStatus?.worker?.voice || '') : '')),
-      fabric_ready: Boolean(voiceStudio.enabled),
+      fabric_ready: voiceFabricActuallyReady,
+      fabric_configured: Boolean(voiceStudio.enabled),
+      fabric_reason: voiceFabricActuallyReady
+        ? ''
+        : String(
+            voiceDiscovery?.capabilities?.ready === false
+              ? 'provider-not-ready'
+              : (voiceDiscovery?.reason || voiceDiscovery?.capabilities?.reason || '')
+          ).slice(0, 300),
       cloud_ready: Boolean(cloudVoice.enabled),
+      cloud_reason: cloudVoice.enabled ? '' : cloudVoice.blockedReason,
+      cloud_zero_cost_mode: Boolean(config.zeroCostMode),
+      cloud_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
       runtime_ready: Boolean(bridgeStatus?.worker_online && bridgeStatus?.worker?.voice),
       strict_identity: Boolean(config.voiceFabricStrictIdentity),
       fabric: voiceStudio.diagnostic({ publicView: !privateView }),
@@ -748,25 +930,16 @@ app.get('/api/capabilities', async (request) => {
       mode: bridgeStatus?.worker_online ? 'local-worker' : 'offline',
     },
     hands: {
-      ready: Boolean(cloudOperatorReady || bridgeStatus?.worker_online),
-      mode: cloudOperatorReady
-        ? 'cloud-first'
-        : (bridgeStatus?.worker_online ? 'local-specialized-only' : 'cloud-capability-missing'),
-      execution_policy: 'cloud-first-local-optional',
-      cloud_operator_ready: cloudOperatorReady,
-      cloud_capabilities: cloudOperatorCapabilities.length,
-      local_worker_required: false,
-      local_worker_online: Boolean(bridgeStatus?.worker_online),
+      ready: Boolean(bridgeStatus?.worker_online),
+      mode: bridgeStatus?.worker_online ? 'quantic-studio-real' : 'offline',
       capabilities: privateView ? workerCapabilities : [],
     },
     horizon: { ready: Boolean(horizon.status().enabled) },
     web_substrate: webSubstrate.status(),
     evolution: {
-      ready: Boolean(config.evolutionEnabled),
+      ready: Boolean(bridgeStatus?.worker_online),
       cloud_enabled: Boolean(config.evolutionEnabled),
-      execution_policy: 'cloud-first-local-optional',
-      local_worker_optional: true,
-      local_worker_online: Boolean(bridgeStatus?.worker_online),
+      delegated_to_local: Boolean(bridgeStatus?.worker_online),
     },
     command_center: bootstrap.runtimeReady
       ? await commandCenter.status({ publicView: !privateView })
@@ -777,16 +950,31 @@ app.get('/api/capabilities', async (request) => {
       capabilities: fabric.list().length,
       remote_side_effects: false,
     },
+    skill_learning: bootstrap.runtimeReady
+      ? await kernel.skillLearning.status()
+      : { version: 'aura-skill-learning-v2', candidates: 0, promoted: 0, registered_runtime: 0 },
     kernel: privateView ? kernelStatus : undefined,
   };
 });
 
+app.get('/api/skills/status', async () =>
+  bootstrap.runtimeReady
+    ? kernel.skillLearning.status()
+    : { version: 'aura-skill-learning-v2', ready: false, candidates: 0, promoted: 0, registered_runtime: 0 }
+);
+
+app.get('/api/skills', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return { skills: await kernel.skillLearning.list(request.query?.limit) };
+});
+
 app.get('/api/kernel/architecture', async () => ({
-  release: releaseInfo(),
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
-  organism: 'homeostasie_v7_streamlined',
-  cognition_owner: 'AURA native cognitive kernel + active-inference allocator',
-  language_model_role: 'replaceable specialist constellation for candidate semantic data only; never final formulation',
+  organism: 'homeostasie_v9_unified',
+  cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
+  dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
+  skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
+  language_model_role: 'French Language Faculty: replaceable zero-cost multilingual model for expression only; deterministic wording is emergency fallback, never the normal path',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
   command_center: 'continuous native initiative engine with bounded autonomous execution',
@@ -796,13 +984,10 @@ app.get('/api/kernel/architecture', async () => ({
   distributed_compute: 'typed DAG -> Capability Fabric -> parallel Node/Rust swarm -> edge/API/local capabilities',
   capability_router: 'trust + observed reliability + latency + cost + task tags',
   network_action_model: 'typed authenticated capabilities; no arbitrary remote shell; remote edge side effects disabled',
-  execution_arm: 'AURA Cloud typed workspace first; authenticated local bridge only for explicit local side effects',
+  execution_arm: 'Quantic Studio authenticated bridge for bounded side effects; edge fabric for read/compute',
   autonomous_risk_envelope: [...config.commandCenterAllowedRisks],
   provider: ai.provider,
   provider_enabled: ai.enabled,
-  final_language_authority: 'AURA native cognition',
-  execution_policy: 'cloud-first-local-optional',
-  local_worker_required: false,
 }));
 
 app.get('/healthz', async () => {
@@ -817,8 +1002,8 @@ app.get('/healthz', async () => {
     }
   }
   return {
-    release: releaseInfo(),
     ok: true,
+    build: buildInfo(),
     ready: bootstrap.runtimeReady && databaseAlive,
     status: bootstrap.runtimeReady && databaseAlive ? 'ready' : 'diagnostic',
     db: databaseAlive,
@@ -889,6 +1074,219 @@ app.get('/api/kernel/public', async () => {
   return { ...soul, organism };
 });
 
+
+
+function publicContextObject(value) {
+  try {
+    const parsed = JSON.parse(String(value || '{}'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function publicOperationalSnapshot() {
+  if (!bootstrap.runtimeReady) {
+    return {
+      visibility: 'public-read-only',
+      runtime_ready: false,
+      soul: { ...publicFallbackSoul(false), organism: { ready: false } },
+      kernel_status: {
+        version: CognitiveKernel.VERSION,
+        enabled: config.cognitiveEnabled,
+        started: false,
+        counts: {},
+      },
+      intentions: [],
+      lessons: [],
+      activity: [],
+      work: [],
+      attention: { nodes: [], focus_statement: 'AURA démarre son noyau.' },
+      command: null,
+      curiosity: null,
+      scout: await capabilityScout.status().catch(() => null),
+      evolution: null,
+    };
+  }
+
+  const [
+    soul,
+    organism,
+    kernelStatus,
+    rawIntentions,
+    rawLessons,
+    rawActivity,
+    rawInitiatives,
+    attention,
+    commandStatus,
+    curiosityStatus,
+    scoutStatus,
+    evolutionStatus,
+  ] = await Promise.all([
+    kernel.soul({ privateView: false }),
+    kernel.organismState({ publicView: true }),
+    kernel.status(),
+    kernel.intentions(20),
+    kernel.lessons(20),
+    kernel.activity(30),
+    commandCenter.initiatives(20),
+    kernel.attentionMap(),
+    commandCenter.status({ publicView: true }),
+    curiosity.status(),
+    capabilityScout.status(),
+    evolution.status().catch(() => ({ enabled: false, phase: 'unavailable' })),
+  ]);
+
+  const intentions = rawIntentions
+    .filter((row) => {
+      const source = String(row.source || '').toLowerCase();
+      const context = publicContextObject(row.context);
+      return ['curiosity','capability-scout'].includes(source)
+        && String(context.target || 'system') !== 'interlocutor';
+    })
+    .slice(0, 8)
+    .map((row) => ({
+      statement: String(row.statement || '').slice(0, 500),
+      priority: Number(row.priority || 0),
+      source: String(row.source || ''),
+      updated_at: row.updated_at,
+    }));
+
+  const scoutLessons = (scoutStatus?.recent_findings || []).slice(0, 5).map((row) => ({
+    content:
+      `Découverte: ${row.repository} · score ${Math.round(Number(row.score || 0) * 100)}% · `
+      + `licence ${row.license || 'à vérifier'} · ${row.experiment_eligible ? 'expérimentable' : 'observation'}.`,
+    confidence: Number(row.research_confidence || row.score || 0),
+    evidence_count: row.researched ? 2 : 1,
+    source: 'capability-scout',
+    updated_at: row.discovered_at,
+  }));
+  const technicalLessons = rawLessons
+    .filter((row) => ['automation-outcomes'].includes(String(row.source || '').toLowerCase()))
+    .slice(0, 3)
+    .map((row) => ({
+      content: String(row.content || '').slice(0, 700),
+      confidence: Number(row.confidence || 0),
+      evidence_count: Number(row.evidence_count || 0),
+      source: String(row.source || ''),
+      updated_at: row.updated_at,
+    }));
+
+  const allowedTraceKinds = new Set([
+    'capability-scout',
+    'capability-experiment',
+    'curiosity-question',
+    'curiosity-research',
+    'curiosity-research-error',
+    'director-promotion',
+    'fleet-scan',
+    'service-observation',
+  ]);
+  const activity = rawActivity
+    .filter((row) => allowedTraceKinds.has(String(row.kind || '')))
+    .slice(0, 10)
+    .map((row) => ({
+      kind: String(row.kind || 'activité'),
+      title: String(row.title || row.kind || 'Activité AURA').slice(0, 240),
+      content: String(row.content || '').slice(0, 500),
+      created_at: row.created_at,
+    }));
+
+  const safeKinds = new Set(['github','evolution','research']);
+  const work = rawInitiatives
+    .filter((row) => safeKinds.has(String(row.kind || '')))
+    .slice(0, 8)
+    .map((row) => ({
+      kind: String(row.kind || 'initiative'),
+      title: String(row.title || 'Initiative AURA').slice(0, 240),
+      detail: `${String(row.domain || 'AURA')} · ${String(row.status || 'queued')}`,
+      priority: Number(row.priority || 0),
+      confidence: Number(row.confidence || 0),
+      status: String(row.status || ''),
+      updated_at: row.updated_at,
+    }));
+
+  const publicFocus = intentions[0]?.statement
+    || commandStatus?.top_initiative?.title
+    || scoutStatus?.recent_findings?.[0]?.repository
+    || (attention?.dominant ? `Focus autonome: ${attention.dominant}` : 'Observation autonome du système.');
+  const publicAttention = {
+    ...(attention || {}),
+    focus_statement: String(publicFocus).slice(0, 500),
+  };
+
+  const publicCuriosity = {
+    version: curiosityStatus.version,
+    enabled: curiosityStatus.enabled,
+    started: curiosityStatus.started,
+    running: curiosityStatus.running,
+    questions_last_hour: curiosityStatus.questions_last_hour,
+    last_run_at: curiosityStatus.last_run_at,
+    last_research_at: curiosityStatus.last_research_at,
+    recent_questions: (curiosityStatus.recent_questions || [])
+      .filter((item) => ['system','web'].includes(String(item?.context?.target || '')))
+      .slice(0, 6)
+      .map((item) => ({
+        content: item.content,
+        title: item.title,
+        created_at: item.created_at,
+        target: item.context?.target || '',
+        domain: item.context?.domain || '',
+      })),
+  };
+
+  return {
+    visibility: 'public-read-only',
+    runtime_ready: true,
+    soul: { ...soul, organism },
+    kernel_status: { ...kernelStatus, organism },
+    intentions,
+    lessons: [...scoutLessons, ...technicalLessons].slice(0, 8),
+    activity,
+    work,
+    attention: publicAttention,
+    command: commandStatus,
+    curiosity: publicCuriosity,
+    scout: scoutStatus,
+    evolution: evolutionStatus,
+    privacy_boundary: {
+      interface_public: true,
+      raw_private_memory_public: false,
+      founder_conversation_public: false,
+      secrets_public: false,
+      mutations_public: false,
+      execution_controls_public: false,
+    },
+  };
+}
+
+app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
+
+app.get('/api/language/embedded/status', async () => ({
+  // Public, path-free diagnostics. Does not disclose server folders or secrets.
+  ...kernel.expression.language.embedded.status(),
+}));
+
+app.get('/api/language/progress', async () => {
+  if (!bootstrap.runtimeReady) return { status: 'not-evaluated', score: null, delta: null, evaluated_at: null };
+  return kernel.language.progress();
+});
+
+app.post('/api/language/evaluate', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return kernel.language.evaluate({ force: Boolean(request.body?.force) });
+});
+
+app.get('/api/scout/status', async () => capabilityScout.status());
+
+app.post('/api/scout/run', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await capabilityScout.runCycle(String(request.body?.trigger || 'private-api'));
+  } catch (error) {
+    return reply.code(502).send({ error: String(error?.message || error) });
+  }
+});
 
 app.get('/api/kernel/soul', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
@@ -973,6 +1371,16 @@ app.get('/api/kernel/activity', async (request, reply) =>
 app.get('/api/kernel/work', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.workItems(request.query?.limit)
+    : undefined);
+
+app.get('/api/kernel/agenda', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.agendaSnapshot()
+    : undefined);
+
+app.get('/api/kernel/activity-since-last-conversation', async (request, reply) =>
+  requirePrivate(request, reply) && requireRuntime(reply)
+    ? kernel.activitySinceLastConversation('private-founder')
     : undefined);
 
 app.get('/api/kernel/attention', async (request, reply) =>
@@ -1072,8 +1480,11 @@ app.get('/api/aura/products', async (request, reply) => {
 });
 
 app.post('/api/aura/products/register', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
   const body = request.body || {};
+  const productId = String(body.id || '').trim().toLowerCase();
+  const auth = requireProduct(request, reply, productId);
+  if (!auth) return;
   try {
     const product = await commandCenter.upsertService({
       id: body.id,
@@ -1093,6 +1504,8 @@ app.post('/api/aura/products/register', async (request, reply) => {
         modification_policy: body.modification_policy || 'branch-test-canary-promote',
         bridge_version: String(body.bridge_version || 'aura-universal-bridge-v1').slice(0, 120),
         runtime: body.runtime || {},
+        auth_mode: auth.mode,
+        authenticated_product_id: auth.product_id,
       },
     });
     await kernel.observeEvent('quantic.product.registered', {
@@ -1107,12 +1520,18 @@ app.post('/api/aura/products/register', async (request, reply) => {
 });
 
 app.post('/api/aura/products/:id/observe', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
+  const auth = requireProduct(request, reply, request.params.id);
+  if (!auth) return;
   try {
     const product = await commandCenter.observeService(request.params.id, {
       state: request.body?.state || 'online',
       detail: request.body?.detail || request.body?.message || '',
-      metadata: request.body?.metadata || {},
+      metadata: {
+        ...(request.body?.metadata || {}),
+        auth_mode: auth.mode,
+        authenticated_product_id: auth.product_id,
+      },
     });
     await kernel.observeEvent(
       'quantic.product.observation',
@@ -1131,11 +1550,14 @@ app.post('/api/aura/products/:id/observe', async (request, reply) => {
 });
 
 app.post('/api/aura/products/:id/event', async (request, reply) => {
-  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!requireRuntime(reply)) return;
+  const auth = requireProduct(request, reply, request.params.id);
+  if (!auth) return;
   const type = String(request.body?.type || 'quantic.product.event').slice(0, 120);
   const payload = request.body?.payload || {};
   await kernel.observeEvent(type, {
     product_id: request.params.id,
+    auth_mode: auth.mode,
     ...payload,
   }, request.params.id);
   return { ok: true };
@@ -1661,6 +2083,7 @@ export async function stopAura() {
     clearInterval(metricsTimer);
     metricsTimer = null;
   }
+  capabilityScout.stop();
   curiosity.stop();
   commandCenter.stop();
   fabric.stop();

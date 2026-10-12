@@ -5,7 +5,7 @@ const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
 const now = () => new Date().toISOString();
 
 export class AuraOrganism {
-  static VERSION = 'homeostasie_v8_director';
+  static VERSION = 'homeostasie_v9_unified';
 
   defaultState() {
     const stamp = now();
@@ -30,6 +30,8 @@ export class AuraOrganism {
       mood: 'calme',
       intention_active: 'observer',
       last_reason: 'organisme AURA actif',
+      schema_revision: 9,
+      authority: 'cloud-canonical',
       updated_at: stamp,
       last_interaction_at: stamp,
       last_idle_at: stamp,
@@ -229,6 +231,8 @@ export class AuraOrganism {
       state[key] = Number(clamp(state[key]).toFixed(4));
     }
     state.version = AuraOrganism.VERSION;
+    state.schema_revision = 9;
+    state.authority = 'cloud-canonical';
     state.needs = this.needs(state);
     state.intention_field = this.intentionField(state, state.last_event || '');
     state.intention_active = state.intention_field.collapse.intention_choisie;
@@ -443,6 +447,9 @@ export class AuraOrganism {
       mood:state.mood,
       valence:state.derniere_valence,
       active_intention:state.intention_active,
+      last_reason:String(state.last_reason || ''),
+      schema_revision:9,
+      authority:'cloud-canonical',
       identite:state.identite,
       stabilite:state.stabilite,
       clarte:state.clarte,
@@ -457,6 +464,11 @@ export class AuraOrganism {
       pression_de_reve:state.pression_de_reve,
       besoin_de_silence:state.besoin_de_silence,
       risque_assistante:state.risque_assistante,
+      dynamics:{
+        activation:Number(clamp(state.engagement*.42+state.agency*.33+state.curiosite*.25).toFixed(4)),
+        agitation:Number(clamp(state.frustration*.55+(1-state.stabilite)*.30+(1-state.clarte)*.15).toFixed(4)),
+        recovery:Number(clamp(state.stabilite*.45+state.clarte*.35+(1-state.besoin_de_silence)*.20).toFixed(4)),
+      },
       top_needs:needs,
       intention_field:state.intention_field,
       relationship:{

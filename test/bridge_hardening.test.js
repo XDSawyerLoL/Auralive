@@ -22,13 +22,13 @@ test('bridge stores media results above the former 12 MB truncation threshold', 
 });
 
 
-test('Hostinger entry loads Fastify statically without a dynamic-import deadlock', () => {
-  assert.match(gatewaySource, /import \{ app, bootstrap, startRuntimeLoop, stopAura \} from '\.\/src\/server\.js'/);
-  assert.match(gatewaySource, /framework: 'fastify-direct'/);
-  assert.match(gatewaySource, /app\.listen\(\{ host, port \}\)/);
-  assert.match(gatewaySource, /const port = production[\s\S]*\? 3000/);
-  assert.doesNotMatch(gatewaySource, /await import\('\.\/src\/server\.js'\)/);
-  assert.doesNotMatch(gatewaySource, /native-node-gateway/);
+test('Hostinger entry uses one direct Fastify listener and keeps lsnode-compatible async boot', () => {
+  assert.match(gatewaySource, /await import\('\.\/src\/server\.js'\)/);
+  assert.match(gatewaySource, /await app\.listen\(\{ host: publicHost, port: publicPort \}\)/);
+  assert.match(gatewaySource, /void bootAura\(\)/);
+  assert.doesNotMatch(gatewaySource, /proxyToAura/);
+  assert.doesNotMatch(gatewaySource, /app\.listen\(\{ host: '127\.0\.0\.1', port: 0 \}\)/);
+  assert.match(gatewaySource, /single-listener recovery server/);
   assert.match(serverSource, /bodyLimit:\s*24\s*\*\s*1024\s*\*\s*1024/);
 });
 

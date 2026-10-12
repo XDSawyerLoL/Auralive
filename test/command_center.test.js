@@ -8,11 +8,11 @@ import {
   needsExternalEvidence,
   safeGithubChangePath,
 } from '../src/command_center.js';
+import { classifyInitiativeResult } from '../src/outcome_truth.js';
 
 const serverSource = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 const commandSource = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
 const configSource = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
-const kernelSource = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
 
 test('command center creates deterministic native initiative fingerprints', () => {
   const center = new CommandCenter({}, {}, {});
@@ -84,7 +84,8 @@ test('command center is part of runtime startup and shutdown', () => {
   assert.match(serverSource, /await commandCenter\.start\(\)/);
   assert.match(serverSource, /commandCenter\.stop\(\)/);
   assert.match(serverSource, /command_center_enabled/);
-  assert.match(serverSource, /version:\s*'2\.2\.1'/);
+  assert.match(serverSource, /\.\.\.buildInfo\(\)/);
+  assert.match(serverSource, /app\.get\('\/api\/build'/);
 });
 
 
@@ -158,26 +159,27 @@ test('repeated CI failures can trigger bounded Evolution Fleet repair', () => {
   assert.match(commandSource, /executionMode = repository[\s\S]*'evolution-fleet'/);
 });
 
-test('offline local worker does not hard-block operator or Fleet initiatives', () => {
-  assert.doesNotMatch(commandSource, /initiative\.kind === 'operator' && !bridgeOnline/);
-  assert.doesNotMatch(commandSource, /crossProductEvolution && !bridgeOnline/);
-  assert.match(commandSource, /returnedStatus\.startsWith\('waiting'\)/);
-  assert.match(commandSource, /waiting-cloud-capability/);
-  assert.match(commandSource, /const status = waiting \? 'waiting'/);
+test('offline Fleet evolution remains waiting instead of recording false success', () => {
+  assert.match(commandSource, /crossProductEvolution && !bridgeOnline/);
+  assert.match(commandSource, /execution_mode: 'waiting-local-worker'/);
+  assert.match(commandSource, /classifyInitiativeResult\(initiative\.kind, result\)/);
+  assert.equal(classifyInitiativeResult('evolution', { status: 'waiting-local-worker' }).status, 'waiting');
+  assert.equal(classifyInitiativeResult('evolution', { status: 'queued' }).status, 'waiting');
 });
 
 test('reconciliation records rejected or no-safe-patch Fleet worker results as failed', () => {
-  assert.match(commandSource, /payloadStatus\.endsWith\('-rejected'\)/);
-  assert.match(commandSource, /payloadStatus === 'no-safe-patch'/);
-  assert.match(commandSource, /const finalStatus = evolutionRejected \? 'failed' : 'completed'/);
-  assert.match(commandSource, /ok: !evolutionRejected/);
+  assert.equal(classifyInitiativeResult('worker', { status: 'no-safe-patch' }).status, 'failed');
+  assert.equal(classifyInitiativeResult('worker', { status: 'security-rejected' }).status, 'failed');
+  assert.equal(classifyInitiativeResult('worker', { ok: false, reason: 'worker denied' }).status, 'failed');
+  assert.match(commandSource, /const finalStatus = executionRejected \? 'failed' : 'completed'/);
+  assert.match(commandSource, /ok: !executionRejected/);
 });
 
 test('Director mode creates rotating portfolio Evolution initiatives', () => {
   assert.match(commandSource, /config\.directorModeEnabled/);
   assert.match(commandSource, /Direction · faire progresser/);
   assert.match(commandSource, /director_mode: true/);
-  assert.match(commandSource, /Director Mode réalise une revue tournante du portefeuille/);
+  assert.match(commandSource, /Director Mode maintient plusieurs workstreams produits en parallèle/);
   assert.match(commandSource, /director-autonomous-operations/);
 });
 
@@ -219,7 +221,7 @@ test('Director low-risk promotion merges only green safe AURA pull requests', as
     if (path === '/repos/XDSawyerLoL/Auralive/pulls/42/files?per_page=100') {
       return {
         data: [{
-          filename: 'src/ui.js',
+          filename: 'docs/aura-safe-improvement.md',
           status: 'modified',
           changes: 12,
           patch: '@@ -1 +1 @@\n-old\n+new',
@@ -230,7 +232,10 @@ test('Director low-risk promotion merges only green safe AURA pull requests', as
       return { data: [] };
     }
     if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/check-runs?per_page=100') {
-      return { data: { check_runs: [{ status: 'completed', conclusion: 'success' }] } };
+      return { data: { check_runs: [
+        { name: 'unit-tests', status: 'completed', conclusion: 'success' },
+        { name: 'policy', status: 'completed', conclusion: 'success' },
+      ] } };
     }
     if (path === '/repos/XDSawyerLoL/Auralive/commits/abc123/status') {
       return { data: { statuses: [] } };
@@ -302,15 +307,11 @@ test('Director auto-merge requires same-repository trusted provenance', () => {
   assert.match(commandSource, /trustedProvenance/);
 });
 
-test('Command Center and kernel use Cloud-first execution with local optional', () => {
-  assert.doesNotMatch(commandSource, /executionMode = 'aura-runtime-operator'/);
-  assert.doesNotMatch(commandSource, /initiative\.kind === 'operator' && !bridgeOnline/);
-  assert.match(commandSource, /cloud-first-operator/);
-  assert.match(kernelSource, /cloud-first-local-optional/);
-  assert.match(kernelSource, /waiting-cloud-capability/);
-  const cloudFirst = kernelSource.indexOf("provider || '') === 'aura-cloud-workspace'");
-  const localOptional = kernelSource.indexOf('if (explicitlyLocal && localOnline)');
-  assert.ok(cloudFirst >= 0 && localOptional > cloudFirst);
+test('Command Center does not use Quantic Studio as AURA execution authority', () => {
+  assert.match(commandSource, /AURA Runtime worker offline/);
+  assert.match(commandSource, /executionMode = 'aura-runtime-operator'/);
+  assert.doesNotMatch(commandSource, /Quantic Studio worker offline/);
+  assert.doesNotMatch(commandSource, /quantic-studio-operator/);
 });
 
 test('Command Center does not default AURA Runtime host back to Quantic Studio', () => {
@@ -373,17 +374,4 @@ test('mission cancellation propagates to Runtime jobs', () => {
   assert.match(commandSource, /this\.bridge\.cancelJob/);
   assert.match(commandSource, /mission_steps ms[\s\S]*aura_initiatives i/);
   assert.match(commandSource, /i\.status IN \('queued','running','waiting'\)/);
-});
-
-
-test('public capability contract exposes Cloud-first execution policy', () => {
-  assert.match(serverSource, /execution_policy: 'cloud-first-local-optional'/);
-  assert.match(serverSource, /cloud_operator_ready: cloudOperatorReady/);
-  assert.match(serverSource, /local_worker_required: false/);
-  assert.match(serverSource, /final_authority: 'aura-native-cognition'/);
-});
-
-test('zero-cost defaults do not prefer local AI or paid expert bridge', () => {
-  assert.match(configSource, /localAiPreferred: bool\('AURA_LOCAL_AI_PREFERRED', false\)/);
-  assert.match(configSource, /expertBridgeEnabled: bool\('AURA_EXPERT_BRIDGE_ENABLED', false\)/);
 });

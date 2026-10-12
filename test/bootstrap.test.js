@@ -31,6 +31,7 @@ function launch(extraEnv = {}) {
       NODE_ENV: 'production',
       HOST: 'antiquewhite-dolphin-780448.hostingersite.com',
       PORT: '49999',
+      AURA_PORT: String(HOSTINGER_PORT),
       AURA_GATEWAY_PORT: '3987',
       DB_HOST: '',
       DB_USER: '',
@@ -81,11 +82,13 @@ test('Hostinger lsnode can require the ESM entry because server.js has no top-le
   );
   const gateway = JSON.parse(gatewayText);
   assert.equal(gateway.gateway_port, requirePort);
-  assert.equal(gateway.framework, 'fastify-direct');
+  assert.equal(gateway.framework, 'fastify');
+  assert.equal(gateway.application_ready, true);
+  assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('production entry forces Hostinger port 3000 and stays online with runtime disabled', async (t) => {
+test('production entry uses one Fastify listener on Hostinger port 3000 with runtime disabled', async (t) => {
   const child = launch({ AURA_GATEWAY_ONLY: 'true' });
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
@@ -97,7 +100,7 @@ test('production entry forces Hostinger port 3000 and stays online with runtime 
   assert.equal(gateway.gateway_ready, true);
   assert.equal(gateway.gateway_port, 3000);
   assert.equal(gateway.runtime_ready, false);
-  assert.equal(gateway.framework, 'fastify-direct');
+  assert.equal(gateway.framework, 'fastify');
   assert.equal(gateway.application_ready, true);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
@@ -108,7 +111,8 @@ test('production entry forces Hostinger port 3000 and stays online with runtime 
   assert.equal(root.status, 200);
   const html = await root.text();
   assert.match(html, /AURA/);
-  assert.match(html, /Interface de conscience opérationnelle/);
+  assert.match(html, /Company OS/);
+  assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
 
@@ -118,10 +122,13 @@ test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  const html = await waitFor('/', (text) => text.includes('Interface de conscience opérationnelle'));
+  const html = await waitFor('/', (text) => text.includes('Company OS'));
   assert.match(html, /AURA/);
-  assert.match(html, /Interface de conscience opérationnelle/);
-  assert.match(html, /Carte d’intérêt/);
+  assert.match(html, /Company OS/);
+  assert.match(html, /AURA vivante/);
+  assert.match(html, /Parler à AURA/);
+  assert.match(html, /id="message"/);
+  assert.match(html, /id="send"/);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const payload = JSON.parse(healthText);

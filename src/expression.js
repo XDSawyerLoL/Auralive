@@ -1,14 +1,20 @@
+import { config } from './config.js';
+import { FrenchLanguageFaculty } from './french_language.js';
+
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
 export class ExpressionLayer {
-  static VERSION = 'aura-expression-v3-native-authority';
+  static VERSION = 'aura-expression-v4-language-faculty';
 
   constructor(ai, cognition) {
     this.ai = ai;
     this.cognition = cognition;
+    this.language = new FrenchLanguageFaculty(ai);
     this.lastError = '';
+    this.lastMode = 'uninitialized';
+    this.fallbackCount = 0;
   }
 
   async semanticSupport(plan, context = '', options = {}) {
@@ -42,23 +48,54 @@ export class ExpressionLayer {
     }
   }
 
-  async verbalize(plan, _options = {}) {
-    // Final-language authority is native to AURA. External models may supply
-    // candidate semantic data through semanticSupport(), but they never write
-    // the final sentence spoken in AURA's name.
-    const answer = normalize(this.cognition.deterministicReply(plan));
-    return answer || 'Je n’ai pas encore assez d’éléments internes pour répondre de façon fiable.';
+  async verbalize(plan, options = {}) {
+    const fallback = this.cognition.deterministicReply(plan);
+    try {
+      const answer = normalize(await this.language.generate(plan, {
+        maxTokens: Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
+        taskRole: String(options.taskRole || 'french'),
+      }));
+      if (answer) {
+        this.lastError = '';
+        this.lastMode = 'french-language-faculty';
+        return answer;
+      }
+    } catch (error) {
+      this.lastError = normalize(error?.message || error).slice(0, 500);
+    }
+
+    this.lastError = this.language.lastError || 'natural-french-backend-unavailable';
+    this.fallbackCount += 1;
+    if (config.frenchLanguageRequired) {
+      this.lastMode = 'natural-language-unavailable';
+      // Operational diagnostic only; never impersonate natural conversation with templates.
+      // A technical setup hint belongs in /api/ai/runtime, not in the chat.
+      // Never claim a generated reply when no real language engine responded.
+      return 'Ma faculté de français naturel est indisponible pour le moment. '
+        + 'Aucun moteur linguistique opérationnel n’a pu produire de réponse. '
+        + 'Je conserve le contexte de notre conversation pour la reprise.';
+    }
+
+    // Secours legacy explicitement opt-in seulement.
+    this.lastMode = 'deterministic-emergency-fallback';
+    return fallback;
   }
 
-
-  diagnostic() {
+  async diagnostic() {
+    const language = await this.language.status();
     return {
       version: ExpressionLayer.VERSION,
-      ai_available: Boolean(this.ai?.enabled),
-      last_error: this.lastError,
-      role: 'semantic-support-only',
-      final_language_authority: 'aura-native-cognition',
-      external_model_can_formulate_final_reply: false,
+      language,
+      natural_french_ready: Boolean(language.verified_ready),
+      mode: language.verified_ready
+        ? 'learned-language-model'
+        : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
+      scripted_normal_path: false,
+      strict_natural_language: Boolean(config.frenchLanguageRequired),
+      fallback_count: this.fallbackCount,
+      last_mode: this.lastMode,
+      last_error: this.lastError || language.last_error || '',
+      role: 'verbalisation-only',
     };
   }
 }

@@ -4,8 +4,30 @@ let lastSoul = null;
 let lastAttention = null;
 let livingScene = null;
 let voicePlayer = null;
+let voiceAudioContext = null;
 let voicePrimed = false;
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
+const AURA_API_BASE=(function(){
+  try{
+    const qp=new URLSearchParams(location.search).get('api');
+    if(qp && /^https:\/\//i.test(qp)){
+      const clean=qp.replace(/\/$/,'');
+      localStorage.setItem('aura_api_base',clean);
+      return clean;
+    }
+    const explicit=String(window.AURA_API_BASE||'').trim().replace(/\/$/,'');
+    if(explicit) return explicit;
+    const saved=String(localStorage.getItem('aura_api_base')||'').trim().replace(/\/$/,'');
+    if(saved) return saved;
+  }catch(_){}
+  if(location.hostname==='xdsawyerlol.github.io') return 'https://auralive-mmh5.onrender.com';
+  return '';
+})();
+function apiUrl(path){
+  const value=String(path||'');
+  if(/^https?:\/\//i.test(value)) return value;
+  return AURA_API_BASE ? AURA_API_BASE + (value.startsWith('/')?value:'/'+value) : value;
+}
 
 function escapeHtml(value){
   return String(value == null ? '' : value).replace(/[&<>"']/g,function(c){
@@ -19,8 +41,8 @@ function headers(json){
 }
 async function api(path,options){
   options=options||{};
-  const response=await fetch(path,Object.assign(
-    {credentials:'same-origin'},
+  const response=await fetch(apiUrl(path),Object.assign(
+    {credentials:AURA_API_BASE?'include':'same-origin'},
     options,
     {headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}
   ));
@@ -121,14 +143,14 @@ function renderActivity(rows){
   }).join('');
 }
 const nodeLayout={
-  stability:{x:205,y:190,color:'#60e6ad'},
-  learning:{x:455,y:112,color:'#a478ff'},
-  studio:{x:700,y:190,color:'#6da7ff'},
-  horizon:{x:755,y:355,color:'#ffc96a'},
-  automation:{x:650,y:500,color:'#59e0ef'},
-  memory:{x:450,y:535,color:'#ffc96a'},
-  evolution:{x:250,y:500,color:'#f178d6'},
-  watch:{x:145,y:355,color:'#6da7ff'}
+  stability:{x:205,y:190,color:'#5de0aa'},
+  learning:{x:455,y:112,color:'#9b6cff'},
+  studio:{x:700,y:190,color:'#ec5fa9'},
+  horizon:{x:755,y:355,color:'#ffbf68'},
+  automation:{x:650,y:500,color:'#ff8f45'},
+  memory:{x:450,y:535,color:'#f7e4cf'},
+  evolution:{x:250,y:500,color:'#b46cff'},
+  watch:{x:145,y:355,color:'#ffb76d'}
 };
 function renderMap(data){
   if(!data || !Array.isArray(data.nodes)) return;
@@ -152,7 +174,7 @@ function renderMap(data){
       web.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
       web.setAttribute('class','web-link');
       web.setAttribute('fill','none');
-      web.setAttribute('stroke',offset===1?a.color:'#7b78c8');
+      web.setAttribute('stroke',offset===1?a.color:'#a26f6c');
       web.setAttribute('stroke-width',offset===1?'1.15':'.75');
       web.setAttribute('opacity',offset===1?'.16':'.085');
       web.setAttribute('stroke-dasharray',offset===1?'2 8':'1 12');
@@ -202,8 +224,8 @@ function renderMap(data){
     g.appendChild(halo);g.appendChild(orbit);g.appendChild(circle);g.appendChild(core);
     nodes.appendChild(g);
 
-    const label=document.createElementNS(svgNS,'text'); label.setAttribute('x',String(pos.x+38)); label.setAttribute('y',String(pos.y-3)); label.setAttribute('fill','#eef2ff'); label.setAttribute('font-size','13'); label.setAttribute('font-weight','600'); label.textContent=n.label; nodes.appendChild(label);
-    const sub=document.createElementNS(svgNS,'text'); sub.setAttribute('x',String(pos.x+38)); sub.setAttribute('y',String(pos.y+13)); sub.setAttribute('fill','#77849d'); sub.setAttribute('font-size','9'); sub.textContent=n.subtitle+' · '+Math.round(intensity*100)+'%'; nodes.appendChild(sub);
+    const label=document.createElementNS(svgNS,'text'); label.setAttribute('x',String(pos.x+38)); label.setAttribute('y',String(pos.y-3)); label.setAttribute('fill','#f8f1eb'); label.setAttribute('font-size','13'); label.setAttribute('font-weight','600'); label.textContent=n.label; nodes.appendChild(label);
+    const sub=document.createElementNS(svgNS,'text'); sub.setAttribute('x',String(pos.x+38)); sub.setAttribute('y',String(pos.y+13)); sub.setAttribute('fill','#897c78'); sub.setAttribute('font-size','9'); sub.textContent=n.subtitle+' · '+Math.round(intensity*100)+'%'; nodes.appendChild(sub);
   });
 }
 function initLivingAuraScene(){
@@ -264,30 +286,33 @@ function initLivingAuraScene(){
     nctx.clearRect(0,0,scene.w,scene.h);
     nctx.globalCompositeOperation='screen';
     const o=scene.organism||{};
-    const tension=Number(o.tension||0);
+    const dynamics=o.dynamics||{};
+    const agitation=Number(dynamics.agitation||0);
+    const activation=Number(dynamics.activation||0);
+    const recovery=Number(dynamics.recovery||0);
     const curiosity=Number(o.curiosite||0);
     const stability=Number(o.stabilite||0);
     const dream=Number(o.pression_de_reve||0);
-    const fatigue=Number(o.fatigue_cognitive||0);
     const attachment=Number(o.attachement||0);
+    const silence=Number(o.besoin_de_silence||0);
     const cx=scene.w*.5, cy=scene.h*.50;
-    const tempo=.00042+tension*.00038+(1-fatigue)*.00008;
+    const tempo=.00040+agitation*.00042+activation*.00012-silence*.00008;
     const breath=.5+.5*Math.sin(t*tempo);
-    glow(cx+Math.sin(t*.00016)*10,cy+Math.cos(t*.00013)*8,Math.max(scene.w,scene.h)*(.28+dream*.06),'rgba(141,84,255,ALPHA)',.14+.10*dream+.055*breath);
-    glow(cx-scene.w*.22+Math.sin(t*.00010)*18,cy-scene.h*.18,scene.w*.24,'rgba(55,235,210,ALPHA)',.055+.12*curiosity);
-    glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00012)*12,scene.w*.25,'rgba(76,135,255,ALPHA)',.055+.095*stability);
-    glow(cx+scene.w*.29+Math.cos(t*.00009)*12,cy+scene.h*.19,scene.w*.20,'rgba(255,185,82,ALPHA)',.035+.09*attachment);
-    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00011)*11,scene.w*.20,'rgba(245,86,196,ALPHA)',.035+.15*tension);
-    glow(cx,cy,Math.min(scene.w,scene.h)*(.15+.08*stability),'rgba(205,185,255,ALPHA)',.05+.08*(1-fatigue));
+    glow(cx+Math.sin(t*.00016)*10,cy+Math.cos(t*.00013)*8,Math.max(scene.w,scene.h)*(.28+dream*.06),'rgba(255,157,72,ALPHA)',.14+.10*dream+.055*breath);
+    glow(cx-scene.w*.22+Math.sin(t*.00010)*18,cy-scene.h*.18,scene.w*.24,'rgba(151,92,255,ALPHA)',.055+.12*curiosity);
+    glow(cx+scene.w*.25,cy-scene.h*.16+Math.cos(t*.00012)*12,scene.w*.25,'rgba(232,78,164,ALPHA)',.045+.095*stability);
+    glow(cx+scene.w*.29+Math.cos(t*.00009)*12,cy+scene.h*.19,scene.w*.20,'rgba(255,190,102,ALPHA)',.045+.09*attachment);
+    glow(cx-scene.w*.25,cy+scene.h*.21+Math.sin(t*.00011)*11,scene.w*.20,'rgba(187,92,255,ALPHA)',.035+.15*agitation);
+    glow(cx,cy,Math.min(scene.w,scene.h)*(.15+.08*stability),'rgba(255,224,190,ALPHA)',.05+.08*recovery);
     nctx.globalCompositeOperation='source-over';
   }
 
   function drawParticles(t){
     pctx.clearRect(0,0,scene.w,scene.h);
     pctx.globalCompositeOperation='screen';
-    const colors=['207,219,255','157,119,255','102,227,239','255,201,106','96,230,173'];
+    const colors=['255,231,207','155,108,255','236,95,169','255,191,104','93,224,170'];
     scene.dust.forEach(function(d){
-      const o=scene.organism||{};const motion=.55+Number(o.curiosite||0)*.75-Number(o.fatigue_cognitive||0)*.25;
+      const o=scene.organism||{};const dynamics=o.dynamics||{};const motion=.45+Number(o.curiosite||0)*.55+Number(dynamics.activation||0)*.55-Number(o.besoin_de_silence||0)*.35;
       if(!reduceMotion){d.x+=d.vx*motion;d.y+=d.vy*motion;}
       if(d.x<-.02)d.x=1.02;if(d.x>1.02)d.x=-.02;if(d.y<-.02)d.y=1.02;if(d.y>1.02)d.y=-.02;
       const pulse=.46+.54*Math.sin(t*.00125+d.phase)*.5+.27;
@@ -300,7 +325,7 @@ function initLivingAuraScene(){
 
     const cx=scene.w*.5,cy=scene.h*.50;
     scene.sparks.forEach(function(s){
-      const o=scene.organism||{};const orbit=.65+Number(o.curiosite||0)*.85+Number(o.tension||0)*.35;
+      const o=scene.organism||{};const dynamics=o.dynamics||{};const orbit=.60+Number(o.curiosite||0)*.70+Number(dynamics.activation||0)*.45+Number(dynamics.agitation||0)*.30;
       if(!reduceMotion)s.angle+=s.speed*16.6*orbit;
       const wobble=1+Math.sin(t*.0008+s.phase)*.07;
       const rr=Math.min(scene.w,scene.h)*s.radius*wobble;
@@ -308,9 +333,9 @@ function initLivingAuraScene(){
       const y=cy+Math.sin(s.angle)*rr*.66;
       const a=.20+.56*(.5+.5*Math.sin(t*.002+s.phase));
       const g=pctx.createRadialGradient(x,y,0,x,y,10+s.size*4);
-      g.addColorStop(0,'rgba(226,217,255,'+a+')');
-      g.addColorStop(.22,'rgba(148,102,255,'+(a*.68)+')');
-      g.addColorStop(1,'rgba(148,102,255,0)');
+      g.addColorStop(0,'rgba(255,239,222,'+a+')');
+      g.addColorStop(.22,'rgba(255,166,89,'+(a*.68)+')');
+      g.addColorStop(1,'rgba(255,166,89,0)');
       pctx.fillStyle=g;pctx.fillRect(x-18,y-18,36,36);
     });
     pctx.globalCompositeOperation='source-over';
@@ -320,11 +345,12 @@ function initLivingAuraScene(){
     const core=$('core');
     if(core){
       const o=scene.organism||{};
-      const tension=Number(o.tension||0), stability=Number(o.stabilite||0), fatigue=Number(o.fatigue_cognitive||0);
-      const amp=.014+tension*.026+(1-stability)*.010;
-      const speed=.0009+tension*.0012+(1-fatigue)*.00025;
+      const dynamics=o.dynamics||{};
+      const agitation=Number(dynamics.agitation||0), activation=Number(dynamics.activation||0), stability=Number(o.stabilite||0), silence=Number(o.besoin_de_silence||0);
+      const amp=.012+agitation*.024+activation*.012+(1-stability)*.010;
+      const speed=.00072+activation*.00070+agitation*.00085-silence*.00020;
       const pulse=reduceMotion?1:(1+Math.sin(t*speed)*amp+Math.sin(t*.00041)*.012);
-      const rot=reduceMotion?0:Math.sin(t*(.00008+tension*.00007))*(.35+tension*1.35);
+      const rot=reduceMotion?0:Math.sin(t*(.00007+agitation*.00008))*(.28+agitation*1.15);
       core.setAttribute('transform','translate(450 325) rotate('+rot+') scale('+pulse+') translate(-450 -325)');
     }
     document.querySelectorAll('.aura-node').forEach(function(node,index){
@@ -369,6 +395,7 @@ function renderCommandCenter(command,work,attention){
     $('commandFleet').textContent='—';
     $('commandMode').textContent='—';
     $('commandCount').textContent='—';
+    if($('commandCompany'))$('commandCompany').textContent='—';
     renderNext(work,attention);
     return;
   }
@@ -381,6 +408,20 @@ function renderCommandCenter(command,work,attention){
   $('commandMode').textContent=command.github_write_authority?'Agit + observe':'Observe + planifie';
   $('commandMode').className=command.github_write_authority?'good':'warn';
   $('commandCount').textContent=active+' active'+(active>1?'s':'');
+  const readiness=command.company_readiness||{};
+  if($('commandCompany')){
+    const score=Number(readiness.overall||0);
+    $('commandCompany').textContent=score?score.toFixed(1)+'/10':'—';
+    $('commandCompany').className=score>=8?'good':(score>0?'warn':'');
+    $('commandCompany').title=Array.isArray(readiness.blockers)&&readiness.blockers.length
+      ? readiness.blockers.join(' · ')
+      : 'Objectif ≥ 8/10 atteint sur les preuves runtime disponibles.';
+    const scoreRing=$('commandCompany').closest('.score-ring');
+    if(scoreRing){
+      const ringPct=Math.max(0,Math.min(100,score*10));
+      scoreRing.style.background='conic-gradient(#5de0aa 0 '+ringPct+'%,rgba(255,255,255,.06) '+ringPct+'% 100%)';
+    }
+  }
   const top=command.top_initiative||null;
   if(top){
     $('nextAction').textContent=String(top.title||top.objective||'Initiative autonome');
@@ -391,6 +432,42 @@ function renderCommandCenter(command,work,attention){
     return;
   }
   renderNext(work,attention);
+}
+function renderPortfolio(command){
+  const list=$('portfolioList');
+  const meta=$('portfolioMeta');
+  if(!list||!meta)return;
+  const rows=Array.isArray(command&&command.portfolio)?command.portfolio:[];
+  if(!rows.length){
+    meta.textContent='Aucune télémétrie';
+    list.innerHTML='<div class="empty">Aucun produit observable pour le moment.</div>';
+    return;
+  }
+  const healthy=rows.filter(function(row){return ['online','healthy'].includes(String(row.state||''));}).length;
+  const troubled=rows.filter(function(row){return ['stale','offline','degraded','error','unhealthy'].includes(String(row.state||''));}).length;
+  meta.textContent=healthy+'/'+rows.length+' opérationnels'+(troubled?' · '+troubled+' à traiter':'');
+  list.innerHTML=rows.map(function(row){
+    const age=row.heartbeat_age_seconds==null?'jamais':(Number(row.heartbeat_age_seconds)<60?Number(row.heartbeat_age_seconds)+' s':Math.round(Number(row.heartbeat_age_seconds)/60)+' min');
+    const active=Number(row.active_workstreams||0);
+    const state=String(row.state||'unknown');
+    return '<div class="intent-row product-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.name||row.id||'Produit')+'</div><span class="badge '+escapeHtml(state)+'">'+escapeHtml(state)+'</span></div><div class="memory-date">heartbeat '+escapeHtml(age)+' · '+active+' workstream'+(active>1?'s':'')+(row.last_work_at?' · travail '+fmtTime(row.last_work_at):'')+'</div></div>';
+  }).join('');
+}
+function renderReceipts(command){
+  const list=$('receiptList');
+  const meta=$('receiptMeta');
+  if(!list||!meta)return;
+  const rows=Array.isArray(command&&command.recent_receipts)?command.recent_receipts:[];
+  meta.textContent=rows.length+' preuve'+(rows.length>1?'s':'')+' récente'+(rows.length>1?'s':'');
+  if(!rows.length){
+    list.innerHTML='<div class="empty">Aucun reçu opérationnel récent.</div>';
+    return;
+  }
+  list.innerHTML=rows.slice(0,12).map(function(row){
+    const title=String(row.title||row.event||'Activité AURA');
+    const detail=[row.domain,row.status,row.execution_mode].filter(Boolean).join(' · ');
+    return '<div class="activity-row"><div><div class="activity-title">'+escapeHtml(title)+'</div><div class="memory-date">'+escapeHtml(detail)+' · reçu #'+escapeHtml(row.receipt_id||'—')+'</div></div><div class="activity-time">'+fmtTime(row.created_at)+'</div></div>';
+  }).join('');
 }
 function renderCuriosity(status){
   const list=$('curiosityList');
@@ -413,6 +490,28 @@ function renderCuriosity(status){
     return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.content||'')+'</div><span class="badge">'+escapeHtml(target)+'</span></div><div class="memory-date">'+escapeHtml(domain)+'</div></div>';
   }).join('');
 }
+function renderScout(status){
+  const list=$('scoutList');
+  const meta=$('scoutMeta');
+  if(!list||!meta)return;
+  if(!status||!status.enabled){
+    meta.textContent='Arrêtée';
+    list.innerHTML='<div class="empty">Veille autonome indisponible.</div>';
+    return;
+  }
+  meta.textContent=status.running?'Scan en cours':'Sans prompt · '+Math.round(Number(status.interval_seconds||0)/60)+' min';
+  const rows=Array.isArray(status.recent_findings)?status.recent_findings:[];
+  if(!rows.length){
+    list.innerHTML='<div class="empty">AURA cherche seule de nouvelles capacités pertinentes.</div>';
+    return;
+  }
+  list.innerHTML=rows.slice(0,5).map(function(row){
+    const score=Math.round(Number(row.score||0)*100);
+    const license=String(row.license||'licence ?');
+    const badge=row.experiment_eligible?'test':'veille';
+    return '<div class="intent-row"><div class="intent-top"><div class="intent-title">'+escapeHtml(row.repository||'Projet externe')+'</div><span class="badge">'+score+'% · '+escapeHtml(badge)+'</span></div><div class="memory-date">'+escapeHtml(license)+' · '+escapeHtml(row.theme||'veille')+'</div></div>';
+  }).join('');
+}
 function renderNext(work,attention){
   const item=(work&&work[0])||null;
   const node=attention&&attention.nodes?attention.nodes.find(function(n){return n.dominant;}):null;
@@ -420,6 +519,37 @@ function renderNext(work,attention){
   if(node){$('nextAction').textContent='Poursuivre le focus sur '+node.label+'.';const p=pct(node.score);$('confidenceValue').textContent=p+'%';$('confidenceBar').style.width=p+'%';return;}
   $('nextAction').textContent='Observer le système avant de prioriser une nouvelle action.';$('confidenceValue').textContent='—';$('confidenceBar').style.width='0%';
 }
+function renderLanguageProgress(report){
+  const known=report && typeof report.score==='number' && Number.isFinite(report.score);
+  const score=known?Math.max(0,Math.min(100,Math.round(report.score))):null;
+  $('languageScore').textContent=known?score+'%':'—';
+  $('languageProgressBar').style.width=known?score+'%':'0%';
+  if(known)$('languageTrack').setAttribute('aria-valuenow',String(score));
+  else $('languageTrack').removeAttribute('aria-valuenow');
+  $('languageTrack').setAttribute('aria-valuetext',known?score+' pour cent aux tests':'Pas encore évalué');
+  const delta=typeof report?.delta==='number'?report.delta:null;
+  const suffix=delta===null?'Mesure initiale':delta>0?'↗ +'+delta+' points':delta<0?'↘ '+delta+' points · régression':'→ Stable';
+  $('languageTrend').textContent=known?suffix:'Premier test en attente';
+  if(report?.status==='model-unavailable'&&!known){
+    const missing=report?.blocking_reason==='openrouter-free-key-missing';
+    $('languageTrend').textContent=missing?'Modèle gratuit à connecter':'Moteur gratuit indisponible';
+    if(report?.setup_hint)$('languageTrend').title=String(report.setup_hint);
+  }else $('languageTrend').title='';
+  if(report?.status==='unavailable'&&!known)$('languageTrend').textContent='Service de mesure indisponible';
+  if(report?.evaluated_at){
+    const d=new Date(report.evaluated_at);
+    $('languageTestDate').textContent=Number.isNaN(d.getTime())?'Évaluation datée indisponible':'Évalué le '+d.toLocaleDateString('fr-FR');
+  }else $('languageTestDate').textContent='Tests comparables · 9 tâches';
+  const explain='Score mesuré sur '+(report?.benchmark_cases||9)+' tâches fixes de compréhension, mémoire, correction et raisonnement. Ne mesure ni conscience ni entraînement des poids.';
+  $('languageTrack').title=explain;
+  const help=$('languageSetupHelp');
+  if(help){
+    const issue=String(report?.setup_hint||'');
+    help.hidden=!issue;
+    help.textContent=issue;
+  }
+}
+
 async function refresh(){
   try{
     const boot=await api('/api/bootstrap/status');
@@ -432,50 +562,77 @@ async function refresh(){
         ? 'Le serveur est en ligne mais le noyau redémarre automatiquement : '+startup
         : 'L’interface est en ligne, mais le noyau attend encore MySQL. Reconnexion automatique en cours.';
     }
-    const auth=await api('/api/auth/session');
-    const privateView=Boolean(auth&&auth.authenticated);
-    const coreState=await Promise.all([
-      api('/api/kernel/status'),
-      api(privateView?'/api/kernel/soul':'/api/kernel/public')
-    ]);
-    const ks=coreState[0];
-    const soul=coreState[1];
+
+    const publicState=await api('/api/dashboard/public');
+    const ks=publicState.kernel_status||{};
+    const soul=publicState.soul||{};
+    try{renderLanguageProgress(await api('/api/language/progress'));}catch(_){renderLanguageProgress({status:'unavailable'});}
+
     try{
       const capabilities=await api('/api/capabilities');
+      const language=(capabilities&&capabilities.language)||{};
+      const languageReady=Boolean(language.ready);
+      const nativeDialogueReady=Boolean(language.native_dialogue_ready||(capabilities&&capabilities.cognition&&capabilities.cognition.ready));
+      $('languageDot').className='live-dot '+(languageReady||nativeDialogueReady?'good':'bad');
+      if(languageReady){
+        const provider=String(language.provider||language.last_backend||'modèle libre');
+        $('languageText').textContent='Français · modèle libre';
+        $('languageText').title='Faculté linguistique française active · '+provider+' · réponses non scriptées';
+      }else if(nativeDialogueReady){
+        $('languageDot').className='live-dot warn';
+        const strict=String(language.mode||'')==='natural-language-unavailable';
+        $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
+        $('languageText').title=strict
+          ? String(language.setup_hint || 'Aucun modèle libre disponible : vérifier /api/ai/runtime.') + ' AURA refuse de simuler une conversation pré-écrite tant que le modèle manque.'
+          : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
+      }else{
+        $('languageText').textContent='Français · indisponible';
+        $('languageText').title=String(language.last_error||'Faculté linguistique et noyau conversationnel indisponibles.');
+      }
+
       const voice=(capabilities&&capabilities.voice)||{};
       const voiceReady=Boolean(voice.ready);
-      $('voiceDot').className='live-dot '+(voiceReady?'good':'');
+      $('voiceDot').className='live-dot '+(voiceReady?'good':'warn');
       if(voice.fabric_ready){
-        $('voiceText').textContent='Mairaiy · ff_siwis';
-        $('voiceText').title='Voix Mairaiy verrouillée · Kokoro ff_siwis · fr-fr';
+        $('voiceText').textContent='Mairaiy · Aoede';
+        $('voiceText').title='Voix Mairaiy historique · Gemini TTS · Aoede · fr-fr';
       }else if(voice.runtime_ready){
         $('voiceText').textContent='Mairaiy · Studio';
-        $('voiceText').title='Voix Mairaiy locale via Quantic Studio · ff_siwis';
+        $('voiceText').title='Voix Mairaiy via Quantic Studio · Gemini Aoede';
       }else{
-        $('voiceText').textContent='Mairaiy · attente';
-        $('voiceText').title='Voix ff_siwis indisponible · aucun TTS générique autorisé';
+        $('voiceText').textContent='Mairaiy · à configurer';
+        const cloudReason=String(voice.cloud_reason||'');
+        const reasonLabel=cloudReason==='free-tier-unconfirmed'
+          ? 'Aoede bloquée par le garde-fou zéro-coût : niveau gratuit Gemini non confirmé.'
+          : cloudReason==='missing-api-key'
+            ? 'Clé Gemini TTS absente sur AURA Cloud.'
+            : String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
+        $('voiceText').title=reasonLabel;
       }
     }catch(_){
       $('voiceDot').className='live-dot';
-      $('voiceText').textContent='Mairaiy · attente';
+      $('voiceText').textContent='Mairaiy · diagnostic';
     }
-    try{
-      const evolution=await api('/api/evolution/status');
-      const phase=String(evolution.phase||'');
-      const local=Boolean(evolution.local_worker_online);
-      const active=Boolean(evolution.enabled);
-      $('evolutionDot').className='live-dot '+(active?'good':'');
-      $('evolutionText').textContent=local?'Évolution · Phase 2':'Évolution · Cloud';
-      $('evolutionText').title=phase;
-    }catch(_){
-      $('evolutionDot').className='live-dot';
-      $('evolutionText').textContent='Évolution · attente';
-    }
-    let commandStatus=null;
-    let curiosityStatus=null;
-    try{commandStatus=await api('/api/command/status');}catch(_){commandStatus=null;}
-    try{curiosityStatus=await api('/api/curiosity/status');}catch(_){curiosityStatus=null;}
-    metric('energy',soul.energy,boot.runtime_ready);metric('curiosity',soul.curiosity,boot.runtime_ready);metric('pressure',soul.pressure,boot.runtime_ready);metric('continuity',soul.continuity,boot.runtime_ready);metric('introspection',soul.introspection,boot.runtime_ready);metric('reactivity',soul.reactivity,boot.runtime_ready);
+
+    const evolution=publicState.evolution||{};
+    const phase=String(evolution.phase||'');
+    const local=Boolean(evolution.local_worker_online);
+    const active=Boolean(evolution.enabled);
+    $('evolutionDot').className='live-dot '+(active?'good':'');
+    $('evolutionText').textContent=local?'Évolution · Phase 2':'Évolution · Cloud';
+    $('evolutionText').title=phase;
+
+    const commandStatus=publicState.command||null;
+    const curiosityStatus=publicState.curiosity||null;
+    const scoutStatus=publicState.scout||null;
+
+    metric('energy',soul.energy,boot.runtime_ready);
+    metric('curiosity',soul.curiosity,boot.runtime_ready);
+    metric('pressure',soul.pressure,boot.runtime_ready);
+    metric('continuity',soul.continuity,boot.runtime_ready);
+    metric('introspection',soul.introspection,boot.runtime_ready);
+    metric('reactivity',soul.reactivity,boot.runtime_ready);
+
     const organism=(ks&&ks.organism)||(soul&&soul.organism)||{};
     renderEmotion(organism);
     if(livingScene)livingScene.organism=organism;
@@ -485,45 +642,97 @@ async function refresh(){
     $('organismDot').style.background=moodColors[mood]||'#9f78ff';
     $('organismDot').style.boxShadow='0 0 13px '+(moodColors[mood]||'#9f78ff');
     setLive(true,boot.runtime_ready?'En ligne · '+mood:'En ligne · configuration');
-    $('chatState').textContent=boot.runtime_ready?'Noyau actif · '+mood:'Diagnostic';
-    $('dominantThought').textContent=(soul.dominant_thought||'Aucune pensée dominante.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    $('chatState').textContent=boot.runtime_ready?'Noyau actif · autonomie visible':'Diagnostic';
+
+    const attention=publicState.attention||null;
+    $('dominantThought').textContent=(attention&&attention.focus_statement?attention.focus_statement:'Observation autonome du système.')+'\n\nÉtat : '+(organism.mood||'calme')+' · intention organique : '+(organism.active_intention||'observer');
+    const continuity=ks.continuity||{};
+    const continuityState=continuity.state||{};
+    const lastAutonomous=continuityState.last_autonomous_reflection_at?fmtDate(continuityState.last_autonomous_reflection_at)+' '+fmtTime(continuityState.last_autonomous_reflection_at):'pas encore';
+    $('continuityState').textContent='Continuité autonome : '+(continuity.enabled?'active':'inactive')
+      +' · dernière réflexion : '+lastAutonomous
+      +' · '+(continuityState.unfinished_work?'travail inachevé suivi':'auto-réévaluation')
+      +(continuityState.last_reason?' · raison : '+continuityState.last_reason:'');
     lastSoul=Object.assign({},soul);
-    if(boot.runtime_ready&&privateView){
-      const results=await Promise.all([
-        api('/api/kernel/intentions?limit=5'),
-        api('/api/kernel/lessons?limit=5'),
-        api('/api/kernel/activity?limit=8'),
-        api('/api/kernel/work?limit=5'),
-        api('/api/kernel/attention')
-      ]);
-      renderIntentions(results[0]);renderLessons(results[1]);renderActivity(results[2]);renderWork(results[3]);renderMap(results[4]);renderCommandCenter(commandStatus,results[3],results[4]);renderCuriosity(curiosityStatus);
-    }else if(boot.runtime_ready){
-      $('intentList').innerHTML='<div class="empty">Détails privés · authentification AURA requise.</div>';
-      $('memoryList').innerHTML='<div class="empty">Mémoire privée · authentification AURA requise.</div>';
-      $('activityList').innerHTML='<div class="empty">Journal privé · authentification AURA requise.</div>';
-      $('workList').innerHTML='<div class="empty">Travail détaillé privé.</div>';
-      renderCommandCenter(commandStatus,[],null);
+
+    if(boot.runtime_ready){
+      const intentions=publicState.intentions||[];
+      const lessons=publicState.lessons||[];
+      const activity=publicState.activity||[];
+      const work=publicState.work||[];
+      renderIntentions(intentions);
+      renderLessons(lessons);
+      renderActivity(activity);
+      renderWork(work);
+      renderMap(attention);
+      renderCommandCenter(commandStatus,work,attention);
+      renderPortfolio(commandStatus);
+      renderReceipts(commandStatus);
       renderCuriosity(curiosityStatus);
+      renderScout(scoutStatus);
     }else{
       $('intentList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('memoryList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('activityList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       $('workList').innerHTML='<div class="empty">Noyau en démarrage.</div>';
       renderCommandCenter(commandStatus,[],null);
+      renderPortfolio(commandStatus);
+      renderReceipts(commandStatus);
       renderCuriosity(curiosityStatus);
+      renderScout(scoutStatus);
     }
   }catch(error){
     setLive(false,'Indisponible');
     $('chatState').textContent=error.message;
   }
 }
-function playVoiceSegment(payload){
-  return new Promise(function(resolve,reject){
-    if(!payload||!payload.audio_base64){reject(new Error('Segment audio absent'));return;}
+function primeVoice(){
+  if(voicePrimed)return;
+  voicePrimed=true;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){
+      voiceAudioContext=voiceAudioContext||new AC();
+      const resumed=voiceAudioContext.resume();
+      if(resumed&&resumed.catch)resumed.catch(function(){});
+    }
+  }catch(_){voiceAudioContext=null;}
+  try{
+    if(!voicePlayer)voicePlayer=new Audio();
+    voicePlayer.preload='auto';
+    voicePlayer.muted=false;
+  }catch(_){
+    voicePlayer=null;
+  }
+}
+async function playVoiceSegment(payload){
+  if(!payload||!payload.audio_base64)throw new Error('Segment audio absent');
+  const raw=atob(payload.audio_base64);
+  const bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+
+  if(voiceAudioContext){
     try{
-      const raw=atob(payload.audio_base64);
-      const bytes=new Uint8Array(raw.length);
-      for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+      if(voiceAudioContext.state==='suspended')await voiceAudioContext.resume();
+      const copy=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
+      const decoded=await voiceAudioContext.decodeAudioData(copy);
+      await new Promise(function(resolve,reject){
+        try{
+          const source=voiceAudioContext.createBufferSource();
+          source.buffer=decoded;
+          source.connect(voiceAudioContext.destination);
+          source.onended=resolve;
+          source.start(0);
+        }catch(error){reject(error);}
+      });
+      return;
+    }catch(error){
+      console.warn('Web Audio Mairaiy indisponible; essai lecteur HTML5.',error);
+    }
+  }
+
+  await new Promise(function(resolve,reject){
+    try{
       const blob=new Blob([bytes],{type:payload.mime_type||'audio/wav'});
       const url=URL.createObjectURL(blob);
       const audio=voicePlayer||new Audio();
@@ -538,7 +747,12 @@ function playVoiceSegment(payload){
       audio.onended=function(){finish(true);};
       audio.onerror=function(){finish(false,new Error('Lecture du segment Mairaiy impossible'));};
       const play=audio.play();
-      if(play&&play.catch)play.catch(function(error){finish(false,error);});
+      if(play&&play.catch)play.catch(function(error){
+        const blocked=error&&error.name==='NotAllowedError'
+          ? new Error('Le navigateur bloque le son. Clique dans la page puis renvoie un message.')
+          : error;
+        finish(false,blocked);
+      });
     }catch(error){reject(error);}
   });
 }
@@ -562,13 +776,18 @@ async function speakAura(text,ticket){
   }catch(error){
     document.body.classList.remove('aura-speaking');
     $('voiceText').textContent='Mairaiy · indisponible';
-    $('voiceText').title='Voix ff_siwis indisponible · aucun TTS générique utilisé';
-    $('chatState').textContent='Réponse texte prête · voix Mairaiy ff_siwis indisponible';
-    console.error('Mairaiy ff_siwis indisponible; repli TTS générique interdit',error);
+    $('voiceText').title='Voix Aoede indisponible · aucun autre timbre utilisé';
+    const reason=String(error&&error.message||'');
+    $('chatState').textContent=reason.includes('free-tier-unconfirmed')
+      ? 'Réponse texte prête · Aoede bloquée par le garde-fou zéro-coût'
+      : (reason.includes('bloque le son')
+        ? reason
+        : 'Réponse texte prête · voix Mairaiy Aoede indisponible');
+    console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
 async function sendMessage(text){
-  primeVoice();
+  try{primeVoice();}catch(_){}
   text=(text||'').trim();if(!text)return;
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';

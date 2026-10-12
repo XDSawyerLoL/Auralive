@@ -7,7 +7,7 @@ const organismSource = fs.readFileSync(new URL('../src/organism.js', import.meta
 const curiositySource = fs.readFileSync(new URL('../src/curiosity.js', import.meta.url), 'utf8');
 const commandSource = fs.readFileSync(new URL('../src/command_center.js', import.meta.url), 'utf8');
 const expressionSource = fs.readFileSync(new URL('../src/expression.js', import.meta.url), 'utf8');
-const cognitionSource = fs.readFileSync(new URL('../src/cognition.js', import.meta.url), 'utf8');
+const frenchLanguageSource = fs.readFileSync(new URL('../src/french_language.js', import.meta.url), 'utf8');
 
 test('Director mode replaces passive observer defaults with operational leadership', () => {
   assert.match(kernelSource, /directrice_operationnelle_quantic_sillage/);
@@ -23,15 +23,15 @@ test('active intentions are semantically deduplicated instead of accumulating co
   assert.match(kernelSource, /deduplicated: true/);
 });
 
-test('AURA carries relational continuity into language instead of isolated-turn replies', () => {
+test('AURA carries relational continuity into the French language faculty instead of isolated-turn scripts', () => {
   assert.match(kernelSource, /CONTINUITÉ DE CONVERSATION/);
   assert.match(kernelSource, /recentMessages/);
   assert.match(organismSource, /relationship/);
   assert.match(organismSource, /last_open_thread/);
-  assert.match(cognitionSource, /conversationContext/);
-  assert.match(cognitionSource, /previousUserMessage/);
-  assert.match(cognitionSource, /last_open_thread/);
-  assert.match(expressionSource, /final-language authority is native to AURA/i);
+  assert.match(expressionSource, /FrenchLanguageFaculty/);
+  assert.match(frenchLanguageSource, /conversation/);
+  assert.match(frenchLanguageSource, /implicites, pronoms et relances/i);
+  assert.match(frenchLanguageSource, /Évite les formulations répétitives et les phrases préfabriquées/i);
 });
 
 test('AURA Director combines proactive curiosity, open-web research and low-risk promotion', () => {

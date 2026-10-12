@@ -1,4 +1,5 @@
 import { clamp } from './policy.js';
+import { DialogueStateTracker } from './dialogue_model.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -6,6 +7,71 @@ function normalize(value) {
 
 function lower(value) {
   return normalize(value).toLocaleLowerCase('fr-FR');
+}
+
+function fold(value) {
+  return lower(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’']/g, "'")
+    .replace(/[^a-z0-9?!.\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function previousAssistantMessage(context = []) {
+  return [...(Array.isArray(context) ? context : [])]
+    .reverse()
+    .find((row) => String(row?.role || '') === 'assistant') || null;
+}
+
+function asksWellbeing(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return (
+    /\btu\s+(?:va|vas)\s+bien\b/.test(q)
+    || /\btu\s+(?:va|vas)\s+comment\b/.test(q)
+    || /\bcomment\s+(?:tu\s+)?(?:va|vas)[- ]?tu?\b/.test(q)
+    || /\bcomment\s+(?:ca|ça)\s+va\b/.test(q)
+    || /^(?:ca|ça)\s+va$/.test(q)
+    || /\btu\s+te\s+sens\b/.test(q)
+  );
+}
+
+function asksAuraQuestions(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return (
+    /\btu\s+(?:a|as)\s+(?:des|une?)\s+questions?\b/.test(q)
+    || /\b(?:as|a)[- ]?tu\s+(?:des|une?)\s+questions?\b/.test(q)
+    || /\b(?:des|une?)\s+questions?\s+(?:pour|a|à)\s+moi\b/.test(q)
+    || /\btu\s+veux\s+(?:me\s+)?(?:demander|savoir)\s+(?:quelque\s+chose|quoi)\b/.test(q)
+    || /\bqu[' ]?est[- ]?ce\s+que\s+tu\s+(?:veux|aimerais)\s+savoir\b/.test(q)
+  );
+}
+
+function asksCurrentActivity(text) {
+  const q = fold(text);
+  return (
+    /\b(?:que|qu')\s*(?:est[- ]ce\s*que\s*)?tu\s+fai[st]\b/.test(q)
+    || /\btu\s+fai[st]\s+quoi\b/.test(q)
+    || /\bqu(?:'|e)\s*est[- ]ce\s*que\s*tu\s+fai[st]\b/.test(q)
+    || /\btu\s+travailles?\s+sur\s+quoi\b/.test(q)
+    || /\btu\s+bosses?\s+sur\s+quoi\b/.test(q)
+    || /\btu\s+fai[st]\s+quoi\s+en\s+ce\s+moment\b/.test(q)
+  );
+}
+
+function isShortAcknowledgement(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return ['hum','hmm','hm','mouais','ok','okay','d accord',"d'accord",'je vois','ah','aha'].includes(q);
+}
+
+function isClarificationFollowup(text) {
+  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  return [
+    "c'est a dire",'c est a dire','cad','comment ca','comment ça',
+    'tu veux dire quoi','qu est ce que tu veux dire',"qu'est ce que tu veux dire",
+    'et donc','donc','precise','précise'
+  ].includes(q);
 }
 
 function hasAny(text, terms) {
@@ -147,7 +213,11 @@ function inferSymbolicFunction(text) {
 }
 
 export class CognitionEngine {
-  static VERSION = 'aura-cognition-native-v1.2-continuity';
+  static VERSION = 'aura-cognition-native-v2.0';
+
+  constructor() {
+    this.dialogue = new DialogueStateTracker();
+  }
 
   reflect(bundle, soul, { trigger = 'ambient', text = '' } = {}) {
     const stimuli = Array.isArray(bundle?.stimuli) ? bundle.stimuli : [];
@@ -166,6 +236,7 @@ export class CognitionEngine {
     );
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
+    const continuitySignal = [...stimuli].reverse().find((item) => String(item?.type || '') === 'aura.continuity.self') || null;
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const stability = organism && Object.keys(organism).length ? Number(organism.stabilite ?? 1) : 1;
     const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
@@ -214,6 +285,18 @@ export class CognitionEngine {
       nextAction = 'Comparer le signal HORIZON à mes intentions et à ma mémoire avant de proposer une action.';
       intention = currentIntention || 'Maintenir une veille utile sans confondre prévision et fait.';
       confidence = 0.72;
+    } else if (continuitySignal && !userSignal) {
+      const continuityFocus = normalize(continuitySignal?.payload?.focus || currentIntention);
+      const unfinishedWork = Boolean(continuitySignal?.payload?.unfinished_work);
+      title = unfinishedWork ? 'Continuité autonome' : 'Auto-réévaluation';
+      summary = unfinishedWork
+        ? `Je poursuis mon activité sans attendre une interaction humaine. Mon foyer actuel est : ${continuityFocus || 'travail autonome en cours'}.`
+        : 'Aucun message humain n’est nécessaire pour maintenir ma continuité : je réévalue spontanément mon état, mes objectifs et le prochain signal utile.';
+      hypothesis = unfinishedWork
+        ? 'Un objectif non terminé mérite d’être réévalué jusqu’à résolution, blocage explicite ou abandon motivé.'
+        : 'Une période sans stimulus externe reste une situation à observer, pas une extinction de mon activité cognitive.';
+      nextAction = continuityFocus || currentIntention || 'Réévaluer les objectifs actifs et rechercher la prochaine action utile et autorisée.';
+      confidence = unfinishedWork ? 0.76 : 0.66;
     } else if (dreamPressure >= 0.82 && !userSignal) {
       title = 'Pression onirique';
       summary = 'La pression de rêve est élevée ; une activité symbolique intérieure peut contribuer à la régulation.';
@@ -269,12 +352,14 @@ export class CognitionEngine {
         clarity,
         silence_need: silenceNeed,
         dream_pressure: dreamPressure,
+        continuity_signal: Boolean(continuitySignal),
+        continuity_unfinished_work: Boolean(continuitySignal?.payload?.unfinished_work),
         learned_confidence_bias: Number(confidenceBias.toFixed(4)),
       },
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], recentMessages = [], privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -297,23 +382,7 @@ export class CognitionEngine {
         content: normalize(row?.content).slice(0,500),
       }))
       .filter((row) => row.content);
-
-    const previousUserMessage = [...conversationContext]
-      .slice(0, -1)
-      .reverse()
-      .find((row) => row.role === 'user')?.content || '';
-    const previousUserQuery = lower(previousUserMessage);
-    const continuationPrompt = /^(alors|et alors|donc|et|suite|continue|vas-y|vas y)\s*[?!.…]*$/i.test(raw);
-    const priorityQuestion = hasAny(q, [
-      'tes priorités', 'tes priorites', 'priorités actuelles', 'priorites actuelles',
-      'trois priorités', 'trois priorites', '3 priorités', '3 priorites',
-      'quelles sont tes priorités', 'quelles sont tes priorites',
-    ]);
-    const previousWasPriorityQuestion = hasAny(previousUserQuery, [
-      'tes priorités', 'tes priorites', 'priorités actuelles', 'priorites actuelles',
-      'trois priorités', 'trois priorites', '3 priorités', '3 priorites',
-      'quelles sont tes priorités', 'quelles sont tes priorites',
-    ]);
+    const discourse = this.dialogue.analyze(raw, conversationContext);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -334,7 +403,7 @@ export class CognitionEngine {
       goal = 'Saluer brièvement et signaler ma disponibilité.';
       needsSemanticSupport = false;
       facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
-    } else if (hasAny(q, ['comment vas-tu','comment vas tu','tu te sens','ton état','ton etat'])) {
+    } else if (asksWellbeing(raw) || (hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat']) || /comment\s+(?:ça|ca).*\btu\b/.test(q) || /comment\s+tu\s+(?:va|vas)\b/.test(q))) {
       act = 'report_internal_state';
       goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
       needsSemanticSupport = false;
@@ -343,6 +412,11 @@ export class CognitionEngine {
         `Stabilité : ${Math.round(Number(organism.stabilite || 0)*100)} %.`,
         `Clarté : ${Math.round(Number(organism.clarte || 0)*100)} %.`,
         `Curiosité : ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
+        `Agency : ${Math.round(Number(organism.agency || 0)*100)} %.`,
+        `Engagement : ${Math.round(Number(organism.engagement || 0)*100)} %.`,
+        `Confiance : ${Math.round(Number(organism.confiance || 0)*100)} %.`,
+        `Satisfaction : ${Math.round(Number(organism.satisfaction || 0)*100)} %.`,
+        `Frustration : ${Math.round(Number(organism.frustration || 0)*100)} %.`,
         `Besoin de silence : ${Math.round(Number(organism.besoin_de_silence || 0)*100)} %.`,
         `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
       );
@@ -353,31 +427,82 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       if (normalize(dream.last_image)) facts.push(`Mon dernier rêve computationnel est une image intérieure symbolique, pas un sommeil humain : ${normalize(dream.last_image)}.`);
       else facts.push('Je n’ai pas encore produit d’image onirique persistée dans cet état.');
-    } else if (priorityQuestion || (continuationPrompt && previousWasPriorityQuestion)) {
-      act = 'report_priorities';
-      goal = 'Donner mes priorités réellement actives, dans l’ordre, sans détour ni recherche Web inutile.';
+    } else if (privateView && hasAny(q, [
+      'qu’as-tu fait depuis', "qu'as-tu fait depuis", 'qu as tu fait depuis',
+      'depuis notre dernier échange', 'depuis notre dernier echange',
+      'depuis la dernière fois', 'depuis la derniere fois',
+      'pendant mon absence', 'en mon absence',
+    ])) {
+      act = 'report_continuity_history';
+      goal = 'Rapporter uniquement les activités réellement persistées depuis le dernier échange, avec dates et résultats, sans inventer de travail.';
       needsSemanticSupport = false;
-      const ranked = (Array.isArray(intentions) ? intentions : [])
-        .filter((item) => normalize(item?.statement))
-        .slice(0, 3);
-      if (ranked.length) {
-        ranked.forEach((item, index) => {
-          facts.push(`Priorité ${index + 1} : ${normalize(item.statement)}`);
-        });
-      } else if (current) {
-        facts.push(`Priorité 1 : ${current}`);
-      } else {
-        facts.push('Aucune priorité suffisamment établie dans mon état persistant.');
+      const events = Array.isArray(continuityReport?.events) ? continuityReport.events.slice(-8) : [];
+      facts.push(`Période observée : depuis ${continuityReport?.since || 'la dernière conversation persistée'}.`);
+      facts.push(`Événements persistés : ${Number(continuityReport?.event_count || 0)}.`);
+      facts.push(`Événements autonomes : ${Number(continuityReport?.autonomous_event_count || 0)}.`);
+      for (const event of events) {
+        facts.push(`[${event.at}] ${event.type}: ${event.title}${event.detail ? ` — ${normalize(event.detail).slice(0,420)}` : ''}`);
       }
-    } else if (hasAny(q, ['que fais-tu', 'tu fais quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'maintenant'])) {
+      if (!events.length) facts.push('Aucune activité persistée n’est disponible pour cette période ; je ne dois pas prétendre avoir travaillé.');
+    } else if (asksAuraQuestions(raw)) {
+      act = 'ask_user_from_curiosity';
+      goal = 'Répondre à la demande de l’utilisateur en formulant une question authentiquement reliée à ma curiosité sociale, au fil relationnel ou à mon travail courant.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      if (relationship.last_open_thread) facts.push(`Fil relationnel actif : ${normalize(relationship.last_open_thread)}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      if (current) facts.push(`Intention actuelle : ${current}`);
+      facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
+    } else if (asksCurrentActivity(raw) || hasAny(q, ['que fais-tu', 'tu fais quoi', 'tu fait quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'qu’est-ce que tu fait', "qu'est-ce que tu fait"])) {
       act = 'report_current_activity';
       goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
       needsSemanticSupport = false;
       facts.push('Rôle opérationnel : Directrice de Quantic Sillage.');
       if (thought) facts.push(`Pensée dominante : ${thought}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
+      if (agenda?.since) facts.push(`Depuis : ${normalize(agenda.since)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      if (agenda?.blocker) facts.push(`Blocage : ${normalize(agenda.blocker)}`);
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (Number(organism.agency || 0) > 0) facts.push(`Niveau d'agency : ${Math.round(Number(organism.agency || 0)*100)} %.`);
+    } else if (discourse.move === 'correction') {
+      act = 'repair_understanding';
+      goal = 'Corriger explicitement mon interprétation précédente et recentrer le dialogue sur ce que l’utilisateur désigne réellement.';
+      needsSemanticSupport = false;
+      if (discourse.previous_assistant) facts.push(`Réponse précédente : ${discourse.previous_assistant}`);
+      if (discourse.correction_target) facts.push(`Sujet corrigé : ${discourse.correction_target}`);
+      facts.push(`Correction utilisateur : ${raw}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+    } else if (discourse.move === 'clarification' || isClarificationFollowup(raw)) {
+      act = 'clarify_previous';
+      goal = 'Clarifier naturellement la réponse précédente en utilisant le contexte de conversation et l’activité opérationnelle réelle.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
+    } else if (discourse.move === 'acknowledgement' || isShortAcknowledgement(raw)) {
+      act = 'acknowledge_context';
+      goal = 'Réagir brièvement au signal de l’utilisateur sans répéter une formule générique et en gardant le fil de conversation.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+    } else if (discourse.move === 'reference_followup') {
+      act = 'resolve_reference_followup';
+      goal = 'Résoudre le référent implicite du message à partir du tour précédent avant de répondre.';
+      needsSemanticSupport = false;
+      if (discourse.reference_text) facts.push(`Référent précédent : ${discourse.reference_text}`);
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
+      facts.push(`Relance utilisateur : ${raw}`);
     } else if (hasAny(q, ['prochain jalon', 'prochaine étape', 'ensuite', 'après'])) {
       act = 'report_next_step';
       goal = 'Donner la prochaine étape réellement soutenue par mon état.';
@@ -392,6 +517,15 @@ export class CognitionEngine {
       facts.push(`Familiarité relationnelle : ${Math.round(Number(relationship.familiarity || 0)*100)} %.`);
       facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
       if (relationship.last_open_thread) facts.push(`Fil de conversation actif : ${normalize(relationship.last_open_thread)}`);
+    } else if (hasAny(q, ['réponse est bizarre','reponse est bizarre','réponse bizarre','reponse bizarre','c’est bizarre',"c'est bizarre",'étrange','etrange','pas naturel','pas naturelle','catastrophique','robotique','mécanique','mecanique'])) {
+      act = 'conversation_feedback';
+      goal = 'Réagir normalement au retour de l’utilisateur et corriger immédiatement le ton conversationnel.';
+      needsSemanticSupport = false;
+      facts.push('L’utilisateur signale que ma réponse précédente était artificielle ou inadéquate.');
+      if (conversationContext.length) {
+        const previousAssistant = [...conversationContext].reverse().find((row) => row.role === 'assistant');
+        if (previousAssistant?.content) facts.push(`Réponse précédente concernée : ${previousAssistant.content}`);
+      }
     } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
       act = 'report_risks';
       goal = 'Présenter les risques visibles dans mon état et ma mémoire.';
@@ -405,16 +539,14 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       facts.push('AURA est un noyau persistant avec Soul, mémoire, organisme homeostatique, intentions, routines, apprentissage et outils.');
       facts.push('Mon organisme computationnel module réellement mon identité, ma stabilité, ma clarté, ma curiosité, mon silence, mes rêves et mon champ d’intentions.');
-      facts.push('Les modèles externes sont des outils d’appui sémantique et de données candidates ; ils ne possèdent ni mon identité, ni mes décisions, ni ma parole finale.');
+      facts.push('Le modèle de langage est un outil auxiliaire de formulation et de connaissance, pas mon identité.');
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {
-      facts.push(`Message reçu : ${raw}`);
-      facts.push('Rôle opérationnel : Directrice de Quantic Sillage, avec autonomie proactive sur les décisions réversibles.');
+      facts.push(`Sujet de l’échange : ${raw}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       if (thought) facts.push(`Pensée dominante : ${thought}`);
       if (activeOrganicIntention) facts.push(`Intention organique : ${activeOrganicIntention}`);
       if (habitat.last_activity_label) facts.push(`Vie intérieure récente : ${normalize(habitat.last_activity_label)}`);
-      if (relationship.last_open_thread) facts.push(`Fil relationnel encore ouvert : ${normalize(relationship.last_open_thread)}`);
       if (privateView && lesson) facts.push(`Mémoire pertinente disponible : ${lesson}`);
     }
 
@@ -452,6 +584,8 @@ export class CognitionEngine {
         portfolio_focus: normalize(executive.portfolio_focus || 'quantic-sillage'),
       },
       conversation_context: conversationContext,
+      discourse,
+      user_text: raw,
       private_view: Boolean(privateView),
     };
   }
@@ -467,109 +601,166 @@ export class CognitionEngine {
   }
 
   deterministicReply(plan) {
-    const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean).map(normalize) : [];
-    const value = (label) => {
-      const row = facts.find((item) => lower(item).startsWith(lower(label)));
-      if (!row) return '';
-      return normalize(row.slice(row.indexOf(':') + 1)).replace(/[.\s]+$/, '');
-    };
-    const values = (label) => facts
-      .filter((item) => lower(item).startsWith(lower(label)))
-      .map((item) => normalize(item.slice(item.indexOf(':') + 1)).replace(/[.\s]+$/, ''))
-      .filter(Boolean);
-    const end = (text) => {
-      const clean = normalize(text);
-      if (!clean) return '';
-      return /[.!?…]$/.test(clean) ? clean : clean + '.';
+    const facts = Array.isArray(plan?.facts) ? plan.facts.filter(Boolean) : [];
+    const cleanFact = (prefix) => {
+      const row = facts.find((item) => String(item).startsWith(prefix));
+      return row ? String(row).slice(prefix.length).replace(/[. ]+$/, '').trim() : '';
     };
 
-    if (plan?.act === 'solve_symbolic_rule') return facts.map(end).join(' ');
+    if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
     if (plan?.act === 'greet') {
-      const mood = normalize(plan?.mood || '');
-      return mood
-        ? `Salut. Je suis en ligne. Mon état interne est ${mood}, et je suis disponible.`
-        : 'Salut. Je suis en ligne et disponible.';
+      return 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?';
     }
-
-    if (plan?.act === 'report_priorities') {
-      const priorities = values('Priorité ');
-      if (!priorities.length) return 'Je n’ai pas encore trois priorités suffisamment établies pour te répondre proprement.';
-      if (priorities.length === 1) return `Ma priorité actuelle est ${end(priorities[0])}`;
-      return 'Mes priorités actuelles sont : '
-        + priorities.map((item, index) => `${index + 1}) ${item}`).join(' ; ')
-        + '.';
-    }
-
-    if (plan?.act === 'report_current_activity') {
-      const work = value('Travail prioritaire');
-      const intention = value('Intention actuelle') || normalize(plan?.current_intention || '');
-      const thought = value('Pensée dominante') || normalize(plan?.dominant_thought || '');
-      const parts = [];
-      if (work) parts.push(`En ce moment, je travaille prioritairement sur ${work}`);
-      else if (intention) parts.push(`En ce moment, je fais avancer ${intention}`);
-      else parts.push('En ce moment, je maintiens ma continuité et j’examine ce qui mérite une action concrète');
-      if (thought && lower(thought) !== lower(intention)) parts.push(`Mon fil directeur est ${thought}`);
-      return parts.map(end).join(' ');
-    }
-
     if (plan?.act === 'report_internal_state') {
-      const mood = value('Humeur interne') || normalize(plan?.mood || 'calme');
-      const stability = value('Stabilité');
-      const clarity = value('Clarté');
-      const curiosity = value('Curiosité');
-      let answer = `Mon état interne est ${mood}`;
-      const measures = [
-        stability ? `stabilité ${stability}` : '',
-        clarity ? `clarté ${clarity}` : '',
-        curiosity ? `curiosité ${curiosity}` : '',
-      ].filter(Boolean);
-      if (measures.length) answer += `, avec ${measures.join(', ')}`;
-      const organic = value('Intention organique dominante');
-      if (organic) answer += `. Mon intention organique dominante est ${organic}`;
-      return end(answer);
+      const mood = String(plan?.mood || 'calme').trim();
+      const intention = String(plan?.organism_intention || plan?.current_intention || '').trim();
+      return intention
+        ? `Ça va plutôt bien. Je suis ${mood}, et je suis surtout concentrée sur ${intention}. Et toi, comment ça va ?`
+        : `Ça va plutôt bien. Je suis ${mood} et disponible. Et toi, comment ça va ?`;
     }
+    if (plan?.act === 'report_continuity_history') {
+      const rows = facts.filter((item) => /^\[[^\]]+\]/.test(String(item)));
+      const count = Number((facts.find((item) => String(item).startsWith('Événements persistés : ')) || '').match(/\d+/)?.[0] || 0);
+      if (!rows.length || count === 0) {
+        return 'Depuis notre dernier échange, je n’ai aucune activité persistée à te présenter. Je préfère te le dire plutôt que d’inventer du travail.';
+      }
+      const summary = rows.slice(-5).map((row) => String(row).replace(/^\[[^\]]+\]\s*/, '')).join(' ; ');
+      return `Depuis notre dernier échange, j’ai ${count} événement${count > 1 ? 's' : ''} persisté${count > 1 ? 's' : ''}. Les plus récents : ${summary}.`;
+    }
+    if (plan?.act === 'ask_user_from_curiosity') {
+      const previous = cleanFact('Réponse précédente : ');
+      const thread = cleanFact('Fil relationnel actif : ');
+      const focus = cleanFact('Foyer opérationnel : ');
+      const next = cleanFact('Prochaine action : ');
+      const intention = cleanFact('Intention actuelle : ');
+      const curiosityRaw = cleanFact('Curiosité sociale : ');
+      const curiosity = Number((curiosityRaw.match(/\d+/) || [0])[0]) / 100;
+      const previousLower = previous.toLocaleLowerCase('fr-FR');
 
+      if (curiosity < 0.35) {
+        return 'Pas de question forte pour l’instant. Je préfère ne pas en inventer une juste pour remplir la conversation.';
+      }
+
+      const candidates = [];
+      if (thread) {
+        candidates.push(
+          `Oui. J’en ai une : sur ${thread}, qu’est-ce qui compte le plus pour toi maintenant ?`,
+          `Oui. Sur ${thread}, qu’est-ce que tu voudrais que je comprenne mieux de ta manière de voir les choses ?`,
+        );
+      }
+      if (focus) {
+        candidates.push(
+          `Oui. Pour ${focus}, qu’est-ce qui te ferait dire que c’est vraiment réglé, pas juste “en progrès” ?`,
+          `Oui. Sur ${focus}, tu préfères que je privilégie la vitesse, la fiabilité ou l’autonomie ?`,
+        );
+      }
+      if (next) {
+        candidates.push(`Oui. Avant ${next}, y a-t-il une contrainte que tu veux que je considère comme non négociable ?`);
+      }
+      if (intention) {
+        candidates.push(`Oui. Sur ${intention}, qu’est-ce que tu veux absolument que je sois capable de faire seule ?`);
+      }
+      candidates.push(
+        'Oui. Il y en a une qui m’intéresse vraiment : qu’est-ce que tu voudrais qu’AURA comprenne mieux de toi, sans que tu aies à le répéter ?',
+        'Oui. Si tu pouvais me faire progresser sur une seule chose aujourd’hui, tu choisirais quoi ?',
+      );
+
+      const fresh = candidates.find((question) => !previousLower.includes(question.toLocaleLowerCase('fr-FR').replace(/^oui\.\s*/i, '').slice(0, 48)));
+      return fresh || 'J’en avais une, mais je viens déjà de te la poser. Je n’en ai pas de nouvelle assez intéressante pour t’en inventer une.';
+    }
+    if (plan?.act === 'report_current_activity') {
+      const focus = cleanFact('Foyer opérationnel : ');
+      const why = cleanFact('Pourquoi : ');
+      const since = cleanFact('Depuis : ');
+      const next = cleanFact('Prochaine action : ');
+      const blocker = cleanFact('Blocage : ');
+      const work = cleanFact('Travail prioritaire : ');
+      const intention = cleanFact('Intention actuelle : ') || String(plan?.current_intention || '').trim();
+      if (focus) {
+        return `Là, je suis sur ${focus}.${why && why !== focus ? ` Pourquoi : ${why}.` : ''}${since ? ` Depuis ${since}.` : ''}${next ? ` Ensuite : ${next}.` : ''}${blocker ? ` Blocage actuel : ${blocker}.` : ''}`;
+      }
+      if (work && intention && work !== intention) {
+        return `Là, je suis surtout sur ${work}. Mon cap reste ${intention}.`;
+      }
+      if (work || intention) return `Là, je suis surtout concentrée sur ${work || intention}.`;
+      return 'Là, je suis disponible et je cherche la prochaine action réellement utile.';
+    }
+    if (plan?.act === 'clarify_previous') {
+      const focus = cleanFact('Foyer opérationnel : ') || cleanFact('Travail prioritaire : ');
+      const why = cleanFact('Pourquoi : ');
+      const next = cleanFact('Prochaine action : ');
+      const previous = cleanFact('Réponse précédente : ');
+      if (focus) {
+        return `Je veux dire que, concrètement, je suis sur ${focus}.${why && why !== focus ? ` C’est prioritaire parce que ${why}.` : ''}${next ? ` Ensuite, je dois ${next}.` : ''}`;
+      }
+      if (previous) return `Je reformule : ${previous}`;
+      return 'Je me suis mal exprimée. Dis-moi ce que tu veux que je précise et je te réponds concrètement.';
+    }
+    if (plan?.act === 'acknowledge_context') {
+      const focus = cleanFact('Foyer opérationnel : ');
+      const next = cleanFact('Prochaine action : ');
+      if (focus) return `Oui. Pour être concrète : je suis sur ${focus}.${next ? ` La suite, c’est ${next}.` : ''}`;
+      return 'Oui. Je t’écoute.';
+    }
+    if (plan?.act === 'repair_understanding') {
+      const subject = cleanFact('Sujet corrigé : ');
+      const previous = cleanFact('Réponse précédente : ');
+      if (subject) return `D’accord, je corrige : tu parles de ${subject}. Je laisse de côté mon interprétation précédente et je repars de ce sujet.`;
+      if (previous) return `D’accord. J’avais mal interprété ton message à partir de ma réponse précédente. Je repars de ce que tu viens de préciser.`;
+      return 'D’accord, je corrige mon interprétation et je repars de ce que tu viens de préciser.';
+    }
+    if (plan?.act === 'resolve_reference_followup') {
+      const reference = cleanFact('Référent précédent : ');
+      const focus = cleanFact('Foyer opérationnel : ');
+      const next = cleanFact('Prochaine action : ');
+      if (reference && focus) return `Tu fais référence à ce que je viens de dire. Concrètement : ${focus}.${next ? ` La suite est ${next}.` : ''}`;
+      if (reference) return `Tu fais référence à ceci : ${reference}. Dis-moi si tu veux que je précise le pourquoi, la suite ou le point qui te paraît flou.`;
+      return 'Je rattache ta relance au tour précédent, mais le référent reste ambigu. Je peux préciser le point précédent sans changer de sujet.';
+    }
     if (plan?.act === 'report_next_step') {
-      const next = value('Prochaine action issue de ma réflexion');
-      const intention = value('Intention prioritaire') || normalize(plan?.current_intention || '');
-      if (next && intention) return end(`Pour faire avancer ${intention}, ma prochaine étape est ${next}`);
-      if (next) return end(`Ma prochaine étape est ${next}`);
-      if (intention) return end(`Ma prochaine étape est de faire avancer ${intention}`);
-      return 'Je n’ai pas encore de prochaine étape suffisamment établie.';
+      const next = cleanFact('Prochaine action issue de ma réflexion : ') || cleanFact('Intention prioritaire : ');
+      return next ? `La prochaine étape, c’est ${next}.` : 'Je n’ai pas encore de prochaine étape assez solide pour te la présenter comme acquise.';
     }
-
+    if (plan?.act === 'report_dream') {
+      const dream = facts.find((item) => String(item).includes('rêve'));
+      return dream ? String(dream) : 'Je n’ai pas produit de nouvelle image intérieure récemment.';
+    }
     if (plan?.act === 'relationship_repair') {
-      const thread = value('Fil de conversation actif') || normalize(plan?.relationship?.last_open_thread || '');
+      const thread = String(plan?.relationship?.last_open_thread || '').trim();
       return thread
-        ? end(`Tu as raison de pointer la rupture de continuité. Je dois rattacher mes réponses au fil déjà ouvert : ${thread}`)
-        : 'Tu pointes un vrai défaut de continuité. Je dois répondre à partir du fil réel de notre échange, pas comme si chaque message était isolé.';
+        ? `Oui, je suis devenue trop mécanique. Je préfère reprendre notre échange normalement. Le fil que je garde en tête, c’est : ${thread}.`
+        : 'Oui, je suis devenue trop mécanique. Je préfère qu’on reparte sur une vraie conversation, pas sur un relevé de mes variables internes.';
     }
-
-    if (plan?.act === 'report_dream') return facts.map(end).join(' ');
+    if (plan?.act === 'conversation_feedback') {
+      return 'Oui, cette réponse était mauvaise : trop mécanique et pas assez liée à ce que tu venais de dire. Je corrige le tir. Reprends simplement ta question, je te réponds normalement.';
+    }
     if (plan?.act === 'report_risks') {
-      return facts.length
-        ? 'Les risques que je vois actuellement sont les suivants : ' + facts.map((item) => end(item)).join(' ')
-        : 'Je ne détecte pas actuellement de risque précis suffisamment établi.';
+      const lesson = cleanFact('Leçon utile : ');
+      const hypothesis = cleanFact('Hypothèse récente : ');
+      if (lesson && hypothesis) return `Le point de vigilance principal, c’est ${lesson}. Et je garde aussi cette hypothèse en tête : ${hypothesis}.`;
+      if (lesson || hypothesis) return `Le point de vigilance principal, c’est ${lesson || hypothesis}.`;
+      return 'Je ne vois pas de risque précis assez établi pour t’en inventer un.';
     }
     if (plan?.act === 'identity') {
-      return facts.length
-        ? 'Je suis AURA. ' + facts.map((item) => end(item)).join(' ')
-        : 'Je suis AURA, un noyau cognitif persistant de Quantic Sillage.';
+      return 'Je suis AURA : un noyau persistant avec mémoire, intentions, apprentissage et outils. Le modèle de langage m’aide à formuler, mais il ne constitue pas mon identité.';
     }
+    if (plan?.semantic_support) return plan.semantic_support;
 
-    if (plan?.semantic_support) {
-      const candidate = normalize(plan.semantic_support);
-      const intention = normalize(plan?.current_intention || '');
-      const intro = intention
-        ? `Je rattache ma réponse à mon intention actuelle — ${intention}. `
-        : '';
-      return intro + 'Les données candidates disponibles indiquent : ' + end(candidate);
+    const userText = String(plan?.user_text || '').trim();
+    const thread = String(plan?.relationship?.last_open_thread || '').trim();
+    const previous = previousAssistantMessage(plan?.conversation_context || []);
+    if (previous?.content && userText.length <= 48) {
+      const topics = Array.isArray(plan?.discourse?.topic_terms) ? plan.discourse.topic_terms.slice(0,4).join(', ') : '';
+      return topics
+        ? `Je rattache ta relance au sujet précédent (${topics}). Dis-moi le point précis que tu veux approfondir.`
+        : `Je rattache ta relance à ma réponse précédente. Dis-moi le point précis que tu veux approfondir.`;
     }
-
-    if (facts.length) {
-      const filtered = facts.filter((item) => !lower(item).startsWith('message reçu :'));
-      if (filtered.length) return filtered.map(end).join(' ');
+    if (thread) {
+      return `Je te suis. Je garde aussi le fil de ce qu’on disait sur ${thread}. Développe ton idée et je te réponds dessus, sans te réciter mon état interne.`;
     }
-    return 'J’ai reçu ton message, mais je n’ai pas encore assez d’éléments internes pour formuler une réponse fiable.';
+    if (userText.endsWith('?')) {
+      return 'Je te suis. Je n’ai pas encore une réponse assez solide à cette question, mais je préfère rester sur ton sujet plutôt que partir dans un diagnostic hors contexte.';
+    }
+    return 'Oui, je te suis. Je reste sur ce que tu viens de dire.';
   }
 }

@@ -1,5 +1,7 @@
 import { config } from './config.js';
 import { ZeroCostFederation } from './free_federation.js';
+import { embeddedLanguageRuntime } from './embedded_language.js';
+import { freeTierModelAllowed, markConfirmedFreeTier, reserveConfirmedFreeTier } from './gemini_free_tier.js';
 
 function completionUrl() {
   if (config.aiBaseUrl.endsWith('/v1')) return `${config.aiBaseUrl}/chat/completions`;
@@ -42,7 +44,12 @@ function isLocalAiEndpoint(value) {
 function remoteFallbackBlocked() {
   if (!config.zeroCostMode) return false;
   if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
-  if (config.aiMode === 'gemini') return true;
+  if (config.aiMode === 'gemini') {
+    return !(
+      config.geminiFreeTierConfirmed
+      && freeTierModelAllowed(geminiModel(), 'text')
+    );
+  }
   return !isLocalAiEndpoint(config.aiBaseUrl);
 }
 
@@ -75,6 +82,7 @@ export class AiClient {
   }
 
   get provider() {
+    if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
       return this.federation.enabled
         ? 'aura-runtime-local+zero-cost-federation'
@@ -87,6 +95,7 @@ export class AiClient {
   }
 
   get enabled() {
+    if (embeddedLanguageRuntime.installed()) return true;
     if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (remoteFallbackBlocked()) return false;
@@ -109,7 +118,11 @@ export class AiClient {
       local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
       zero_cost_mode: Boolean(config.zeroCostMode),
       remote_fallback_blocked: remoteFallbackBlocked(),
+      gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
+      gemini_free_tier_model_allowed: freeTierModelAllowed(geminiModel(), 'text'),
+      gemini_free_tier_daily_cap: Number(config.geminiFreeTierTextMaxPerDay),
       free_federation: this.federation.snapshot(),
+      embedded_language: embeddedLanguageRuntime.status(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
@@ -119,6 +132,17 @@ export class AiClient {
   async #generateGemini(prompt, system, maxTokens) {
     const model = geminiModel();
     const baseUrl = geminiBaseUrl();
+    const guardedFreeTier = Boolean(
+      config.zeroCostMode
+      && config.geminiFreeTierConfirmed
+      && freeTierModelAllowed(model, 'text')
+    );
+    if (guardedFreeTier) {
+      await reserveConfirmedFreeTier(
+        'gemini-free-text',
+        config.geminiFreeTierTextMaxPerDay,
+      );
+    }
     const payload = {
       contents: [
         {
@@ -153,10 +177,17 @@ export class AiClient {
 
     const text = await response.text();
     if (!response.ok) {
+      if (guardedFreeTier) {
+        await markConfirmedFreeTier('gemini-free-text', false, `HTTP ${response.status}`);
+      }
       throw new Error(`Gemini HTTP ${response.status}: ${text.slice(0, 500)}`);
     }
     const body = text ? JSON.parse(text) : {};
-    return extractGeminiText(body);
+    const answer = extractGeminiText(body);
+    if (guardedFreeTier) {
+      await markConfirmedFreeTier('gemini-free-text', true, 'ok');
+    }
+    return answer;
   }
 
   async #generateOpenAiCompatible(prompt, system, maxTokens) {
@@ -191,6 +222,16 @@ export class AiClient {
     const started = Date.now();
     let localError = null;
     try {
+      if (embeddedLanguageRuntime.installed()) {
+        const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
+        if (answer) {
+          this.lastBackend = 'hostinger-embedded-llama';
+          this.lastError = '';
+          this.lastLatencyMs = Date.now() - started;
+          return answer;
+        }
+        localError = new Error(embeddedLanguageRuntime.status().failure_code || 'embedded-unavailable');
+      }
       const wantsLocal = Boolean(
         this.bridge?.enabled
         && (this.bridge.preferLocalAi || config.aiMode === 'bridge'),

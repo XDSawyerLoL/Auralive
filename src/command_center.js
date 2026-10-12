@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
 import { LongHorizonMissionEngine } from './long_horizon.js';
+import { classifyInitiativeResult } from './outcome_truth.js';
 
 const now = () => new Date().toISOString();
 
@@ -36,6 +37,20 @@ const DEFAULT_SERVICES = [
     kind: 'execution-plane',
     objective: 'Fournir à AURA les capacités locales universelles : modèles, outils machine, opérateur, voix/image, sandbox et calcul local.',
     criticality: 0.98,
+  },
+  {
+    id: 'quantic-studio',
+    name: 'Quantic Studio',
+    kind: 'product',
+    objective: 'Maintenir le studio de diffusion vivant, observable et pilotable par AURA.',
+    criticality: 0.84,
+  },
+  {
+    id: 'identity-vault',
+    name: 'Identity Vault',
+    kind: 'product',
+    objective: 'Maintenir le coffre d’identité Quantic disponible, portable et sûr.',
+    criticality: 0.93,
   },
   {
     id: 'horizon',
@@ -102,13 +117,37 @@ function safeOperationalError(value, limit = 5000) {
     .slice(0, Math.max(64, Number(limit || 5000)));
 }
 
-const BAD_SERVICE_STATES = new Set(['degraded', 'offline', 'error', 'unhealthy']);
+const BAD_SERVICE_STATES = new Set(['degraded', 'offline', 'error', 'unhealthy', 'stale']);
 const BAD_WORKFLOW_CONCLUSIONS = new Set([
   'failure',
   'timed_out',
   'action_required',
   'startup_failure',
 ]);
+
+export function productHeartbeatHealth(row = {}, {
+  nowMs = Date.now(),
+  staleSeconds = config.commandCenterProductStaleSeconds,
+  offlineSeconds = config.commandCenterProductOfflineSeconds,
+} = {}) {
+  const state = String(row.state || 'unknown').toLowerCase();
+  const observedAt = Date.parse(String(row.last_observed_at || ''));
+  if (!Number.isFinite(observedAt)) {
+    return { state, next_state: state, age_seconds: null, transition: false };
+  }
+  const ageSeconds = Math.max(0, Math.round((Number(nowMs) - observedAt) / 1000));
+  let nextState = state;
+  if (!['error','unhealthy','degraded','offline'].includes(state)) {
+    if (ageSeconds >= Number(offlineSeconds)) nextState = 'offline';
+    else if (ageSeconds >= Number(staleSeconds) && state === 'online') nextState = 'stale';
+  }
+  return {
+    state,
+    next_state: nextState,
+    age_seconds: ageSeconds,
+    transition: nextState !== state,
+  };
+}
 const REPO_SERVICE_MAP = new Map([
   ['xdsawyerlol/auralive', 'aura'],
   ['xdsawyerlol/quanticsillage', 'quantic-sillage'],
@@ -933,6 +972,43 @@ export class CommandCenter {
         compatibility_host: String(bridgeStatus?.worker?.host_product || ''),
       },
     );
+    const hostProduct = String(bridgeStatus?.worker?.host_product || '').toLowerCase();
+    const runtimePackaging = String(bridgeStatus?.worker?.runtime_packaging || '').toLowerCase();
+    const studioHosted = Boolean(
+      bridgeStatus.worker_online
+      && (hostProduct.includes('studio') || runtimePackaging.includes('studio'))
+    );
+    if (studioHosted) {
+      await this.setServiceState(
+        'quantic-studio',
+        'online',
+        'Quantic Studio héberge actuellement un AURA Runtime actif.',
+        {
+          worker_online: true,
+          worker_version: String(bridgeStatus?.worker?.version || ''),
+          runtime_host_product: String(bridgeStatus?.worker?.host_product || 'Quantic Studio'),
+          runtime_packaging: String(bridgeStatus?.worker?.runtime_packaging || ''),
+          telemetry_source: 'aura-runtime-heartbeat',
+        },
+      );
+    } else if (
+      hostProduct.includes('studio')
+      || runtimePackaging.includes('embedded-compatibility-host')
+    ) {
+      await this.setServiceState(
+        'quantic-studio',
+        'offline',
+        'Le dernier AURA Runtime hébergé par Quantic Studio ne répond plus.',
+        {
+          worker_online: false,
+          worker_version: String(bridgeStatus?.worker?.version || ''),
+          runtime_host_product: String(bridgeStatus?.worker?.host_product || 'Quantic Studio'),
+          runtime_packaging: String(bridgeStatus?.worker?.runtime_packaging || ''),
+          telemetry_source: 'aura-runtime-heartbeat',
+        },
+      );
+    }
+
     const horizonStatus = this.kernel?.horizon?.status?.() || {};
     await this.setServiceState(
       'horizon',
@@ -946,6 +1022,62 @@ export class CommandCenter {
       },
     );
     return bridgeStatus;
+  }
+
+  async refreshProductHealth() {
+    const stamp = Date.now();
+    const staleMs = config.commandCenterProductStaleSeconds * 1000;
+    const offlineMs = config.commandCenterProductOfflineSeconds * 1000;
+    const rows = await query(
+      `SELECT id,name,state,state_detail,last_observed_at,metadata
+       FROM aura_command_services
+       WHERE enabled=1 AND kind='quantic-product'`,
+    );
+    const transitions = [];
+    for (const row of rows) {
+      const health = productHeartbeatHealth(row, {
+        nowMs: stamp,
+        staleSeconds: config.commandCenterProductStaleSeconds,
+        offlineSeconds: config.commandCenterProductOfflineSeconds,
+      });
+      const state = health.state;
+      const next = health.next_state;
+      const ageSeconds = health.age_seconds;
+      if (!health.transition || ageSeconds == null) continue;
+      const detail = next === 'offline'
+        ? `Aucun heartbeat produit depuis ${ageSeconds} s; seuil offline=${config.commandCenterProductOfflineSeconds}s.`
+        : `Heartbeat produit périmé depuis ${ageSeconds} s; seuil stale=${config.commandCenterProductStaleSeconds}s.`;
+      const metadata = parseJson(row.metadata, {});
+      const result = await query(
+        `UPDATE aura_command_services
+         SET state=?,state_detail=?,metadata=?,updated_at=?
+         WHERE id=? AND last_observed_at=?`,
+        [
+          next,
+          detail,
+          JSON.stringify({
+            ...metadata,
+            health_transition_source: 'heartbeat-ttl',
+            heartbeat_age_seconds: ageSeconds,
+          }).slice(0, 20000),
+          now(),
+          row.id,
+          row.last_observed_at,
+        ],
+      );
+      if (Number(result.affectedRows || 0)) {
+        transitions.push({ id: row.id, from: state, to: next, age_seconds: ageSeconds });
+        await query(
+          'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(NULL,?,?,?)',
+          [
+            'service-heartbeat-expired',
+            JSON.stringify(transitions[transitions.length - 1]).slice(0, 30000),
+            now(),
+          ],
+        );
+      }
+    }
+    return transitions;
   }
 
   async services() {
@@ -1125,6 +1257,7 @@ export class CommandCenter {
 
   async buildCandidates() {
     const syncedBridgeStatus = await this.syncCoreServices();
+    await this.refreshProductHealth();
     const [intentions, improvements, outcomes, services, bridgeStatus, recentReasoning] = await Promise.all([
       this.kernel.intentions(8),
       this.kernel.improvements(8),
@@ -1203,19 +1336,15 @@ export class CommandCenter {
     }
 
     if (config.directorModeEnabled) {
-      const uniqueRepositories = [];
-      const seenRepositories = new Set();
-      for (const service of services) {
+      const portfolio = services.filter((service) => {
         const repository = String(service.repository || '').trim();
-        if (!service.enabled || !repository) continue;
-        if (BAD_SERVICE_STATES.has(String(service.state || '').toLowerCase())) continue;
-        const key = repository.toLowerCase();
-        if (seenRepositories.has(key)) continue;
-        seenRepositories.add(key);
-        uniqueRepositories.push(service);
-      }
+        return service.enabled
+          && repository
+          && !BAD_SERVICE_STATES.has(String(service.state || '').toLowerCase())
+          && String(service.id || '') !== 'aura';
+      });
 
-      if (uniqueRepositories.length) {
+      if (portfolio.length) {
         const slotMs = Math.max(1, config.directorPortfolioIntervalHours) * 3600_000;
         const directorSlot = Math.floor(Date.now() / slotMs);
         const directorAngles = [
@@ -1228,32 +1357,37 @@ export class CommandCenter {
           'usage intelligent du Web et des modèles',
           'réduction des frictions pour l’utilisateur',
         ];
-        const focusService = uniqueRepositories[directorSlot % uniqueRepositories.length];
-        const angle = directorAngles[directorSlot % directorAngles.length];
-        candidates.push(this.candidate({
-          domain: focusService.id,
-          kind: 'evolution',
-          action_payload: {
-            repository: focusService.repository,
-            base_branch: 'main',
-            director_mode: true,
-            portfolio_angle: angle,
-            product_id: focusService.id,
-          },
-          title: `Direction · faire progresser ${focusService.name}`,
-          objective:
-            `En tant que Directrice opérationnelle de Quantic Sillage, auditer ${focusService.name} sur l’angle « ${angle} ». `
-            + `Dépôt cible: ${focusService.repository}. Objectif produit: ${focusService.objective || 'améliorer le produit'}. `
-            + 'Choisir au maximum une amélioration à fort levier, mesurable et réversible. '
-            + 'Inspecter les faits et le code avant de modifier quoi que ce soit. '
-            + 'Si aucune amélioration sûre et suffisamment étayée n’est trouvée, conclure no-safe-patch plutôt que produire du changement artificiel.',
-          rationale:
-            'Director Mode réalise une revue tournante du portefeuille afin qu’AURA ne dépende pas uniquement des pannes ou des demandes humaines pour prendre des initiatives.',
-          priority: 0.73,
-          confidence: 0.80,
-          requested_risks: [],
-          signature: `director:${focusService.repository}:${directorSlot}:${angle}`,
-        }));
+        const width = Math.min(config.commandCenterPortfolioWorkstreams, portfolio.length);
+        for (let offset = 0; offset < width; offset += 1) {
+          const focusService = portfolio[(directorSlot + offset) % portfolio.length];
+          const angle = directorAngles[(directorSlot + offset) % directorAngles.length];
+          candidates.push(this.candidate({
+            domain: focusService.id,
+            kind: 'evolution',
+            action_payload: {
+              repository: focusService.repository,
+              base_branch: 'main',
+              director_mode: true,
+              portfolio_angle: angle,
+              product_id: focusService.id,
+              workstream_slot: offset + 1,
+            },
+            title: `Direction · faire progresser ${focusService.name}`,
+            objective:
+              `En tant que Directrice opérationnelle de Quantic Sillage, auditer ${focusService.name} sur l’angle « ${angle} ». `
+              + `Dépôt cible: ${focusService.repository}. Objectif produit: ${focusService.objective || 'améliorer le produit'}. `
+              + 'Maintenir ce produit comme un workstream autonome du portefeuille. '
+              + 'Choisir au maximum une amélioration à fort levier, mesurable et réversible. '
+              + 'Inspecter les faits et le code avant de modifier quoi que ce soit. '
+              + 'Si aucune amélioration sûre et suffisamment étayée n’est trouvée, conclure no-safe-patch plutôt que produire du changement artificiel.',
+            rationale:
+              'Director Mode maintient plusieurs workstreams produits en parallèle plutôt qu’une seule revue par dépôt.',
+            priority: Number((0.73 + Math.max(0, Number(focusService.criticality || 0.5) - 0.5) * 0.12).toFixed(3)),
+            confidence: 0.82,
+            requested_risks: [],
+            signature: `director:${focusService.id}:${directorSlot}:${angle}`,
+          }));
+        }
       }
     }
 
@@ -1329,6 +1463,22 @@ export class CommandCenter {
         }));
       }
     }
+    if (!bridgeStatus?.worker_online) {
+      candidates.push(this.candidate({
+        domain: 'aura-runtime',
+        kind: 'reflection',
+        title: 'Maintenir l’autonomie malgré AURA Runtime hors ligne',
+        objective:
+          'Évaluer ce qu’AURA peut continuer à faire côté Cloud sans AURA Runtime, '
+          + 'identifier les missions locales bloquées et préparer leur reprise dès le retour du worker.',
+        rationale: 'AURA Runtime n’est pas actuellement en ligne. Quantic Studio n’est pas requis pour la continuité du noyau.',
+        priority: 0.64,
+        confidence: 0.98,
+        requested_risks: [],
+        signature: 'bridge-offline',
+      }));
+    }
+
     if (!candidates.length) {
       candidates.push(this.candidate({
         domain: 'quantic-sillage',
@@ -1451,16 +1601,47 @@ export class CommandCenter {
       return { id, status: 'waiting', reason: 'auto execution disabled' };
     }
 
+    // Operator execution can use AURA's typed Cloud Workspace when the local
+    // worker is offline. kernel.operate() still denies arbitrary shell/network
+    // effects and truth classification keeps plan-only actions in waiting.
+
     const targetRepository = String(initiative.action_payload?.repository || '').trim();
+    const crossProductEvolution = initiative.kind === 'evolution'
+      && targetRepository
+      && targetRepository.toLowerCase() !== 'xdsawyerlol/auralive';
+    if (crossProductEvolution && !bridgeOnline) {
+      await this.updateInitiative(id, {
+        status: 'waiting',
+        execution_mode: 'waiting-local-worker',
+        result: {
+          reason: 'AURA Runtime worker offline',
+          repository: targetRepository,
+        },
+      });
+      return {
+        id,
+        status: 'waiting',
+        execution_mode: 'waiting-local-worker',
+        reason: 'worker offline',
+        repository: targetRepository,
+      };
+    }
 
     await query(
       "UPDATE aura_initiatives SET status='running',updated_at=? WHERE id=?",
       [now(), id],
     );
+    // Correlate one native Reflex assessment with this actual initiative.
+    // These tier inputs are a conservative heuristic, NOT calibrated labels.
+    const reflexDecision = this.kernel.inferenceAssessment({
+      novelty: ['research', 'evolution'].includes(String(initiative.kind)) ? 0.65 : 0.2,
+      risk: ['operator', 'github', 'evolution'].includes(String(initiative.kind)) ? 0.7 : 0.2,
+    });
 
     try {
       let result;
       let executionMode;
+      let usedCapabilities = [];
 
       if (initiative.kind === 'github') {
         const githubResult = await this.executeGithubInitiative(initiative);
@@ -1481,6 +1662,7 @@ export class CommandCenter {
           await this.kernel.recordOutcome({
             automation_id: `command-center:${initiative.domain}`,
             event_type: 'aura.initiative.github',
+            reflex_decision_id: reflexDecision.decision_id,
             ok: true,
             signature: 'success',
             report: { initiative_id: id, title: initiative.title, result },
@@ -1508,6 +1690,7 @@ export class CommandCenter {
             },
           );
           executionMode = 'aura-fabric-research-dag';
+          usedCapabilities = [...new Set((graph.nodes || []).map((node) => String(node.capability || '')).filter(Boolean))];
           result = await this.graphExecutor.execute(
             graph,
             { trigger: 'command-center' },
@@ -1517,6 +1700,7 @@ export class CommandCenter {
             throw new Error('Web Substrate indisponible');
           }
           executionMode = 'web-substrate-research';
+          usedCapabilities = ['web.research'];
           result = await this.webSubstrate.research(
             initiative.objective,
             { trigger: 'command-center' },
@@ -1534,11 +1718,11 @@ export class CommandCenter {
           { repository, base_branch: baseBranch },
         );
       } else if (initiative.kind === 'operator') {
+        executionMode = 'aura-runtime-operator';
         result = await this.kernel.operate(
           initiative.objective,
           initiative.requested_risks,
         );
-        executionMode = String(result?.execution_mode || 'cloud-first-operator');
       } else {
         executionMode = 'native-reflection';
         result = await this.kernel.tick({
@@ -1549,17 +1733,12 @@ export class CommandCenter {
       }
 
       const returnedStatus = String(result?.status || '').toLowerCase();
-      if (returnedStatus === 'waiting-cloud-capability') {
-        executionMode = 'cloud-capability-missing';
+      if (initiative.kind === 'evolution' && returnedStatus === 'waiting-local-worker') {
+        executionMode = 'waiting-local-worker';
       }
-      const waiting = Boolean(result?.queued)
-        || ['queued', 'leased'].includes(returnedStatus)
-        || returnedStatus.startsWith('waiting');
-      const failed = ['error', 'cancelled', 'canceled'].includes(returnedStatus)
-        || returnedStatus.endsWith('-rejected');
-      const executed = !waiting && !failed
-        && (initiative.kind !== 'operator' || Boolean(result?.executed || result?.queued));
-      const status = waiting ? 'waiting' : (failed ? 'failed' : 'completed');
+      const classification = classifyInitiativeResult(initiative.kind, result);
+      if (classification.waiting_for_worker) executionMode = 'waiting-local-worker';
+      const { status, executed } = classification;
       await this.updateInitiative(id, {
         status,
         execution_mode: executionMode,
@@ -1570,13 +1749,17 @@ export class CommandCenter {
         'INSERT INTO aura_command_events(initiative_id,kind,payload,created_at) VALUES(?,?,?,?)',
         [id, 'initiative-result', JSON.stringify({ status, executionMode, result }).slice(0, 30000), now()],
       );
-      if (status === 'completed') {
+      if (status === 'completed' || status === 'failed') {
         await this.kernel.recordOutcome({
+          reflex_decision_id: reflexDecision.decision_id,
           automation_id: `command-center:${initiative.domain}`,
           event_type: `aura.initiative.${initiative.kind}`,
-          ok: Boolean(executed),
+          ok: status === 'completed' && Boolean(executed),
           signature: executed ? 'success' : (result?.reason || 'not-executed'),
-          report: { initiative_id: id, title: initiative.title, result },
+          report: { initiative_id: id, title: initiative.title, result, capabilities: usedCapabilities },
+          capabilities: usedCapabilities,
+          context_key: String(initiative.domain || initiative.kind || 'command-center'),
+          strategy_key: `command-center:${initiative.kind}:${usedCapabilities.join('>') || initiative.action_type || 'native'}`,
           created_at: now(),
         });
       }
@@ -1596,6 +1779,7 @@ export class CommandCenter {
       await this.kernel.recordOutcome({
         automation_id: `command-center:${initiative.domain}`,
         event_type: `aura.initiative.${initiative.kind}`,
+        reflex_decision_id: reflexDecision.decision_id,
         ok: false,
         signature: message,
         report: { initiative_id: id, title: initiative.title, error: message },
@@ -1644,17 +1828,13 @@ export class CommandCenter {
 
       if (job.status === 'completed') {
         const payload = job.result || {};
+        // Transport completion is not proof that the underlying action worked.
+        const classification = classifyInitiativeResult('worker', payload);
+        const executionRejected = classification.status !== 'completed';
         const payloadStatus = String(payload?.status || '').toLowerCase();
-        const evolutionRejected = row.kind === 'evolution'
-          && (
-            payload?.ok === false
-            || payloadStatus === 'error'
-            || payloadStatus === 'no-safe-patch'
-            || payloadStatus.endsWith('-rejected')
-          );
-        const finalStatus = evolutionRejected ? 'failed' : 'completed';
-        const finalError = evolutionRejected
-          ? String(payload?.error || payload?.reason || payloadStatus || 'evolution rejected').slice(0, 5000)
+        const finalStatus = executionRejected ? 'failed' : 'completed';
+        const finalError = executionRejected
+          ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed').slice(0, 5000)
           : '';
         await query(
           `UPDATE aura_initiatives
@@ -1673,8 +1853,8 @@ export class CommandCenter {
         await this.kernel.recordOutcome({
           automation_id: `command-center:${row.domain}`,
           event_type: `aura.initiative.${row.kind}`,
-          ok: !evolutionRejected && payload?.ok !== false,
-          signature: evolutionRejected || payload?.ok === false
+          ok: !executionRejected,
+          signature: executionRejected
             ? String(payload?.error || payload?.reason || payloadStatus || 'worker-result-failed')
             : 'success',
           report: { initiative_id: row.id, job_id: jobId, result: payload },
@@ -1970,11 +2150,14 @@ export class CommandCenter {
           const status = String(file?.status || '');
           const safe = safeGithubChangePath(path);
           const changes = Number(file?.changes || 0);
+          const allowedAutomergeSurface = config.directorAutoMergePathPrefixes.some((prefix) =>
+            path.startsWith(String(prefix || '')));
           const sensitivePath = /(^|\/)(auth|oauth|security|policy|permissions?|config|database|migrations?|billing|payments?|identity|vault)(\/|\.|$)/i.test(path);
           const patch = String(file?.patch || '');
           const sensitivePatch = /(process\.env|secrets?|credentials?|private[_-]?key|child_process|\bexec\s*\(|\bspawn\s*\(|subprocess|os\.system|\bDROP\s+TABLE\b|\bTRUNCATE\b)/i.test(patch);
           return Boolean(safe)
             && safe === path
+            && allowedAutomergeSurface
             && !sensitivePath
             && !sensitivePatch
             && ['added', 'modified'].includes(status)
@@ -2001,7 +2184,7 @@ export class CommandCenter {
         const checks = Array.isArray(checksResponse.data?.check_runs)
           ? checksResponse.data.check_runs
           : [];
-        if (!checks.length) continue;
+        if (checks.length < config.directorMergeMinChecks) continue;
         const checksGreen = checks.every((check) =>
           String(check?.status || '') === 'completed'
           && ['success', 'neutral', 'skipped'].includes(String(check?.conclusion || ''))
@@ -2078,6 +2261,65 @@ export class CommandCenter {
     return this.executeInitiative(row);
   }
 
+  async resumeQueuedPortfolioInitiatives() {
+    const rows = await query(
+      `SELECT i.*
+       FROM aura_initiatives i
+       WHERE i.status='queued'
+         AND NOT EXISTS (
+           SELECT 1 FROM aura_mission_steps ms WHERE ms.initiative_id=i.id
+         )
+       ORDER BY i.priority DESC,i.confidence DESC,i.updated_at ASC
+       LIMIT ?`,
+      [Math.max(1, config.commandCenterPortfolioWorkstreams * 3)],
+    );
+    if (!rows.length) return [];
+
+    const selected = [];
+    const domains = new Set();
+    const repositories = new Set();
+    let sideEffectSelected = false;
+    for (const row of rows) {
+      if (selected.length >= config.commandCenterPortfolioWorkstreams) break;
+      const domain = String(row.domain || 'aura');
+      if (domains.has(domain)) continue;
+      const payload = parseJson(row.action_payload, {});
+      const repository = String(payload.repository || '').trim().toLowerCase();
+      const sideEffecting = ['operator','github'].includes(String(row.kind || ''));
+      if (repository && repositories.has(repository)) continue;
+      if (sideEffecting && sideEffectSelected) continue;
+      selected.push(row);
+      domains.add(domain);
+      if (repository) repositories.add(repository);
+      if (sideEffecting) sideEffectSelected = true;
+    }
+    if (!selected.length) return [];
+
+    const safe = selected.filter((row) => !['operator','github'].includes(String(row.kind || '')));
+    const sideEffect = selected.find((row) => ['operator','github'].includes(String(row.kind || ''))) || null;
+    const settled = await Promise.allSettled(safe.map((row) => this.executeInitiative(row)));
+    const results = settled.map((item, index) =>
+      item.status === 'fulfilled'
+        ? item.value
+        : {
+          id: safe[index]?.id || '',
+          status: 'failed',
+          error: safeOperationalError(item.reason, 1000),
+        });
+    if (sideEffect) {
+      try {
+        results.push(await this.executeInitiative(sideEffect));
+      } catch (error) {
+        results.push({
+          id: sideEffect.id,
+          status: 'failed',
+          error: safeOperationalError(error, 1000),
+        });
+      }
+    }
+    return results;
+  }
+
   async runCycle(trigger = 'manual') {
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
@@ -2102,6 +2344,21 @@ export class CommandCenter {
           initiative: resumedMissionInitiative,
         };
       }
+      const resumedPortfolio = await this.resumeQueuedPortfolioInitiatives().catch((error) => {
+        this.lastError = String(error?.message || error).slice(0, 1000);
+        return [];
+      });
+      if (resumedPortfolio.length) {
+        this.lastCycleAt = now();
+        this.lastError = '';
+        return {
+          ok: true,
+          trigger,
+          mode: 'portfolio-resume',
+          reconciled,
+          workstreams: resumedPortfolio,
+        };
+      }
       const promotions = await this.promoteDirectorPullRequests().catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);
         return [];
@@ -2121,6 +2378,15 @@ export class CommandCenter {
         return { enabled: true, error: this.lastError };
       });
       if (missionAdvance?.candidate && missionAdvance?.step?.id) {
+        // Keep the atomic claim alive during slow inference, research or
+        // execution. Releasing requires the original unique lease token.
+        const leaseHeartbeat = setInterval(() => {
+          void this.longHorizon.renewLease(missionAdvance.lease).catch((error) => {
+            this.lastError = String(error?.message || error).slice(0, 1000);
+          });
+        }, 60_000);
+        leaseHeartbeat.unref?.();
+        try {
         const missionCandidate = this.candidate(missionAdvance.candidate);
         const persisted = await this.persistInitiative(missionCandidate);
         const initiative = await one(
@@ -2150,6 +2416,13 @@ export class CommandCenter {
           mission_step: missionAdvance.step,
           initiative: missionResult,
         };
+        } finally {
+          clearInterval(leaseHeartbeat);
+          // The lease is held through persistence + execution, including errors.
+          await this.longHorizon.releaseLease(missionAdvance.lease).catch((error) => {
+            this.lastError = String(error?.message || error).slice(0, 1000);
+          });
+        }
       }
       const expertCandidates = await this.consultFailedInitiatives(2).catch((error) => {
         this.lastError = String(error?.message || error).slice(0, 1000);
@@ -2164,15 +2437,19 @@ export class CommandCenter {
         ...this.githubCandidates(fleet),
         ...(await this.buildCandidates()),
       ].sort((a, b) => (b.priority + b.confidence * 0.15) - (a.priority + a.confidence * 0.15));
-      let selected = null;
+      const selected = [];
+      const domains = new Set();
       for (const candidate of candidates) {
+        if (selected.length >= config.commandCenterPortfolioWorkstreams) break;
+        const domain = String(candidate.domain || 'aura');
+        if (domains.has(domain)) continue;
         const persisted = await this.persistInitiative(candidate);
         if (!persisted.created) continue;
-        selected = persisted.initiative;
-        break;
+        selected.push(persisted.initiative);
+        domains.add(domain);
       }
       this.lastCycleAt = now();
-      if (!selected) {
+      if (!selected.length) {
         return {
           ok: true,
           reconciled,
@@ -2184,17 +2461,50 @@ export class CommandCenter {
           candidates: candidates.length,
         };
       }
-      const result = await this.executeInitiative(selected);
+
+      const repositoriesInFlight = new Set();
+      const immediate = [];
+      const queued = [];
+      for (const initiative of selected) {
+        const payload = parseJson(initiative.action_payload, {});
+        const repository = String(payload.repository || '').toLowerCase();
+        const sideEffecting = ['operator','github'].includes(String(initiative.kind || ''));
+        const repositoryBusy = repository && repositoriesInFlight.has(repository);
+        if (sideEffecting || repositoryBusy) {
+          queued.push({
+            id: initiative.id,
+            domain: initiative.domain,
+            kind: initiative.kind,
+            status: initiative.status,
+            execution_mode: 'portfolio-queued',
+          });
+          continue;
+        }
+        if (repository) repositoriesInFlight.add(repository);
+        immediate.push(initiative);
+      }
+
+      const settled = await Promise.allSettled(immediate.map((initiative) =>
+        this.executeInitiative(initiative)));
+      const results = settled.map((item, index) =>
+        item.status === 'fulfilled'
+          ? item.value
+          : {
+            id: immediate[index]?.id || '',
+            status: 'failed',
+            error: safeOperationalError(item.reason, 1000),
+          });
       this.lastError = '';
       return {
         ok: true,
         trigger,
+        mode: 'portfolio-workstreams',
         candidate_count: candidates.length,
         reconciled,
         promotions,
         expert_candidates: expertCandidates.length,
         long_horizon: missionAdvance,
-        initiative: result,
+        workstreams: [...results, ...queued],
       };
     } catch (error) {
       this.lastError = String(error?.message || error).slice(0, 1000);
@@ -2249,8 +2559,163 @@ export class CommandCenter {
     return this.executeInitiative(row);
   }
 
+  async operationalLedger(limit = 24) {
+    const bounded = Math.max(1, Math.min(Number(limit) || 24, 80));
+    const rows = await query(
+      `SELECT e.id,e.initiative_id,e.kind,e.created_at,
+              i.domain,i.title,i.kind AS initiative_kind,i.status,i.execution_mode,i.updated_at
+       FROM aura_command_events e
+       LEFT JOIN aura_initiatives i ON i.id=e.initiative_id
+       WHERE e.kind IN (
+         'initiative-created','initiative-result','initiative-error','initiative-superseded',
+         'service-observation','service-state-change','service-heartbeat-expired',
+         'director-promotion','expert-remediation-proposed'
+       )
+       ORDER BY e.id DESC LIMIT ?`,
+      [bounded],
+    );
+    return rows.map((row) => ({
+      receipt_id: Number(row.id || 0),
+      initiative_id: String(row.initiative_id || ''),
+      event: String(row.kind || ''),
+      domain: String(row.domain || 'quantic-sillage'),
+      title: String(row.title || row.kind || 'Activité AURA').slice(0, 240),
+      kind: String(row.initiative_kind || row.kind || ''),
+      status: String(row.status || ''),
+      execution_mode: String(row.execution_mode || ''),
+      created_at: row.created_at,
+      updated_at: row.updated_at || row.created_at,
+    }));
+  }
+
+  async portfolioSnapshot() {
+    await this.refreshProductHealth().catch(() => []);
+    const [services, active] = await Promise.all([
+      this.services(),
+      query(
+        `SELECT domain,
+          COUNT(*) AS active_count,
+          SUM(CASE WHEN status='running' THEN 1 ELSE 0 END) AS running_count,
+          SUM(CASE WHEN status='waiting' THEN 1 ELSE 0 END) AS waiting_count,
+          MAX(updated_at) AS last_work_at
+         FROM aura_initiatives
+         WHERE status IN ('queued','running','waiting')
+         GROUP BY domain`,
+      ),
+    ]);
+    const byDomain = new Map(active.map((row) => [String(row.domain || ''), row]));
+    const stamp = Date.now();
+    return services
+      .filter((service) => ['quantic-product','product'].includes(String(service.kind || '')))
+      .map((service) => {
+        const work = byDomain.get(String(service.id || '')) || {};
+        const observedMs = Date.parse(String(service.last_observed_at || ''));
+        const ageSeconds = Number.isFinite(observedMs)
+          ? Math.max(0, Math.round((stamp - observedMs) / 1000))
+          : null;
+        return {
+          id: service.id,
+          name: service.name,
+          state: service.state,
+          detail: String(service.state_detail || '').slice(0, 400),
+          criticality: Number(service.criticality || 0),
+          last_observed_at: service.last_observed_at || '',
+          heartbeat_age_seconds: ageSeconds,
+          active_workstreams: Number(work.active_count || 0),
+          running_workstreams: Number(work.running_count || 0),
+          waiting_workstreams: Number(work.waiting_count || 0),
+          last_work_at: String(work.last_work_at || ''),
+          repository: String(service.repository || ''),
+        };
+      });
+  }
+
+  companyReadiness({ services = [], portfolio = [], receipts = [], bridgeStatus = {} } = {}) {
+    const products = services.filter((item) =>
+      ['quantic-product','product'].includes(String(item.kind || '')));
+    const observed = products.filter((item) => Boolean(item.last_observed_at));
+    const observedRatio = products.length ? observed.length / products.length : 0;
+    const healthyStates = new Set(['online','healthy']);
+    const healthyRatio = products.length
+      ? products.filter((item) => healthyStates.has(String(item.state || '').toLowerCase())).length / products.length
+      : 0;
+    const byId = new Map(products.map((item) => [String(item.id || ''), item]));
+    const studio = byId.get('quantic-studio');
+    const vault = byId.get('identity-vault');
+    const expectedScoped = products.filter((item) => String(item.id || '') !== 'aura').length;
+    const configuredScoped = Object.keys(config.productTokens || {}).filter((id) => byId.has(id)).length;
+    const scopedRatio = expectedScoped ? Math.min(1, configuredScoped / expectedScoped) : 0;
+
+    const lowRiskPrefixes = config.directorAutoMergePathPrefixes.every((prefix) =>
+      ['docs/','test/','tests/'].includes(String(prefix || '')));
+    const dimensions = {
+      product_connectivity: Number(Math.min(10, 4 + observedRatio * 6).toFixed(1)),
+      parallel_portfolio: Number(Math.min(10, 5 + Math.min(config.commandCenterPortfolioWorkstreams, 5)).toFixed(1)),
+      product_health: Number(Math.min(
+        10,
+        6
+          + (config.commandCenterProductStaleSeconds <= 600 ? 1 : 0)
+          + (config.commandCenterProductOfflineSeconds <= 1800 ? 1 : 0)
+          + Math.min(2, healthyRatio * 2),
+      ).toFixed(1)),
+      quantic_studio: Number((
+        studio
+          ? 4 + (studio.last_observed_at ? 3 : 0) + (healthyStates.has(String(studio.state || '').toLowerCase()) ? 3 : 0)
+          : 0
+      ).toFixed(1)),
+      identity_vault: Number((
+        vault
+          ? 5 + (vault.last_observed_at ? 2.5 : 0) + (healthyStates.has(String(vault.state || '').toLowerCase()) ? 2.5 : 0)
+          : 0
+      ).toFixed(1)),
+      identity_isolation: Number(Math.min(
+        10,
+        (!config.allowLegacyBridgeAdminToken && !config.allowLegacyProductAdminToken ? 3 : 0)
+          + (config.bridgeToken ? 3 : 0)
+          + scopedRatio * 4,
+      ).toFixed(1)),
+      csrf_admin: 9,
+      autonomous_merge: Number((
+        config.directorMergeMinChecks >= 2 && lowRiskPrefixes ? 9 : 6
+      ).toFixed(1)),
+      visible_work_evidence: Number(Math.min(10, 4 + Math.min(receipts.length, 12) / 12 * 6).toFixed(1)),
+    };
+    const values = Object.values(dimensions);
+    const overall = values.length
+      ? Number((values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length).toFixed(1))
+      : 0;
+    return {
+      scale: 10,
+      overall,
+      target: 8,
+      target_met: overall >= 8,
+      dimensions,
+      evidence: {
+        products_total: products.length,
+        products_observed: observed.length,
+        products_healthy: products.filter((item) => healthyStates.has(String(item.state || '').toLowerCase())).length,
+        product_tokens_configured: configuredScoped,
+        product_tokens_expected: expectedScoped,
+        bridge_token_configured: Boolean(config.bridgeToken),
+        runtime_worker_online: Boolean(bridgeStatus?.worker_online),
+        portfolio_workstreams: config.commandCenterPortfolioWorkstreams,
+        receipts_considered: receipts.length,
+        live_portfolio_rows: portfolio.length,
+      },
+      blockers: [
+        !config.bridgeToken ? 'AURA_BRIDGE_TOKEN absent' : '',
+        configuredScoped < expectedScoped
+          ? `Identités produit configurées: ${configuredScoped}/${expectedScoped}`
+          : '',
+        observedRatio < 0.8 ? `Produits observés: ${observed.length}/${products.length}` : '',
+        studio && !studio.last_observed_at ? 'Quantic Studio sans télémétrie récente' : '',
+        vault && !vault.last_observed_at ? 'Identity Vault sans télémétrie récente' : '',
+      ].filter(Boolean),
+    };
+  }
+
   async status({ publicView = true } = {}) {
-    const [counts, bridgeStatus, services, longHorizon] = await Promise.all([
+    const [counts, bridgeStatus, services, longHorizon, portfolio, receipts] = await Promise.all([
       one(
         `SELECT COUNT(*) AS total,
           SUM(CASE WHEN status='queued' THEN 1 ELSE 0 END) AS queued,
@@ -2263,6 +2728,8 @@ export class CommandCenter {
       this.bridge?.status?.() || Promise.resolve({ enabled: false, worker_online: false }),
       this.services(),
       this.longHorizon.status().catch(() => ({ enabled: false, error: 'unavailable' })),
+      this.portfolioSnapshot().catch(() => []),
+      this.operationalLedger(24).catch(() => []),
     ]);
     const degraded = services.filter((item) => BAD_SERVICE_STATES.has(String(item.state || '').toLowerCase()));
     const fleet = this.fleetSnapshot || [];
@@ -2276,6 +2743,12 @@ export class CommandCenter {
        WHERE status IN ('queued','running','waiting')
        ORDER BY priority DESC,confidence DESC,updated_at DESC LIMIT 1`,
     );
+    const companyReadiness = this.companyReadiness({
+      services,
+      portfolio,
+      receipts,
+      bridgeStatus,
+    });
     const payload = {
       version: CommandCenter.VERSION,
       enabled: config.commandCenterEnabled,
@@ -2301,6 +2774,14 @@ export class CommandCenter {
       local_worker_online: Boolean(bridgeStatus?.worker_online),
       github_write_authority: Boolean(this.githubToken),
       monitored_repositories: config.commandCenterGithubRepos.length,
+      portfolio_workstreams: config.commandCenterPortfolioWorkstreams,
+      product_health_ttl: {
+        stale_seconds: config.commandCenterProductStaleSeconds,
+        offline_seconds: config.commandCenterProductOfflineSeconds,
+      },
+      portfolio,
+      recent_receipts: receipts,
+      company_readiness: companyReadiness,
       fleet: {
         score: fleetScore,
         healthy: fleet.filter((item) => item.state === 'healthy').length,

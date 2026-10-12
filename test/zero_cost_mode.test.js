@@ -89,11 +89,14 @@ test('command center redacts secrets before persisting operational errors', () =
   assert.match(source, /github_pat_/);
 });
 
-test('Hostinger example enables hard zero-cost mode and cloud TTS is off', () => {
+test('Hostinger example keeps zero-cost fail-closed while allowing configured Aoede', () => {
   const env = fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
   assert.match(env, /^AURA_ZERO_COST_MODE=true$/m);
   assert.match(env, /^AI_MODE=off$/m);
   assert.match(env, /^AURA_FREE_FEDERATION_ENABLED=true$/m);
   assert.match(env, /^AURA_OPENROUTER_FREE_MODELS=openrouter\/free$/m);
-  assert.match(env, /^MAIRAIY_CLOUD_VOICE_ENABLED=false$/m);
+  assert.match(env, /^MAIRAIY_CLOUD_VOICE_ENABLED=true$/m);
+  assert.match(env, /^AURA_GEMINI_FREE_TIER_CONFIRMED=false$/m);
+  assert.match(env, /^TTS_MODEL=gemini-3\.1-flash-tts-preview$/m);
+  assert.match(env, /^TTS_VOICE=Aoede$/m);
 });

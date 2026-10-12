@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 12;
+export const LATEST_SCHEMA_VERSION = 16;
 
 export function getDb() {
   if (pool) return pool;
@@ -584,6 +584,104 @@ async function applyMigrations(db) {
     );
     current = 12;
   }
+
+  if (current < 13) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_skills (
+      id VARCHAR(80) PRIMARY KEY,
+      strategy_key VARCHAR(500) NOT NULL,
+      name VARCHAR(180) NOT NULL,
+      recipe LONGTEXT NOT NULL,
+      status VARCHAR(40) NOT NULL DEFAULT 'candidate',
+      successes BIGINT NOT NULL DEFAULT 0,
+      failures BIGINT NOT NULL DEFAULT 0,
+      context_count INT NOT NULL DEFAULT 0,
+      confidence DOUBLE NOT NULL DEFAULT 0,
+      source VARCHAR(80) NOT NULL DEFAULT 'outcome',
+      first_seen_at VARCHAR(40) NOT NULL,
+      last_seen_at VARCHAR(40) NOT NULL,
+      promoted_at VARCHAR(40) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_skills_status(status,confidence,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_skill_observations (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      skill_id VARCHAR(80) NOT NULL,
+      ok TINYINT NOT NULL,
+      context_key VARCHAR(240) NOT NULL,
+      evidence LONGTEXT NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_skill_obs_skill(skill_id,created_at),
+      INDEX idx_aura_skill_obs_context(skill_id,context_key,ok)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(13,?,?)',
+      ['cross-context-skill-learning', new Date().toISOString()],
+    );
+    current = 13;
+  }
+
+  if (current < 14) {
+    // Atomic, database-clock leases prevent duplicate mission dispatch on
+    // horizontally scaled instances. No local machine/paid service required.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_mission_leases (
+      mission_id CHAR(36) PRIMARY KEY,
+      lease_owner VARCHAR(80) NOT NULL DEFAULT '',
+      lease_until DATETIME(6) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_mission_leases_until(lease_until)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(14,?,?)',
+      ['atomic-mission-leases', new Date().toISOString()],
+    );
+    current = 14;
+  }
+
+  if (current < 15) {
+    // Evidence-linked observations; no generated labels passed off as learning.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_reflex_observations (
+      id CHAR(36) PRIMARY KEY,
+      decision_id CHAR(36) NOT NULL,
+      compute_tier VARCHAR(24) NOT NULL,
+      difficulty DOUBLE NOT NULL,
+      risk DOUBLE NOT NULL,
+      novelty DOUBLE NOT NULL,
+      uncertainty DOUBLE NOT NULL,
+      outcome_ok TINYINT NOT NULL,
+      evidence_level VARCHAR(40) NOT NULL DEFAULT 'reported',
+      source VARCHAR(120) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_reflex_decision(decision_id),
+      INDEX idx_aura_reflex_created(created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(15,?,?)',
+      ['evidence-linked-reflex-observations', new Date().toISOString()],
+    );
+    current = 15;
+  }
+
+  if (current < 16) {
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_agent_runs (
+      id CHAR(36) PRIMARY KEY,
+      mission_id CHAR(36) NOT NULL DEFAULT '',
+      role VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL,
+      task_sha256 CHAR(64) NOT NULL,
+      provider VARCHAR(120) NOT NULL DEFAULT '',
+      latency_ms BIGINT NOT NULL DEFAULT 0,
+      error_code VARCHAR(64) NOT NULL DEFAULT '',
+      created_at VARCHAR(40) NOT NULL,
+      finished_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_agent_runs_mission(mission_id,created_at),
+      INDEX idx_aura_agent_runs_status(status,created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(16,?,?)',
+      ['persistent-agent-role-runs', new Date().toISOString()],
+    );
+    current = 16;
+  }
 }
 
 export async function initSchema() {
@@ -679,6 +777,32 @@ export async function initSchema() {
       content TEXT NOT NULL,
       created_at VARCHAR(40) NOT NULL,
       INDEX idx_aura_cloud_messages_session(session_id,id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_language_experiences (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      session_id VARCHAR(96) NOT NULL,
+      kind VARCHAR(48) NOT NULL,
+      note TEXT NOT NULL,
+      evidence_status VARCHAR(64) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_language_experiences_session(session_id,id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_world_beliefs (
+      domain_key VARCHAR(220) PRIMARY KEY,
+      observations INT NOT NULL DEFAULT 0,
+      successes INT NOT NULL DEFAULT 0,
+      failures INT NOT NULL DEFAULT 0,
+      last_signature VARCHAR(500) NOT NULL DEFAULT '',
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_world_beliefs_observations(observations,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
+    `CREATE TABLE IF NOT EXISTS aura_language_benchmarks (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      score INT NOT NULL,
+      dimensions LONGTEXT NOT NULL,
+      provider VARCHAR(120) NOT NULL,
+      created_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_language_benchmarks_created(created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
     `CREATE TABLE IF NOT EXISTS aura_organism_events (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -779,7 +903,7 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs, skills] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -791,6 +915,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT id,trigger_name,question,conclusion,confidence,epistemic_status,evidence_count,created_at,updated_at FROM aura_reasoning_sessions ORDER BY updated_at DESC LIMIT 100'),
     query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
     query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
+    query('SELECT id,strategy_key,name,recipe,status,successes,failures,context_count,confidence,source,promoted_at,updated_at FROM aura_skills ORDER BY confidence DESC,updated_at DESC LIMIT 200'),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -807,6 +932,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     reasoning_sessions: reasoningSessions,
     fabric_capabilities: fabricCapabilities,
     fabric_graphs: fabricGraphs,
+    skills,
   });
   const id = randomUUID();
   await query(

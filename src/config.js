@@ -19,6 +19,24 @@ function csv(name, fallback = '') {
     .filter(Boolean);
 }
 
+function secretMap(name) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return Object.freeze({});
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return Object.freeze({});
+    const clean = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      const id = String(key || '').trim().toLowerCase();
+      const secret = String(value || '').trim();
+      if (id && secret) clean[id] = secret;
+    }
+    return Object.freeze(clean);
+  } catch {
+    return Object.freeze({});
+  }
+}
+
 function normalizeIceServer(row) {
   const raw = typeof row === 'string' ? { urls: row } : (row && typeof row === 'object' ? row : {});
   const sourceUrls = Array.isArray(raw.urls) ? raw.urls : [raw.urls];
@@ -72,7 +90,17 @@ function num(name, fallback, min = -Infinity, max = Infinity) {
   return Math.max(min, Math.min(max, value));
 }
 
-const AI_MODE = String(process.env.AI_MODE || 'off').trim().toLowerCase();
+const LEGACY_GEMINI_API_KEY = String(
+  process.env.AI_API_KEY
+  || process.env.GEMINI_API_KEY
+  || process.env.GOOGLE_API_KEY
+  || process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  || ''
+).trim();
+const AI_MODE = String(
+  process.env.AI_MODE
+  || (LEGACY_GEMINI_API_KEY ? 'gemini' : 'off')
+).trim().toLowerCase();
 const AI_DEFAULT_BASE_URL = AI_MODE === 'gemini'
   ? 'https://generativelanguage.googleapis.com/v1beta'
   : 'http://localhost:11434';
@@ -81,7 +109,10 @@ const AI_DEFAULT_MODEL = AI_MODE === 'gemini'
   : 'gemma3:12b';
 
 function configBridgeMode() {
-  return (process.env.AURA_BRIDGE_TOKEN || process.env.AURA_CLOUD_TOKEN)
+  const legacyAllowed = ['1','true','yes','oui','on'].includes(
+    String(process.env.AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN || '').trim().toLowerCase(),
+  );
+  return (process.env.AURA_BRIDGE_TOKEN || (legacyAllowed && process.env.AURA_CLOUD_TOKEN))
     ? 'remote-execute'
     : 'plan-only';
 }
@@ -95,6 +126,10 @@ export const config = Object.freeze({
   logLevel: process.env.LOG_LEVEL || 'info',
 
   cloudToken: process.env.AURA_CLOUD_TOKEN || '',
+  bridgeToken: process.env.AURA_BRIDGE_TOKEN || '',
+  productTokens: secretMap('AURA_PRODUCT_TOKENS_JSON'),
+  allowLegacyBridgeAdminToken: bool('AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN', false),
+  allowLegacyProductAdminToken: bool('AURA_ALLOW_LEGACY_PRODUCT_ADMIN_TOKEN', false),
   canaryToken: process.env.AURA_EVOLUTION_CANARY_TOKEN || '',
 
   publicChatRateLimitMax: int('AURA_PUBLIC_CHAT_RATE_LIMIT_MAX', 20, 1, 600),
@@ -122,20 +157,27 @@ export const config = Object.freeze({
   // local/runtime workers and explicitly zero-cost fabric capabilities, but not
   // remote model APIs that can create usage charges.
   zeroCostMode: bool('AURA_ZERO_COST_MODE', true),
+  geminiFreeTierConfirmed: bool('AURA_GEMINI_FREE_TIER_CONFIRMED', false),
+  geminiFreeTierTextMaxPerDay: int('AURA_GEMINI_FREE_TIER_TEXT_MAX_PER_DAY', 45, 1, 500),
+  geminiFreeTierVoiceMaxPerDay: int('AURA_GEMINI_FREE_TIER_VOICE_MAX_PER_DAY', 60, 1, 500),
 
   aiMode: AI_MODE,
   aiBaseUrl: String(process.env.AI_BASE_URL || AI_DEFAULT_BASE_URL).replace(/\/$/, ''),
   aiModel: process.env.AI_MODEL || AI_DEFAULT_MODEL,
-  aiApiKey: process.env.AI_API_KEY || '',
+  aiApiKey: LEGACY_GEMINI_API_KEY,
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
-  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', false),
+  localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
+  frenchLanguageRequired: bool('AURA_FRENCH_LANGUAGE_REQUIRED', true),
+  embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', true),
 
   // AURA 2.2: remote inference may run in zero-cost mode only through model IDs
   // whose endpoint is intrinsically free. No paid fallback is ever enabled here.
   freeFederationEnabled: bool('AURA_FREE_FEDERATION_ENABLED', true),
   freeFederationTimeoutMs: int('AURA_FREE_FEDERATION_TIMEOUT_MS', 45000, 1000, 180000),
   freeFederationMaxRequestsPerDay: int('AURA_FREE_FEDERATION_MAX_REQUESTS_PER_DAY', 45, 1, 10000),
+  // Keep the final 30 of 45 internal requests available for chat instead of autonomous tasks.
+  freeFederationChatReserve: int('AURA_FREE_FEDERATION_CHAT_RESERVE', 30, 0, 10000),
   freeFederationDiscoverModels: bool('AURA_FREE_FEDERATION_DISCOVER_MODELS', true),
   freeFederationCatalogTtlSeconds: int('AURA_FREE_FEDERATION_CATALOG_TTL_SECONDS', 900, 60, 86400),
   freeFederationMaxCatalogModels: int('AURA_FREE_FEDERATION_MAX_CATALOG_MODELS', 24, 1, 100),
@@ -144,28 +186,28 @@ export const config = Object.freeze({
   openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
   openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),
 
-  voiceCloudEnabled: bool('MAIRAIY_CLOUD_VOICE_ENABLED', false),
-  voiceApiKey: process.env.TTS_API_KEY || process.env.AI_API_KEY || '',
-  voiceBaseUrl: String(process.env.TTS_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/$/, ''),
-  voiceModel: process.env.TTS_MODEL || 'gemini-3.1-flash-tts-preview',
-  voiceName: process.env.TTS_VOICE || process.env.MAIRAIY_GEMINI_VOICE || 'Leda',
+  // Historical Mairaiy identity: Gemini 3.1 Flash TTS Preview + prebuilt Aoede.
+  // Model and timbre are deliberately locked so stale Hostinger variables cannot
+  // silently move AURA to Leda/Kokoro/another provider.
+  voiceCloudEnabled: true,
+  voiceApiKey: process.env.TTS_API_KEY || LEGACY_GEMINI_API_KEY,
+  voiceBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+  voiceModel: 'gemini-3.1-flash-tts-preview',
+  voiceName: 'Aoede',
   voiceTimeoutMs: int('TTS_TIMEOUT_MS', 35000, 5000, 120000),
 
-  // AURA Voice Fabric: provider-neutral Mairaiy identity.
-  // VoiceStudio remains a separable sidecar through its public OpenAI-compatible API.
-  voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', true),
-  voiceFabricPinQuanticEndpoint: bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true),
-  voiceFabricBaseUrl: String(
-    bool('AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT', true)
-      ? 'https://mediumorchid-badger-314305.hostingersite.com/voice'
-      : (process.env.AURA_VOICE_FABRIC_BASE_URL || 'https://mediumorchid-badger-314305.hostingersite.com/voice')
-  ).replace(/\/$/, ''),
+  // Optional Voice Fabric for a future provider that really serves Aoede.
+  // The old Providence endpoint renders Kokoro ff_siwis and is therefore not a
+  // valid Mairaiy/Aoede provider. It must never be pinned as the default.
+  voiceFabricEnabled: bool('AURA_VOICE_FABRIC_ENABLED', false),
+  voiceFabricPinQuanticEndpoint: false,
+  voiceFabricBaseUrl: String(process.env.AURA_VOICE_FABRIC_BASE_URL || '').replace(/\/$/, ''),
   voiceFabricApiKey: process.env.AURA_VOICE_FABRIC_API_KEY || '',
-  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'kokoro',
+  voiceFabricModel: process.env.AURA_VOICE_FABRIC_MODEL || 'gemini-3.1-flash-tts-preview',
   voiceFabricProfileId: process.env.AURA_MAIRAIY_VOICE_PROFILE_ID || '',
-  voiceFabricProfileName: process.env.AURA_MAIRAIY_VOICE_PROFILE_NAME || 'Mairaiy',
-  voiceFabricRequireProfile: bool('AURA_MAIRAIY_REQUIRE_PROFILE', true),
-  voiceFabricLanguage: process.env.AURA_MAIRAIY_LANGUAGE || 'fr-fr',
+  voiceFabricProfileName: 'Mairaiy',
+  voiceFabricRequireProfile: true,
+  voiceFabricLanguage: 'fr-fr',
   voiceFabricInstruct: process.env.AURA_MAIRAIY_VOICE_INSTRUCT || '',
   voiceFabricSpeed: num('AURA_MAIRAIY_VOICE_SPEED', 1, 0.5, 1.5),
   voiceFabricSeed: int('AURA_MAIRAIY_VOICE_SEED', 2388, 0, 2147483647),
@@ -174,13 +216,20 @@ export const config = Object.freeze({
   voiceFabricChunkChars: int('AURA_VOICE_FABRIC_CHUNK_CHARS', 3200, 800, 3900),
   voiceFabricMaxAudioBytes: int('AURA_VOICE_FABRIC_MAX_AUDIO_BYTES', 20 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
   voiceFabricZeroCostConfirmed: bool('AURA_VOICE_FABRIC_ZERO_COST_CONFIRMED', false),
-  voiceFabricTrustedZeroCostOrigins: csv('AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS', 'https://mediumorchid-badger-314305.hostingersite.com/voice'),
-  voiceFabricStrictIdentity: bool('AURA_VOICE_FABRIC_STRICT_IDENTITY', true),
+  voiceFabricTrustedZeroCostOrigins: csv('AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS', ''),
+  voiceFabricStrictIdentity: true,
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
+
+  // Continuous Existence: AURA periodically re-evaluates unfinished work even
+  // when no human message or external event arrives. This is native cognition
+  // only; it does not authorize new risks or paid inference.
+  continuityEnabled: bool('AURA_CONTINUITY_ENABLED', true),
+  continuityReflectionSeconds: int('AURA_CONTINUITY_REFLECTION_SECONDS', 600, 60, 86400),
+  continuityMaxReflectionsPerHour: int('AURA_CONTINUITY_MAX_REFLECTIONS_PER_HOUR', 4, 1, 24),
 
   curiosityEnabled: bool('AURA_CURIOSITY_ENABLED', true),
   curiosityTickSeconds: int('AURA_CURIOSITY_TICK_SECONDS', 180, 30, 86400),
@@ -192,6 +241,23 @@ export const config = Object.freeze({
   curiosityMaxInterlocutorQuestionsPerHour: int('AURA_CURIOSITY_MAX_INTERLOCUTOR_QUESTIONS_PER_HOUR', 4, 0, 12),
   curiosityProductStaleSeconds: int('AURA_CURIOSITY_PRODUCT_STALE_SECONDS', 900, 60, 86400),
 
+  // Capability Scout — AURA cherche elle-même des briques externes utiles,
+  // vérifie leur licence/maturité et expérimente les meilleures en sandbox.
+  capabilityScoutEnabled: bool('AURA_CAPABILITY_SCOUT_ENABLED', true),
+  capabilityScoutIntervalSeconds: int('AURA_CAPABILITY_SCOUT_INTERVAL_SECONDS', 5400, 900, 86400),
+  capabilityScoutWarmupSeconds: int('AURA_CAPABILITY_SCOUT_WARMUP_SECONDS', 75, 15, 1800),
+  capabilityScoutQueriesPerCycle: int('AURA_CAPABILITY_SCOUT_QUERIES_PER_CYCLE', 2, 1, 4),
+  capabilityScoutSearchResults: int('AURA_CAPABILITY_SCOUT_SEARCH_RESULTS', 8, 3, 20),
+  capabilityScoutInspectPerCycle: int('AURA_CAPABILITY_SCOUT_INSPECT_PER_CYCLE', 6, 1, 12),
+  capabilityScoutInvestigationsPerCycle: int('AURA_CAPABILITY_SCOUT_INVESTIGATIONS_PER_CYCLE', 2, 1, 4),
+  capabilityScoutMaxFindingsPerCycle: int('AURA_CAPABILITY_SCOUT_MAX_FINDINGS_PER_CYCLE', 5, 1, 10),
+  capabilityScoutMinScore: num('AURA_CAPABILITY_SCOUT_MIN_SCORE', 0.64, 0.3, 0.95),
+  capabilityScoutExperimentMinScore: num('AURA_CAPABILITY_SCOUT_EXPERIMENT_MIN_SCORE', 0.78, 0.5, 0.99),
+  capabilityScoutResearchMinConfidence: num('AURA_CAPABILITY_SCOUT_RESEARCH_MIN_CONFIDENCE', 0.60, 0.3, 0.95),
+  capabilityScoutAutoExperiment: bool('AURA_CAPABILITY_SCOUT_AUTO_EXPERIMENT', true),
+  capabilityScoutMaxExperimentsPerDay: int('AURA_CAPABILITY_SCOUT_MAX_EXPERIMENTS_PER_DAY', 2, 0, 8),
+  capabilityScoutDedupeDays: int('AURA_CAPABILITY_SCOUT_DEDUPE_DAYS', 14, 1, 90),
+
   commandCenterEnabled: bool('AURA_COMMAND_CENTER_ENABLED', true),
   commandCenterAutoExecute: bool('AURA_COMMAND_CENTER_AUTO_EXECUTE', true),
   directorModeEnabled: bool('AURA_DIRECTOR_MODE_ENABLED', true),
@@ -200,13 +266,21 @@ export const config = Object.freeze({
   directorPromotionPollSeconds: int('AURA_DIRECTOR_PROMOTION_POLL_SECONDS', 300, 60, 3600),
   directorMergeMaxFiles: int('AURA_DIRECTOR_MERGE_MAX_FILES', 4, 1, 8),
   directorMergeMaxChanges: int('AURA_DIRECTOR_MERGE_MAX_CHANGES', 800, 50, 5000),
+  directorMergeMinChecks: int('AURA_DIRECTOR_MERGE_MIN_CHECKS', 2, 1, 20),
+  directorAutoMergePathPrefixes: csv(
+    'AURA_DIRECTOR_AUTO_MERGE_PATH_PREFIXES',
+    'docs/,test/,tests/',
+  ),
   directorTrustedGithubActors: new Set(csv(
     'AURA_DIRECTOR_TRUSTED_GITHUB_ACTORS',
     'XDSawyerLoL',
   ).map((item) => item.toLowerCase())),
   commandCenterTickSeconds: int('AURA_COMMAND_CENTER_TICK_SECONDS', 60, 15, 86400),
   commandCenterWarmupSeconds: int('AURA_COMMAND_CENTER_WARMUP_SECONDS', 20, 10, 300),
-  commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 8, 1, 24),
+  commandCenterMaxInitiativesPerHour: int('AURA_COMMAND_CENTER_MAX_INITIATIVES_PER_HOUR', 12, 1, 48),
+  commandCenterPortfolioWorkstreams: int('AURA_COMMAND_PORTFOLIO_WORKSTREAMS', 4, 1, 8),
+  commandCenterProductStaleSeconds: int('AURA_COMMAND_PRODUCT_STALE_SECONDS', 360, 120, 86400),
+  commandCenterProductOfflineSeconds: int('AURA_COMMAND_PRODUCT_OFFLINE_SECONDS', 900, 300, 172800),
   commandCenterCooldownSeconds: int('AURA_COMMAND_CENTER_COOLDOWN_SECONDS', 900, 60, 86400),
   commandCenterMinConfidence: num('AURA_COMMAND_CENTER_MIN_CONFIDENCE', 0.58, 0.1, 1),
   commandCenterAllowedRisks: new Set(csv(
@@ -247,7 +321,7 @@ export const config = Object.freeze({
   commandCenterMaxGithubActionsPerCycle: int('AURA_COMMAND_MAX_GITHUB_ACTIONS_PER_CYCLE', 3, 0, 6),
 
   // Expert Bridge: second avis autonome. L'expert conseille; AURA garde tous les outils.
-  expertBridgeEnabled: bool('AURA_EXPERT_BRIDGE_ENABLED', false),
+  expertBridgeEnabled: bool('AURA_EXPERT_BRIDGE_ENABLED', true),
   expertBridgeBaseUrl: String(process.env.AURA_EXPERT_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
   expertBridgeApiKey: process.env.AURA_EXPERT_API_KEY || process.env.OPENAI_API_KEY || '',
   expertBridgeModel: process.env.AURA_EXPERT_MODEL || 'gpt-6-astra',
@@ -351,10 +425,10 @@ export function productionConfigIssues() {
       message: 'AI_MODE=gemini exige AI_API_KEY.',
     });
   }
-  if (config.aiMode === 'bridge' && !config.cloudToken && !process.env.AURA_BRIDGE_TOKEN) {
+  if (config.aiMode === 'bridge' && !config.bridgeToken && !config.allowLegacyBridgeAdminToken) {
     issues.push({
       code: 'bridge_token_missing',
-      message: 'AI_MODE=bridge exige AURA_CLOUD_TOKEN ou AURA_BRIDGE_TOKEN.',
+      message: 'AI_MODE=bridge exige AURA_BRIDGE_TOKEN; le token admin n’est plus accepté implicitement.',
     });
   }
   if (process.env.NODE_ENV === 'production' && config.fabricDiscoveryUrls.length && !config.fabricToken) {

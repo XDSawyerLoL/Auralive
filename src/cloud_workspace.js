@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -22,8 +22,12 @@ function nestedPath(value) {
 export class AuraCloudWorkspace {
   static VERSION = 'aura-cloud-workspace-v1';
 
-  constructor(root = path.join(tmpdir(), 'aura-cloud-workspace')) {
-    this.root = path.resolve(root);
+  constructor(root = '') {
+    const isolatedRoot = String(root || '').trim() || path.join(
+      tmpdir(),
+      `aura-cloud-workspace-${process.pid}-${randomUUID()}`,
+    );
+    this.root = path.resolve(isolatedRoot);
   }
 
   safePath(relativeName) {

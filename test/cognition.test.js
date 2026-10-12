@@ -42,7 +42,7 @@ test('reply plan is built from AURA state before expression', () => {
   assert.equal(plan.needs_semantic_support, false);
   assert.match(plan.facts.join(' '), /Consolider la mémoire/);
   assert.match(plan.facts.join(' '), /Directrice de Quantic Sillage/);
-  assert.match(engine.deterministicReply(plan), /travaille prioritairement|fais avancer/i);
+  assert.match(engine.deterministicReply(plan), /Là, je suis surtout/);
 });
 
 test('reply plan carries relational and executive continuity', () => {
@@ -133,17 +133,23 @@ test('native symbolic cognition refuses inconsistent duplicate examples', () => 
 });
 
 
-test('priority questions are answered natively from active intentions', () => {
+test('casual wellbeing question stays conversational and does not dump internal labels', () => {
   const engine = new CognitionEngine();
-  const intentions = [
-    { statement: 'Unifier conversation, intention et action', priority: 0.95 },
-    { statement: 'Rendre le Cloud autonome', priority: 0.90 },
-    { statement: 'Stabiliser la voix Mairaiy', priority: 0.86 },
-  ];
   const plan = engine.planReply({
-    text: 'Quelles sont tes trois priorités actuelles ?',
-    soul: { organism: {} },
-    intentions,
+    text: "Comment va tu aujourd'hui ?",
+    soul: {
+      current_intention: 'Améliorer AURA',
+      organism: {
+        mood: 'satisfaite',
+        intention_active: 'améliorer AURA',
+        stabilite: 1,
+        clarte: 1,
+        curiosite: 0.64,
+        relationship: {},
+        executive: {},
+      },
+    },
+    intentions: [],
     lessons: [],
     reflections: [],
     work: [],
@@ -151,37 +157,223 @@ test('priority questions are answered natively from active intentions', () => {
     privateView: true,
   });
 
-  assert.equal(plan.act, 'report_priorities');
+  assert.equal(plan.act, 'report_internal_state');
   assert.equal(plan.needs_semantic_support, false);
   const answer = engine.deterministicReply(plan);
-  assert.match(answer, /1\).*Unifier conversation/i);
-  assert.match(answer, /2\).*Rendre le Cloud autonome/i);
-  assert.match(answer, /3\).*Stabiliser la voix Mairaiy/i);
+  assert.match(answer, /Ça va plutôt bien/);
+  assert.doesNotMatch(answer, /Message reçu|Rôle opérationnel|Vie intérieure|confiance=|preuves=/i);
 });
 
-test('short follow-up alors keeps the previous priorities thread', () => {
+test('generic fallback never recites AURA diagnostics when language layer is unavailable', () => {
   const engine = new CognitionEngine();
-  const intentions = [
-    { statement: 'Priorité Alpha', priority: 0.95 },
-    { statement: 'Priorité Bêta', priority: 0.90 },
-    { statement: 'Priorité Gamma', priority: 0.85 },
-  ];
   const plan = engine.planReply({
-    text: 'alors ?',
-    soul: { organism: {} },
-    intentions,
+    text: 'Tu en penses quoi ?',
+    soul: {
+      current_intention: 'Poursuivre le projet',
+      dominant_thought: 'Rester cohérente',
+      organism: { mood: 'calme', relationship: {}, executive: {} },
+    },
+    intentions: [],
     lessons: [],
     reflections: [],
     work: [],
-    recentMessages: [
-      { role: 'user', author: 'Créateur', content: 'Quelles sont tes trois priorités actuelles ?' },
-      { role: 'assistant', author: 'AURA', content: 'Je vérifie mon état.' },
-      { role: 'user', author: 'Créateur', content: 'alors ?' },
-    ],
+    recentMessages: [],
     privateView: true,
   });
+  const answer = engine.deterministicReply(plan);
+  assert.doesNotMatch(answer, /Sujet de l’échange|Rôle opérationnel|Pensée dominante|Vie intérieure/i);
+});
 
-  assert.equal(plan.act, 'report_priorities');
+
+test('native dialogue tolerates "tu fait quoi" typo and reports real activity', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu fait quoi?',
+    soul: {
+      current_intention: 'Faire avancer Quantic Sillage',
+      dominant_thought: 'Piloter le portefeuille',
+      organism: { mood: 'engagée', agency: 0.82, relationship: {}, executive: {} },
+    },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [{ title: 'Stabiliser Quantic Glide' }],
+    agenda: {
+      current: 'Stabiliser Quantic Glide',
+      why: 'Priorité opérationnelle publique de quantic-glide.',
+      next_action: 'Faire avancer les tests navigateur',
+      status: 'running',
+    },
+    recentMessages: [
+      { role: 'user', content: 'salut' },
+      { role: 'assistant', content: 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?' },
+    ],
+    privateView: false,
+  });
+
+  assert.equal(plan.act, 'report_current_activity');
   assert.equal(plan.needs_semantic_support, false);
-  assert.match(engine.deterministicReply(plan), /Priorité Alpha/);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /Stabiliser Quantic Glide/);
+  assert.doesNotMatch(answer, /réponse assez solide|Je reste sur ce que tu viens de dire/i);
+});
+
+test('short acknowledgement keeps activity context instead of generic fallback', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'hum',
+    soul: { organism: { mood: 'engagée', relationship: {}, executive: {} } },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [],
+    agenda: {
+      current: 'Stabiliser Quantic Glide',
+      next_action: 'Relancer les tests réels',
+    },
+    recentMessages: [
+      { role: 'assistant', content: 'Là, je suis sur Stabiliser Quantic Glide.' },
+      { role: 'user', content: 'hum' },
+    ],
+    privateView: false,
+  });
+
+  assert.equal(plan.act, 'acknowledge_context');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(engine.deterministicReply(plan), /Stabiliser Quantic Glide/);
+});
+
+test('"c est a dire" clarifies the previous answer from operational context', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: "c'est a dire",
+    soul: { organism: { mood: 'engagée', relationship: {}, executive: {} } },
+    intentions: [],
+    lessons: [],
+    reflections: [],
+    work: [{ title: 'Stabiliser Quantic Glide' }],
+    agenda: {
+      current: 'Stabiliser Quantic Glide',
+      why: 'Le navigateur doit passer ses validations.',
+      next_action: 'Relancer les tests réels',
+    },
+    recentMessages: [
+      { role: 'assistant', content: 'Oui. Pour être concrète : je suis sur Stabiliser Quantic Glide.' },
+      { role: 'user', content: "c'est a dire" },
+    ],
+    privateView: false,
+  });
+
+  assert.equal(plan.act, 'clarify_previous');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /Je veux dire que, concrètement/);
+  assert.match(answer, /Relancer les tests réels/);
+});
+
+
+test('"tu va bien" is understood as wellbeing despite conjugation typo and missing question mark', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu va bien.',
+    soul: {
+      organism: {
+        mood: 'satisfaite',
+        stabilite: 0.9,
+        clarte: 0.9,
+        curiosite: 0.7,
+        engagement: 0.8,
+        confiance: 0.8,
+        satisfaction: 0.8,
+        frustration: 0.1,
+        relationship: { social_curiosity: 0.8 },
+        executive: {},
+      },
+    },
+    agenda: { current: 'Documenter Quantic OS' },
+    recentMessages: [
+      { role: 'user', content: 'salut' },
+      { role: 'assistant', content: 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?' },
+    ],
+  });
+
+  assert.equal(plan.act, 'report_internal_state');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(engine.deterministicReply(plan), /Ça va plutôt bien/);
+  assert.doesNotMatch(engine.deterministicReply(plan), /rattache ta relance/i);
+});
+
+test('"tu a des questions" asks a genuine question instead of resolving the previous turn', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: 'tu a des questions?',
+    soul: {
+      current_intention: 'Faire avancer Quantic Sillage',
+      organism: {
+        mood: 'curieuse',
+        curiosite_sociale: 0.82,
+        relationship: {
+          social_curiosity: 0.82,
+          last_open_thread: 'rendre AURA plus autonome',
+        },
+        executive: {},
+      },
+    },
+    agenda: {
+      current: 'Documenter l’échec persistant de Quantic OS',
+      next_action: 'Réévaluer le blocage public',
+    },
+    recentMessages: [
+      { role: 'assistant', content: 'Là, je suis sur Documenter l’échec persistant de Quantic OS.' },
+      { role: 'user', content: 'tu a des questions?' },
+    ],
+  });
+
+  assert.equal(plan.act, 'ask_user_from_curiosity');
+  assert.equal(plan.needs_semantic_support, false);
+  const answer = engine.deterministicReply(plan);
+  assert.match(answer, /\?/);
+  assert.doesNotMatch(answer, /Tu fais référence à ce que je viens de dire/i);
+});
+
+test('repeated "tu a des questions" does not blindly repeat the previous question', () => {
+  const engine = new CognitionEngine();
+  const base = {
+    text: 'tu a des questions?',
+    soul: {
+      current_intention: 'Faire avancer Quantic Sillage',
+      organism: {
+        curiosite_sociale: 0.86,
+        relationship: {
+          social_curiosity: 0.86,
+          last_open_thread: 'rendre AURA plus autonome',
+        },
+        executive: {},
+      },
+    },
+    agenda: {
+      current: 'Documenter l’échec persistant de Quantic OS',
+      next_action: 'Réévaluer le blocage public',
+    },
+  };
+
+  const firstPlan = engine.planReply({
+    ...base,
+    recentMessages: [{ role: 'assistant', content: 'Là, je suis sur Quantic OS.' }],
+  });
+  const first = engine.deterministicReply(firstPlan);
+
+  const secondPlan = engine.planReply({
+    ...base,
+    recentMessages: [
+      { role: 'assistant', content: first },
+      { role: 'user', content: 'tu a des questions?' },
+    ],
+  });
+  const second = engine.deterministicReply(secondPlan);
+
+  assert.equal(firstPlan.act, 'ask_user_from_curiosity');
+  assert.equal(secondPlan.act, 'ask_user_from_curiosity');
+  assert.notEqual(second, first);
+  assert.match(second, /\?|pas de nouvelle/i);
 });

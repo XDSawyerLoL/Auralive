@@ -80,9 +80,7 @@ test('cloud kernel executes typed sandbox mission when Quantic Studio is offline
     ['safe'],
   );
   assert.equal(outcome.executed, true);
-  assert.equal(outcome.execution_mode, 'aura-cloud-first');
-  assert.equal(outcome.execution_policy, 'cloud-first-local-optional');
-  assert.equal(outcome.local_worker_required, false);
+  assert.equal(outcome.execution_mode, 'aura-cloud-sandbox');
   assert.equal(outcome.authority, 'typed-reversible-cloud-workspace');
 });
 

@@ -54,9 +54,21 @@ DB_PASSWORD=...
 DB_NAME=...
 DB_CONNECT_TIMEOUT_MS=5000
 
-OPTIONNEL — SURFACES PRIVÉES SERVEUR
-AURA_CLOUD_TOKEN=
+IDENTITÉS SÉPARÉES — RECOMMANDÉES / PRODUCTION
+AURA_CLOUD_TOKEN=<secret-admin-fondateur>
+AURA_BRIDGE_TOKEN=<secret-runtime-worker>
+AURA_PRODUCT_TOKENS_JSON={"quantic-glide":"...","quantic-mail":"...","identity-vault":"...","quantic-os":"...","zoon":"...","pulse":"...","quantic-news":"...","providence":"...","horizon":"..."}
+AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN=false
+AURA_ALLOW_LEGACY_PRODUCT_ADMIN_TOKEN=false
 AURA_EVOLUTION_CANARY_TOKEN=
+
+COMPANY OS
+AURA_CONTINUITY_ENABLED=true
+AURA_COMMAND_PORTFOLIO_WORKSTREAMS=4
+AURA_COMMAND_PRODUCT_STALE_SECONDS=360
+AURA_COMMAND_PRODUCT_OFFLINE_SECONDS=900
+AURA_DIRECTOR_MERGE_MIN_CHECKS=2
+AURA_DIRECTOR_AUTO_MERGE_PATH_PREFIXES=docs/,test/,tests/
 
 VOIX MAIRAIY EN LIGNE
 AURA_VOICE_FABRIC_ENABLED=true
@@ -88,6 +100,18 @@ VÉRIFICATION APRÈS DÉPLOIEMENT
 5. POST /api/chat doit répondre sans Authorization Bearer lorsque le runtime est prêt.
 
 6. GET /api/voice/status doit indiquer Mairaiy / aura-voice-fabric lorsque le service voix est joignable.
+
+7. GET /api/command-center/status doit exposer :
+   "portfolio"
+   "recent_receipts"
+   "company_readiness"
+   et un score "overall" calculé sur des preuves runtime.
+
+8. Vérifier dans /api/bootstrap/status :
+   "bridge_token_configured": true
+   "product_identity_tokens_configured": au moins 9
+   "legacy_bridge_admin_token_allowed": false
+   "legacy_product_admin_token_allowed": false
 
 DIAGNOSTIC D'UN ANCIEN DÉPLOIEMENT
 - Si la page affiche "Accès privé", AURA_CLOUD_TOKEN à saisir, ou un badge antérieur à 2.2.1 :

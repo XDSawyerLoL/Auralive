@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp } from './policy.js';
+import { classifyInitiativeResult } from './outcome_truth.js';
+import { selectNextMission, missionRotation } from './mission_scheduler.js';
+import { MissionLeaseManager } from './mission_leases.js';
 
 const now = () => new Date().toISOString();
 
@@ -51,15 +54,7 @@ function likelyNeedsResearch(value) {
 }
 
 function resultLooksSuccessful(kind, storedResult) {
-  const result = parseJson(storedResult, {});
-  const returnedStatus = String(result?.status || result?.result?.status || '').toLowerCase();
-  if (['error', 'failed', 'cancelled', 'canceled', 'no-safe-patch'].includes(returnedStatus)) {
-    return false;
-  }
-  if (returnedStatus.endsWith('-rejected')) return false;
-  if (kind === 'operator' && result?.executed === false && !result?.queued) return false;
-  if (result?.ok === false) return false;
-  return true;
+  return classifyInitiativeResult(kind, parseJson(storedResult, {})).status === 'completed';
 }
 
 export class LongHorizonMissionEngine {
@@ -69,6 +64,8 @@ export class LongHorizonMissionEngine {
     this.kernel = kernel;
     this.lastError = '';
     this.lastAdvanceAt = '';
+    this.lastScheduledMissionId = '';
+    this.leases = new MissionLeaseManager();
   }
 
   async init() {
@@ -152,12 +149,17 @@ export class LongHorizonMissionEngine {
     };
   }
 
-  async activeMission() {
-    return one(
+  async activeMission({ advance = false } = {}) {
+    // Rotate cooperatively instead of starving lower-priority projects forever.
+    // No claim of cross-process leases or simultaneous multi-mission execution.
+    const rows = await query(
       `SELECT * FROM aura_missions
        WHERE status IN ('planning','running','waiting')
-       ORDER BY priority DESC,updated_at ASC LIMIT 1`,
+       ORDER BY priority DESC,updated_at ASC LIMIT 64`,
     );
+    const mission = selectNextMission(rows, this.lastScheduledMissionId);
+    if (advance && mission) this.lastScheduledMissionId = String(mission.id);
+    return mission;
   }
 
   async createMission(input = {}) {
@@ -210,6 +212,12 @@ export class LongHorizonMissionEngine {
         stamp,
       ],
     );
+    if (sourceIntentionId) {
+      await this.kernel.setIntentionStatus(sourceIntentionId, 'working', {
+        mission_id: id,
+        lifecycle_reason: 'mission-created',
+      }).catch(() => {});
+    }
 
     try {
       await this.planMission(id, { reason: 'initial-plan' });
@@ -250,7 +258,7 @@ export class LongHorizonMissionEngine {
 
     let parsed = {};
     try {
-      const answer = await this.kernel.runAgent('planner', prompt);
+      const answer = await this.kernel.runAgent('planner', prompt, { missionId: mission.id });
       parsed = parseJsonObject(answer?.answer);
     } catch {
       parsed = {};
@@ -437,6 +445,7 @@ export class LongHorizonMissionEngine {
             result,
           }).slice(0, 9000)}`,
         ].join('\n'),
+        { missionId: mission.id },
       );
       const parsed = parseJsonObject(response?.answer);
       const verdict = String(parsed.verdict || '').toLowerCase();
@@ -498,6 +507,18 @@ export class LongHorizonMissionEngine {
        WHERE id=?`,
       [status, success ? 1 : Number(mission.progress || 0), success ? '' : normalizeText(reason, 4000), stamp, stamp, mission.id],
     );
+    if (mission.source_intention_id) {
+      await this.kernel.setIntentionStatus(
+        mission.source_intention_id,
+        success ? 'completed' : 'blocked',
+        {
+          mission_id: mission.id,
+          mission_status: status,
+          lifecycle_reason: success ? 'mission-completed' : 'mission-failed',
+          blocker: success ? '' : normalizeText(reason || 'révisions épuisées', 1800),
+        },
+      ).catch(() => {});
+    }
     await this.kernel.learn({
       lessonKey: `mission:${mission.id}:${status}`,
       content: success
@@ -659,9 +680,43 @@ export class LongHorizonMissionEngine {
 
   async nextCandidate() {
     if (!config.longHorizonEnabled) return { enabled: false };
-    let mission = await this.ensureAutonomousMission();
-    if (!mission) return { enabled: true, idle: true, reason: 'no mission candidate' };
+    // Seed when no active mission exists, but do not let one waiting mission
+    // starve all other projects. Every candidate receives an atomic DB lease.
+    await this.ensureAutonomousMission();
+    const rows = await query(
+      `SELECT * FROM aura_missions
+       WHERE status IN ('planning','running','waiting')
+       ORDER BY priority DESC,updated_at ASC LIMIT 64`,
+    );
+    let idle = { enabled: true, idle: true, reason: 'no mission candidate' };
+    for (const row of missionRotation(rows, this.lastScheduledMissionId)) {
+      const lease = await this.leases.claim(row.id);
+      if (!lease) continue;
+      this.lastScheduledMissionId = String(row.id);
+      let retained = false;
+      try {
+        const result = await this.evaluateMissionCandidate(row);
+        if (result?.candidate && result?.step?.id) {
+          retained = true;
+          return { ...result, lease };
+        }
+        idle = result || idle;
+      } finally {
+        if (!retained) await this.leases.release(lease);
+      }
+    }
+    return idle;
+  }
 
+  async releaseLease(lease) {
+    return this.leases.release(lease);
+  }
+
+  async renewLease(lease) {
+    return this.leases.renew(lease);
+  }
+
+  async evaluateMissionCandidate(mission) {
     if (String(mission.status || '') === 'planning') {
       await this.planMission(mission.id, { reason: 'resume-planning-state' });
       mission = await one('SELECT * FROM aura_missions WHERE id=?', [mission.id]);
@@ -745,13 +800,21 @@ export class LongHorizonMissionEngine {
   async bindInitiative(stepId, initiativeId) {
     const step = await one('SELECT * FROM aura_mission_steps WHERE id=?', [String(stepId)]);
     if (!step) throw new Error('Étape de mission inconnue');
-    if (step.initiative_id) return step;
-    await query(
+    if (step.initiative_id) {
+      if (String(step.initiative_id) !== String(initiativeId)) throw new Error('mission-step-already-bound');
+      return step;
+    }
+    // Compare-and-set prevents two expired/stale lease holders from attaching
+    // different initiatives to the same mission step.
+    const changed = await query(
       `UPDATE aura_mission_steps
        SET initiative_id=?,status='queued',started_at=IF(started_at='',?,started_at),updated_at=?
-       WHERE id=?`,
+       WHERE id=? AND initiative_id='' AND status='pending'`,
       [String(initiativeId), now(), now(), step.id],
     );
+    if (Number(changed?.affectedRows || 0) !== 1) {
+      throw new Error('mission-step-already-bound');
+    }
     await query(
       `UPDATE aura_missions SET status='running',updated_at=? WHERE id=?`,
       [now(), step.mission_id],
@@ -768,11 +831,23 @@ export class LongHorizonMissionEngine {
         `UPDATE aura_missions SET status='paused',updated_at=? WHERE id=?`,
         [now(), mission.id],
       );
+      if (mission.source_intention_id) {
+        await this.kernel.setIntentionStatus(mission.source_intention_id, 'waiting', {
+          mission_id: mission.id,
+          lifecycle_reason: 'mission-paused',
+        }).catch(() => {});
+      }
     } else if (command === 'resume') {
       await query(
         `UPDATE aura_missions SET status='running',updated_at=? WHERE id=? AND status='paused'`,
         [now(), mission.id],
       );
+      if (mission.source_intention_id) {
+        await this.kernel.setIntentionStatus(mission.source_intention_id, 'working', {
+          mission_id: mission.id,
+          lifecycle_reason: 'mission-resumed',
+        }).catch(() => {});
+      }
     } else if (command === 'cancel') {
       const stamp = now();
       await query(
@@ -795,6 +870,12 @@ export class LongHorizonMissionEngine {
         `UPDATE aura_missions SET status='cancelled',completed_at=?,updated_at=? WHERE id=?`,
         [stamp, stamp, mission.id],
       );
+      if (mission.source_intention_id) {
+        await this.kernel.setIntentionStatus(mission.source_intention_id, 'abandoned', {
+          mission_id: mission.id,
+          lifecycle_reason: 'mission-cancelled',
+        }).catch(() => {});
+      }
     } else {
       throw new Error('Action de mission inconnue');
     }
