@@ -47,3 +47,12 @@ test('completed worker jobs still require a nonempty outcome', () => {
   assert.equal(classifyInitiativeResult('worker', { ok: true, artifact: 'result.json' }).status, 'completed');
   assert.equal(classifyInitiativeResult('worker', {}).status, 'failed');
 });
+
+test('explicit failures outrank waiting/plan-only markers', () => {
+  assert.equal(classifyInitiativeResult('operator', {
+    status: 'failed', ok: false, executed: false,
+  }).status, 'failed');
+  assert.equal(classifyInitiativeResult('worker', {
+    status: 'queued', result: { ok: false },
+  }).status, 'failed');
+});
