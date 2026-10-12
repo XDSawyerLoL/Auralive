@@ -19,11 +19,32 @@ export function classifyEmbeddedFailure(error) {
   if (/exec format|enoexec|glibc|wrong elf class/.test(reason))
     return { code: 'embedded-incompatible-binary',
       hint: 'Le binaire llama-server est incompatible avec le système Linux de cet hébergement.' };
-  if (/enomem|out of memory|killed|bad_alloc/.test(reason))
+  if (/sigkill|exit.signal.sigkill|enomem|out of memory|killed|bad.alloc|cannot allocate memory|failed to allocate|oom.kill|exit.code.137/i.test(reason))
     return { code: 'embedded-insufficient-memory',
-      hint: 'La mémoire de cet hébergement ne suffit pas au modèle GGUF.' };
+      hint: 'Le processus a probablement dépassé la mémoire disponible. AURA tente un contexte et des lots plus petits.' };
+  if (/sigill|illegal instruction|exit.signal.sigill/.test(reason))
+    return {code:'embedded-cpu-instruction-unsupported',
+      hint:'Le processeur Hostinger ne prend pas en charge une instruction du binaire (SIGILL).'};
+  if (/sigsegv|segmentation fault|exit.signal.sigsegv/.test(reason))
+    return {code:'embedded-native-segfault',
+      hint:'Le moteur natif a rencontré une erreur mémoire (SIGSEGV) pendant son lancement.'};
+  if (/invalid.gguf|invalid magic|unknown architecture|unsupported model|failed to load model|error loading model|llama_model_load|model_load.*failed|gguf_init_from_file.*failed/.test(reason))
+    return {code:'embedded-model-load-failed',
+      hint:'llama.cpp ne parvient pas à charger le modèle GGUF. Vérifier le modèle et la compatibilité du moteur.'};
+  if (/unrecognized argument|invalid argument|unknown option|invalid value for|error parsing arguments/.test(reason))
+    return {code:'embedded-unsupported-startup-option',
+      hint:'Un argument de démarrage est refusé par la version installée de llama.cpp.'};
+  if (/eaddrinuse|failed to bind|address already in use/.test(reason))
+    return {code:'embedded-loopback-port-in-use',
+      hint:'Le port local du moteur est déjà occupé sur Hostinger.'};
+  if (/startup.timeout|timeout waiting for health/.test(reason))
+    return {code:'embedded-startup-timeout',
+      hint:'Le modèle ne devient pas disponible avant le délai de démarrage.'};
+  const match=reason.match(/embedded-engine-exited-(\d{1,3})/);
+  if(match)return {code:'embedded-process-exit-'+match[1],
+    hint:'Le processus llama.cpp s’arrête avec le code '+match[1]+'. Le diagnostic natif donne son étape et ses signaux.'};
   return { code: 'embedded-engine-failed',
-    hint: 'Le moteur intégré ne démarre pas. Examiner les journaux de l’hébergement.' };
+    hint: 'Le moteur s’arrête sans raison classifiée. Consulter les signaux et le code de sortie sur /api/language/embedded/status.' };
 }
 // The pinned upstream tarball can contain broken SONAME symlinks. Never
 // modify other applications; inspect only AURA-managed runtime directories.
@@ -179,6 +200,53 @@ export function nativeLaunchSpec(executable, args=[], useElfLoader=false) {
     : {command:executable,args,env,mode:'direct'};
 }
 
+// Path-free, token-free operational diagnostics. Never expose stderr, model
+// prompts, file paths, environment variables or downloaded URL tokens.
+export function embeddedLogSignals(stderr=''){
+  const source=String(stderr).toLowerCase();
+  const patterns=[
+    ['memory-allocation-failed',/out of memory|failed to allocate|bad.alloc|cannot allocate memory|oom/i],
+    ['model-loader-failed',/failed to load model|error loading model|llama_model_load|gguf_init_from_file|unknown architecture/i],
+    ['unsupported-argument',/unknown option|unrecognized argument|invalid argument|invalid value for/i],
+    ['cpu-instruction',/illegal instruction|sigill/i],
+    ['network-bind',/failed to bind|address already in use|eaddrinuse/i],
+    ['unsupported-syscall',/operation not permitted|seccomp|unsupported syscall/i],
+    ['thread-create-failed',/pthread_create|cannot create thread|resource temporarily unavailable/i],
+    ['model-file-open-failed',/failed to open|cannot open model|model file not found/i],
+  ];
+  return patterns.filter(([,re])=>re.test(source)).map(([name])=>name);
+}
+export function cgroupMemorySnapshot({
+  read=fs.readFileSync,
+}={}){
+  const num=(p)=>{
+    try{
+      const v=String(read(p,'utf8')).trim();
+      if(v==='max')return null;
+      const n=Number(v);return Number.isSafeInteger(n)&&n>=0&&n<1e15?n:null;
+    }catch{return null;}
+  };
+  const mb=(n)=>n===null?null:Math.round(n/1048576);
+  const events=(()=>{
+    try{
+      const lines=String(read('/sys/fs/cgroup/memory.events','utf8')).split('\n');
+      const result={};
+      for(const line of lines){const [key,v]=line.trim().split(/\s+/);if(['oom','oom_kill'].includes(key))result[key]=Number(v)||0;}
+      return result;
+    }catch{return {};}
+  })();
+  return {limit_mb:mb(num('/sys/fs/cgroup/memory.max')??num('/sys/fs/cgroup/memory/memory.limit_in_bytes')),
+    current_mb:mb(num('/sys/fs/cgroup/memory.current')??num('/sys/fs/cgroup/memory/memory.usage_in_bytes')),
+    oom_events:events.oom??null,oom_kills:events.oom_kill??null};
+}
+export function nativeBootArgs(gguf, port, {lowMemory=false,threads=2}={}){
+  const context=lowMemory?768:2048;
+  return ['-m',gguf,'--host','127.0.0.1','--port',String(port),
+    '--ctx-size',String(context),'--threads',String(Math.max(1,Math.min(4,Number(threads)||2))),
+    '--parallel','1','--batch-size',lowMemory?'32':'96',
+    '--ubatch-size',lowMemory?'16':'48','--no-warmup'];
+}
+
 export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
@@ -224,7 +292,7 @@ function freePort(){
 }
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=fetch,
-    allocatePort=freePort,delay=pause,bootTimeoutMs=60_000,
+    allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
     provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
     Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
     this.provisionedPaths=null;this.canonicalSource=false;
@@ -233,6 +301,9 @@ export class EmbeddedLanguageRuntime {
     this.cachedDiscovery=null;this.lastDiscoveryAt=0;
     this.repairedLibraryAliases=[];
     this.launchMode='not-started';
+    this.bootProfile='standard';this.lastProcessExit={code:null,signal:null};
+    this.lastLogSignals=[];this.failureStage='';this.memoryAtBoot=null;
+    this.memoryAfterFailure=null;this.lastOomKillDelta=null;
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -288,10 +359,23 @@ export class EmbeddedLanguageRuntime {
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
       launch_mode:this.launchMode,
+      boot_profile:this.bootProfile,
+      process_exit:this.lastProcessExit,
+      failure_stage:this.failureStage,
+      log_signals:this.lastLogSignals,
+      resource_before_start:this.memoryAtBoot,
+      resource_after_failure:this.memoryAfterFailure,
+      oom_kills_during_start:this.lastOomKillDelta,
       paid_model_api_required:false};
   }
   fail(error){
     this.ready=false;this.lastFailure=errorText(error);
+    this.memoryAfterFailure=cgroupMemorySnapshot();
+    if(this.memoryAtBoot?.oom_kills!==null && this.memoryAtBoot?.oom_kills!==undefined
+      && this.memoryAfterFailure.oom_kills!==null)
+      this.lastOomKillDelta=Math.max(0,this.memoryAfterFailure.oom_kills-this.memoryAtBoot.oom_kills);
+    if(this.lastOomKillDelta>0)
+      this.lastFailure+=' out of memory embedded-cgroup-oom-kill';
     this.cooldownUntil=Date.now()+60_000;
   }
   async start(){
@@ -324,47 +408,83 @@ export class EmbeddedLanguageRuntime {
   async bootWithExecutable(){
     if(!this.repairExecutable())return false;
     this.repairedLibraryAliases=repairLlamaLibraryAliases(this.inspect().executable);
-    const direct=await this.boot();
-    if(direct || classifyEmbeddedFailure(this.lastFailure).code!=='embedded-shared-library-unresolved'
-      || !systemElfLoader())return direct;
-    // AURA controls the interpreter path, binary, model and library roots;
-    // Linux resolves the loader's --library-path without relying on the
-    // hosting platform preserving LD_LIBRARY_PATH in the child environment.
+    let success=await this.boot();
+    if(success)return true;
+    // Reduce model memory requirements for process OOM, SIGKILL or a stalled
+    // first warmup. No recursive retry loops or background orphan servers.
+    const firstFailure=classifyEmbeddedFailure(this.lastFailure).code;
+    if(['embedded-insufficient-memory','embedded-startup-timeout'].includes(firstFailure)){
+      this.cooldownUntil=0;
+      success=await this.boot(false,true);
+      if(success)return true;
+    }
+    if(classifyEmbeddedFailure(this.lastFailure).code!=='embedded-shared-library-unresolved'
+      || !systemElfLoader())return false;
+    // Fallback for dynamic ELF binaries only; a standalone musl binary
+    // normally does not need or support the host's glibc interpreter.
     this.cooldownUntil=0;
     return this.boot(true);
   }
-  async boot(useElfLoader=false){
+  async boot(useElfLoader=false,lowMemory=false){
     const {executable,gguf}=this.inspect();
     this.lastFailure='';this.port=await this.allocatePort();
+    this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
+    this.failureStage='spawning-native-server';
+    this.bootProfile=lowMemory?'low-memory':'standard';
+    this.memoryAtBoot=cgroupMemorySnapshot();
+    this.memoryAfterFailure=null;this.lastOomKillDelta=null;
     let child;
     try{
-      const spec=nativeLaunchSpec(executable,[
-        '-m',gguf,'--host','127.0.0.1','--port',String(this.port),
-        '--ctx-size','2048','--threads',String(Math.max(1,Math.min(4,
-          Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||2)))],useElfLoader);
+      const spec=nativeLaunchSpec(executable,nativeBootArgs(gguf,this.port,{
+        lowMemory,threads:Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||2,
+      }),useElfLoader);
       if(!spec)throw new Error('embedded-system-loader-unavailable');
       this.launchMode=spec.mode;
       child=this.spawnProcess(spec.command,spec.args,
         {cwd:path.dirname(executable),env:spec.env,
-         stdio:['ignore','ignore','pipe'],shell:false});
+         stdio:['ignore','pipe','pipe'],shell:false});
     }catch(error){this.fail(error);return false;}
     this.child=child;
-    let stderr='';
-    child.stderr?.on('data',chunk=>{stderr=(stderr+String(chunk)).slice(-2200);});
-    child.on('error',error=>this.fail(error));
-    child.on('exit',code=>{
-      if(this.child===child) this.fail(stderr||'embedded-engine-exited-'+code);
+    let stderr='',stdout='';
+    child.stderr?.on('data',chunk=>{
+      stderr=(stderr+String(chunk)).slice(-4000);
+      this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
+    });
+    child.stdout?.on('data',chunk=>{
+      stdout=(stdout+String(chunk)).slice(-1500);
+      this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
+    });
+    child.on('error',error=>{
+      if(this.child===child){
+        this.failureStage='native-spawn-error';this.fail(error);
+      }
+    });
+    child.on('exit',(code,signal)=>{
+      if(this.child===child){
+        this.lastProcessExit={code:code??null,signal:signal??null};
+        if(this.lastFailure && signal==='SIGTERM')return;
+        this.failureStage='native-process-exit';
+        this.fail((stderr||stdout||'embedded-engine-exited-'+code)
+          +(signal?' exit.signal.'+signal.toLowerCase():'')
+          +(code===137?' exit.code.137':''));
+      }
     });
     const deadline=Date.now()+this.bootTimeoutMs;
-    while(Date.now()<deadline && this.child===child && child.exitCode===null && !this.lastFailure){
+    this.failureStage='waiting-model-health';
+    while(Date.now()<deadline && this.child===child && child.exitCode===null
+      && child.signalCode===null && !this.lastFailure){
       try{
         const health=await this.request('http://127.0.0.1:'+this.port+'/health',{
           signal:AbortSignal.timeout(1500)});
-        if(health.ok){this.ready=true;return true;}
+        if(health.ok){this.ready=true;this.failureStage='';return true;}
       }catch{}
       await this.delay(400);
     }
-    if(!this.ready){this.fail(stderr||'embedded-engine-startup-timeout');try{child.kill('SIGTERM');}catch{}}
+    if(!this.ready && !this.lastFailure){
+      this.failureStage='health-timeout';
+      this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
+    }
+    if(!this.ready)try{child.kill('SIGTERM');}catch{}
     return this.ready;
   }
   async generate(prompt,system,maxTokens=600){
