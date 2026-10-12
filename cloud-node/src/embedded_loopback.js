@@ -81,7 +81,8 @@ export function nativeUnixRequest(socketPath,endpoint,{
   if(typeof socketPath!=='string'||!socketPath.startsWith('/')
      ||socketPath.length>106||!socketPath.endsWith('.sock')
      ||socketPath.includes('\0'))throw Error('embedded-unix-socket-invalid');
-  if((route==='/health'&&verb!=='GET')
+  if(!['/health','/v1/chat/completions'].includes(route)
+    ||(route==='/health'&&verb!=='GET')
     ||(route==='/v1/chat/completions'&&verb!=='POST'))
     throw Error('embedded-unix-endpoint-rejected');
   return new Promise((resolve,reject)=>{
