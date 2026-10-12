@@ -69,9 +69,12 @@ export class ExpressionLayer {
     if (config.frenchLanguageRequired) {
       this.lastMode = 'natural-language-unavailable';
       // Operational diagnostic only; never impersonate natural conversation with templates.
-      const languageStatus = await this.language.status();
-      return 'Ma faculté de français naturel est indisponible. '
-        + (languageStatus.setup_hint || 'Aucun modèle linguistique libre n’est joignable.');
+      await this.language.status();
+      // The chat is public-facing. Expose only the service state here;
+      // backend, filesystem paths and remediation remain in diagnostics.
+      return 'Je ne peux pas répondre en français naturel pour le moment : '
+        + 'aucun moteur linguistique opérationnel n’est disponible. '
+        + 'Je conserve le contexte de notre conversation pour reprendre lorsque le service sera rétabli.';
     }
 
     // Secours legacy explicitement opt-in seulement.
