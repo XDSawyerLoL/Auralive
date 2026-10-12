@@ -188,3 +188,19 @@ test('host-native binary denial is reported instead of unrelated OpenRouter setu
   assert.equal(status.blocking_reason,'host-disallows-native-execution');
   assert.match(status.setup_hint,/Hostinger/);
 });
+
+test('on-host bootstrap reports installation instead of demanding an OpenRouter key',async()=>{
+  const embedded={
+    installed:()=>false, canProvision:()=>true,
+    status:()=>({installed:false,ready:false,binary_found:false,model_found:false,
+      provisioning:{enabled:true,stage:'downloading-open-model'},failure_code:''}),
+    async generate(){return '';},
+  };
+  const faculty=new FrenchLanguageFaculty({
+    federation:{enabled:false,snapshot:()=>({enabled:false,zero_cost_mode:true,api_key_configured:false})},
+    bridge:null,
+  },{embedded});
+  const result=await faculty.status();
+  assert.equal(result.blocking_reason,'embedded-language-installing');
+  assert.match(result.setup_hint,/Installation vérifiée/);
+});
