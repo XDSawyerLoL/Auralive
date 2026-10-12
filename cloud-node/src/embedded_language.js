@@ -442,13 +442,17 @@ export class EmbeddedLanguageRuntime {
       this.launchMode=spec.mode;
       child=this.spawnProcess(spec.command,spec.args,
         {cwd:path.dirname(executable),env:spec.env,
-         stdio:['ignore','ignore','pipe'],shell:false});
+         stdio:['ignore','pipe','pipe'],shell:false});
     }catch(error){this.fail(error);return false;}
     this.child=child;
-    let stderr='';
+    let stderr='',stdout='';
     child.stderr?.on('data',chunk=>{
       stderr=(stderr+String(chunk)).slice(-4000);
-      this.lastLogSignals=embeddedLogSignals(stderr);
+      this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
+    });
+    child.stdout?.on('data',chunk=>{
+      stdout=(stdout+String(chunk)).slice(-1500);
+      this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.on('error',error=>{
       if(this.child===child){
@@ -460,7 +464,7 @@ export class EmbeddedLanguageRuntime {
         this.lastProcessExit={code:code??null,signal:signal??null};
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
-        this.fail((stderr||'embedded-engine-exited-'+code)
+        this.fail((stderr||stdout||'embedded-engine-exited-'+code)
           +(signal?' exit.signal.'+signal.toLowerCase():'')
           +(code===137?' exit.code.137':''));
       }
@@ -478,7 +482,7 @@ export class EmbeddedLanguageRuntime {
     }
     if(!this.ready && !this.lastFailure){
       this.failureStage='health-timeout';
-      this.fail((stderr||'')+' embedded-engine-startup-timeout');
+      this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
     }
     if(!this.ready)try{child.kill('SIGTERM');}catch{}
     return this.ready;
