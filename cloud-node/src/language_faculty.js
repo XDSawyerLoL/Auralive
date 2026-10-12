@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { one, query } from './db.js';
+import { retrieveExperiences } from './memory_retrieval.js';
 
 const VERSION = 'aura-language-faculty-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -92,14 +93,16 @@ export class LanguageFaculty {
     );
   }
 
-  async contextFor(sessionId) {
+  async contextFor(sessionId, queryText = '') {
     const id = clean(sessionId, 96);
     if (!id) return [];
+    // Fetch recent candidates within this session only. Rank and deduplicate
+    // locally without external embeddings, model calls or extra infrastructure.
     const rows = await this.store.query(
-      'SELECT kind,note,evidence_status,created_at FROM aura_language_experiences WHERE session_id=? ORDER BY id DESC LIMIT 6',
+      'SELECT kind,note,evidence_status,created_at FROM aura_language_experiences WHERE session_id=? ORDER BY id DESC LIMIT 24',
       [id],
     );
-    const memories = rows.reverse().map((row) => ({
+    const memories = retrieveExperiences(rows, { query: queryText, limit: 6 }).map((row) => ({
       kind: row.kind, note: clean(row.note, 900),
       evidence_status: row.evidence_status, at: row.created_at,
     }));

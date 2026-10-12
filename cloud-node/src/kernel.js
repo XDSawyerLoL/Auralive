@@ -1099,7 +1099,7 @@ export class CognitiveKernel {
     }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     plan = {
       ...plan,
-      experiential_memory: await this.language.contextFor(conversationSession).catch(() => []),
+      experiential_memory: await this.language.contextFor(conversationSession, content).catch(() => []),
     };
 
     // Allocation adaptative : le noyau choisit combien de calcul externe
