@@ -1234,6 +1234,15 @@ export class CognitiveKernel {
       answer,
       !speechFailureCode,
     );
+    if(!speechFailureCode&&privateView
+      &&plan.act==='ask_user_from_curiosity'
+      &&plan.question_proposal
+      &&answer.includes(plan.question_proposal)){
+      // Persist only the question chosen by native cognition when it has
+      // genuinely been spoken. Avoid repeating it on the next invitation.
+      post.state.relationship ||= {};
+      post.state.relationship.last_question=String(plan.question_proposal).slice(0,400);
+    }
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
     await this.recordOrganismEvent('interaction-post', post.state.last_reason || 'expression', {
