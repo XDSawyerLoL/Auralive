@@ -346,14 +346,14 @@ export function chooseNativeTransport({env=process.env,platform=process.platform
 }
 // Bound prompt and response to the CPU-only 2048-token model context.
 // A normal chat failure must never SIGTERM an otherwise healthy llama server.
-export function nativeChatPayload(prompt,system,maxTokens=600){
+export function nativeChatPayload(prompt,system,maxTokens=600,{lowMemory=false}={}){
   const requested=Number(maxTokens);
-  const limit=Number.isFinite(requested)?Math.max(32,Math.min(192,Math.floor(requested))):192;
+  const limit=Number.isFinite(requested)?Math.max(32,Math.min(lowMemory?96:192,Math.floor(requested))):(lowMemory?96:192);
   return {model:'local',stream:false,temperature:0.6,max_tokens:limit,
     chat_template_kwargs:{enable_thinking:false},
     messages:[
-      {role:'system',content:String(system??'').slice(0,1200)},
-      {role:'user',content:String(prompt??'').slice(-1800)},
+      {role:'system',content:String(system??'').slice(0,lowMemory?450:1200)},
+      {role:'user',content:String(prompt??'').slice(lowMemory?-700:-1800)},
     ],
   };
 }
@@ -922,12 +922,12 @@ export class EmbeddedLanguageRuntime {
     try{
       const response=await this.localRequest('/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify(nativeChatPayload(prompt,system,maxTokens)),
+        body:JSON.stringify(nativeChatPayload(prompt,system,maxTokens,{lowMemory:this.bootProfile==='low-memory'})),
         signal:AbortSignal.timeout(75_000)});
       if(!response.ok)throw Error('embedded-http-'+response.status);
       const json=await response.json();
       const answer=String(json?.choices?.[0]?.message?.content||'')
-        .replace(/<think>[\\s\\S]*?<\\/think>/gi,'').trim();
+        .replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
       if(!answer)throw Error('embedded-empty-response');
       this.lastSuccessAt=new Date().toISOString();
       this.lastLatencyMs=Date.now()-started;
