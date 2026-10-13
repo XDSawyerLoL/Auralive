@@ -565,6 +565,7 @@ function renderLanguageEngine(state){
   const install=state?.provisioning||{};
   const stage=String(install.stage||'not-started');
   const backend=String(state?.status||'');
+  const speechStandby=backend==='standby-external-speech';
   const fail=String(install.error_code||state?.failure_code||'');
   const installed=stage==='installed-verified'&&!!state?.installed;
   const previouslyVerified=Boolean(state?.last_verified_probe_at
@@ -574,10 +575,13 @@ function renderLanguageEngine(state){
   const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at&&!degraded);
   const booting=backend==='starting'||backend==='verifying-inference';
   const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
-  const kind=healthy?'ready':degraded?'blocked':blocked?'blocked':booting||generating?'loading':'blocked';
+  const kind=speechStandby?'ready':healthy?'ready':degraded?'blocked'
+    :blocked?'blocked':booting||generating?'loading':'blocked';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':degraded?'Génération momentanément dégradée':generating?'Génération en cours':blocked&&previouslyVerified?'Inférence confirmée · moteur arrêté':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
-  $('railLanguage').textContent=healthy?'Conversation disponible'
+  $('engineChip').textContent=speechStandby?'Moteur local en veille · Groq choisi'
+    :healthy?'Réponse vérifiée':degraded?'Génération momentanément dégradée':generating?'Génération en cours':blocked&&previouslyVerified?'Inférence confirmée · moteur arrêté':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('railLanguage').textContent=speechStandby?'Français · mode Groq'
+    :healthy?'Conversation disponible'
     :degraded?'Conversation à réessayer':booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
     'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
@@ -604,7 +608,8 @@ function renderLanguageEngine(state){
     'embedded-shared-library-unresolved':'Bibliothèque native introuvable',
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
-  $('engineTitle').textContent=healthy?'Génération locale vérifiée'
+  $('engineTitle').textContent=speechStandby?'Qwen en veille pour libérer la mémoire'
+    :healthy?'Génération locale vérifiée'
     :degraded?'Moteur actif · dernière réponse non générée'
     :blocked?(titles[fail]||(previouslyVerified
       ?'Moteur arrêté après génération vérifiée':'Moteur français indisponible'))
@@ -650,7 +655,9 @@ function renderLanguageEngine(state){
     '. Sortie native : '+(state?.native_output_observed?'oui':'non')+
     '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+
     '. '+transportDesc;
-  $('engineDescription').textContent=healthy
+  $('engineDescription').textContent=speechStandby
+    ?'Le moteur GGUF n’est volontairement pas démarré : Groq est sélectionné pour la verbalisation. Les fichiers locaux restent sur disque pour un retour arrière. La disponibilité de Groq se vérifie dans le diagnostic de la faculté française.'
+    :healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
     :degraded?'Le moteur natif est encore actif et son test initial a produit des tokens. La dernière conversation a échoué ('+String(state?.generation_failure_code||'inconnu')+'). Le moteur n’a pas été arrêté ; une nouvelle tentative est possible. Dernier délai : '+Number(state?.generation_last_duration_ms||0)+' ms. '+trace
     :booting
@@ -678,7 +685,8 @@ function renderLanguageEngine(state){
     'installed-verified':'Fichiers GGUF et exécutable vérifiés',
     'blocked':'Installation bloquée'
   };
-  $('engineStage').textContent=stages[stage]||backend||'En attente';
+  $('engineStage').textContent=speechStandby?'Modèle local conservé · en veille'
+    :stages[stage]||backend||'En attente';
   // This bar measures file installation only, never linguistic learning.
   const fileProgress={
     'not-started':0,'locating-existing-install':10,'downloading-cpu-runtime':25,
