@@ -985,7 +985,8 @@ export class EmbeddedLanguageRuntime {
       return '';
     }finally{
       this.generationLastDurationMs=Date.now()-started;
-      if(this.provisioner?.modelVariant==='qwen3-q4-canary'){
+      if(this.provisioner?.modelVariant==='qwen3-q4-canary'
+        &&(kind==='french-chat'||kind==='french-chat-retry')){
         this.canaryGenerationSamples.push({durationMs:this.generationLastDurationMs,
           ok:generatedSuccessfully,timeout:timedOut});
         this.canaryGenerationSamples=this.canaryGenerationSamples.slice(-12);
