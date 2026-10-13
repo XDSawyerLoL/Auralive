@@ -959,10 +959,25 @@ async function speakAura(text,ticket){
 let chatSubmitting=false;
 function showChatResult(out,pending){
   const answer=String(out?.answer||'');
-  const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(answer);
+  const code=String(out?.speech_error_code||'');
+  const unavailable=Boolean(code)
+    ||/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(answer);
+  const reasons={
+    'speech-plan-insufficient-grounding':'Le noyau AURA ne dispose pas encore d’éléments vérifiés pour répondre à cette question. Groq n’a pas le droit d’inventer la réponse.',
+    'speech-http-429':'Limite temporaire du fournisseur linguistique atteinte (429). Aucun contenu n’a été généré.',
+    'speech-rate-limit-cooldown':'Le fournisseur linguistique demande un délai avant le prochain essai.',
+    'speech-daily-cap-reached':'Le quota quotidien gratuit configuré pour le moteur de parole est atteint.',
+    'speech-timeout':'Le moteur de parole n’a pas répondu dans le délai prévu.',
+    'speech-output-rejected':'La formulation reçue n’a pas respecté les faits ou le contrat du noyau ; elle a été refusée.',
+    'speech-busy':'Le moteur de parole traite déjà une autre demande.',
+  };
+  const visible=unavailable&&code
+    ?(reasons[code]||'Le moteur de parole n’a pas produit de réponse valide ('+code+').')
+    :answer;
   pending.className='msg aura'+(unavailable?' service-msg':'');
-  pending.innerHTML='<span class="who">AURA</span>'+escapeHtml(answer);
+  pending.innerHTML='<span class="who">'+(unavailable?'ÉTAT DE LA RÉPONSE':'AURA')+'</span>'+escapeHtml(visible);
   $('messages').scrollTop=$('messages').scrollHeight;
+  $('chatState').textContent=unavailable?'Réponse non produite':'Réponse reçue';
   if(!unavailable)speakAura(answer,out?.voice_ticket||'');
   if(unavailable)void refreshEnginePanel();
   void refresh();
@@ -993,7 +1008,6 @@ async function sendMessage(text){
       const status=await api('/api/chat/async/'+encodeURIComponent(created.job_id));
       if(status.status==='done'){
         showChatResult(status.result||{},pending);
-        $('chatState').textContent='Réponse reçue';
         finished=true;break;
       }
       if(status.status==='failed')throw Error('Le traitement a échoué ; le modèle reste à vérifier.');
