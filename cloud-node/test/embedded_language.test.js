@@ -893,3 +893,26 @@ test('Q8 stays the default boot path when model canary is disabled',async()=>{
   assert.equal(stable,1);
   assert.equal(runtime.status().model_canary_requested,false);
 });
+
+test('canary metrics require six real conversation samples and never auto-promote',()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:{enabled:true,modelVariant:'qwen3-q4-canary',
+      snapshot:()=>({model_variant:'qwen3-q4-canary'})},
+  });
+  let metrics=runtime.canaryMetrics();
+  assert.deepEqual(metrics,{samples:0,successful:0,timeouts:0,p95_ms:null,
+    rollout_status:'insufficient-samples',target_p95_ms:30000,
+    model_promotion_automatic:false});
+  runtime.canaryGenerationSamples=[
+    ...Array.from({length:6},(_,index)=>({durationMs:600+index*500,ok:true,timeout:false}))
+  ];
+  metrics=runtime.canaryMetrics();
+  assert.equal(metrics.rollout_status,'candidate-meets-target');
+  assert.equal(metrics.successful,6);
+  assert.equal(runtime.status().model_canary_observations.samples,6);
+  runtime.canaryGenerationSamples.push({durationMs:55003,ok:false,timeout:true});
+  assert.equal(runtime.canaryMetrics().rollout_status,'candidate-needs-review');
+  assert.equal(runtime.canaryMetrics().timeouts,1);
+  assert.equal(runtime.status().model_canary_active,false);
+});
