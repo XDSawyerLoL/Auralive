@@ -4,6 +4,17 @@ function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
+export function cleanSpeechOutput(value) {
+  let speech = String(value || '').trim();
+  // Reasoning and model instructions are not user-facing conversation.
+  speech = speech.replace(/<think>[\\s\\S]*?<\\/think>/gi, '').trim();
+  if (/<think>|<\\/think>|(?:^|\\s)(?:The user said|The communicative goal|The speech act|The factual constraints|The conversation history|Now we need to respond|Should be brief|Maybe \\x22|The goal is to greet|We need to respond naturally)/i.test(speech)) return '';
+  if (/^(?:analysis|reasoning|thought process|assistant analysis)\\s*:/i.test(speech)) return '';
+  if (/\\b(?:communicative goal|speech act|factual constraints|conversation history)\\b/i.test(speech)) return '';
+  if (!speech || /^(?:\\x22|“)[^\\x22”]*$/.test(speech)) return '';
+  return normalize(speech);
+}
+
 function safeError(error) {
   return normalize(error?.message || error).slice(0, 700);
 }
@@ -228,7 +239,7 @@ export class FrenchLanguageFaculty {
     // Prefer real on-host inference. Remote free federation remains a last
     // resort only if the local binary or model cannot generate a reply.
     if (this.embedded.installed() || this.embedded.canProvision?.()) {
-      const answer = normalize(await this.embedded.generate(prompt, system, maxTokens));
+      const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
       if (answer) {
         this.lastMode = 'hostinger-embedded';
         this.lastBackend = 'hostinger-embedded-llama';
@@ -247,7 +258,16 @@ export class FrenchLanguageFaculty {
           Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
           taskRole,
         );
-        const answer = normalize(result?.answer || '');
+        let answer = cleanSpeechOutput(result?.answer || '');
+        if (!answer && result?.answer) {
+          const retry = await this.federation.generate(
+            prompt + '\nIMPORTANT : écris uniquement la réponse finale en français, jamais ton analyse ou des instructions.',
+            system + ' Réponds uniquement en français, directement, sans explication du processus.',
+            Math.min(360, Math.max(120, Number(maxTokens) || 250)), taskRole,
+          );
+          answer = cleanSpeechOutput(retry?.answer || '');
+          if (!answer) this.lastError = 'speech-reasoning-leak-rejected';
+        }
         if (answer) {
           this.lastMode = 'zero-cost-federation';
           this.lastError = '';
@@ -263,7 +283,7 @@ export class FrenchLanguageFaculty {
 
     if (await this.localAvailable()) {
       try {
-        const answer = normalize(await this.ai.bridge.infer(
+        const answer = cleanSpeechOutput(await this.ai.bridge.infer(
           prompt,
           system,
           Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
