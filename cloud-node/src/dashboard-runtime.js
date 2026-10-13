@@ -47,7 +47,7 @@ async function api(path,options){
     {headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}
   ));
   const raw=await response.text();
-  const html=/<\\s*(?:!doctype|html|head|body)\\b/i.test(raw);
+  const html=/<\s*(?:!doctype|html|head|body)\b/i.test(raw);
   let data={};
   try{data=raw?JSON.parse(raw):{};}
   catch(_){
