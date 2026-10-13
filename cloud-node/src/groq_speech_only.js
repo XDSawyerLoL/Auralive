@@ -69,6 +69,15 @@ export function verifyGroqSpeechResponse(data,envelope){
   const action=/\b(?:j['’]ai|nous avons|je viens de)\s+(?:envoyé|effectué|modifié|supprimé|déployé|installé|créé|publié|enregistré|réservé|payé|transféré)/i;
   if(action.test(utterance)&&!envelope.authorized_facts.some(f=>action.test(f.text)))
     return {ok:false,code:'speech-unsupported-action'};
+  if(envelope.required_question){
+    if(utterance.includes(envelope.required_question)){
+      if((utterance.match(/\?/g)||[]).length!==1)
+        return {ok:false,code:'speech-extra-question'};
+      return {ok:true,code:'',text:utterance};
+    }
+    if(utterance.includes('?'))return {ok:false,code:'speech-question-changed'};
+    return {ok:true,code:'',text:(utterance+' '+envelope.required_question).trim()};
+  }
   return {ok:true,code:'',text:utterance};
 }
 
