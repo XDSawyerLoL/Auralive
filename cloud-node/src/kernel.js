@@ -1204,7 +1204,11 @@ export class CognitiveKernel {
 
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
-    if (plan.needs_semantic_support) {
+    // Sovereign voice mode: no generic LLM may synthesize missing cognition
+    // and feed its answer back into the AURA thought plan. The external
+    // Web Substrate can still provide source evidence, but cannot authorize
+    // a provider to make decisions. Unresolved plans fail closed in speech.
+    if (plan.needs_semantic_support && !this.expression.language.groq.enabled) {
       const support = await this.expression.semanticSupport(
         plan,
         await this.contextForAi(privateView),
@@ -1220,11 +1224,45 @@ export class CognitiveKernel {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
+    // A gateway refusal is NOT a successful conversational response:
+    // keep the cognitive plan, report the exact safe reason to the UI and
+    // avoid rewarding AURA's organism for a language failure.
+    const speechFailureCode=this.expression.lastMode==='natural-language-unavailable'
+      ?String(this.expression.lastError||'speech-unavailable').slice(0,80):'';
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
-      true,
+      !speechFailureCode,
     );
+    if(!speechFailureCode&&privateView
+      &&plan.act==='ask_user_from_curiosity'
+      &&plan.question_proposal
+      &&answer.includes(plan.question_proposal)){
+      // Persist only the question chosen by native cognition when it has
+      // genuinely been spoken. Avoid repeating it on the next invitation.
+      post.state.relationship ||= {};
+      post.state.relationship.last_question=String(plan.question_proposal).slice(0,400);
+    }
+    if(!speechFailureCode&&privateView&&plan.act==='acknowledge_learning'
+      &&plan.learning_observation?.question
+      &&plan.learning_observation?.answer){
+      // Explicit answers to a question *AURA already asked* become a small,
+      // private, sourced learning record. They remain user-reported (not
+      // independently verified facts) and cannot authorize actions.
+      post.state.relationship ||= {};
+      const existing=Array.isArray(post.state.relationship.learning_observations)
+        ?post.state.relationship.learning_observations.slice(-7):[];
+      const entry={
+        question:String(plan.learning_observation.question).slice(0,400),
+        answer:String(plan.learning_observation.answer).slice(0,700),
+        source:'private-founder-dialogue',
+        epistemic_status:'user-reported-unverified',
+        observed_at:now(),
+      };
+      if(!existing.some(record=>record.question===entry.question
+        &&record.answer===entry.answer))existing.push(entry);
+      post.state.relationship.learning_observations=existing.slice(-8);
+    }
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
     await this.recordOrganismEvent('interaction-post', post.state.last_reason || 'expression', {
@@ -1249,6 +1287,7 @@ export class CognitiveKernel {
     return {
       ok: true,
       answer,
+      speech_error_code:speechFailureCode,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,

@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { ChatJobs } from './chat_jobs.js';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
-import { embeddedLanguageRuntime } from './embedded_language.js';
+import { embeddedLanguageRuntime, embeddedWarmupAllowed } from './embedded_language.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -411,8 +411,7 @@ async function startRuntime() {
     app.log.info('AURA Cloud: noyau persistant démarré.');
     // Always non-blocking: the first verified GGUF install can take minutes.
     // Production-only to avoid downloading model weights during CI/test runs.
-    if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
-      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false') {
+    if (embeddedWarmupAllowed()) {
       void embeddedLanguageRuntime.start().catch((error) => {
         app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
           'AURA: local French engine warmup failed');

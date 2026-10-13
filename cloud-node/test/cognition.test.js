@@ -377,3 +377,162 @@ test('repeated "tu a des questions" does not blindly repeat the previous questio
   assert.notEqual(second, first);
   assert.match(second, /\?|pas de nouvelle/i);
 });
+
+test('natural French questions about AURA difficulties resolve to native risk plan, not ungrounded LLM response',()=>{
+  const engine=new CognitionEngine();
+  for(const userText of [
+    'Quel sont les problématique que tu rencontre?',
+    'Quelles sont les problématiques que tu rencontres ?',
+    'Quels sont tes problèmes ?',
+    'Quelles difficultés rencontres-tu ?',
+    'Quels sont les blocages en ce moment ?',
+    'Quels obstacles freinent ton activité ?',
+    'Qu’est-ce qui te bloque ?',
+    'Quels sont les soucis qui t’empêchent d’avancer ?',
+  ]){
+    const plan=engine.planReply({
+      text:userText,
+      soul:{pressure:0.2,organism:{mood:'calme'}},
+      agenda:{current:'Faire avancer Quantic OS',
+        blocker:'Le contrôle de démarrage a échoué',
+        next_action:'Réexaminer la cause du démarrage'},
+      work:[{title:'Diagnostiquer le démarrage'}],
+      privateView:true,
+    });
+    assert.equal(plan.act,'report_risks',userText);
+    assert.equal(plan.needs_semantic_support,false,userText);
+    assert.match(plan.facts.join(' '),/contrôle de démarrage a échoué/);
+    assert.match(plan.facts.join(' '),/Réexaminer la cause/);
+    assert.ok(plan.facts.length<=7);
+  }
+});
+test('native AURA admits an unknown operational blocker without inventing one',()=>{
+  const plan=new CognitionEngine().planReply({
+    text:'Quels sont tes problèmes ?',
+    soul:{organism:{mood:'satisfaite'}},
+    agenda:{current:'Évaluer AURA'},
+    lessons:[],reflections:[],work:[],
+  });
+  assert.equal(plan.act,'report_risks');
+  assert.match(plan.facts.join(' '),/Aucun blocage précis n’est enregistré/);
+  assert.doesNotMatch(plan.facts.join(' '),/blocage réseau|panne MySQL|quota Groq/i);
+});
+
+test('old technical language failure never becomes evidence or reference in AURA cognition',()=>{
+  const plan=new CognitionEngine().planReply({
+    text:'Quels sont tes blocages ?',
+    soul:{organism:{mood:'calme'}},
+    agenda:{blocker:'Dépendance MySQL non prête'},
+    recentMessages:[
+      {role:'user',content:'Quels sont tes problèmes ?'},
+      {role:'assistant',content:'Ma faculté de français naturel est indisponible pour le moment. Aucun moteur linguistique opérationnel n’a pu produire de réponse.'},
+      {role:'user',content:'Quels sont tes blocages ?'},
+    ],
+  });
+  assert.equal(plan.act,'report_risks');
+  assert.equal(plan.conversation_context.some(x=>/faculté de français naturel/i.test(x.content)),false);
+  assert.match(plan.facts.join(' '),/Dépendance MySQL non prête/);
+});
+
+test('AURA understands offers to answer her own questions as an invitation to initiate learning',()=>{
+  const engine=new CognitionEngine();
+  const examples=[
+    'j\'aimerai repondre à des questions que tu peux te poser',
+    'j\'aimerai que tu prenne l\'initiative de me poser des questions pour eventuellement savoir et apprendre des elements qui peuvent t\'aider',
+    'Je voudrais répondre aux questions que tu te poses',
+    'Je peux répondre à tes questions',
+    'Prends l’initiative de me poser des questions',
+    'Demande-moi ce que tu aimerais savoir',
+  ];
+  for(const text of examples){
+    const plan=engine.planReply({
+      text,
+      soul:{current_intention:'Faire progresser Quantic Sillage',
+        organism:{mood:'curieuse',relationship:{social_curiosity:0.86,last_question:''}}},
+      agenda:{current:'Documenter l’échec persistant de Quantic OS',
+        blocker:'La panne n’est pas encore caractérisée',
+        next_action:'Identifier les conditions du dernier échec'},
+      recentMessages:[
+        {role:'assistant',content:'Je vois que ma curiosité sociale est à 86 %. Qu’aimerais-tu explorer aujourd’hui ?'},
+        {role:'user',content:text},
+      ],
+      privateView:true,
+    });
+    assert.equal(plan.act,'ask_user_from_curiosity',text);
+    assert.equal(plan.needs_semantic_support,false,text);
+    assert.match(plan.question_proposal,/Quantic OS/);
+    assert.match(plan.question_proposal,/\?$/);
+    assert.match(plan.facts[0],/Question choisie par mon noyau/);
+    assert.doesNotMatch(plan.question_proposal,/Qu'aimerais-tu partager ou explorer/i);
+  }
+});
+test('AURA changes its own learning question after one was already answered or asked',()=>{
+  const engine=new CognitionEngine();
+  const input={
+    text:'j’aimerais répondre aux questions que tu peux te poser',
+    soul:{current_intention:'Améliorer AURA',
+      organism:{relationship:{social_curiosity:.86}}},
+    agenda:{current:'Quantic OS',blocker:'Tester le démarrage',
+      next_action:'Auditer la CI'},
+  };
+  const first=engine.planReply(input);
+  const second=engine.planReply({...input,
+    soul:{...input.soul,organism:{relationship:{
+      social_curiosity:.86,last_question:first.question_proposal}}},
+    recentMessages:[{role:'assistant',content:'Oui. '+first.question_proposal}],
+  });
+  assert.notEqual(first.question_proposal,second.question_proposal);
+  assert.equal(second.act,'ask_user_from_curiosity');
+});
+test('AURA does not treat unrelated learning discussions as permission to question the user',()=>{
+  const plan=new CognitionEngine().planReply({
+    text:'Explique-moi comment fonctionne ton apprentissage.',
+    soul:{organism:{relationship:{social_curiosity:.86}}},
+  });
+  assert.notEqual(plan.act,'ask_user_from_curiosity');
+});
+
+test('native cognition recognises a founder answer to its preceding question as a learning observation',()=>{
+  const previousQuestion='Quel résultat vérifiable te ferait considérer « Quantic OS » comme réellement terminé ?';
+  const engine=new CognitionEngine();
+  const plan=engine.planReply({
+    text:'Il faut pouvoir démarrer sur trois machines différentes.',
+    privateView:true,
+    soul:{organism:{relationship:{social_curiosity:0.8,last_question:previousQuestion}}},
+    agenda:{current:'Quantic OS'},
+    recentMessages:[
+      {role:'assistant',content:'Oui. '+previousQuestion},
+      {role:'user',content:'Il faut pouvoir démarrer sur trois machines différentes.'},
+    ],
+  });
+  assert.equal(plan.act,'acknowledge_learning');
+  assert.equal(plan.needs_semantic_support,false);
+  assert.equal(plan.learning_observation.question,previousQuestion);
+  assert.equal(plan.learning_observation.answer,'Il faut pouvoir démarrer sur trois machines différentes.');
+  assert.equal(plan.learning_observation.epistemic_status,'user-reported-unverified');
+  assert.match(plan.facts.join(' '),/non vérifiée/);
+});
+
+test('a public conversation cannot promote user responses to founder learning memory',()=>{
+  const last='Quel résultat te ferait considérer Quantic OS comme terminé ?';
+  const plan=new CognitionEngine().planReply({
+    text:'Je veux vérifier plusieurs machines.',
+    privateView:false,
+    soul:{organism:{relationship:{last_question:last}}},
+    recentMessages:[{role:'assistant',content:last}],
+  });
+  assert.notEqual(plan.act,'acknowledge_learning');
+  assert.equal(plan.learning_observation,null);
+});
+
+test('a new unrelated question does not become an answer to AURA previous curiosity',()=>{
+  const last='Quel résultat te ferait considérer Quantic OS comme terminé ?';
+  const plan=new CognitionEngine().planReply({
+    text:'Tu fais quoi en ce moment ?',
+    privateView:true,
+    soul:{organism:{relationship:{last_question:last}}},
+    recentMessages:[{role:'assistant',content:last}],
+  });
+  assert.equal(plan.act,'report_current_activity');
+  assert.equal(plan.learning_observation,null);
+});

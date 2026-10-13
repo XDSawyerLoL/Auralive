@@ -427,6 +427,17 @@ function freePort(){
     });
   });
 }
+// In Groq speech-only mode no local LLM should be loaded into Hostinger RAM.
+// Files remain intact for an explicit rollback: disable Groq and restart.
+export function embeddedStandbyForSpeech(env=process.env){
+  return env.AURA_GROQ_SPEECH_ENABLED==='true';
+}
+export function embeddedWarmupAllowed(env=process.env){
+  return env.CI!=='true' && env.NODE_ENV==='production'
+    &&env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
+    &&env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false'
+    &&!embeddedStandbyForSpeech(env);
+}
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=nativeLoopbackRequest,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
@@ -474,6 +485,7 @@ export class EmbeddedLanguageRuntime {
     return this.cachedDiscovery;
   }
   canProvision(){
+    if(embeddedStandbyForSpeech() || process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return false;
     return Boolean(this.provisioner?.enabled
       && (process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
         || (process.env.NODE_ENV==='production' && process.env.CI!=='true')));
@@ -481,8 +493,9 @@ export class EmbeddedLanguageRuntime {
   installed(){
     const found=this.inspect();
     // Installed means binary and model detected, even if the archive lost +x.
-    return process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
-      && Boolean(found.binFound && found.modelFound);
+    return !embeddedStandbyForSpeech()
+      &&process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
+      &&Boolean(found.binFound&&found.modelFound);
   }
   repairExecutable(){
     const item=this.inspect();
@@ -501,7 +514,9 @@ export class EmbeddedLanguageRuntime {
     }catch(error){this.fail(error);return false;}
   }
   status(){
-    const item=this.inspect(),enabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
+    const standby=embeddedStandbyForSpeech();
+    const item=this.inspect(),enabled=!standby
+      &&process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
     const failure=this.lastFailure?classifyEmbeddedFailure(this.lastFailure):null;
     const running=Boolean(this.child&&this.child.exitCode===null&&this.child.signalCode===null);
     const snapshot=running?nativeProcessSnapshot(this.child.pid):null;
@@ -512,7 +527,8 @@ export class EmbeddedLanguageRuntime {
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
-      status:this.ready && this.lastProbeAt && this.generationFailure ? 'generation-degraded'
+      status:standby?'standby-external-speech'
+        :this.ready && this.lastProbeAt && this.generationFailure ? 'generation-degraded'
         :this.ready && this.lastProbeAt ? 'verified-responsive'
          :this.healthSeen && this.booting ? 'verifying-inference'
          :this.ready ? 'model-loaded-unverified'
@@ -520,8 +536,13 @@ export class EmbeddedLanguageRuntime {
         :!item.binFound?'binary-missing':!item.modelFound?'gguf-missing'
           :!item.executableAllowed?'permission-denied':this.booting?'starting'
             :failure?'startup-failed':'available-not-started',
-      failure_code:failure?.code||(!item.executableAllowed && item.binFound?'host-disallows-native-execution':''),
-      setup_hint:failure?.hint||(!item.binFound?'Fournir AURA_EMBEDDED_LLAMA_BIN.'
+      failure_code:standby?''
+        :failure?.code||(!item.executableAllowed&&item.binFound?'host-disallows-native-execution':''),
+      standby_for_speech:standby,
+      standby_reason:standby?'groq-speech-only':'',
+      setup_hint:standby
+        ?'Moteur GGUF local intentionnellement en veille pour préserver la mémoire ; Groq est sélectionné pour verbaliser.'
+        :failure?.hint||(!item.binFound?'Fournir AURA_EMBEDDED_LLAMA_BIN.'
         :!item.modelFound?'Fournir AURA_EMBEDDED_LANGUAGE_MODEL vers un GGUF local.'
           :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
 
@@ -633,7 +654,8 @@ export class EmbeddedLanguageRuntime {
     this.cooldownUntil=Date.now()+60_000;
   }
   scheduleNativeRecovery(){
-    if(this.recoveryTimer||process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return;
+    if(this.recoveryTimer||embeddedStandbyForSpeech()
+      ||process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return;
     const now=Date.now();
     this.recoveryTimes=this.recoveryTimes.filter(time=>now-time<15*60_000);
     if(this.recoveryTimes.length>=3){
@@ -658,6 +680,8 @@ export class EmbeddedLanguageRuntime {
     this.recoveryTimer?.unref?.();
   }
   async start(){
+    if(embeddedStandbyForSpeech()
+      ||process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return false;
     if(this.ready && this.child?.exitCode===null)return true;
     if(this.booting)return this.booting;
     if(Date.now()<this.cooldownUntil)return false;
@@ -931,6 +955,8 @@ export class EmbeddedLanguageRuntime {
       target_p95_ms:30_000,model_promotion_automatic:false};
   }
   async generate(prompt,system,maxTokens=600,{purpose='background'}={}){
+    if(embeddedStandbyForSpeech()
+      ||process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return '';
     // Never block a chat request waiting for installation or a 150s boot.
     if(!this.ready){
       if(!this.booting && Date.now()>=this.cooldownUntil

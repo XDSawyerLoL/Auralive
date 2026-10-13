@@ -1,4 +1,5 @@
 import { embeddedLanguageRuntime } from './embedded_language.js';
+import { GroqSpeechOnly } from './groq_speech_only.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -97,9 +98,11 @@ export function isFrenchConversationalOutput(value){
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
-  constructor(ai, { embedded = embeddedLanguageRuntime } = {}) {
+  constructor(ai, { embedded = embeddedLanguageRuntime, groq = new GroqSpeechOnly() } = {}) {
     this.ai = ai;
     this.embedded = embedded;
+    // Private voice gateway: no tools, cognition mutations or memory access.
+    this.groq = groq;
     this.lastError = '';
     this.lastBackend = '';
     this.lastModel = '';
@@ -124,6 +127,8 @@ export class FrenchLanguageFaculty {
     const federation = this.federation?.snapshot?.() || {};
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
+    const groq=this.groq.status();
+    const groqSelected=Boolean(groq.enabled);
     const embeddedInstalled = Boolean(embedded.installed);
     const stage = embedded.provisioning?.stage || '';
     const installing = embedded.provisioning?.enabled && !embedded.ready
@@ -131,8 +136,12 @@ export class FrenchLanguageFaculty {
     const provisionFailed = stage === 'blocked';
     const localDegraded=Boolean(embedded.ready && embedded.generation_failure_code);
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(embedded.ready || federation.enabled || local);
-    const blockingReason = localDegraded ? embedded.generation_failure_code
+    const ready=groqSelected?Boolean(groq.configured)
+      :Boolean(embedded.ready||federation.enabled||local);
+    const blockingReason=groqSelected
+      ?!groq.configured?'groq-speech-free-plan-or-key-missing'
+        :this.lastMode==='degraded'?(groq.last_error_code||'groq-speech-failed'):''
+      :localDegraded ? embedded.generation_failure_code
       : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
@@ -153,7 +162,13 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = localDegraded
+    const setupHint=groqSelected
+      ?(!groq.configured
+        ?'Vérifier AURA_GROQ_API_KEY, AURA_GROQ_FREE_PLAN_CONFIRMED=true et AURA_ZERO_COST_MODE=true sur Groq gratuit.'
+        :blockingReason
+          ?'La dernière verbalisation Groq a été rejetée ou a échoué : '+blockingReason
+          :'Groq exprime uniquement le plan du noyau AURA, sans accès aux outils ni à la mémoire.')
+      :localDegraded
       ? 'Qwen est démarré, mais la dernière génération a échoué ('+embedded.generation_failure_code+'). Le problème concerne la lenteur ou la requête locale, pas OpenRouter.'
       : installing
       ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
@@ -176,12 +191,15 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+      verified_ready: Boolean((groqSelected&&groq.configured&&this.lastMode==='groq-speech-only')
+        ||(!groqSelected&&embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: embedded.ready ? 'hostinger-embedded'
+      primary: groqSelected?'groq-speech-only'
+        :embedded.ready ? 'hostinger-embedded'
         : federation.enabled ? 'zero-cost-federation'
           : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
+      speech_gateway:groq,
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
@@ -262,6 +280,25 @@ export class FrenchLanguageFaculty {
     const system = this.system();
     const started = Date.now();
     this.lastError = '';
+    if(this.groq.enabled){
+      // Only the semantic plan enters the speech-only adapter. It has no
+      // access to AiClient, tools, Soul or writable memory.
+      const voiced=normalize(await this.groq.generate(plan));
+      if(voiced&&isFrenchConversationalOutput(voiced)){
+        this.lastMode='groq-speech-only';
+        this.lastBackend='groq-speech-only';
+        this.lastModel=this.groq.status().model;
+        this.lastLatencyMs=Date.now()-started;
+        this.lastError='';
+        return voiced;
+      }
+      // Strict fail-closed: no substitute provider may silently take control.
+      this.lastMode='degraded';
+      this.lastBackend='groq-speech-only';
+      this.lastLatencyMs=Date.now()-started;
+      this.lastError=this.groq.status().last_error_code||'groq-speech-unavailable';
+      return '';
+    }
     // Prefer real on-host inference. Remote free federation remains a last
     // resort only if the local binary or model cannot generate a reply.
     if (this.embedded.installed() || this.embedded.canProvision?.()) {
