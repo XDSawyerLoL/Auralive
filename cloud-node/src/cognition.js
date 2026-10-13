@@ -683,6 +683,7 @@ export class CognitionEngine {
       return `Depuis notre dernier échange, j’ai ${count} événement${count > 1 ? 's' : ''} persisté${count > 1 ? 's' : ''}. Les plus récents : ${summary}.`;
     }
     if (plan?.act === 'ask_user_from_curiosity') {
+      if(plan.question_proposal)return 'Oui. '+plan.question_proposal;
       const previous = cleanFact('Réponse précédente : ');
       const thread = cleanFact('Fil relationnel actif : ');
       const focus = cleanFact('Foyer opérationnel : ');
