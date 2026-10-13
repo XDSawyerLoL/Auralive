@@ -38,14 +38,47 @@ function asksWellbeing(text) {
 }
 
 function asksAuraQuestions(text) {
-  const q = fold(text).replace(/[?!.]+$/g, '').trim();
+  const q=fold(text).replace(/[?!.]+$/g,'').trim();
+  const offersAnswer=/(?:j'?aimerai(?:s)?|je\s+(?:voudrais|veux|peux|souhaite)|je\s+suis\s+(?:pret|prete)|tu\s+peux)\b/.test(q)
+    && /(repondre|reponse|poser|demander|question|apprendre|connaitre|savoir)/.test(q)
+    && /(tes?\s+questions?|questions?\s+que\s+tu|me\s+poser|tu\s+(?:te\s+)?poses?|ton\s+initiative|prenne?\s+l'?initiative|apprendre\s+(?:sur|de|des|quelque))/i.test(q);
   return (
     /\btu\s+(?:a|as)\s+(?:des|une?)\s+questions?\b/.test(q)
     || /\b(?:as|a)[- ]?tu\s+(?:des|une?)\s+questions?\b/.test(q)
     || /\b(?:des|une?)\s+questions?\s+(?:pour|a|à)\s+moi\b/.test(q)
     || /\btu\s+veux\s+(?:me\s+)?(?:demander|savoir)\s+(?:quelque\s+chose|quoi)\b/.test(q)
     || /\bqu[' ]?est[- ]?ce\s+que\s+tu\s+(?:veux|aimerais)\s+savoir\b/.test(q)
+    || /\b(?:pose|poses|demande)[- ]?(?:moi|nous)\b/.test(q)
+    || /\b(?:prends?|prendre)\s+l'?initiative\s+de\s+(?:me\s+)?poser\b/.test(q)
+    || offersAnswer
   );
+}
+// Cognitive question selection is deterministic and informed by persisted
+// executive state, not by the verbalization provider. Keep one question per
+// turn and avoid questions already recorded in the conversation.
+export function chooseNativeCuriosityQuestion({agenda={},current='',thread='',lesson='',
+  priorQuestion='',conversationContext=[]}={}){
+  const focus=normalize(agenda?.current||'').slice(0,135);
+  const blocker=normalize(agenda?.blocker||'').slice(0,135);
+  const next=normalize(agenda?.next_action||'').slice(0,135);
+  const intention=normalize(current).slice(0,135);
+  const relational=normalize(thread).slice(0,135);
+  const observation=normalize(lesson).slice(0,135);
+  const proposals=[];
+  if(blocker&&focus)proposals.push(`Pour avancer sur « ${focus} », quel élément concret te semble manquer pour lever ce blocage : ${blocker} ?`);
+  if(focus)proposals.push(`Quel résultat vérifiable te ferait considérer « ${focus} » comme réellement terminé ?`);
+  if(next)proposals.push(`Avant « ${next} », quelle contrainte importante devrais-je intégrer à ma décision ?`);
+  if(intention)proposals.push(`Pour mon intention « ${intention} », quelle capacité aimerais-tu me voir développer en priorité ?`);
+  // The latest incoming request often overwrites last_open_thread. Avoid
+  // self-referential questions about the invitation itself.
+  if(relational&&!asksAuraQuestions(relational))
+    proposals.push(`Au sujet de « ${relational} », quelle information me manque pour mieux comprendre ton point de vue ?`);
+  if(observation)proposals.push(`Par rapport à « ${observation} », qu’est-ce qui mériterait selon toi une vérification supplémentaire ?`);
+  proposals.push('Quelle compétence devrais-je apprendre en priorité pour t’être réellement utile sur Quantic Sillage ?');
+  proposals.push('Quel type de décision voudrais-tu que je sois capable de justifier avec des preuves, plutôt que de seulement formuler ?');
+  const already=[priorQuestion,...(Array.isArray(conversationContext)?conversationContext:[])
+    .filter(row=>row.role==='assistant').map(row=>row.content)];
+  return proposals.find(question=>!already.some(row=>fold(row).includes(fold(question))))||'';
 }
 
 function asksCurrentActivity(text) {
@@ -390,6 +423,7 @@ export class CognitionEngine {
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
     let needsSemanticSupport = true;
+    let questionProposal = '';
     const facts = [];
     const symbolic = inferSymbolicFunction(raw);
 
@@ -449,12 +483,17 @@ export class CognitionEngine {
       if (!events.length) facts.push('Aucune activité persistée n’est disponible pour cette période ; je ne dois pas prétendre avoir travaillé.');
     } else if (asksAuraQuestions(raw)) {
       act = 'ask_user_from_curiosity';
-      goal = 'Répondre à la demande de l’utilisateur en formulant une question authentiquement reliée à ma curiosité sociale, au fil relationnel ou à mon travail courant.';
+      goal = 'Prendre l’initiative de poser une seule question choisie par ma cognition à partir de mes priorités, de ma mémoire et de ce que je dois encore apprendre.';
       needsSemanticSupport = false;
-      const previous = previousAssistantMessage(conversationContext);
-      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
-      if (relationship.last_open_thread) facts.push(`Fil relationnel actif : ${normalize(relationship.last_open_thread)}`);
+      questionProposal=chooseNativeCuriosityQuestion({
+        agenda,current,thread:relationship.last_open_thread,lesson,
+        priorQuestion:relationship.last_question,conversationContext,
+      });
+      // Groq never gets to invent the question. The nucleus provides the
+      // exact question, backed by an actual operational knowledge gap.
+      if(questionProposal)facts.push(`Question choisie par mon noyau : ${questionProposal}`);
       if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.blocker) facts.push(`Blocage enregistré : ${normalize(agenda.blocker)}`);
       if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
@@ -569,6 +608,7 @@ export class CognitionEngine {
       act,
       goal,
       facts,
+      question_proposal:questionProposal,
       needs_semantic_support: needsSemanticSupport,
       semantic_query: needsSemanticSupport ? raw : '',
       current_intention: current,
