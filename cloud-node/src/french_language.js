@@ -66,6 +66,8 @@ export function nativeFrenchExpressionPrompt(plan={}){
   const semantic=clean(plan.semantic_support||'',155);
   const evidence=clean(plan.external_research_summary||'',125);
   const lastConversation=(Array.isArray(plan.conversation_context)?plan.conversation_context:[])
+    .slice(-3)
+    .filter(item=>item?.role!=='assistant'||isFrenchConversationalOutput(item?.content))
     .slice(-2).map(item=>clean(item?.content||'',95)).filter(Boolean);
   const parts=['Message utilisateur : '+user];
   if(goal)parts.push('Intention du noyau AURA : '+goal);
@@ -307,7 +309,7 @@ export class FrenchLanguageFaculty {
           taskRole,
         );
         const answer = normalize(result?.answer || '');
-        if (answer) {
+        if (answer && isFrenchConversationalOutput(answer)) {
           this.lastMode = 'zero-cost-federation';
           this.lastError = '';
           this.lastBackend = String(result?.provider || 'openrouter-free');
@@ -328,7 +330,7 @@ export class FrenchLanguageFaculty {
           Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
           'conversation',
         ));
-        if (answer) {
+        if (answer && isFrenchConversationalOutput(answer)) {
           this.lastMode = 'runtime-local';
           this.lastError = '';
           this.lastBackend = 'aura-runtime-local';
