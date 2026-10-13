@@ -377,3 +377,43 @@ test('repeated "tu a des questions" does not blindly repeat the previous questio
   assert.notEqual(second, first);
   assert.match(second, /\?|pas de nouvelle/i);
 });
+
+test('natural French questions about AURA difficulties resolve to native risk plan, not ungrounded LLM response',()=>{
+  const engine=new CognitionEngine();
+  for(const userText of [
+    'Quel sont les problématique que tu rencontre?',
+    'Quelles sont les problématiques que tu rencontres ?',
+    'Quels sont tes problèmes ?',
+    'Quelles difficultés rencontres-tu ?',
+    'Quels sont les blocages en ce moment ?',
+    'Quels obstacles freinent ton activité ?',
+    'Qu’est-ce qui te bloque ?',
+    'Quels sont les soucis qui t’empêchent d’avancer ?',
+  ]){
+    const plan=engine.planReply({
+      text:userText,
+      soul:{pressure:0.2,organism:{mood:'calme'}},
+      agenda:{current:'Faire avancer Quantic OS',
+        blocker:'Le contrôle de démarrage a échoué',
+        next_action:'Réexaminer la cause du démarrage'},
+      work:[{title:'Diagnostiquer le démarrage'}],
+      privateView:true,
+    });
+    assert.equal(plan.act,'report_risks',userText);
+    assert.equal(plan.needs_semantic_support,false,userText);
+    assert.match(plan.facts.join(' '),/contrôle de démarrage a échoué/);
+    assert.match(plan.facts.join(' '),/Réexaminer la cause/);
+    assert.ok(plan.facts.length<=7);
+  }
+});
+test('native AURA admits an unknown operational blocker without inventing one',()=>{
+  const plan=new CognitionEngine().planReply({
+    text:'Quels sont tes problèmes ?',
+    soul:{organism:{mood:'satisfaite'}},
+    agenda:{current:'Évaluer AURA'},
+    lessons:[],reflections:[],work:[],
+  });
+  assert.equal(plan.act,'report_risks');
+  assert.match(plan.facts.join(' '),/Aucun blocage précis n’est enregistré/);
+  assert.doesNotMatch(plan.facts.join(' '),/blocage réseau|panne MySQL|quota Groq/i);
+});
