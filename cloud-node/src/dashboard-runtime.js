@@ -535,7 +535,10 @@ function renderLanguageProgress(report){
   $('languageTrack').setAttribute('aria-valuetext',known?score+' pour cent aux tests':'Pas encore évalué');
   const delta=typeof report?.delta==='number'?report.delta:null;
   const suffix=delta===null?'Mesure initiale':delta>0?'↗ +'+delta+' points':delta<0?'↘ '+delta+' points · régression':'→ Stable';
-  $('languageTrend').textContent=known?suffix:'Premier test en attente';
+  $('languageTrend').textContent=known?suffix
+    :String(report?.blocking_reason||'').startsWith('generation-')
+      ?'Qwen actif · conversation lente, tests en attente'
+      :'Premier test en attente';
   if(report?.status==='model-unavailable'&&!known){
     const missing=report?.blocking_reason==='openrouter-free-key-missing';
     $('languageTrend').textContent=missing?'Modèle gratuit à connecter':'Moteur gratuit indisponible';
