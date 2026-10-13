@@ -787,7 +787,7 @@ test('chat-level rejection must preserve native readiness, verified probe and so
     if(calls===1)return {ok:false,status:422};
     return {ok:true,status:200,json:async()=>({
       usage:{completion_tokens:11},
-      choices:[{message:{content:'<think>secret</think>Bonjour, comment allez-vous ?'}}
+      choices:[{message:{content:'<think>secret</think>Bonjour, comment allez-vous ?'}}]
     })};
   };
   assert.equal(await runtime.generate('Bonjour','Tu es AURA',700),'');
