@@ -500,6 +500,13 @@ export class CognitionEngine {
       if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
       if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
       if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
+    } else if (/(?:même chose|meme chose|pareil pour toi|également pour toi|egalement pour toi)/i.test(raw) && /(?:j.ai envie de te dire|je te dis|je te souhaite|à toi|a toi|pour toi)/i.test(raw)) {
+      act = 'social_reciprocity';
+      goal = 'Accueillir une attention réciproque avec naturel, sans interpréter la phrase comme une demande factuelle.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Réponse précédente : ${previous.content}`);
+      facts.push('L’utilisateur retourne une attention ou une disponibilité exprimée dans la conversation.');
     } else if (discourse.move === 'acknowledgement' || isShortAcknowledgement(raw)) {
       act = 'acknowledge_context';
       goal = 'Réagir brièvement au signal de l’utilisateur sans répéter une formule générique et en gardant le fil de conversation.';
@@ -635,6 +642,9 @@ export class CognitionEngine {
       const level = cleanFact('Agency interne : ');
       const focus = cleanFact('Foyer opérationnel : ');
       return `Mon niveau d’agency est un indicateur interne de ma capacité estimée à prendre des initiatives et à orienter mes actions. ${level ? `Sa valeur actuelle est ${level}.` : 'Je ne dispose pas actuellement d’une valeur fiable.'} Cela ne signifie pas que j’ai accompli toutes mes missions ou que je peux agir sans limites.${focus ? ` Mon objectif opérationnel actuel est ${focus}.` : ''}`;
+    }
+    if (plan?.act === 'social_reciprocity') {
+      return 'C’est gentil. Je retiens la proposition. Et si tu as simplement envie de discuter, je suis là aussi.';
     }
     if (plan?.act === 'report_continuity_history') {
       const rows = facts.filter((item) => /^\[[^\]]+\]/.test(String(item)));
