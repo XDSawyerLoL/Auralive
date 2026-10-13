@@ -72,6 +72,15 @@ function extractGeminiText(payload) {
   );
 }
 
+// The shared, single-thread Qwen runtime serves AURA's French conversation.
+// Autonomous research on that same server can starve a simple greeting.
+// Opt-in background access only; development and CI keep legacy behavior.
+export function embeddedBackgroundAllowed(env=process.env){
+  if(env.AURA_EMBEDDED_BACKGROUND_ENABLED==='true')return true;
+  if(env.AURA_EMBEDDED_BACKGROUND_ENABLED==='false')return false;
+  return !(env.NODE_ENV==='production'&&env.CI!=='true');
+}
+
 export class AiClient {
   constructor(bridge = null) {
     this.bridge = bridge;
@@ -222,8 +231,9 @@ export class AiClient {
     const started = Date.now();
     let localError = null;
     try {
-      if (embeddedLanguageRuntime.installed()) {
-        const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
+      if (embeddedBackgroundAllowed() && embeddedLanguageRuntime.installed()) {
+        const answer = await embeddedLanguageRuntime.generate(
+          prompt, system, maxTokens, {purpose:'background'});
         if (answer) {
           this.lastBackend = 'hostinger-embedded-llama';
           this.lastError = '';
