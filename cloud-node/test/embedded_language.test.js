@@ -759,14 +759,14 @@ test('post-inference clean exits retry only three times within a bounded window'
 test('CPU-only Qwen chat payload respects standard and reduced context budgets',()=>{
   const long='É'.repeat(18000);
   const base=nativeChatPayload(long,long,900);
-  assert.equal(base.max_tokens,192);
-  assert.equal(base.messages[0].content.length,1200);
-  assert.equal(base.messages[1].content.length,1800);
+  assert.equal(base.max_tokens,96);
+  assert.equal(base.messages[0].content.length,600);
+  assert.equal(base.messages[1].content.length,1000);
   assert.equal(base.chat_template_kwargs.enable_thinking,false);
   const reduced=nativeChatPayload(long,long,900,{lowMemory:true});
-  assert.equal(reduced.max_tokens,96);
-  assert.equal(reduced.messages[0].content.length,450);
-  assert.equal(reduced.messages[1].content.length,700);
+  assert.equal(reduced.max_tokens,64);
+  assert.equal(reduced.messages[0].content.length,300);
+  assert.equal(reduced.messages[1].content.length,620);
 });
 test('chat-level rejection must preserve native readiness, verified probe and socket',async()=>{
   const runtime=new EmbeddedLanguageRuntime({
@@ -783,7 +783,7 @@ test('chat-level rejection must preserve native readiness, verified probe and so
   let calls=0;
   runtime.localRequest=async(_endpoint,opts)=>{
     calls++;
-    assert.equal(JSON.parse(opts.body).max_tokens,192);
+    assert.equal(JSON.parse(opts.body).max_tokens,96);
     if(calls===1)return {ok:false,status:422};
     return {ok:true,status:200,json:async()=>({
       usage:{completion_tokens:11},
@@ -847,4 +847,15 @@ test('chat error classification is allowlisted; no raw paths or prompts are reve
   assert.equal(classifyChatError(Error('embedded-empty-response')),'generation-empty');
   assert.equal(classifyChatError(Error('/private/qwen/token-abcdef')),
     'generation-request-error');
+});
+
+test('the native payload keeps the first user question even with long remaining context',()=>{
+  const prompt='Message utilisateur : salut\n'
+    +'Intention du noyau : répondre naturellement\n'+'X'.repeat(10000);
+  const base=nativeChatPayload(prompt,'Tu es AURA',28);
+  assert.equal(base.max_tokens,28);
+  assert.match(base.messages[1].content,/^Message utilisateur : salut/);
+  const low=nativeChatPayload(prompt,'Tu es AURA',28,{lowMemory:true});
+  assert.match(low.messages[1].content,/^Message utilisateur : salut/);
+  assert.equal(low.max_tokens,28);
 });
