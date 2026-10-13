@@ -417,3 +417,19 @@ test('native AURA admits an unknown operational blocker without inventing one',(
   assert.match(plan.facts.join(' '),/Aucun blocage précis n’est enregistré/);
   assert.doesNotMatch(plan.facts.join(' '),/blocage réseau|panne MySQL|quota Groq/i);
 });
+
+test('old technical language failure never becomes evidence or reference in AURA cognition',()=>{
+  const plan=new CognitionEngine().planReply({
+    text:'Quels sont tes blocages ?',
+    soul:{organism:{mood:'calme'}},
+    agenda:{blocker:'Dépendance MySQL non prête'},
+    recentMessages:[
+      {role:'user',content:'Quels sont tes problèmes ?'},
+      {role:'assistant',content:'Ma faculté de français naturel est indisponible pour le moment. Aucun moteur linguistique opérationnel n’a pu produire de réponse.'},
+      {role:'user',content:'Quels sont tes blocages ?'},
+    ],
+  });
+  assert.equal(plan.act,'report_risks');
+  assert.equal(plan.conversation_context.some(x=>/faculté de français naturel/i.test(x.content)),false);
+  assert.match(plan.facts.join(' '),/Dépendance MySQL non prête/);
+});
