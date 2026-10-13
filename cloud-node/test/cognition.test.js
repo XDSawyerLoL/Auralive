@@ -377,3 +377,20 @@ test('repeated "tu a des questions" does not blindly repeat the previous questio
   assert.notEqual(second, first);
   assert.match(second, /\?|pas de nouvelle/i);
 });
+
+test('AURA explains its agency metric instead of rejecting an ordinary follow-up', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: "C'est quoi ton niveau d'agence?",
+    soul: { organism: { mood: 'satisfaite', agency: 1 } },
+    recentMessages: [
+      { role: 'user', content: 'tu vas bien ?' },
+      { role: 'assistant', content: "Mon niveau d'agence est à 100 %." },
+    ],
+  });
+  assert.equal(plan.act, 'explain_agency_metric');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(plan.facts.join(' '), /100 %/);
+  assert.match(engine.deterministicReply(plan), /indicateur interne/i);
+  assert.match(engine.deterministicReply(plan), /sans limites/i);
+});
