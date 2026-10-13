@@ -54,6 +54,35 @@ function compactContext(rows = []) {
     .filter((row) => row.content);
 }
 
+// Compact the *meaning* selected by cognition rather than truncating the
+// trailing JSON of a large semantic plan. User text must survive every budget.
+export function nativeFrenchExpressionPrompt(plan={}){
+  const clean=(value,limit)=>normalize(value).slice(0,limit);
+  const user=clean(plan.user_text||plan.semantic_query||'',420);
+  const goal=clean(plan.goal||'',160);
+  const act=clean(plan.act||'',60);
+  const facts=(Array.isArray(plan.facts)?plan.facts:[])
+    .slice(0,2).map(item=>clean(item,125)).filter(Boolean);
+  const semantic=clean(plan.semantic_support||'',155);
+  const evidence=clean(plan.external_research_summary||'',125);
+  const lastConversation=(Array.isArray(plan.conversation_context)?plan.conversation_context:[])
+    .slice(-2).map(item=>clean(item?.content||'',95)).filter(Boolean);
+  const parts=['Message utilisateur : '+user];
+  if(goal)parts.push('Intention du noyau AURA : '+goal);
+  if(act)parts.push('Acte de parole : '+act);
+  if(facts.length)parts.push('Contraintes factuelles : '+facts.join('; '));
+  if(semantic)parts.push('Appui sémantique : '+semantic);
+  if(evidence)parts.push('Preuves externes : '+evidence);
+  if(lastConversation.length)parts.push('Contexte récent : '+lastConversation.join(' | '));
+  return parts.join('\n').slice(0,950);
+}
+export function nativeFrenchResponseBudget(plan={}){
+  const user=normalize(plan.user_text||plan.semantic_query||'');
+  if(user.length<=85 && !/[?!].*[?!]/.test(user))return 28;
+  if(user.length<=320)return 48;
+  return 64;
+}
+
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
@@ -219,7 +248,12 @@ export class FrenchLanguageFaculty {
     // Prefer real on-host inference. Remote free federation remains a last
     // resort only if the local binary or model cannot generate a reply.
     if (this.embedded.installed() || this.embedded.canProvision?.()) {
-      const answer = normalize(await this.embedded.generate(prompt, system, maxTokens));
+      // Preserve actual user message + AURA cognitive intent in a small
+      // inference prompt. No templates, no canned answers.
+      const nativePrompt=nativeFrenchExpressionPrompt(plan);
+      const nativeSystem='Tu exprimes les pensées d’AURA en français naturel, en restant fidèle au sens décidé par son noyau. Réponds directement, sans JSON ni invention.';
+      const nativeBudget=Math.min(nativeFrenchResponseBudget(plan),Number(maxTokens)||64);
+      const answer = normalize(await this.embedded.generate(nativePrompt,nativeSystem,nativeBudget));
       if (answer) {
         this.lastMode = 'hostinger-embedded';
         this.lastBackend = 'hostinger-embedded-llama';
