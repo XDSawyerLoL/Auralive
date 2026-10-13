@@ -85,6 +85,13 @@ export function nativeFrenchResponseBudget(plan={}){
   return 64;
 }
 
+// Filter leaked safety-classifier metadata; never call it a French response.
+export function isFrenchConversationalOutput(value){
+  const text=normalize(value);
+  if(!text)return false;
+  return !/^(?:user\s+safety|content\s+safety|safety\s+(?:rating|classification)|moderation)\s*:\s*(?:safe|unsafe|allowed|blocked|pass|fail|yes|no)[.!\s]*$/i.test(text)
+    && !/^(?:\{\s*["']?(?:user_safety|safety_status)["']?\s*:)/i.test(text);
+}
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
@@ -96,6 +103,7 @@ export class FrenchLanguageFaculty {
     this.lastModel = '';
     this.lastLatencyMs = 0;
     this.lastMode = 'unavailable';
+    this.lastRejectedOutput = false;
   }
 
   get federation() {
@@ -176,6 +184,7 @@ export class FrenchLanguageFaculty {
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
       last_mode: this.lastMode,
+      last_output_classifier_rejected:this.lastRejectedOutput,
       last_backend: this.lastBackend,
       last_model: this.lastModel,
       last_latency_ms: this.lastLatencyMs,
@@ -257,17 +266,36 @@ export class FrenchLanguageFaculty {
       // Preserve actual user message + AURA cognitive intent in a small
       // inference prompt. No templates, no canned answers.
       const nativePrompt=nativeFrenchExpressionPrompt(plan);
-      const nativeSystem='Tu exprimes les pensées d’AURA en français naturel, en restant fidèle au sens décidé par son noyau. Réponds directement, sans JSON ni invention.';
+      const nativeSystem='Tu es AURA. Réponds au message utilisateur en français naturel. Exprime directement l’intention du noyau, sans JSON, sans étiquettes techniques ni classification de sécurité.';
       const nativeBudget=Math.min(nativeFrenchResponseBudget(plan),Number(maxTokens)||64);
-      const answer = normalize(await this.embedded.generate(nativePrompt,nativeSystem,nativeBudget));
-      if (answer) {
-        this.lastMode = 'hostinger-embedded';
-        this.lastBackend = 'hostinger-embedded-llama';
-        this.lastModel = 'local-gguf';
-        this.lastLatencyMs = Date.now() - started;
+      let answer=normalize(await this.embedded.generate(
+        nativePrompt,nativeSystem,nativeBudget,{purpose:'french-chat'}));
+      this.lastRejectedOutput=Boolean(answer&&!isFrenchConversationalOutput(answer));
+      if(this.lastRejectedOutput){
+        // One model-generated repair attempt: never a canned response.
+        answer=normalize(await this.embedded.generate(nativePrompt,
+          'Tu es AURA. Tu parles en français à une personne. Réponds directement au message sans métadonnées.',
+          Math.min(nativeBudget,32),{purpose:'french-chat-retry'}));
+      }
+      if(isFrenchConversationalOutput(answer)){
+        this.lastMode='hostinger-embedded';
+        this.lastBackend='hostinger-embedded-llama';
+        this.lastModel='local-gguf';
+        this.lastLatencyMs=Date.now()-started;
         return answer;
       }
-      this.lastError = this.embedded.status().failure_code || 'embedded-engine-unavailable';
+      const nativeStatus=this.embedded.status();
+      this.lastError=this.lastRejectedOutput||Boolean(answer)
+        ?'embedded-non-conversational-output'
+        :(nativeStatus?.generation_failure_code||nativeStatus?.failure_code||'embedded-generation-busy');
+      // Healthy local model unavailable for one generation: do not print
+      // an unrelated free-provider safety label in the conversation.
+      if(nativeStatus?.ready){
+        this.lastMode='degraded';
+        this.lastBackend='hostinger-embedded-llama';
+        this.lastLatencyMs=Date.now()-started;
+        return '';
+      }
     }
 
     if (this.federation?.enabled) {
