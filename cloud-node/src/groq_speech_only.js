@@ -58,7 +58,7 @@ export function verifyGroqSpeechResponse(data,envelope){
     return {ok:false,code:'speech-not-conversational'};
   const evidence=[
     envelope.user_message,envelope.communicative_goal,
-    ...envelope.authorized_facts.map(f=>f.text)
+    envelope.required_question||'',...envelope.authorized_facts.map(f=>f.text)
   ].join(' ');
   const allowed=numbers(evidence);
   for(const n of numbers(utterance)){
