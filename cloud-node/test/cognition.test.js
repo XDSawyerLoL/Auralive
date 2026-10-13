@@ -491,3 +491,48 @@ test('AURA does not treat unrelated learning discussions as permission to questi
   });
   assert.notEqual(plan.act,'ask_user_from_curiosity');
 });
+
+test('native cognition recognises a founder answer to its preceding question as a learning observation',()=>{
+  const previousQuestion='Quel résultat vérifiable te ferait considérer « Quantic OS » comme réellement terminé ?';
+  const engine=new CognitionEngine();
+  const plan=engine.planReply({
+    text:'Il faut pouvoir démarrer sur trois machines différentes.',
+    privateView:true,
+    soul:{organism:{relationship:{social_curiosity:0.8,last_question:previousQuestion}}},
+    agenda:{current:'Quantic OS'},
+    recentMessages:[
+      {role:'assistant',content:'Oui. '+previousQuestion},
+      {role:'user',content:'Il faut pouvoir démarrer sur trois machines différentes.'},
+    ],
+  });
+  assert.equal(plan.act,'acknowledge_learning');
+  assert.equal(plan.needs_semantic_support,false);
+  assert.equal(plan.learning_observation.question,previousQuestion);
+  assert.equal(plan.learning_observation.answer,'Il faut pouvoir démarrer sur trois machines différentes.');
+  assert.equal(plan.learning_observation.epistemic_status,'user-reported-unverified');
+  assert.match(plan.facts.join(' '),/non vérifiée/);
+});
+
+test('a public conversation cannot promote user responses to founder learning memory',()=>{
+  const last='Quel résultat te ferait considérer Quantic OS comme terminé ?';
+  const plan=new CognitionEngine().planReply({
+    text:'Je veux vérifier plusieurs machines.',
+    privateView:false,
+    soul:{organism:{relationship:{last_question:last}}},
+    recentMessages:[{role:'assistant',content:last}],
+  });
+  assert.notEqual(plan.act,'acknowledge_learning');
+  assert.equal(plan.learning_observation,null);
+});
+
+test('a new unrelated question does not become an answer to AURA previous curiosity',()=>{
+  const last='Quel résultat te ferait considérer Quantic OS comme terminé ?';
+  const plan=new CognitionEngine().planReply({
+    text:'Tu fais quoi en ce moment ?',
+    privateView:true,
+    soul:{organism:{relationship:{last_question:last}}},
+    recentMessages:[{role:'assistant',content:last}],
+  });
+  assert.equal(plan.act,'report_current_activity');
+  assert.equal(plan.learning_observation,null);
+});
