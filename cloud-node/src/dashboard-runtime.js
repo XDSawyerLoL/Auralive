@@ -560,14 +560,16 @@ function renderLanguageEngine(state){
   const installed=stage==='installed-verified'&&!!state?.installed;
   const previouslyVerified=Boolean(state?.last_verified_probe_at
     ||(Array.isArray(state?.boot_attempts)&&state.boot_attempts.some(a=>a.inference_verified)));
-  const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at);
+  const degraded=state?.status==='generation-degraded';
+  const generating=Boolean(state?.generation_active);
+  const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at&&!degraded);
   const booting=backend==='starting'||backend==='verifying-inference';
   const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
-  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
+  const kind=healthy?'ready':degraded?'blocked':blocked?'blocked':booting||generating?'loading':'blocked';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked&&previouslyVerified?'Inférence confirmée · moteur arrêté':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('engineChip').textContent=healthy?'Réponse vérifiée':degraded?'Génération momentanément dégradée':generating?'Génération en cours':blocked&&previouslyVerified?'Inférence confirmée · moteur arrêté':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
   $('railLanguage').textContent=healthy?'Conversation disponible'
-    :booting?'Chargement du modèle':'Français non opérationnel';
+    :degraded?'Conversation à réessayer':booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
     'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
     'embedded-sha256-mismatch':'Le modèle ou moteur téléchargé a échoué au contrôle d’intégrité',
@@ -594,6 +596,7 @@ function renderLanguageEngine(state){
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
   $('engineTitle').textContent=healthy?'Génération locale vérifiée'
+    :degraded?'Moteur actif · dernière réponse non générée'
     :blocked?(titles[fail]||(previouslyVerified
       ?'Moteur arrêté après génération vérifiée':'Moteur français indisponible'))
       :booting?'Chargement du moteur linguistique'
@@ -640,6 +643,7 @@ function renderLanguageEngine(state){
     '. '+transportDesc;
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
+    :degraded?'Le moteur natif est encore actif et son test initial a produit des tokens. La dernière conversation a échoué ('+String(state?.generation_failure_code||'inconnu')+'). Le moteur n’a pas été arrêté ; une nouvelle tentative est possible. Dernier délai : '+Number(state?.generation_last_duration_ms||0)+' ms. '+trace
     :booting
       ?backend==='verifying-inference'?'Le modèle a répondu au contrôle de santé. AURA vérifie maintenant la production réelle de tokens.'
          :'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée. '+trace
