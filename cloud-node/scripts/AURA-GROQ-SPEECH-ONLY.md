@@ -67,8 +67,8 @@ Si une erreur apparaît, désactiver
 `AURA_GROQ_SPEECH_ENABLED` et redémarrer. Cela restaure le comportement
 linguistique précédent; aucune mémoire ni poids locaux ne sont supprimés.
 
-Modèle API : `llama-3.3-70b-versatile`, HTTPS vers
-`https://api.groq.com/openai/v1/chat/completions`, JSON Object Mode,
+Modèle Groq accessible sur le plan Free (dans la limite des quotas) : `openai/gpt-oss-120b`, HTTPS vers
+`https://api.groq.com/openai/v1/chat/completions`, JSON Schema strict,
 sans tool calls; timeout 12 secondes, aucun retry automatique.
 
 **État :** tests simulés CI, aucun appel réel ni clé fournie; pas de
