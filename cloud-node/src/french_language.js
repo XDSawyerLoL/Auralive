@@ -236,18 +236,29 @@ export class FrenchLanguageFaculty {
     const system = this.system();
     const started = Date.now();
     this.lastError = '';
-    // Prefer real on-host inference. Remote free federation remains a last
-    // resort only if the local binary or model cannot generate a reply.
-    if (this.embedded.installed() || this.embedded.canProvision?.()) {
-      const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
-      if (answer) {
-        this.lastMode = 'hostinger-embedded';
-        this.lastBackend = 'hostinger-embedded-llama';
-        this.lastModel = 'local-gguf';
-        this.lastLatencyMs = Date.now() - started;
+    // A broken optional native runtime must never block a configured cloud speech provider.
+    // Run local inference only when health and inference have already been verified.
+    const tryEmbedded = async () => {
+      if (!this.embedded.status?.().ready) return '';
+      try {
+        const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
+        if (answer) {
+          this.lastMode = 'hostinger-embedded';
+          this.lastBackend = 'hostinger-embedded-llama';
+          this.lastModel = 'local-gguf';
+          this.lastLatencyMs = Date.now() - started;
+          this.lastError = '';
+        }
         return answer;
+      } catch (error) {
+        this.lastError = safeError(error);
+        return '';
       }
-      this.lastError = this.embedded.status().failure_code || 'embedded-engine-unavailable';
+    };
+    // Without federation, use the local runtime if it is healthy.
+    if (!this.federation?.enabled) {
+      const localAnswer = await tryEmbedded();
+      if (localAnswer) return localAnswer;
     }
 
     if (this.federation?.enabled) {
@@ -279,6 +290,12 @@ export class FrenchLanguageFaculty {
       } catch (error) {
         this.lastError = safeError(error);
       }
+    }
+
+    // Federation was preferred; if unavailable, a healthy local engine can still answer.
+    if (this.federation?.enabled) {
+      const localAnswer = await tryEmbedded();
+      if (localAnswer) return localAnswer;
     }
 
     if (await this.localAvailable()) {
