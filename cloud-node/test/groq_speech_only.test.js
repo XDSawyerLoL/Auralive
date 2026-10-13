@@ -164,3 +164,38 @@ test('if Groq speech rejects a response no other LLM can silently replace its wo
   assert.equal(faculty.lastError,'speech-output-rejected');
   assert.equal((await faculty.status()).blocking_reason,'speech-output-rejected');
 });
+
+test('general cognitive intent without actual answer must never be completed by Groq',async()=>{
+  const generic={
+    user_text:'Explique la cause de cette panne',
+    act:'respond',
+    goal:'Répondre utilement au message en restant cohérente avec mon état réel.',
+    needs_semantic_support:true,
+    facts:['Sujet de l’échange : Explique la cause de cette panne',
+      'Intention actuelle : optimiser AURA']
+  };
+  assert.throws(()=>buildAuraSpeechEnvelope(generic),
+    error=>error.message==='speech-plan-insufficient-grounding');
+  let calls=0;
+  const adapter=new GroqSpeechOnly({env:env(),fetchImpl:async()=>{calls++;throw Error('NO');}});
+  assert.equal(await adapter.generate(generic),'');
+  assert.equal(adapter.status().last_error_code,'speech-plan-insufficient-grounding');
+  assert.equal(calls,0);
+  assert.equal(adapter.status().local_requests_today,0);
+});
+test('explicit cognitive fact content remains eligible to be voiced',()=>{
+  const solved={
+    user_text:'Combien font 7 + 5 ?',
+    act:'solve_symbolic_rule',
+    goal:'Communiquer la valeur vérifiée par le noyau.',
+    needs_semantic_support:false,
+    facts:['La règle calculée et vérifiée donne 7 + 5 = 12.']
+  };
+  const contract=buildAuraSpeechEnvelope(solved);
+  assert.equal(contract.speech_act,'solve_symbolic_rule');
+  assert.equal(verifyGroqSpeechResponse({
+    speech_act:'solve_symbolic_rule',
+    used_fact_ids:['f1'],
+    utterance:'Cela fait 12.'
+  },contract).ok,true);
+});
