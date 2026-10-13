@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {FrenchLanguageFaculty,nativeFrenchExpressionPrompt,nativeFrenchResponseBudget} from '../src/french_language.js';
+import {FrenchLanguageFaculty,nativeFrenchExpressionPrompt,nativeFrenchResponseBudget,isFrenchConversationalOutput} from '../src/french_language.js';
 
 test('native French greeting preserves real user text before all cognitive metadata',()=>{
   const plan={
@@ -70,4 +70,55 @@ test('a healthy but slow embedded model never reports misleading OpenRouter erro
   assert.equal(status.blocking_reason,'generation-timeout');
   assert.match(status.setup_hint,/Qwen est démarré/);
   assert.doesNotMatch(status.setup_hint,/OpenRouter a répondu sans texte/);
+});
+
+test('User Safety: safe is not French text and cannot contaminate new context',()=>{
+  assert.equal(isFrenchConversationalOutput('User Safety: safe'),false);
+  assert.equal(isFrenchConversationalOutput('user safety : unsafe.'),false);
+  assert.equal(isFrenchConversationalOutput('Moderation: allowed'),false);
+  assert.equal(isFrenchConversationalOutput('Bonjour, comment vas-tu ?'),true);
+  const plan={user_text:'salut',goal:'Saluer naturellement',act:'greet',
+    conversation_context:[{role:'assistant',content:'User Safety: safe'},
+      {role:'user',content:'salut'}]};
+  assert.doesNotMatch(nativeFrenchExpressionPrompt(plan),/User Safety: safe/i);
+});
+
+test('classificatory output triggers one real model retry, never a canned answer',async()=>{
+  const attempts=[];
+  const local={installed:()=>true,canProvision:()=>false,
+    generate:async(...args)=>{attempts.push(args);
+      return attempts.length===1?'User Safety: safe':'Salut ! Je suis là.';},
+    status:()=>({ready:true,probe_verified:true})};
+  let remoteCalls=0;
+  const ai={federation:{enabled:true,generate:async()=>{remoteCalls++;return {answer:'remote'};}}};
+  const faculty=new FrenchLanguageFaculty(ai,{embedded:local});
+  const answer=await faculty.generate({user_text:'salut',goal:'Saluer',act:'greet'});
+  assert.equal(answer,'Salut ! Je suis là.');
+  assert.equal(attempts.length,2);
+  assert.equal(attempts[0][2],28);
+  assert.equal(attempts[0][3].purpose,'french-chat');
+  assert.equal(attempts[1][3].purpose,'french-chat-retry');
+  assert.equal(remoteCalls,0);
+  assert.equal(faculty.lastRejectedOutput,true);
+});
+
+test('when a healthy Qwen server is busy, do not fall back to unrelated free classifier',async()=>{
+  const local={installed:()=>true,canProvision:()=>false,
+    generate:async()=>'',status:()=>({ready:true,probe_verified:true})};
+  let remoteCalls=0;
+  const ai={federation:{enabled:true,generate:async()=>{
+    remoteCalls++;return {answer:'User Safety: safe'};}}};
+  const faculty=new FrenchLanguageFaculty(ai,{embedded:local});
+  assert.equal(await faculty.generate({user_text:'salut',goal:'Saluer',act:'greet'}),'');
+  assert.equal(faculty.lastError,'embedded-generation-busy');
+  assert.equal(remoteCalls,0);
+  assert.equal(faculty.lastMode,'degraded');
+});
+
+test('free models cannot inject classifier metadata into AURA responses',async()=>{
+  const local={installed:()=>false,canProvision:()=>false,
+    status:()=>({ready:false})};
+  const ai={federation:{enabled:true,generate:async()=>({answer:'User Safety: safe'})}};
+  const faculty=new FrenchLanguageFaculty(ai,{embedded:local});
+  assert.equal(await faculty.generate({user_text:'salut'}),'');
 });

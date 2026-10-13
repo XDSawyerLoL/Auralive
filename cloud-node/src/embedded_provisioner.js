@@ -19,11 +19,25 @@ const BUNDLES = Object.freeze({
     sha256: '82b9804017436f624c1751f54a74469a879b16c8edcb721c4d68ef88d472af12',
   },
 });
-const MODEL = Object.freeze({
-  filename: 'Qwen3-0.6B-Q8_0.gguf',
-  sha256: '9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031',
-  url: 'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf',
+export const EMBEDDED_GGUF_MODELS=Object.freeze({
+  'qwen3-q8':Object.freeze({
+    filename:'Qwen3-0.6B-Q8_0.gguf',
+    sha256:'9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031',
+    url:'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf',
+    minBytes:500*1024*1024,maxBytes:750*1024*1024,
+    label:'Qwen3-0.6B Q8_0',
+  }),
+  'qwen3-q4-canary':Object.freeze({
+    filename:'Qwen3-0.6B-Q4_K_M.gguf',
+    sha256:'ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a',
+    url:'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    minBytes:300*1024*1024,maxBytes:600*1024*1024,
+    label:'Qwen3-0.6B Q4_K_M (canary)',
+  }),
 });
+export function selectEmbeddedModelVariant(value=''){
+  return value==='qwen3-q4-canary'?'qwen3-q4-canary':'qwen3-q8';
+}
 const MIN_MEMORY = 1_500 * 1024 * 1024;
 const MIN_FREE_DISK = 900 * 1024 * 1024;
 const BUNDLED_STATIC_REVISION = 'b11425';
@@ -71,7 +85,7 @@ async function availableMemory(){
   }
   return null;
 }
-async function chooseInstallDir({home=homedir(),cwd=process.cwd(),temp=tmpdir()}={}){
+async function chooseInstallDir({home=homedir(),cwd=process.cwd(),temp=tmpdir(),model=EMBEDDED_GGUF_MODELS['qwen3-q8']}={}){
   const requested=String(process.env.AURA_EMBEDDED_CACHE_DIR||'').trim();
   const candidates=requested?[resolve(requested)]:[
     join(home,'.cache','aura-language-runtime'),
@@ -86,9 +100,10 @@ async function chooseInstallDir({home=homedir(),cwd=process.cwd(),temp=tmpdir()}
       await access(folder,2);
       const disk=await statfs(folder).catch(()=>null);
       // Cached models need little extra disk; preserve them after deployment.
-      const saved=await stat(join(folder,MODEL.filename)).catch(()=>null);
-      const cached=Boolean(saved && saved.size>500*1024*1024 && saved.size<750*1024*1024);
-      if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024 : MIN_FREE_DISK))continue;
+      const saved=await stat(join(folder,model.filename)).catch(()=>null);
+      const cached=Boolean(saved && saved.size>model.minBytes && saved.size<model.maxBytes);
+      if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024
+        :Math.min(MIN_FREE_DISK,model.maxBytes+90*1024*1024)))continue;
       return folder;
     }catch{}
   }
@@ -205,8 +220,12 @@ async function extractTar(archive,target,{spawnProcess=spawn}={}){
 export class EmbeddedProvisioner {
   constructor({request=fetch,spawnProcess=spawn,settings={}}={}){
     Object.assign(this,{request,spawnProcess,settings});
+    this.modelVariant=selectEmbeddedModelVariant(
+      settings.modelVariant??process.env.AURA_EMBEDDED_LANGUAGE_MODEL_VARIANT??'');
+    this.model=EMBEDDED_GGUF_MODELS[this.modelVariant];
     this.inflight=null;this.paths=null;this.stage='not-started';this.lastError='';this.retryAfter=0;
     this.failedStage='';this.failureOrigin='';this.engineVariant='unselected';
+    this.canaryRollbackAvailable=false;
   }
   get enabled(){
     return process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false'
@@ -216,7 +235,9 @@ export class EmbeddedProvisioner {
     return {enabled:this.enabled,stage:this.stage,error_code:this.lastError,
       failed_stage:this.failedStage,redirect_origin:this.failureOrigin,
       engine_variant:this.engineVariant,
-      engine_revision:REVISION,model:'Qwen3-0.6B Q8_0',no_paid_api:true,
+      engine_revision:REVISION,model:this.model.label,
+      model_variant:this.modelVariant,canary_rollback_available:this.canaryRollbackAvailable,
+      no_paid_api:true,
       retry_after:this.retryAfter>Date.now()?new Date(this.retryAfter).toISOString():null};
   }
   async ensure(){
@@ -237,9 +258,10 @@ export class EmbeddedProvisioner {
   async #prepare(){
     const memory=await availableMemory();
     if(memory!==null && memory<MIN_MEMORY)throw new Error('embedded-insufficient-cgroup-memory');
-    const cache=await chooseInstallDir(this.settings);
+    const modelSpec=this.model;
+    const cache=await chooseInstallDir({...this.settings,model:modelSpec});
     const dest=join(cache,'llama-'+REVISION);
-    const model=join(cache,MODEL.filename);
+    const model=join(cache,modelSpec.filename);
     const binInfo=BUNDLES[process.arch];
     this.stage='locating-existing-install';
     const staticBinary=await installBundledStaticServer(cache);
@@ -271,22 +293,32 @@ export class EmbeddedProvisioner {
     await chmod(binary,0o700);
     let modelGood=false;
     const existing=await stat(model).catch(()=>null);
-    if(existing?.size>500*1024*1024 && existing.size<750*1024*1024){
+    if(existing?.size>modelSpec.minBytes && existing.size<modelSpec.maxBytes){
       const sha=createHash('sha256');
       const {createReadStream}=await import('node:fs');
       for await(const part of createReadStream(model))sha.update(part);
-      modelGood=sha.digest('hex')===MODEL.sha256;
+      modelGood=sha.digest('hex')===modelSpec.sha256;
     }
     if(!modelGood){
       this.stage='downloading-open-model';
       const partial=model+'.partial-'+process.pid;
       try{
-        await streamChecked(MODEL.url,partial,MODEL.sha256,
-          750*1024*1024,'model',this.request);
+        await streamChecked(modelSpec.url,partial,modelSpec.sha256,
+          modelSpec.maxBytes,'model',this.request);
         await rename(partial,model);
       }finally{await rm(partial,{force:true}).catch(()=>{});}
     }
-    this.paths={executable:binary,gguf:model,binFound:true,modelFound:true,executableAllowed:true,installed:true};
+    // Never advertise a rollback based on filename/size alone. Verify cached
+    // Q8 bytes before exposing a safe fallback option.
+    const stable=EMBEDDED_GGUF_MODELS['qwen3-q8'];
+    const stablePath=join(cache,stable.filename);
+    const stableMeta=this.modelVariant==='qwen3-q4-canary'
+      ?await stat(stablePath).catch(()=>null):null;
+    this.canaryRollbackAvailable=Boolean(stableMeta
+      &&stableMeta.size>stable.minBytes&&stableMeta.size<stable.maxBytes
+      &&await fileSha256(stablePath)===stable.sha256);
+    this.paths={executable:binary,gguf:model,binFound:true,modelFound:true,
+      executableAllowed:true,installed:true};
     this.stage='installed-verified';this.lastError='';
     this.failedStage='';this.failureOrigin='';
     return this.paths;

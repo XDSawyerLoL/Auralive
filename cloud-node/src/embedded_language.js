@@ -453,6 +453,8 @@ export class EmbeddedLanguageRuntime {
     this.generationFailures=0;this.generationLastErrorAt='';
     this.generationLastAttemptAt='';this.generationLastDurationMs=0;
     this.generationLastInputChars=0;this.generationLastMaxTokens=0;
+    this.generationActiveKind='';this.generationLastKind='';
+    this.canaryGenerationSamples=[];
     this.recoveryTimer=null;this.recoveryDueAt=0;
     this.recoveryTimes=[];this.recoveryLimitReached=false;
     this.probeTimeoutMs=30_000;
@@ -525,6 +527,8 @@ export class EmbeddedLanguageRuntime {
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
       generation_active:this.generationActive,
+      generation_active_kind:this.generationActive?this.generationActiveKind:'',
+      generation_last_kind:this.generationLastKind,
       generation_failure_code:this.generationFailure,
       generation_failures_consecutive:this.generationFailures,
       generation_last_error_at:this.generationLastErrorAt,
@@ -542,6 +546,11 @@ export class EmbeddedLanguageRuntime {
        recovery_attempts_in_window:this.recoveryTimes.length,
        recovery_limited:this.recoveryLimitReached,
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
+      model_canary_requested:this.provisioner?.modelVariant==='qwen3-q4-canary',
+      model_canary_active:Boolean(this.ready && this.provisionedPaths
+        && this.provisioner?.modelVariant==='qwen3-q4-canary'),
+      model_canary_observations:this.provisioner?.modelVariant==='qwen3-q4-canary'
+        ?this.canaryMetrics():null,
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
       launch_mode:this.launchMode,
@@ -655,8 +664,13 @@ export class EmbeddedLanguageRuntime {
     const hasInstallation=this.installed();
     const unresolvedLibraries=this.lastFailure
       && classifyEmbeddedFailure(this.lastFailure).code==='embedded-shared-library-unresolved';
-    const needsCanonical = this.canProvision()
-      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource));
+    // Existing Q8 cannot silently satisfy an explicit Q4 canary selection.
+    // A manually pinned GGUF retains precedence over the canary flag.
+    const requestedCanary=this.provisioner?.modelVariant==='qwen3-q4-canary'
+      && !process.env.AURA_EMBEDDED_LANGUAGE_MODEL;
+    const needsCanonical=this.canProvision()
+      && (!hasInstallation || requestedCanary
+        || (unresolvedLibraries && !this.canonicalSource));
     if(!hasInstallation && !needsCanonical)return false;
     this.booting=needsCanonical ? this.installAndBoot() : this.bootWithExecutable();
     try{return await this.booting;}
@@ -904,7 +918,19 @@ export class EmbeddedLanguageRuntime {
       return nativeUnixRequest(this.unixSocketPath,endpoint,options);
     return this.request('http://127.0.0.1:'+this.port+endpoint,options);
   }
-  async generate(prompt,system,maxTokens=600){
+  canaryMetrics(){
+    const samples=this.canaryGenerationSamples.slice(-12);
+    const times=samples.map(item=>item.durationMs).sort((a,b)=>a-b);
+    const p95=times.length?times[Math.ceil(.95*times.length)-1]:null;
+    const succeeded=samples.filter(item=>item.ok).length;
+    const timeouts=samples.filter(item=>item.timeout).length;
+    return {samples:samples.length,successful:succeeded,timeouts,
+      p95_ms:p95,rollout_status:samples.length<6?'insufficient-samples'
+        :succeeded>=Math.ceil(samples.length*.9)&&timeouts===0&&p95<30_000
+          ?'candidate-meets-target':'candidate-needs-review',
+      target_p95_ms:30_000,model_promotion_automatic:false};
+  }
+  async generate(prompt,system,maxTokens=600,{purpose='background'}={}){
     // Never block a chat request waiting for installation or a 150s boot.
     if(!this.ready){
       if(!this.booting && Date.now()>=this.cooldownUntil
@@ -921,6 +947,12 @@ export class EmbeddedLanguageRuntime {
     }
     const started=Date.now();
     this.generationActive=true;
+    const kind=purpose==='french-chat'||purpose==='french-chat-retry'
+      ?purpose:'background';
+    this.generationActiveKind=kind;
+    this.generationLastKind=kind;
+    let generatedSuccessfully=false;
+    let timedOut=false;
     this.generationLastAttemptAt=new Date(started).toISOString();
     try{
       const payload=nativeChatPayload(prompt,system,maxTokens,
@@ -941,17 +973,26 @@ export class EmbeddedLanguageRuntime {
       this.lastLatencyMs=Date.now()-started;
       this.generationFailure='';this.generationFailures=0;
       this.lastFailure='';
+      generatedSuccessfully=true;
       return answer;
     }catch(error){
       // A user-level inference rejection is not a native process failure.
       // Preserve the probe, process, and live socket; never send SIGTERM.
       this.generationFailure=classifyChatError(error);
+      timedOut=this.generationFailure==='generation-timeout';
       this.generationFailures++;
       this.generationLastErrorAt=new Date().toISOString();
       return '';
     }finally{
       this.generationLastDurationMs=Date.now()-started;
+      if(this.provisioner?.modelVariant==='qwen3-q4-canary'
+        &&(kind==='french-chat'||kind==='french-chat-retry')){
+        this.canaryGenerationSamples.push({durationMs:this.generationLastDurationMs,
+          ok:generatedSuccessfully,timeout:timedOut});
+        this.canaryGenerationSamples=this.canaryGenerationSamples.slice(-12);
+      }
       this.generationActive=false;
+      this.generationActiveKind='';
     }
   }
 }
