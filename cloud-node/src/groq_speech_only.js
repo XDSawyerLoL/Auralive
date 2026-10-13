@@ -12,6 +12,15 @@ export function buildAuraSpeechEnvelope(plan={}){
   const communicative_goal=clean(plan.goal,240);
   if(!user_message||!/^[a-z][a-z0-9_]{0,55}$/.test(speech_act)
     ||!communicative_goal)throw Error('speech-plan-invalid');
+  // The kernel's generic "respond" plan often contains only the user's topic,
+  // not an answer. A Groq completion there would be *reasoning for AURA*,
+  // violating the speech-only contract. Fail closed for unsupported plans.
+  const meaningfulFacts=(Array.isArray(plan.facts)?plan.facts:[])
+    .map(x=>clean(x,210)).filter(x=>x
+      && !/^(?:Sujet de l[’']échange|Intention actuelle|Pensée dominante|Intention organique|Vie intérieure récente)\s*:/i.test(x));
+  if(plan.needs_semantic_support===true
+    || (speech_act==='respond'&&!meaningfulFacts.length))
+    throw Error('speech-plan-insufficient-grounding');
   // Deliberately exclude conversation history, full memory, intentions,
   // internal state, tool schemas and every other arbitrary plan property.
   const authorized_facts=(Array.isArray(plan.facts)?plan.facts:[])
@@ -98,7 +107,11 @@ export class GroqSpeechOnly {
     }
     let envelope;
     try{envelope=buildAuraSpeechEnvelope(plan);}
-    catch{this.lastError='speech-plan-invalid';return '';}
+    catch(error){
+      this.lastError=error?.message==='speech-plan-insufficient-grounding'
+        ?'speech-plan-insufficient-grounding':'speech-plan-invalid';
+      return '';
+    }
     const started=this.clock();this.busy=true;this.requestsToday++;
     this.lastError='';this.lastRejectedCode='';
     try{
