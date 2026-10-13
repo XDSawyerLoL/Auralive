@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { allowedArtifactRedirect, noexecMount, nativeProvisionSupported,
-  EmbeddedProvisioner, hasLibraries, installBundledStaticServer } from '../src/embedded_provisioner.js';
+  EmbeddedProvisioner, hasLibraries, installBundledStaticServer,
+  selectEmbeddedModelVariant,EMBEDDED_GGUF_MODELS } from '../src/embedded_provisioner.js';
 
 test('trusts official HTTPS release / model hosts and forbids other endpoints',()=>{
   assert.equal(allowedArtifactRedirect('https://github.com/ggml-org/llama.cpp/releases','binary'),true);
@@ -94,4 +95,24 @@ test('standalone musl Linux payload is copied, verified, and executable without 
       root:path.join(root,'node'),platform:'linux',arch:'x64',
     }),/embedded-static-sha256-mismatch/);
   }finally{fs.rmSync(root,{force:true,recursive:true});}
+});
+
+test('AURA GGUF selection is stable by default and the Q4 canary is pinned',()=>{
+  assert.equal(selectEmbeddedModelVariant(), 'qwen3-q8');
+  assert.equal(selectEmbeddedModelVariant('wrong-model'), 'qwen3-q8');
+  assert.equal(selectEmbeddedModelVariant('qwen3-q8'), 'qwen3-q8');
+  assert.equal(selectEmbeddedModelVariant('qwen3-q4-canary'), 'qwen3-q4-canary');
+  const stable=EMBEDDED_GGUF_MODELS['qwen3-q8'];
+  const canary=EMBEDDED_GGUF_MODELS['qwen3-q4-canary'];
+  assert.equal(stable.filename,'Qwen3-0.6B-Q8_0.gguf');
+  assert.equal(canary.filename,'Qwen3-0.6B-Q4_K_M.gguf');
+  assert.equal(canary.sha256,'ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a');
+  assert.match(canary.url,/^https:\/\/huggingface\.co\/unsloth\/Qwen3-0\.6B-GGUF\//);
+  assert.notEqual(canary.filename,stable.filename);
+  assert.ok(canary.maxBytes<stable.maxBytes);
+  assert.equal(new EmbeddedProvisioner({settings:{modelVariant:'qwen3-q8'}}).snapshot().model_variant,'qwen3-q8');
+  const instance=new EmbeddedProvisioner({settings:{modelVariant:'qwen3-q4-canary'}});
+  assert.equal(instance.snapshot().model_variant,'qwen3-q4-canary');
+  assert.equal(instance.snapshot().canary_rollback_available,false);
+  assert.match(instance.snapshot().model,/Q4_K_M/);
 });
