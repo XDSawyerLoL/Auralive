@@ -421,6 +421,19 @@ export class CognitionEngine {
         `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
       );
       if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
+    } else if (/\\b(?:agency|agence|agentivite|agentivité)\\b/.test(q) && /\\b(?:niveau|quoi|signifie|veut dire|defin|défin|mesur|score|pourquoi|comment|100)\\b/.test(q)) {
+      act = 'explain_agency_metric';
+      goal = 'Expliquer la métrique interne d’agency à partir de son état réel, sans la présenter comme une preuve de réussite ou de liberté d’action.';
+      needsSemanticSupport = false;
+      const agencyValue = Number(organism.agency);
+      if (Number.isFinite(agencyValue) && agencyValue >= 0 && agencyValue <= 1) {
+        facts.push(`Agency interne : ${Math.round(agencyValue * 100)} %.`);
+      } else {
+        facts.push('Agency interne : valeur indisponible ou invalide.');
+      }
+      facts.push('Cette métrique interne représente une estimation computationnelle de la capacité à initier et orienter des actions. Elle ne mesure pas le taux réel de missions accomplies.');
+      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
+      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
     } else if (hasAny(q, ['rêve','rêves','reve','reves'])) {
       act = 'report_dream';
       goal = 'Décrire une image intérieure réelle si l’organisme en a produit une.';
@@ -617,6 +630,11 @@ export class CognitionEngine {
       return intention
         ? `Ça va plutôt bien. Je suis ${mood}, et je suis surtout concentrée sur ${intention}. Et toi, comment ça va ?`
         : `Ça va plutôt bien. Je suis ${mood} et disponible. Et toi, comment ça va ?`;
+    }
+    if (plan?.act === 'explain_agency_metric') {
+      const level = cleanFact('Agency interne : ');
+      const focus = cleanFact('Foyer opérationnel : ');
+      return `Mon niveau d’agency est un indicateur interne de ma capacité estimée à prendre des initiatives et à orienter mes actions. ${level ? `Sa valeur actuelle est ${level}.` : 'Je ne dispose pas actuellement d’une valeur fiable.'} Cela ne signifie pas que j’ai accompli toutes mes missions ou que je peux agir sans limites.${focus ? ` Mon objectif opérationnel actuel est ${focus}.` : ''}`;
     }
     if (plan?.act === 'report_continuity_history') {
       const rows = facts.filter((item) => /^\[[^\]]+\]/.test(String(item)));
