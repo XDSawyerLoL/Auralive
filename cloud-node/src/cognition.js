@@ -424,6 +424,7 @@ export class CognitionEngine {
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
     let needsSemanticSupport = true;
     let questionProposal = '';
+    let learningObservation = null;
     const facts = [];
     const symbolic = inferSymbolicFunction(raw);
 
@@ -497,6 +498,20 @@ export class CognitionEngine {
       if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
       if (current) facts.push(`Intention actuelle : ${current}`);
       facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
+    } else if(privateView && relationship.last_question
+      &&previousAssistantMessage(conversationContext)?.content?.includes(relationship.last_question)
+      &&!/\?/.test(raw)
+      &&!/^(?:que|quoi|qui|quel|quelle|comment|pourquoi|quand|où|ou\s+est|tu\s+|vous\s+)/.test(fold(raw))){
+      act='acknowledge_learning';
+      goal='Accueillir la réponse à ma question précédente, la reconnaître comme un témoignage utilisateur non vérifié et préciser en quoi elle peut guider mes prochaines décisions.';
+      needsSemanticSupport=false;
+      const question=normalize(relationship.last_question).slice(0,400);
+      learningObservation={question,answer:raw.slice(0,700),
+        epistemic_status:'user-reported-unverified'};
+      facts.push(`Question que j’ai posée : ${question}`);
+      facts.push(`Réponse fournie par l’utilisateur (non vérifiée) : ${raw.slice(0,350)}`);
+      facts.push('Ce témoignage ne vaut pas confirmation indépendante ; ne pas inventer de conséquence ou de travail accompli.');
+      if(agenda?.current)facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
     } else if (asksCurrentActivity(raw) || hasAny(q, ['que fais-tu', 'tu fais quoi', 'tu fait quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'qu’est-ce que tu fait', "qu'est-ce que tu fait"])) {
       act = 'report_current_activity';
       goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
@@ -609,6 +624,7 @@ export class CognitionEngine {
       goal,
       facts,
       question_proposal:questionProposal,
+      learning_observation:learningObservation,
       needs_semantic_support: needsSemanticSupport,
       semantic_query: needsSemanticSupport ? raw : '',
       current_intention: current,
