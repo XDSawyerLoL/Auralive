@@ -558,12 +558,14 @@ function renderLanguageEngine(state){
   const backend=String(state?.status||'');
   const fail=String(install.error_code||state?.failure_code||'');
   const installed=stage==='installed-verified'&&!!state?.installed;
+  const previouslyVerified=Boolean(state?.last_verified_probe_at
+    ||(Array.isArray(state?.boot_attempts)&&state.boot_attempts.some(a=>a.inference_verified)));
   const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at);
   const booting=backend==='starting'||backend==='verifying-inference';
   const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
   const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked&&previouslyVerified?'Inférence confirmée · moteur arrêté':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
   $('railLanguage').textContent=healthy?'Conversation disponible'
     :booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
@@ -592,7 +594,8 @@ function renderLanguageEngine(state){
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
   $('engineTitle').textContent=healthy?'Génération locale vérifiée'
-    :blocked?(titles[fail]||'Moteur français indisponible')
+    :blocked?(titles[fail]||(previouslyVerified
+      ?'Moteur arrêté après génération vérifiée':'Moteur français indisponible'))
       :booting?'Chargement du moteur linguistique'
         :'Fichiers installés · français non vérifié';
   const attempts=Array.isArray(state?.boot_attempts)?state.boot_attempts:[];
@@ -647,7 +650,11 @@ function renderLanguageEngine(state){
           '. Tentatives : '+(history||'aucun historique')+
           '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length
             ?state.log_signals.join(', '):'aucun signal classifié')+
-          '. Aucun texte de réponse n’a été généré. '+trace
+          (previouslyVerified
+             ?'. Une génération de tokens a été vérifiée auparavant, mais le moteur est actuellement arrêté.'
+               +(state?.recovery_scheduled?' Redémarrage contrôlé programmé.'
+                 :state?.recovery_limited?' Limite de redémarrages atteinte.':'')
+             :'. Aucun texte de réponse n’a été généré.')+' '+trace
         :'Le modèle est installé, mais le moteur n’a pas encore répondu. La présence des fichiers ne mesure pas l’apprentissage.';
   const stages={
     'not-started':'Installation non démarrée',
