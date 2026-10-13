@@ -1204,7 +1204,11 @@ export class CognitiveKernel {
 
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
-    if (plan.needs_semantic_support) {
+    // Sovereign voice mode: no generic LLM may synthesize missing cognition
+    // and feed its answer back into the AURA thought plan. The external
+    // Web Substrate can still provide source evidence, but cannot authorize
+    // a provider to make decisions. Unresolved plans fail closed in speech.
+    if (plan.needs_semantic_support && !this.expression.language.groq.enabled) {
       const support = await this.expression.semanticSupport(
         plan,
         await this.contextForAi(privateView),
