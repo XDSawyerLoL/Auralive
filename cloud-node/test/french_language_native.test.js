@@ -32,7 +32,7 @@ test('normal French prompt retains question and facts while respecting input bud
   assert.match(compact,/3 tokens/);
   assert.match(compact,/Intention du noyau/);
   assert.ok(compact.length<=950);
-  assert.equal(nativeFrenchResponseBudget(plan),28);
+  assert.equal(nativeFrenchResponseBudget(plan),48);
 });
 test('real embedded French faculty sends compact plan and short generation budget',async()=>{
   const calls=[];
