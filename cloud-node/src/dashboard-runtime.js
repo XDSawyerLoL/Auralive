@@ -619,6 +619,14 @@ function renderLanguageEngine(state){
     :nodeListener===false?'port non visible côté Node'
     :'visibilité Node inconnue';
   const native=state?.native_process||state?.last_native_process||{};
+  const unixMode=state?.local_transport==='unix';
+  const transportDesc=unixMode
+    ?('Transport : socket Unix privé, '+(state?.unix_socket_present?'présent':'non créé')+
+        (state?.transport_fallback?' (repli : '+state.transport_fallback+')':'')+'.')
+    :('Port déclaré : '+(state?.native_listener_report?.matching_port===true?'conforme'
+      :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+
+     '. Noyau : '+socketDesc+'. Réseau : '+nsText+', '+nodeListenerText+
+     '. Au dernier refus : '+refusedSocketText+'. Essai TCP : '+dial+'.');
   const trace='Sonde locale : '+String(state?.health_last_result||'inconnue')+
     ' ('+Number(state?.health_probe_count||0)+' essais). '+
     'Processus : '+(state?.native_process_running?'actif':'inactif')+
@@ -626,11 +634,7 @@ function renderLanguageEngine(state){
     (native.threads!=null?', '+Number(native.threads)+' threads':'')+
     '. Sortie native : '+(state?.native_output_observed?'oui':'non')+
     '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+
-    '. Port déclaré par le moteur : '+(state?.native_listener_report?.matching_port===true?'conforme'
-      :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+
-     '. Vérification noyau : '+socketDesc+
-    '. Réseau : '+nsText+', '+nodeListenerText+'. Au dernier refus : '+
-    refusedSocketText+'. Essai TCP indépendant : '+dial+'.';
+    '. '+transportDesc;
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
     :booting
