@@ -526,13 +526,25 @@ export class CognitionEngine {
         const previousAssistant = [...conversationContext].reverse().find((row) => row.role === 'assistant');
         if (previousAssistant?.content) facts.push(`Réponse précédente concernée : ${previousAssistant.content}`);
       }
-    } else if (hasAny(q, ['risque', 'risques', 'danger', 'problème', 'fragilité'])) {
+    } else if (hasAny(q, [
+      'risque', 'danger', 'problème', 'probleme', 'problématique',
+      'problematique', 'difficulté', 'difficulte', 'blocage', 'bloqué',
+      'bloque', 'obstacle', 'souci', 'défi', 'defi', 'frein',
+      'panne', 'ce qui coince', 'ce qui ne marche pas',
+    ])) {
       act = 'report_risks';
-      goal = 'Présenter les risques visibles dans mon état et ma mémoire.';
+      goal = 'Décrire les difficultés réellement constatées dans mon état, mon agenda et mon travail, sans en inventer.';
       needsSemanticSupport = false;
-      facts.push(`Pression interne : ${Math.round(Number(soul?.pressure || 0) * 100)} %`);
-      if (lesson) facts.push(`Leçon utile : ${lesson}`);
-      if (recentReflection?.hypothesis) facts.push(`Hypothèse récente : ${normalize(recentReflection.hypothesis)}`);
+      if (agenda?.current) facts.push(`Activité actuelle : ${normalize(agenda.current)}`);
+      if (agenda?.blocker) facts.push(`Blocage opérationnel enregistré : ${normalize(agenda.blocker)}`);
+      if (currentWork) facts.push(`Travail en cours : ${currentWork}`);
+      if (recentReflection?.hypothesis) facts.push(`Hypothèse interne non vérifiée : ${normalize(recentReflection.hypothesis)}`);
+      if (lesson) facts.push(`Leçon enregistrée : ${lesson}`);
+      if (agenda?.next_action) facts.push(`Action suivante planifiée : ${normalize(agenda.next_action)}`);
+      if (Number(soul?.pressure || 0) > 0)
+        facts.push(`Pression interne : ${Math.round(Number(soul.pressure)*100)} %`);
+      if (!agenda?.blocker && !recentReflection?.hypothesis && !lesson)
+        facts.push('Aucun blocage précis n’est enregistré dans les éléments consultés ; ne pas inventer de difficulté.');
     } else if (hasAny(q, ['qui es-tu', 'tu es quoi', 'es-tu une ia', 'conscience'])) {
       act = 'identity';
       goal = 'Expliquer mon architecture sans prétendre à une conscience démontrée ni à une AGI.';
