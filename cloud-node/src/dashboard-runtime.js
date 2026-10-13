@@ -682,10 +682,11 @@ function renderLanguageEngine(state){
     ' · '+String(install.engine_variant||'variante inconnue');
 }
 async function refreshEnginePanel(){
-  try{renderLanguageEngine(await api('/api/language/embedded/status'));}
+  try{const state=await api('/api/language/embedded/status');renderLanguageEngine(state);return state;}
   catch(error){
     renderLanguageEngine({provisioning:{stage:'blocked',error_code:'diagnostic-unavailable'},failure_code:'diagnostic-unavailable'});
     $('engineDescription').textContent='Le diagnostic du moteur est inaccessible ('+String(error.status||'réseau')+'). La génération n’est pas vérifiée.';
+    return null;
   }
 }
 
@@ -697,7 +698,7 @@ async function refresh(){
       const info=await api('/healthz');
       $('serverRevision').textContent='Serveur · '+String(info?.build?.git_sha_short||'révision inconnue');
     }catch(_){$('serverRevision').textContent='Serveur · connexion partielle';}
-    await refreshEnginePanel();
+    const nativeEngine=await refreshEnginePanel();
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -716,13 +717,17 @@ async function refresh(){
     try{
       const capabilities=await api('/api/capabilities');
       const language=(capabilities&&capabilities.language)||{};
-      const languageReady=Boolean(language.ready);
+      const nativeReady=Boolean(nativeEngine?.ready&&nativeEngine?.probe_verified);
+      const languageReady=Boolean(language.ready||nativeReady);
+      const generationDegraded=nativeEngine?.status==='generation-degraded';
       const nativeDialogueReady=Boolean(language.native_dialogue_ready||(capabilities&&capabilities.cognition&&capabilities.cognition.ready));
-      $('languageDot').className='live-dot '+(languageReady||nativeDialogueReady?'good':'bad');
+      $('languageDot').className='live-dot '+(generationDegraded?'warn':languageReady||nativeDialogueReady?'good':'bad');
       if(languageReady){
         const provider=String(language.provider||language.last_backend||'modèle libre');
-        $('languageText').textContent='Français · modèle libre';
-        $('languageText').title='Faculté linguistique française active · '+provider+' · réponses non scriptées';
+        $('languageText').textContent=generationDegraded?'Français · génération lente':'Français · modèle libre';
+        $('languageText').title=generationDegraded
+          ?'Moteur Qwen actif : le dernier essai de conversation a échoué ('+String(nativeEngine?.generation_failure_code||'inconnu')+').'
+          :'Faculté linguistique française active · '+provider+' · réponses non scriptées';
       }else if(nativeDialogueReady){
         $('languageDot').className='live-dot warn';
         const strict=String(language.mode||'')==='natural-language-unavailable';
