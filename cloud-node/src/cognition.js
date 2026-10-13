@@ -381,7 +381,10 @@ export class CognitionEngine {
         author: String(row?.author || '').slice(0,80),
         content: normalize(row?.content).slice(0,500),
       }))
-      .filter((row) => row.content);
+      .filter((row) => row.content && !(row.role==='assistant'
+        &&/^(?:Ma faculté de français naturel est indisponible|Aucun moteur linguistique opérationnel|Réponse non générée)/i.test(row.content)));
+    // Operational failure banners are never dialogue from AURA and must not
+    // influence discourse references or the next cognitive response.
     const discourse = this.dialogue.analyze(raw, conversationContext);
 
     let act = 'respond';
