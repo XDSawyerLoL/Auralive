@@ -1243,6 +1243,26 @@ export class CognitiveKernel {
       post.state.relationship ||= {};
       post.state.relationship.last_question=String(plan.question_proposal).slice(0,400);
     }
+    if(!speechFailureCode&&privateView&&plan.act==='acknowledge_learning'
+      &&plan.learning_observation?.question
+      &&plan.learning_observation?.answer){
+      // Explicit answers to a question *AURA already asked* become a small,
+      // private, sourced learning record. They remain user-reported (not
+      // independently verified facts) and cannot authorize actions.
+      post.state.relationship ||= {};
+      const existing=Array.isArray(post.state.relationship.learning_observations)
+        ?post.state.relationship.learning_observations.slice(-7):[];
+      const entry={
+        question:String(plan.learning_observation.question).slice(0,400),
+        answer:String(plan.learning_observation.answer).slice(0,700),
+        source:'private-founder-dialogue',
+        epistemic_status:'user-reported-unverified',
+        observed_at:now(),
+      };
+      if(!existing.some(record=>record.question===entry.question
+        &&record.answer===entry.answer))existing.push(entry);
+      post.state.relationship.learning_observations=existing.slice(-8);
+    }
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
     await this.recordOrganismEvent('interaction-post', post.state.last_reason || 'expression', {
