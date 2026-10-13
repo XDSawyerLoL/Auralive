@@ -394,3 +394,18 @@ test('AURA explains its agency metric instead of rejecting an ordinary follow-up
   assert.match(engine.deterministicReply(plan), /indicateur interne/i);
   assert.match(engine.deterministicReply(plan), /sans limites/i);
 });
+
+test('social reciprocity does not require factual grounding', () => {
+  const engine = new CognitionEngine();
+  const plan = engine.planReply({
+    text: "j'ai envie de te dire la même chose",
+    soul: { organism: { mood: 'satisfaite' } },
+    recentMessages: [
+      { role: 'user', content: 'salut' },
+      { role: 'assistant', content: 'Salut ! Je suis là, n’hésite pas si tu as besoin de quoi que ce soit.' },
+    ],
+  });
+  assert.equal(plan.act, 'social_reciprocity');
+  assert.equal(plan.needs_semantic_support, false);
+  assert.match(engine.deterministicReply(plan), /gentil/i);
+});
