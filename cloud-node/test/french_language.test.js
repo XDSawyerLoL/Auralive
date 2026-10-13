@@ -221,3 +221,11 @@ test('French verbalisation keeps ordinary conversation distinct from verified op
   assert.match(faculty.system(), /reformuler librement les intentions relationnelles/);
   assert.match(faculty.prompt(plan), /même chose/);
 });
+
+test('natural French never emits provider reasoning into conversation', async () => {
+  const { cleanSpeechOutput } = await import('../src/french_language.js');
+  const leaked = 'The user said "salut" (hi). The communicative goal is to greet briefly. The speech act is "greet". Maybe "Salut !"';
+  assert.equal(cleanSpeechOutput(leaked), '');
+  assert.equal(cleanSpeechOutput('<think>Need to greet</think>Salut !'), 'Salut !');
+  assert.equal(cleanSpeechOutput('Salut, je suis là.'), 'Salut, je suis là.');
+});
