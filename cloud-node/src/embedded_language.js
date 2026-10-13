@@ -453,6 +453,7 @@ export class EmbeddedLanguageRuntime {
     this.generationFailures=0;this.generationLastErrorAt='';
     this.generationLastAttemptAt='';this.generationLastDurationMs=0;
     this.generationLastInputChars=0;this.generationLastMaxTokens=0;
+    this.canaryGenerationSamples=[];
     this.recoveryTimer=null;this.recoveryDueAt=0;
     this.recoveryTimes=[];this.recoveryLimitReached=false;
     this.probeTimeoutMs=30_000;
@@ -545,6 +546,8 @@ export class EmbeddedLanguageRuntime {
       model_canary_requested:this.provisioner?.modelVariant==='qwen3-q4-canary',
       model_canary_active:Boolean(this.ready && this.provisionedPaths
         && this.provisioner?.modelVariant==='qwen3-q4-canary'),
+      model_canary_observations:this.provisioner?.modelVariant==='qwen3-q4-canary'
+        ?this.canaryMetrics():null,
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
       launch_mode:this.launchMode,
@@ -912,6 +915,18 @@ export class EmbeddedLanguageRuntime {
       return nativeUnixRequest(this.unixSocketPath,endpoint,options);
     return this.request('http://127.0.0.1:'+this.port+endpoint,options);
   }
+  canaryMetrics(){
+    const samples=this.canaryGenerationSamples.slice(-12);
+    const times=samples.map(item=>item.durationMs).sort((a,b)=>a-b);
+    const p95=times.length?times[Math.ceil(.95*times.length)-1]:null;
+    const succeeded=samples.filter(item=>item.ok).length;
+    const timeouts=samples.filter(item=>item.timeout).length;
+    return {samples:samples.length,successful:succeeded,timeouts,
+      p95_ms:p95,rollout_status:samples.length<6?'insufficient-samples'
+        :succeeded>=Math.ceil(samples.length*.9)&&timeouts===0&&p95<30_000
+          ?'candidate-meets-target':'candidate-needs-review',
+      target_p95_ms:30_000,model_promotion_automatic:false};
+  }
   async generate(prompt,system,maxTokens=600){
     // Never block a chat request waiting for installation or a 150s boot.
     if(!this.ready){
@@ -929,6 +944,8 @@ export class EmbeddedLanguageRuntime {
     }
     const started=Date.now();
     this.generationActive=true;
+    let generatedSuccessfully=false;
+    let timedOut=false;
     this.generationLastAttemptAt=new Date(started).toISOString();
     try{
       const payload=nativeChatPayload(prompt,system,maxTokens,
@@ -949,16 +966,23 @@ export class EmbeddedLanguageRuntime {
       this.lastLatencyMs=Date.now()-started;
       this.generationFailure='';this.generationFailures=0;
       this.lastFailure='';
+      generatedSuccessfully=true;
       return answer;
     }catch(error){
       // A user-level inference rejection is not a native process failure.
       // Preserve the probe, process, and live socket; never send SIGTERM.
       this.generationFailure=classifyChatError(error);
+      timedOut=this.generationFailure==='generation-timeout';
       this.generationFailures++;
       this.generationLastErrorAt=new Date().toISOString();
       return '';
     }finally{
       this.generationLastDurationMs=Date.now()-started;
+      if(this.provisioner?.modelVariant==='qwen3-q4-canary'){
+        this.canaryGenerationSamples.push({durationMs:this.generationLastDurationMs,
+          ok:generatedSuccessfully,timeout:timedOut});
+        this.canaryGenerationSamples=this.canaryGenerationSamples.slice(-12);
+      }
       this.generationActive=false;
     }
   }
