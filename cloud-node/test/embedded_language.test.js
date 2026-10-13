@@ -9,7 +9,8 @@ import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
   nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot,
   nativeProcessSnapshot,nativeStartupMilestones,healthProbeResult,
-  nativeChatPayload,classifyChatError} from '../src/embedded_language.js';
+  nativeChatPayload,classifyChatError,
+  embeddedStandbyForSpeech,embeddedWarmupAllowed} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -915,4 +916,62 @@ test('canary metrics require six real conversation samples and never auto-promot
   assert.equal(runtime.canaryMetrics().rollout_status,'candidate-needs-review');
   assert.equal(runtime.canaryMetrics().timeouts,1);
   assert.equal(runtime.status().model_canary_active,false);
+});
+
+test('Groq speech-only bypasses native llama warmup in production by default',()=>{
+  const base={NODE_ENV:'production',CI:'false'};
+  assert.equal(embeddedWarmupAllowed(base),true);
+  assert.equal(embeddedWarmupAllowed({...base,AURA_GROQ_SPEECH_ENABLED:'true'}),false);
+  assert.equal(embeddedWarmupAllowed({...base,AURA_GROQ_SPEECH_ENABLED:'true',
+    AURA_EMBEDDED_LANGUAGE_WARMUP:'true'}),false);
+  assert.equal(embeddedWarmupAllowed({...base,AURA_GROQ_SPEECH_ENABLED:'true',
+    AURA_EMBEDDED_LANGUAGE_ENABLED:'true'}),false);
+  assert.equal(embeddedWarmupAllowed({...base,AURA_EMBEDDED_LANGUAGE_ENABLED:'false'}),false);
+  assert.equal(embeddedWarmupAllowed({...base,AURA_EMBEDDED_LANGUAGE_WARMUP:'false'}),false);
+  assert.equal(embeddedWarmupAllowed({...base,CI:'true'}),false);
+  assert.equal(embeddedStandbyForSpeech({...base,AURA_GROQ_SPEECH_ENABLED:'true'}),true);
+  assert.equal(embeddedStandbyForSpeech(base),false);
+});
+
+test('Groq speech-only mode never spawns, downloads, restarts or generates native model',async()=>{
+  const prior=process.env.AURA_GROQ_SPEECH_ENABLED;
+  const priorEnabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED;
+  let starts=0,provisions=0,spawned=0,schedules=0;
+  process.env.AURA_GROQ_SPEECH_ENABLED='true';
+  process.env.AURA_EMBEDDED_LANGUAGE_ENABLED='true';
+  try{
+    const runtime=new EmbeddedLanguageRuntime({
+      discover:()=>({installed:true,binFound:true,modelFound:true,
+        executableAllowed:true,executable:'/tmp/llama-server',
+        gguf:'/tmp/Qwen3-0.6B-Q4_K_M.gguf'}),
+      spawnProcess:()=>{spawned++;throw Error('native spawn forbidden in Groq mode');},
+      provisioner:{enabled:true,snapshot:()=>({stage:'installed-verified'})},
+      schedule:()=>{schedules++;throw Error('restart forbidden');},
+    });
+    runtime.installAndBoot=async()=>{provisions++;throw Error('download forbidden');};
+    runtime.bootWithExecutable=async()=>{starts++;throw Error('native boot forbidden');};
+    assert.equal(runtime.canProvision(),false);
+    assert.equal(runtime.installed(),false);
+    assert.equal(await runtime.start(),false);
+    assert.equal(await runtime.generate('salut','français',28,{purpose:'french-chat'}),'');
+    runtime.scheduleNativeRecovery();
+    const info=runtime.status();
+    assert.equal(info.status,'standby-external-speech');
+    assert.equal(info.standby_for_speech,true);
+    assert.equal(info.standby_reason,'groq-speech-only');
+    assert.equal(info.enabled,false);
+    assert.equal(info.binary_found,true);
+    assert.equal(info.model_found,true);
+    assert.equal(info.failure_code,'');
+    assert.equal(info.ready,false);
+    assert.equal(info.native_process_running,false);
+    assert.equal(info.recovery_scheduled,false);
+    assert.equal(info.generation_last_kind,'');
+    assert.equal(starts+provisions+spawned+schedules,0);
+  }finally{
+    if(prior===undefined)delete process.env.AURA_GROQ_SPEECH_ENABLED;
+    else process.env.AURA_GROQ_SPEECH_ENABLED=prior;
+    if(priorEnabled===undefined)delete process.env.AURA_EMBEDDED_LANGUAGE_ENABLED;
+    else process.env.AURA_EMBEDDED_LANGUAGE_ENABLED=priorEnabled;
+  }
 });
