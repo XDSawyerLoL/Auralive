@@ -52,3 +52,22 @@ test('real embedded French faculty sends compact plan and short generation budge
   assert.ok(calls[0][1].length<300);
   assert.doesNotMatch(calls[0][0],/QQQQQQQQQQ/);
 });
+
+test('a healthy but slow embedded model never reports misleading OpenRouter error',async()=>{
+  const embedded={
+    installed:()=>true,canProvision:()=>false,
+    status:()=>({ready:true,installed:true,binary_found:true,
+      generation_failure_code:'generation-timeout',failure_code:'',
+      provisioning:{stage:'installed-verified'}}),
+  };
+  const ai={federation:{enabled:true,snapshot:()=>({enabled:true,
+    zero_cost_mode:true,last_error:'HTTP 200 empty response OpenRouter'})}};
+  const faculty=new FrenchLanguageFaculty(ai,{embedded});
+  faculty.lastMode='degraded';
+  faculty.lastError='OpenRouter returned empty response';
+  const status=await faculty.status();
+  assert.equal(status.ready,true);
+  assert.equal(status.blocking_reason,'generation-timeout');
+  assert.match(status.setup_hint,/Qwen est démarré/);
+  assert.doesNotMatch(status.setup_hint,/OpenRouter a répondu sans texte/);
+});
