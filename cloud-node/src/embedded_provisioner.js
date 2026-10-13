@@ -308,9 +308,15 @@ export class EmbeddedProvisioner {
         await rename(partial,model);
       }finally{await rm(partial,{force:true}).catch(()=>{});}
     }
-    this.canaryRollbackAvailable=this.modelVariant==='qwen3-q4-canary'
-      &&Boolean((await stat(join(cache,EMBEDDED_GGUF_MODELS['qwen3-q8'].filename)).catch(()=>null))
-        ?.size>EMBEDDED_GGUF_MODELS['qwen3-q8'].minBytes);
+    // Never advertise a rollback based on filename/size alone. Verify cached
+    // Q8 bytes before exposing a safe fallback option.
+    const stable=EMBEDDED_GGUF_MODELS['qwen3-q8'];
+    const stablePath=join(cache,stable.filename);
+    const stableMeta=this.modelVariant==='qwen3-q4-canary'
+      ?await stat(stablePath).catch(()=>null):null;
+    this.canaryRollbackAvailable=Boolean(stableMeta
+      &&stableMeta.size>stable.minBytes&&stableMeta.size<stable.maxBytes
+      &&await fileSha256(stablePath)===stable.sha256);
     this.paths={executable:binary,gguf:model,binFound:true,modelFound:true,
       executableAllowed:true,installed:true};
     this.stage='installed-verified';this.lastError='';
