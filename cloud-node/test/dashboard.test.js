@@ -324,3 +324,13 @@ test('Groq-selected AURA shows local model intentionally sleeping, not as a fail
   assert.match(DASHBOARD_SCRIPT,/Le moteur GGUF n’est volontairement pas démarré/);
   assert.match(DASHBOARD_SCRIPT,/Français · mode Groq/);
 });
+
+test('failed Groq speech is a diagnostics-only bubble and not TTS from AURA',()=>{
+  assert.match(DASHBOARD_SCRIPT,/speech_error_code/);
+  assert.match(DASHBOARD_SCRIPT,/speech-plan-insufficient-grounding/);
+  assert.match(DASHBOARD_SCRIPT,/speech-http-429/);
+  assert.match(DASHBOARD_SCRIPT,/speech-output-rejected/);
+  assert.match(DASHBOARD_SCRIPT,/ÉTAT DE LA RÉPONSE/);
+  assert.match(DASHBOARD_SCRIPT,/if\(!unavailable\)speakAura/);
+  assert.match(DASHBOARD_SCRIPT,/Réponse non produite/);
+});
