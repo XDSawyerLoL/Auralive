@@ -77,9 +77,12 @@ test('Groq only sends authenticated JSON text request to the fixed endpoint with
   const payload=JSON.parse(call.opts.body);
   assert.equal(payload.tool_choice,'none');
   assert.equal(payload.stream,false);
-  assert.equal(payload.response_format.type,'json_object');
+  assert.equal(payload.response_format.type,'json_schema');
+  assert.equal(payload.response_format.json_schema.strict,true);
+  assert.equal(payload.response_format.json_schema.schema.additionalProperties,false);
+  assert.deepEqual(payload.response_format.json_schema.schema.required,['utterance','speech_act','used_fact_ids']);
   assert.equal(payload.messages.length,2);
-  assert.equal(payload.model,'llama-3.3-70b-versatile');
+  assert.equal(payload.model,'openai/gpt-oss-120b');
   assert.equal(payload.messages[1].role,'user');
   assert.deepEqual(JSON.parse(payload.messages[1].content),envelope());
   assert.doesNotMatch(JSON.stringify(payload),/very-secret|delete_database|Private historical chat/);
@@ -136,7 +139,7 @@ test('when Groq is enabled, French expression calls neither local Qwen nor gener
     status:()=>({ready:true})};
   const groq={enabled:true,generate:async p=>{
     groqCalls++;assert.equal(p.act,'greet');return 'Bonjour, je suis AURA.';},
-    status:()=>({enabled:true,configured:true,model:'llama-3.3-70b-versatile',
+    status:()=>({enabled:true,configured:true,model:'openai/gpt-oss-120b',
       last_error_code:''})};
   const ai={federation:{enabled:true,generate:async()=>{remoteCalls++;return {answer:'wrong'};}}};
   const faculty=new FrenchLanguageFaculty(ai,{embedded,groq});
@@ -155,7 +158,7 @@ test('if Groq speech rejects a response no other LLM can silently replace its wo
     generate:async()=>{localCalls++;return 'wrong';},
     status:()=>({ready:true})};
   const groq={enabled:true,generate:async()=>'',status:()=>({
-    enabled:true,configured:true,model:'llama-3.3-70b-versatile',
+    enabled:true,configured:true,model:'openai/gpt-oss-120b',
     last_error_code:'speech-output-rejected'})};
   const ai={federation:{enabled:true,generate:async()=>{remoteCalls++;return {answer:'wrong'};}}};
   const faculty=new FrenchLanguageFaculty(ai,{embedded,groq});
