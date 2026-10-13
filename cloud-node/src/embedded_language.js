@@ -14,6 +14,14 @@ const errorText = e => String(e?.message || e || '').slice(0, 2500);
 const safePath = value => path.resolve(String(value || ''));
 export function classifyEmbeddedFailure(error) {
   const reason = errorText(error).toLowerCase();
+  // Explicit lifecycle markers take precedence over incidental stdout/stderr
+  // (the old classifier could mask a verified, clean exit as a generic error).
+  if (/embedded-native-stopped-after-serving/.test(reason))
+    return {code:'embedded-native-stopped-after-serving',
+      hint:'L’inférence a été vérifiée, mais le processus natif a quitté le service. AURA effectue une reprise limitée.'};
+  if (/embedded-clean-exit-before-inference/.test(reason))
+    return {code:'embedded-clean-exit-before-inference',
+      hint:'Le processus natif s’est terminé sans avoir réussi à produire des tokens.'};
   if (/eacces|eperm|permission denied|noexec|operation not permitted/.test(reason))
     return { code: 'host-disallows-native-execution',
       hint: 'Hostinger refuse le processus natif (EACCES/EPERM). Changer LD_LIBRARY_PATH ne peut pas lever cette restriction.' };
@@ -393,10 +401,11 @@ function freePort(){
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=nativeLoopbackRequest,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
-    transport=null,
+    transport=null,schedule=setTimeout,cancelSchedule=clearTimeout,
     provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
     Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
     this.transportPreference=transport;
+    this.schedule=schedule;this.cancelSchedule=cancelSchedule;
     this.provisionedPaths=null;this.canonicalSource=false;
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
@@ -409,6 +418,10 @@ export class EmbeddedLanguageRuntime {
     this.pidsAtBoot=null;this.pidsAfterFailure=null;
     this.bootAttempts=[];this.bootStartedAt=0;
     this.healthSeen=false;this.lastProbeAt='';this.lastProbeLatencyMs=0;
+    this.lastVerifiedProbeAt='';this.lastVerifiedTokens=0;
+    this.lastNativeReadyDurationMs=0;
+    this.recoveryTimer=null;this.recoveryDueAt=0;
+    this.recoveryTimes=[];this.recoveryLimitReached=false;
     this.probeTimeoutMs=30_000;
     this.nativeOutputObserved=false;this.nativeMilestones=[];
     this.healthProbeCount=0;this.healthLastResult='not-requested';
@@ -479,6 +492,13 @@ export class EmbeddedLanguageRuntime {
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
        last_probe_at:this.lastProbeAt,probe_verified:Boolean(this.ready&&this.lastProbeAt),
        probe_latency_ms:this.lastProbeLatencyMs,health_seen:this.healthSeen,
+       last_verified_probe_at:this.lastVerifiedProbeAt,
+       last_verified_completion_tokens:this.lastVerifiedTokens,
+       native_ready_duration_ms:this.lastNativeReadyDurationMs,
+       recovery_scheduled:Boolean(this.recoveryTimer),
+       recovery_due_at:this.recoveryDueAt?new Date(this.recoveryDueAt).toISOString():'',
+       recovery_attempts_in_window:this.recoveryTimes.length,
+       recovery_limited:this.recoveryLimitReached,
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
@@ -517,7 +537,10 @@ export class EmbeddedLanguageRuntime {
   }
   recordAttempt(outcome,detail={}){
     const last=this.bootAttempts[this.bootAttempts.length-1];
-    if(last && last.id===this.bootStartedAt && last.outcome==='started'){
+    if(last && last.id===this.bootStartedAt
+      && (last.outcome==='started'||(last.outcome==='ready'
+        && outcome==='stopped-after-inference'))){
+      const alreadyVerified=Boolean(last.inference_verified);
       last.outcome=outcome;
       last.elapsed_ms=Math.max(0,Date.now()-this.bootStartedAt);
       last.failure_code=outcome==='ready'?'':classifyEmbeddedFailure(this.lastFailure).code;
@@ -526,7 +549,15 @@ export class EmbeddedLanguageRuntime {
       last.signals=this.lastLogSignals.slice();
       last.failure_stage=this.failureStage;
       last.health_seen=this.healthSeen;
-      last.inference_verified=Boolean(outcome==='ready' && this.lastProbeAt);
+      last.inference_verified=alreadyVerified||Boolean(outcome==='ready' && this.lastProbeAt);
+      if(outcome==='ready'){
+        last.verified_at=this.lastProbeAt;
+        last.verified_completion_tokens=this.lastVerifiedTokens;
+      }
+      if(outcome==='stopped-after-inference'){
+        last.verified_at=last.verified_at||this.lastVerifiedProbeAt;
+        last.stopped_at=new Date().toISOString();
+      }
       last.native_output_observed=this.nativeOutputObserved;
       last.native_startup_milestones=this.nativeMilestones.slice();
       last.health_probe_count=this.healthProbeCount;
@@ -549,6 +580,31 @@ export class EmbeddedLanguageRuntime {
     if(this.lastOomKillDelta>0)
       this.lastFailure+=' out of memory embedded-cgroup-oom-kill';
     this.cooldownUntil=Date.now()+60_000;
+  }
+  scheduleNativeRecovery(){
+    if(this.recoveryTimer||process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return;
+    const now=Date.now();
+    this.recoveryTimes=this.recoveryTimes.filter(time=>now-time<15*60_000);
+    if(this.recoveryTimes.length>=3){
+      this.recoveryLimitReached=true;
+      return;
+    }
+    this.recoveryLimitReached=false;
+    const delay=[3000,15_000,60_000][this.recoveryTimes.length];
+    this.recoveryTimes.push(now);
+    this.recoveryDueAt=now+delay;
+    this.recoveryTimer=this.schedule(()=>{
+      this.recoveryTimer=null;
+      this.recoveryDueAt=0;
+      if(this.ready||this.booting)return;
+      // Override only the clean-exit cooldown; other failures still wait.
+      if(classifyEmbeddedFailure(this.lastFailure).code
+          ==='embedded-native-stopped-after-serving'){
+        this.cooldownUntil=0;
+        void this.start().catch(error=>this.fail(error));
+      }
+    },delay);
+    this.recoveryTimer?.unref?.();
   }
   async start(){
     if(this.ready && this.child?.exitCode===null)return true;
@@ -695,16 +751,25 @@ export class EmbeddedLanguageRuntime {
     child.on('exit',(code,signal)=>{
       if(this.child===child){
         this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
+        const previouslyVerified=Boolean(this.ready&&this.lastProbeAt);
+        const verifiedAt=this.lastProbeAt||this.lastVerifiedProbeAt;
+        const uptimeSinceProof=verifiedAt?Date.now()-Date.parse(verifiedAt):0;
         this.lastProcessExit={code:code??null,signal:signal??null};
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
-        this.fail((stderr||stdout||'')+
-          (code===0?(this.ready?' embedded-native-stopped-after-serving'
-            :' embedded-clean-exit-before-inference'):'')+
-          ' embedded-engine-exited-'+(code??'signal')+
-          (signal?' exit.signal.'+signal.toLowerCase():'')+
-          (code===137?' exit.code.137':''));
-        this.recordAttempt('exit',{code,signal});
+        if(previouslyVerified&&code===0&&signal===null){
+          this.lastNativeReadyDurationMs=Math.max(0,uptimeSinceProof);
+          this.fail('embedded-native-stopped-after-serving');
+          this.recordAttempt('stopped-after-inference',{code,signal});
+          this.scheduleNativeRecovery();
+        }else{
+          this.fail((stderr||stdout||'')+
+            (code===0?' embedded-clean-exit-before-inference':'')+
+            ' embedded-engine-exited-'+(code??'signal')+
+            (signal?' exit.signal.'+signal.toLowerCase():'')+
+            (code===137?' exit.code.137':''));
+          this.recordAttempt('exit',{code,signal});
+        }
       }
     });
     const deadline=Date.now()+this.bootTimeoutMs;
@@ -741,6 +806,8 @@ export class EmbeddedLanguageRuntime {
             if(this.child!==child||child.exitCode!==null||child.signalCode!==null||this.lastFailure)
               throw Error('embedded-inference-probe-invalid');
             this.lastProbeAt=new Date().toISOString();
+            this.lastVerifiedProbeAt=this.lastProbeAt;
+            this.lastVerifiedTokens=generated;
             this.lastProbeLatencyMs=Date.now()-started;
             this.ready=true;this.failureStage='';this.recordAttempt('ready');
             return true;
