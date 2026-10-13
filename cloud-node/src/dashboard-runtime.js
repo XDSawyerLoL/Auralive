@@ -46,9 +46,15 @@ async function api(path,options){
     options,
     {headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}
   ));
-  const text=await response.text();
+  const raw=await response.text();
+  const html=/<\\s*(?:!doctype|html|head|body)\\b/i.test(raw);
   let data={};
-  try{data=text?JSON.parse(text):{};}catch(_){data={error:text||'Réponse invalide'};}
+  try{data=raw?JSON.parse(raw):{};}
+  catch(_){
+    // Never display nginx gateway HTML in AURA's message area.
+    data={error:html?'Passerelle Hostinger temporairement indisponible (HTTP '+response.status+').'
+      :'Réponse serveur invalide (HTTP '+response.status+').'};
+  }
   if(!response.ok){
     const err=new Error(data.error||('Erreur '+response.status)); err.status=response.status; err.data=data; throw err;
   }
@@ -939,23 +945,60 @@ async function speakAura(text,ticket){
     console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
+let chatSubmitting=false;
+function showChatResult(out,pending){
+  const answer=String(out?.answer||'');
+  const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(answer);
+  pending.className='msg aura'+(unavailable?' service-msg':'');
+  pending.innerHTML='<span class="who">AURA</span>'+escapeHtml(answer);
+  $('messages').scrollTop=$('messages').scrollHeight;
+  if(!unavailable)speakAura(answer,out?.voice_ticket||'');
+  if(unavailable)void refreshEnginePanel();
+  void refresh();
+}
 async function sendMessage(text){
   try{primeVoice();}catch(_){}
   text=(text||'').trim();if(!text)return;
+  if(chatSubmitting){
+    $('chatState').textContent='AURA termine déjà la réponse en cours.';
+    return;
+  }
+  chatSubmitting=true;
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';
+  const pending=document.createElement('div');
+  pending.className='msg aura service-msg';
+  pending.innerHTML='<span class="who">AURA</span>Réponse en préparation…';
+  $('messages').appendChild(pending);
   $('messages').scrollTop=$('messages').scrollHeight;
+  $('chatState').textContent='AURA réfléchit · réponse asynchrone';
   try{
-    const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
-    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
-    $('messages').scrollTop=$('messages').scrollHeight;
-    if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
-    if(unavailable)void refreshEnginePanel();
-    refresh();
+    const created=await api('/api/chat/async',{method:'POST',
+      body:JSON.stringify({text:text,author:'Utilisateur'})});
+    if(!created.job_id)throw Error('Identifiant de réponse manquant.');
+    let finished=false;
+    for(let count=0;count<180;count++){
+      await new Promise(resolve=>setTimeout(resolve,Math.max(1000,Math.min(3000,Number(created.poll_after_ms)||1700))));
+      const status=await api('/api/chat/async/'+encodeURIComponent(created.job_id));
+      if(status.status==='done'){
+        showChatResult(status.result||{},pending);
+        $('chatState').textContent='Réponse reçue';
+        finished=true;break;
+      }
+      if(status.status==='failed')throw Error('Le traitement a échoué ; le modèle reste à vérifier.');
+      if(count>0&&count%10===0){
+        $('chatState').textContent='AURA calcule toujours · '+Math.round((count+1)*1.7)+' s';
+      }
+    }
+    if(!finished)throw Error('Le traitement dépasse cinq minutes. Vérifie le diagnostic linguistique.');
   }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
-  }
+    const msg=error?.status===404?'La session de traitement a été interrompue. Recharge la page et réessaie.'
+      :error?.status===504?'La passerelle Hostinger a expiré pendant un contrôle court. Réessaie après vérification du serveur.'
+      :String(error?.message||'Réponse momentanément indisponible.').slice(0,220);
+    pending.innerHTML='<span class="who">AURA</span>'+escapeHtml(msg);
+    $('chatState').textContent='Réponse non reçue';
+    void refreshEnginePanel();
+  }finally{chatSubmitting=false;}
 }
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
