@@ -1,8 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner } from './embedded_provisioner.js';
+import { nativeLoopbackRequest,nativeListenerEvidence,nativeUnixRequest } from './embedded_loopback.js';
+import { nativeSocketEvidence } from './native_socket_evidence.js';
+import { nativeNamespaceComparison,nativeTcpDial,ownNamespaceListener } from './native_connectivity.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -10,6 +14,14 @@ const errorText = e => String(e?.message || e || '').slice(0, 2500);
 const safePath = value => path.resolve(String(value || ''));
 export function classifyEmbeddedFailure(error) {
   const reason = errorText(error).toLowerCase();
+  // Explicit lifecycle markers take precedence over incidental stdout/stderr
+  // (the old classifier could mask a verified, clean exit as a generic error).
+  if (/embedded-native-stopped-after-serving/.test(reason))
+    return {code:'embedded-native-stopped-after-serving',
+      hint:'L’inférence a été vérifiée, mais le processus natif a quitté le service. AURA effectue une reprise limitée.'};
+  if (/embedded-clean-exit-before-inference/.test(reason))
+    return {code:'embedded-clean-exit-before-inference',
+      hint:'Le processus natif s’est terminé sans avoir réussi à produire des tokens.'};
   if (/eacces|eperm|permission denied|noexec|operation not permitted/.test(reason))
     return { code: 'host-disallows-native-execution',
       hint: 'Hostinger refuse le processus natif (EACCES/EPERM). Changer LD_LIBRARY_PATH ne peut pas lever cette restriction.' };
@@ -31,7 +43,7 @@ export function classifyEmbeddedFailure(error) {
   if (/sigsegv|segmentation fault|exit.signal.sigsegv/.test(reason))
     return {code:'embedded-native-segfault',
       hint:'Le moteur natif a rencontré une erreur mémoire (SIGSEGV) pendant son lancement.'};
-  if (/invalid.gguf|invalid magic|unknown architecture|unsupported model|failed to load model|error loading model|llama_model_load|model_load.*failed|gguf_init_from_file.*failed/.test(reason))
+  if (/invalid.gguf|invalid magic|unknown architecture|unsupported model|failed to load model|error loading model|model_load.*failed|gguf_init_from_file.*failed/.test(reason))
     return {code:'embedded-model-load-failed',
       hint:'llama.cpp ne parvient pas à charger le modèle GGUF. Vérifier le modèle et la compatibilité du moteur.'};
   if (/unrecognized argument|invalid argument|unknown option|invalid value for|error parsing arguments/.test(reason))
@@ -231,7 +243,7 @@ export function embeddedLogSignals(stderr=''){
   const source=String(stderr).toLowerCase();
   const patterns=[
     ['memory-allocation-failed',/out of memory|failed to allocate|bad.alloc|cannot allocate memory|oom/i],
-    ['model-loader-failed',/failed to load model|error loading model|llama_model_load|gguf_init_from_file|unknown architecture/i],
+    ['model-loader-failed',/failed to load model|error loading model|model_load.*failed|gguf_init_from_file.*failed|unknown architecture/i],
     ['unsupported-argument',/unknown option|unrecognized argument|invalid argument|invalid value for/i],
     ['cpu-instruction',/illegal instruction|sigill/i],
     ['network-bind',/failed to bind|address already in use|eaddrinuse/i],
@@ -290,8 +302,77 @@ export function cgroupPidSnapshot({read=fs.readFileSync}={}){
     current:readCounter(['/sys/fs/cgroup/pids.current','/sys/fs/cgroup/pids/pids.current']),
     failed_forks:getEvents()};
 }
+// Host-specific process diagnostics when cgroups are invisible.
+// Only expose a process state, thread count and resident memory; never /proc raw text.
+export function nativeProcessSnapshot(pid,{read=fs.readFileSync,platform=process.platform}={}){
+  if(platform!=='linux'||!Number.isSafeInteger(pid)||pid<=0||pid>2147483647)return null;
+  let raw;
+  try{raw=String(read('/proc/'+pid+'/status','utf8'));}catch{return null;}
+  const state=raw.match(/^State:\s*([RSDZTIX])/m)?.[1]||'unknown';
+  const threads=Number(raw.match(/^Threads:\s*(\d+)/m)?.[1]);
+  const kb=Number(raw.match(/^VmRSS:\s*(\d+)\s*kB/m)?.[1]);
+  return {
+    state,
+    threads:Number.isSafeInteger(threads)&&threads>=0&&threads<1e6?threads:null,
+    rss_mb:Number.isSafeInteger(kb)&&kb>=0&&kb<1e12?Math.round(kb/1024):null,
+  };
+}
+export function nativeStartupMilestones(log=''){
+  const value=String(log).toLowerCase();
+  return [
+    ['model-metadata',/llama_model_loader|gguf_init_from_file|general.architecture/],
+    ['model-tensors',/load_tensors|loading tensors|tensor data/],
+    ['model-context',/llama_new_context_with_model|llama_init_from_model|kv self size/],
+    ['http-listener',/server is listening on http/],
+  ].filter(([,regex])=>regex.test(value)).map(([name])=>name);
+}
+export function healthProbeResult(error){
+  const name=String(error?.name||'').toLowerCase();
+  const code=String(error?.cause?.code||error?.code||'').toUpperCase();
+  if(name==='aborterror'||name==='timeouterror'||code==='UND_ERR_CONNECT_TIMEOUT')
+    return 'timeout';
+  if(code==='ECONNREFUSED')return 'connection-refused';
+  if(code==='EHOSTUNREACH'||code==='ENETUNREACH')return 'network-unreachable';
+  return 'request-error';
+}
 // llama.cpp b11425 defaults HTTP threads to hardware_concurrency()-1. On
 // shared hosting this can exceed the per-account pids quota even with -t=1.
+export function chooseNativeTransport({env=process.env,platform=process.platform}={}){
+  const selected=String(env.AURA_EMBEDDED_LANGUAGE_TRANSPORT||'').toLowerCase();
+  if(selected==='tcp')return 'tcp';
+  if(selected==='unix')return platform==='linux'?'unix':'tcp';
+  return platform==='linux'&&env.NODE_ENV==='production'&&env.CI!=='true'
+    ?'unix':'tcp';
+}
+// Bound prompt and response to the CPU-only 2048-token model context.
+// A normal chat failure must never SIGTERM an otherwise healthy llama server.
+export function nativeChatPayload(prompt,system,maxTokens=600,{lowMemory=false}={}){
+  const requested=Number(maxTokens);
+  const limit=Number.isFinite(requested)?Math.max(24,Math.min(lowMemory?64:96,Math.floor(requested))):64;
+  return {model:'local',stream:false,temperature:0.6,max_tokens:limit,
+    chat_template_kwargs:{enable_thinking:false},
+    messages:[
+      {role:'system',content:String(system??'').slice(0,lowMemory?300:600)},
+      {role:'user',content:String(prompt??'').slice(0,lowMemory?620:1000)},
+    ],
+  };
+}
+export function classifyChatError(error){
+  const code=String(error?.code||error?.cause?.code||'').toUpperCase();
+  const name=String(error?.name||'').toLowerCase();
+  const message=String(error?.message||'').toLowerCase();
+  if(name==='aborterror'||name==='timeouterror'||/timeout|timed out/.test(message))
+    return 'generation-timeout';
+  if(/embedded-http-(400|413|422)|context.*(size|length)|too many tokens/.test(message))
+    return 'generation-context-rejected';
+  if(/embedded-http-429|server is busy/.test(message))
+    return 'generation-overloaded';
+  if(/^embedded-http-5\d\d/.test(message))return 'generation-http-error';
+  if(/empty-response/.test(message))return 'generation-empty';
+  if(code==='ECONNREFUSED'||code==='ENOENT'||code==='EPIPE'||code==='ECONNRESET')
+    return 'generation-transport-unavailable';
+  return 'generation-request-error';
+}
 export function nativeBootArgs(gguf,port,{lowMemory=false,threads=1}={}){
   const context=lowMemory?768:2048;
   // In Hostinger mode, ignore old overrides that can silently restore extra workers.
@@ -347,10 +428,13 @@ function freePort(){
   });
 }
 export class EmbeddedLanguageRuntime {
-  constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=fetch,
+  constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=nativeLoopbackRequest,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
+    transport=null,schedule=setTimeout,cancelSchedule=clearTimeout,
     provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
     Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
+    this.transportPreference=transport;
+    this.schedule=schedule;this.cancelSchedule=cancelSchedule;
     this.provisionedPaths=null;this.canonicalSource=false;
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
@@ -363,7 +447,23 @@ export class EmbeddedLanguageRuntime {
     this.pidsAtBoot=null;this.pidsAfterFailure=null;
     this.bootAttempts=[];this.bootStartedAt=0;
     this.healthSeen=false;this.lastProbeAt='';this.lastProbeLatencyMs=0;
+    this.lastVerifiedProbeAt='';this.lastVerifiedTokens=0;
+    this.lastNativeReadyDurationMs=0;
+    this.generationActive=false;this.generationFailure='';
+    this.generationFailures=0;this.generationLastErrorAt='';
+    this.generationLastAttemptAt='';this.generationLastDurationMs=0;
+    this.generationLastInputChars=0;this.generationLastMaxTokens=0;
+    this.recoveryTimer=null;this.recoveryDueAt=0;
+    this.recoveryTimes=[];this.recoveryLimitReached=false;
     this.probeTimeoutMs=30_000;
+    this.nativeOutputObserved=false;this.nativeMilestones=[];
+    this.healthProbeCount=0;this.healthLastResult='not-requested';
+    this.lastProcessObserved=null;
+    this.nativeListener={matching_port:null,family:'not-reported'};
+    this.lastSocketEvidence=null;
+    this.lastRefusedSocket=null;this.lastNodeListener=null;this.lastTcpDial=null;
+    this.nativeTransport='tcp';this.unixSocketPath='';
+    this.transportFallback='';
   }
   inspect(){
     if(this.provisionedPaths)return this.provisionedPaths;
@@ -401,10 +501,17 @@ export class EmbeddedLanguageRuntime {
   status(){
     const item=this.inspect(),enabled=process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false';
     const failure=this.lastFailure?classifyEmbeddedFailure(this.lastFailure):null;
+    const running=Boolean(this.child&&this.child.exitCode===null&&this.child.signalCode===null);
+    const snapshot=running?nativeProcessSnapshot(this.child.pid):null;
+    if(snapshot)this.lastProcessObserved=snapshot;
+    const kernelSocket=running?nativeSocketEvidence(this.child.pid,this.port):null;
+    if(kernelSocket?.inspection==='ok')this.lastSocketEvidence=kernelSocket;
+    const networkNamespaces=running?nativeNamespaceComparison(this.child.pid):null;
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
-      status:this.ready && this.lastProbeAt ? 'verified-responsive'
+      status:this.ready && this.lastProbeAt && this.generationFailure ? 'generation-degraded'
+        :this.ready && this.lastProbeAt ? 'verified-responsive'
          :this.healthSeen && this.booting ? 'verifying-inference'
          :this.ready ? 'model-loaded-unverified'
         :!enabled?'disabled'
@@ -417,8 +524,23 @@ export class EmbeddedLanguageRuntime {
           :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
+      generation_active:this.generationActive,
+      generation_failure_code:this.generationFailure,
+      generation_failures_consecutive:this.generationFailures,
+      generation_last_error_at:this.generationLastErrorAt,
+      generation_last_attempt_at:this.generationLastAttemptAt,
+      generation_last_duration_ms:this.generationLastDurationMs,
+      generation_last_input_chars:this.generationLastInputChars,
+      generation_last_max_tokens:this.generationLastMaxTokens,
        last_probe_at:this.lastProbeAt,probe_verified:Boolean(this.ready&&this.lastProbeAt),
        probe_latency_ms:this.lastProbeLatencyMs,health_seen:this.healthSeen,
+       last_verified_probe_at:this.lastVerifiedProbeAt,
+       last_verified_completion_tokens:this.lastVerifiedTokens,
+       native_ready_duration_ms:this.lastNativeReadyDurationMs,
+       recovery_scheduled:Boolean(this.recoveryTimer),
+       recovery_due_at:this.recoveryDueAt?new Date(this.recoveryDueAt).toISOString():'',
+       recovery_attempts_in_window:this.recoveryTimes.length,
+       recovery_limited:this.recoveryLimitReached,
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
@@ -433,11 +555,34 @@ export class EmbeddedLanguageRuntime {
       pids_before_start:this.pidsAtBoot,
       pids_after_failure:this.pidsAfterFailure,
       boot_attempts:this.bootAttempts.slice(-4),
+      startup_elapsed_ms:this.booting&&this.bootStartedAt?Math.max(0,Date.now()-this.bootStartedAt):0,
+      native_process_running:running,
+      native_process:snapshot,
+      last_native_process:this.lastProcessObserved,
+      native_output_observed:this.nativeOutputObserved,
+      native_startup_milestones:this.nativeMilestones.slice(),
+      health_probe_count:this.healthProbeCount,
+      health_last_result:this.healthLastResult,
+      native_listener_report:this.nativeListener,
+      native_socket:this.nativeTransport==='unix'?null:kernelSocket,
+      local_transport:this.nativeTransport,
+      unix_socket_present:this.nativeTransport==='unix'
+        ?Boolean(this.unixSocketPath&&fs.existsSync(this.unixSocketPath)):null,
+      transport_fallback:this.transportFallback,
+      last_native_socket:this.lastSocketEvidence,
+      network_namespace:networkNamespaces,
+      node_namespace_listener:this.nativeTransport==='tcp'
+        ?(running?ownNamespaceListener(this.port):this.lastNodeListener):null,
+      socket_at_last_refusal:this.lastRefusedSocket,
+      tcp_dial_after_refusal:this.lastTcpDial,
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
     const last=this.bootAttempts[this.bootAttempts.length-1];
-    if(last && last.id===this.bootStartedAt && last.outcome==='started'){
+    if(last && last.id===this.bootStartedAt
+      && (last.outcome==='started'||(last.outcome==='ready'
+        && outcome==='stopped-after-inference'))){
+      const alreadyVerified=Boolean(last.inference_verified);
       last.outcome=outcome;
       last.elapsed_ms=Math.max(0,Date.now()-this.bootStartedAt);
       last.failure_code=outcome==='ready'?'':classifyEmbeddedFailure(this.lastFailure).code;
@@ -446,7 +591,25 @@ export class EmbeddedLanguageRuntime {
       last.signals=this.lastLogSignals.slice();
       last.failure_stage=this.failureStage;
       last.health_seen=this.healthSeen;
-      last.inference_verified=Boolean(outcome==='ready' && this.lastProbeAt);
+      last.inference_verified=alreadyVerified||Boolean(outcome==='ready' && this.lastProbeAt);
+      if(outcome==='ready'){
+        last.verified_at=this.lastProbeAt;
+        last.verified_completion_tokens=this.lastVerifiedTokens;
+      }
+      if(outcome==='stopped-after-inference'){
+        last.verified_at=last.verified_at||this.lastVerifiedProbeAt;
+        last.stopped_at=new Date().toISOString();
+      }
+      last.native_output_observed=this.nativeOutputObserved;
+      last.native_startup_milestones=this.nativeMilestones.slice();
+      last.health_probe_count=this.healthProbeCount;
+      last.health_last_result=this.healthLastResult;
+      last.native_process=this.lastProcessObserved;
+      last.native_listener_report=this.nativeListener;
+      last.native_socket=this.lastSocketEvidence;
+      last.node_namespace_listener=this.lastNodeListener;
+      last.tcp_dial_after_refusal=this.lastTcpDial;
+      last.socket_at_last_refusal=this.lastRefusedSocket;
     }
   }
   fail(error){
@@ -459,6 +622,31 @@ export class EmbeddedLanguageRuntime {
     if(this.lastOomKillDelta>0)
       this.lastFailure+=' out of memory embedded-cgroup-oom-kill';
     this.cooldownUntil=Date.now()+60_000;
+  }
+  scheduleNativeRecovery(){
+    if(this.recoveryTimer||process.env.AURA_EMBEDDED_LANGUAGE_ENABLED==='false')return;
+    const now=Date.now();
+    this.recoveryTimes=this.recoveryTimes.filter(time=>now-time<15*60_000);
+    if(this.recoveryTimes.length>=3){
+      this.recoveryLimitReached=true;
+      return;
+    }
+    this.recoveryLimitReached=false;
+    const delay=[3000,15_000,60_000][this.recoveryTimes.length];
+    this.recoveryTimes.push(now);
+    this.recoveryDueAt=now+delay;
+    this.recoveryTimer=this.schedule(()=>{
+      this.recoveryTimer=null;
+      this.recoveryDueAt=0;
+      if(this.ready||this.booting)return;
+      // Override only the clean-exit cooldown; other failures still wait.
+      if(classifyEmbeddedFailure(this.lastFailure).code
+          ==='embedded-native-stopped-after-serving'){
+        this.cooldownUntil=0;
+        void this.start().catch(error=>this.fail(error));
+      }
+    },delay);
+    this.recoveryTimer?.unref?.();
   }
   async start(){
     if(this.ready && this.child?.exitCode===null)return true;
@@ -511,43 +699,89 @@ export class EmbeddedLanguageRuntime {
   async boot(useElfLoader=false,lowMemory=false){
     const {executable,gguf}=this.inspect();
     this.lastFailure='';this.ready=false;this.lastProbeAt='';
-    this.healthSeen=false;this.lastProbeLatencyMs=0;this.port=await this.allocatePort();
+    this.healthSeen=false;this.lastProbeLatencyMs=0;
+    this.nativeTransport=this.transportPreference||chooseNativeTransport();
+    this.unixSocketPath='';this.transportFallback='';
+    let unixDir='';
+    if(this.nativeTransport==='unix'){
+      try{
+        unixDir=fs.mkdtempSync(path.join(os.tmpdir(),'aura-lang-'));
+        fs.chmodSync(unixDir,0o700);
+        this.unixSocketPath=path.join(unixDir,'model.sock');
+        if(this.unixSocketPath.length>106)throw Error('unix-path-too-long');
+        this.port=0;
+      }catch{
+        if(unixDir)try{fs.rmSync(unixDir,{recursive:true,force:true});}catch{}
+        unixDir='';this.unixSocketPath='';
+        this.nativeTransport='tcp';
+        this.transportFallback='unix-socket-unavailable';
+      }
+    }
+    if(this.nativeTransport==='tcp')this.port=await this.allocatePort();
+    this.nativeOutputObserved=false;this.nativeMilestones=[];
+    this.healthProbeCount=0;this.healthLastResult='not-requested';
+    this.lastProcessObserved=null;
+    this.nativeListener={matching_port:null,family:'not-reported'};
+    this.lastSocketEvidence=null;
+    this.lastRefusedSocket=null;this.lastNodeListener=null;this.lastTcpDial=null;
     this.lastProcessExit={code:null,signal:null};this.lastLogSignals=[];
     this.failureStage='spawning-native-server';
     this.bootProfile=lowMemory?'low-memory':'standard';
     this.bootStartedAt=Date.now();
     this.bootAttempts.push({id:this.bootStartedAt,profile:this.bootProfile,
+      transport:this.nativeTransport,
       outcome:'started',elapsed_ms:0,failure_code:'',
       exit_code:null,exit_signal:null,signals:[],failure_stage:'spawning-native-server',
-      health_seen:false,inference_verified:false});
+      health_seen:false,inference_verified:false,
+      native_output_observed:false,native_startup_milestones:[],
+      health_probe_count:0,health_last_result:'not-requested',native_process:null});
     this.bootAttempts=this.bootAttempts.slice(-4);
     this.memoryAtBoot=cgroupMemorySnapshot();
     this.pidsAtBoot=cgroupPidSnapshot();
     this.memoryAfterFailure=null;this.lastOomKillDelta=null;
     this.pidsAfterFailure=null;
     let child;
+    const cleanupUnix=()=>{
+      if(unixDir)try{fs.rmSync(unixDir,{recursive:true,force:true});}catch{}
+    };
     try{
-      const spec=nativeLaunchSpec(executable,nativeBootArgs(gguf,this.port,{
+      const args=nativeBootArgs(gguf,this.port,{
         lowMemory,threads:Number(process.env.AURA_EMBEDDED_LANGUAGE_THREADS)||1,
-      }),useElfLoader);
+      });
+      if(this.nativeTransport==='unix'){
+        args[args.indexOf('--host')+1]=this.unixSocketPath;
+        const portArg=args.indexOf('--port');
+        if(portArg>=0)args.splice(portArg,2);
+      }
+      const spec=nativeLaunchSpec(executable,args,useElfLoader);
       if(!spec)throw new Error('embedded-system-loader-unavailable');
       this.launchMode=spec.mode;
       child=this.spawnProcess(spec.command,spec.args,
         {cwd:path.dirname(executable),env:spec.env,
          stdio:['ignore','pipe','pipe'],shell:false});
     }catch(error){
+      cleanupUnix();
       this.failureStage='native-spawn-error';this.fail(error);
       this.recordAttempt('spawn-error');
       return false;
     }
     this.child=child;
+    if(unixDir)child.once('close',cleanupUnix);
     let stderr='',stdout='';
     child.stderr?.on('data',chunk=>{
+      this.nativeOutputObserved=true;
       stderr=(stderr+String(chunk)).slice(-4000);
+      this.nativeMilestones=[...new Set([...this.nativeMilestones,...nativeStartupMilestones(stderr)])];
+      const listener=nativeListenerEvidence(stderr,this.port);
+      if(listener.matching_port!==null)this.nativeListener=listener;
       this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.stdout?.on('data',chunk=>{
+      this.nativeOutputObserved=true;
       stdout=(stdout+String(chunk)).slice(-1500);
+      this.nativeMilestones=[...new Set([...this.nativeMilestones,...nativeStartupMilestones(stdout)])];
+      const listener=nativeListenerEvidence(stdout,this.port);
+      if(listener.matching_port!==null)this.nativeListener=listener;
       this.lastLogSignals=embeddedLogSignals(stderr+'\n'+stdout);
     });
     child.on('error',error=>{
@@ -558,16 +792,26 @@ export class EmbeddedLanguageRuntime {
     });
     child.on('exit',(code,signal)=>{
       if(this.child===child){
+        this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
+        const previouslyVerified=Boolean(this.ready&&this.lastProbeAt);
+        const verifiedAt=this.lastProbeAt||this.lastVerifiedProbeAt;
+        const uptimeSinceProof=verifiedAt?Date.now()-Date.parse(verifiedAt):0;
         this.lastProcessExit={code:code??null,signal:signal??null};
         if(this.lastFailure && signal==='SIGTERM')return;
         this.failureStage='native-process-exit';
-        this.fail((stderr||stdout||'')+
-          (code===0?(this.ready?' embedded-native-stopped-after-serving'
-            :' embedded-clean-exit-before-inference'):'')+
-          ' embedded-engine-exited-'+(code??'signal')+
-          (signal?' exit.signal.'+signal.toLowerCase():'')+
-          (code===137?' exit.code.137':''));
-        this.recordAttempt('exit',{code,signal});
+        if(previouslyVerified&&code===0&&signal===null){
+          this.lastNativeReadyDurationMs=Math.max(0,uptimeSinceProof);
+          this.fail('embedded-native-stopped-after-serving');
+          this.recordAttempt('stopped-after-inference',{code,signal});
+          this.scheduleNativeRecovery();
+        }else{
+          this.fail((stderr||stdout||'')+
+            (code===0?' embedded-clean-exit-before-inference':'')+
+            ' embedded-engine-exited-'+(code??'signal')+
+            (signal?' exit.signal.'+signal.toLowerCase():'')+
+            (code===137?' exit.code.137':''));
+          this.recordAttempt('exit',{code,signal});
+        }
       }
     });
     const deadline=Date.now()+this.bootTimeoutMs;
@@ -575,14 +819,16 @@ export class EmbeddedLanguageRuntime {
     while(Date.now()<deadline && this.child===child && child.exitCode===null
       && child.signalCode===null && !this.lastFailure){
       try{
-        const health=await this.request('http://127.0.0.1:'+this.port+'/health',{
+        this.healthProbeCount++;
+        const health=await this.localRequest('/health',{
           signal:AbortSignal.timeout(1500)});
+        this.healthLastResult=health.ok?'ok':Number.isInteger(health.status)?'http-'+health.status:'http-error';
         if(health.ok){
           this.healthSeen=true;
           this.failureStage='verifying-inference';
           const started=Date.now();
           try{
-            const proof=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
+            const proof=await this.localRequest('/v1/chat/completions',{
               method:'POST',headers:{'content-type':'application/json'},
               body:JSON.stringify({model:'local',stream:false,temperature:0,max_tokens:48,
                 chat_template_kwargs:{enable_thinking:false},
@@ -602,6 +848,8 @@ export class EmbeddedLanguageRuntime {
             if(this.child!==child||child.exitCode!==null||child.signalCode!==null||this.lastFailure)
               throw Error('embedded-inference-probe-invalid');
             this.lastProbeAt=new Date().toISOString();
+            this.lastVerifiedProbeAt=this.lastProbeAt;
+            this.lastVerifiedTokens=generated;
             this.lastProbeLatencyMs=Date.now()-started;
             this.ready=true;this.failureStage='';this.recordAttempt('ready');
             return true;
@@ -616,10 +864,33 @@ export class EmbeddedLanguageRuntime {
             this.recordAttempt('probe-failed');break;
           }
         }
-      }catch{}
+      }catch(error){
+        this.healthLastResult=healthProbeResult(error);
+        if(this.nativeTransport==='tcp'&&this.healthLastResult==='connection-refused'){
+          // Capture socket, namespace and client connectivity close to the SAME
+          // failed HTTP attempt; a later status sample alone cannot prove overlap.
+          const socket=nativeSocketEvidence(child.pid,this.port);
+          this.lastRefusedSocket=socket;
+          this.lastNodeListener=ownNamespaceListener(this.port);
+          if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+          if(this.nativeTransport==='tcp'&&socket.expected_port===true&&!this.lastTcpDial){
+            this.lastTcpDial=await nativeTcpDial(this.port);
+          }
+        }
+      }
+      this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
+      if(this.nativeTransport==='tcp'){
+        const socket=nativeSocketEvidence(child.pid,this.port);
+        if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+      }
       await this.delay(400);
     }
     if(!this.ready && !this.lastFailure){
+      this.lastProcessObserved=nativeProcessSnapshot(child.pid)||this.lastProcessObserved;
+      if(this.nativeTransport==='tcp'){
+        const socket=nativeSocketEvidence(child.pid,this.port);
+        if(socket.inspection==='ok')this.lastSocketEvidence=socket;
+      }
       this.failureStage='health-timeout';
       this.fail((stderr||stdout||'')+' embedded-engine-startup-timeout');
       this.recordAttempt('health-timeout');
@@ -627,12 +898,14 @@ export class EmbeddedLanguageRuntime {
     if(!this.ready)try{child.kill('SIGTERM');}catch{}
     return this.ready;
   }
+  localRequest(endpoint,options={}){
+    if(this.nativeTransport==='unix'&&this.unixSocketPath
+      &&this.request===nativeLoopbackRequest)
+      return nativeUnixRequest(this.unixSocketPath,endpoint,options);
+    return this.request('http://127.0.0.1:'+this.port+endpoint,options);
+  }
   async generate(prompt,system,maxTokens=600){
-    // Initial model installation may transfer hundreds of MB. Do not keep a
-    // public chat request open until the first download finishes.
-    // Never keep the user's HTTP chat request open while the on-host model
-    // installs or attempts 150s boot profiles. Initiate the optional engine
-    // asynchronously; its readiness is subsequently checked and reported.
+    // Never block a chat request waiting for installation or a 150s boot.
     if(!this.ready){
       if(!this.booting && Date.now()>=this.cooldownUntil
         && (this.installed()||this.canProvision())){
@@ -640,30 +913,45 @@ export class EmbeddedLanguageRuntime {
       }
       return '';
     }
+    // One active inference on the single-thread Hostinger runtime.
+    if(this.generationActive)return '';
     if(this.child && (this.child.exitCode!==null||this.child.signalCode!==null)){
       this.fail('embedded-model-process-exited-before-generation');
       return '';
     }
     const started=Date.now();
+    this.generationActive=true;
+    this.generationLastAttemptAt=new Date(started).toISOString();
     try{
-      const response=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
+      const payload=nativeChatPayload(prompt,system,maxTokens,
+        {lowMemory:this.bootProfile==='low-memory'});
+      this.generationLastInputChars=payload.messages.reduce((sum,m)=>sum+m.content.length,0);
+      this.generationLastMaxTokens=payload.max_tokens;
+      const timeoutMs=Math.min(55_000,20_000+450*payload.max_tokens);
+      const response=await this.localRequest('/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({model:'local',stream:false,temperature:0.6,
-          max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),
-          chat_template_kwargs:{enable_thinking:false},messages:[
-            {role:'system',content:String(system).slice(0,9000)},
-            {role:'user',content:String(prompt).slice(0,14000)}]}),
-        signal:AbortSignal.timeout(30_000)});
-      if(!response.ok)throw Error('embedded HTTP '+response.status);
+        body:JSON.stringify(payload),
+        signal:AbortSignal.timeout(timeoutMs)});
+      if(!response.ok)throw Error('embedded-http-'+response.status);
       const json=await response.json();
-      const answer=String(json?.choices?.[0]?.message?.content||'').trim();
+      const answer=String(json?.choices?.[0]?.message?.content||'')
+        .replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
       if(!answer)throw Error('embedded-empty-response');
-      this.lastSuccessAt=new Date().toISOString();this.lastLatencyMs=Date.now()-started;
-      this.lastFailure='';return answer;
+      this.lastSuccessAt=new Date().toISOString();
+      this.lastLatencyMs=Date.now()-started;
+      this.generationFailure='';this.generationFailures=0;
+      this.lastFailure='';
+      return answer;
     }catch(error){
-      this.fail(error);
-      try{if(this.child?.exitCode===null)this.child.kill('SIGTERM');}catch{}
+      // A user-level inference rejection is not a native process failure.
+      // Preserve the probe, process, and live socket; never send SIGTERM.
+      this.generationFailure=classifyChatError(error);
+      this.generationFailures++;
+      this.generationLastErrorAt=new Date().toISOString();
       return '';
+    }finally{
+      this.generationLastDurationMs=Date.now()-started;
+      this.generationActive=false;
     }
   }
 }

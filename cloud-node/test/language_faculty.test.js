@@ -146,3 +146,21 @@ test('an unavailable language model cannot silently improve the score', async ()
   assert.equal(result.status, 'model-unavailable');
   assert.equal(storage.benchmarks.length, 0);
 });
+
+test('French progress says not-evaluated when local model is ready but generation slow',async()=>{
+  const store=memoryStore();
+  const language=new LanguageFaculty({
+    storage:store,
+    ai:{enabled:true,provider:'hostinger-embedded-llama'},
+    cognition:{},
+    expression:{language:{status:async()=>({
+      ready:true,blocking_reason:'generation-timeout',
+      setup_hint:'Moteur Qwen vivant, requête lente',
+    })}},
+    soul:()=>({}),
+  });
+  const result=await language.progress();
+  assert.equal(result.status,'not-evaluated');
+  assert.equal(result.score,null);
+  assert.equal(result.blocking_reason,'generation-timeout');
+});

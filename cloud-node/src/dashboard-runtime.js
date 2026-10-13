@@ -46,9 +46,15 @@ async function api(path,options){
     options,
     {headers:Object.assign({},headers(Boolean(options.body)),options.headers||{})}
   ));
-  const text=await response.text();
+  const raw=await response.text();
+  const html=/<\s*(?:!doctype|html|head|body)\b/i.test(raw);
   let data={};
-  try{data=text?JSON.parse(text):{};}catch(_){data={error:text||'Réponse invalide'};}
+  try{data=raw?JSON.parse(raw):{};}
+  catch(_){
+    // Never display nginx gateway HTML in AURA's message area.
+    data={error:html?'Passerelle Hostinger temporairement indisponible (HTTP '+response.status+').'
+      :'Réponse serveur invalide (HTTP '+response.status+').'};
+  }
   if(!response.ok){
     const err=new Error(data.error||('Erreur '+response.status)); err.status=response.status; err.data=data; throw err;
   }
@@ -529,7 +535,10 @@ function renderLanguageProgress(report){
   $('languageTrack').setAttribute('aria-valuetext',known?score+' pour cent aux tests':'Pas encore évalué');
   const delta=typeof report?.delta==='number'?report.delta:null;
   const suffix=delta===null?'Mesure initiale':delta>0?'↗ +'+delta+' points':delta<0?'↘ '+delta+' points · régression':'→ Stable';
-  $('languageTrend').textContent=known?suffix:'Premier test en attente';
+  $('languageTrend').textContent=known?suffix
+    :String(report?.blocking_reason||'').startsWith('generation-')
+      ?'Qwen actif · conversation lente, tests en attente'
+      :'Premier test en attente';
   if(report?.status==='model-unavailable'&&!known){
     const missing=report?.blocking_reason==='openrouter-free-key-missing';
     $('languageTrend').textContent=missing?'Modèle gratuit à connecter':'Moteur gratuit indisponible';
@@ -558,14 +567,18 @@ function renderLanguageEngine(state){
   const backend=String(state?.status||'');
   const fail=String(install.error_code||state?.failure_code||'');
   const installed=stage==='installed-verified'&&!!state?.installed;
-  const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at);
+  const previouslyVerified=Boolean(state?.last_verified_probe_at
+    ||(Array.isArray(state?.boot_attempts)&&state.boot_attempts.some(a=>a.inference_verified)));
+  const degraded=state?.status==='generation-degraded';
+  const generating=Boolean(state?.generation_active);
+  const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at&&!degraded);
   const booting=backend==='starting'||backend==='verifying-inference';
   const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
-  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
+  const kind=healthy?'ready':degraded?'blocked':blocked?'blocked':booting||generating?'loading':'blocked';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('engineChip').textContent=healthy?'Réponse vérifiée':degraded?'Génération momentanément dégradée':generating?'Génération en cours':blocked&&previouslyVerified?'Inférence confirmée · moteur arrêté':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
   $('railLanguage').textContent=healthy?'Conversation disponible'
-    :booting?'Chargement du modèle':'Français non opérationnel';
+    :degraded?'Conversation à réessayer':booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
     'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
     'embedded-sha256-mismatch':'Le modèle ou moteur téléchargé a échoué au contrôle d’intégrité',
@@ -592,7 +605,9 @@ function renderLanguageEngine(state){
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
   $('engineTitle').textContent=healthy?'Génération locale vérifiée'
-    :blocked?(titles[fail]||'Moteur français indisponible')
+    :degraded?'Moteur actif · dernière réponse non générée'
+    :blocked?(titles[fail]||(previouslyVerified
+      ?'Moteur arrêté après génération vérifiée':'Moteur français indisponible'))
       :booting?'Chargement du moteur linguistique'
         :'Fichiers installés · français non vérifié';
   const attempts=Array.isArray(state?.boot_attempts)?state.boot_attempts:[];
@@ -600,11 +615,47 @@ function renderLanguageEngine(state){
     (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:'')+
     (a.health_seen?' santé OK':'')+(a.inference_verified?' inférence vérifiée':''))
     .join(' · ');
+  const socket=state?.native_socket?.inspection==='ok'
+    ?state.native_socket:state?.last_native_socket||{};
+  const socketDesc=socket?.inspection!=='ok'?'socket Linux non lisible'
+    :socket.expected_port?'socket IPv4 attendu en écoute'
+    :socket.listening?'socket présent mais pas sur le port IPv4 attendu'
+    :'aucun socket TCP en écoute attribué au moteur';
+  const ns=state?.network_namespace?.same_network_namespace;
+  const nsText=ns===true?'même espace réseau'
+    :ns===false?'espaces réseau différents':'espace réseau non vérifiable';
+  const dial=String(state?.tcp_dial_after_refusal?.result||'non effectué');
+  const refusedSocket=state?.socket_at_last_refusal?.expected_port;
+  const refusedSocketText=refusedSocket===true?'écoute confirmée pendant un refus'
+    :refusedSocket===false?'aucune écoute attendue pendant le refus'
+    :'écoute non déterminée pendant le refus';
+  const nodeListener=state?.node_namespace_listener?.ipv4_listening;
+  const nodeListenerText=nodeListener===true?'port visible côté Node'
+    :nodeListener===false?'port non visible côté Node'
+    :'visibilité Node inconnue';
+  const native=state?.native_process||state?.last_native_process||{};
+  const unixMode=state?.local_transport==='unix';
+  const transportDesc=unixMode
+    ?('Transport : socket Unix privé, '+(state?.unix_socket_present?'présent':'non créé')+
+        (state?.transport_fallback?' (repli : '+state.transport_fallback+')':'')+'.')
+    :('Port déclaré : '+(state?.native_listener_report?.matching_port===true?'conforme'
+      :state?.native_listener_report?.matching_port===false?'différent':'non confirmé')+
+     '. Noyau : '+socketDesc+'. Réseau : '+nsText+', '+nodeListenerText+
+     '. Au dernier refus : '+refusedSocketText+'. Essai TCP : '+dial+'.');
+  const trace='Sonde locale : '+String(state?.health_last_result||'inconnue')+
+    ' ('+Number(state?.health_probe_count||0)+' essais). '+
+    'Processus : '+(state?.native_process_running?'actif':'inactif')+
+    (native.rss_mb!=null?', RAM '+Number(native.rss_mb)+' Mo':'')+
+    (native.threads!=null?', '+Number(native.threads)+' threads':'')+
+    '. Sortie native : '+(state?.native_output_observed?'oui':'non')+
+    '. Jalons : '+((state?.native_startup_milestones||[]).join(', ')||'aucun')+
+    '. '+transportDesc;
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
+    :degraded?'Le moteur natif est encore actif et son test initial a produit des tokens. La dernière conversation a échoué ('+String(state?.generation_failure_code||'inconnu')+'). Le moteur n’a pas été arrêté ; une nouvelle tentative est possible. Dernier délai : '+Number(state?.generation_last_duration_ms||0)+' ms. '+trace
     :booting
       ?backend==='verifying-inference'?'Le modèle a répondu au contrôle de santé. AURA vérifie maintenant la production réelle de tokens.'
-         :'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée.'
+         :'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée. '+trace
       :blocked
         ?'Fichiers : '+(installed?'installés et vérifiés':'installation incomplète')+
           '. Moteur : échec du démarrage'+(fail?' ('+fail+')':'')+
@@ -612,7 +663,11 @@ function renderLanguageEngine(state){
           '. Tentatives : '+(history||'aucun historique')+
           '. Signaux : '+(Array.isArray(state?.log_signals)&&state.log_signals.length
             ?state.log_signals.join(', '):'aucun signal classifié')+
-          '. Aucun texte de réponse n’a été généré.'
+          (previouslyVerified
+             ?'. Une génération de tokens a été vérifiée auparavant, mais le moteur est actuellement arrêté.'
+               +(state?.recovery_scheduled?' Redémarrage contrôlé programmé.'
+                 :state?.recovery_limited?' Limite de redémarrages atteinte.':'')
+             :'. Aucun texte de réponse n’a été généré.')+' '+trace
         :'Le modèle est installé, mais le moteur n’a pas encore répondu. La présence des fichiers ne mesure pas l’apprentissage.';
   const stages={
     'not-started':'Installation non démarrée',
@@ -636,10 +691,11 @@ function renderLanguageEngine(state){
     ' · '+String(install.engine_variant||'variante inconnue');
 }
 async function refreshEnginePanel(){
-  try{renderLanguageEngine(await api('/api/language/embedded/status'));}
+  try{const state=await api('/api/language/embedded/status');renderLanguageEngine(state);return state;}
   catch(error){
     renderLanguageEngine({provisioning:{stage:'blocked',error_code:'diagnostic-unavailable'},failure_code:'diagnostic-unavailable'});
     $('engineDescription').textContent='Le diagnostic du moteur est inaccessible ('+String(error.status||'réseau')+'). La génération n’est pas vérifiée.';
+    return null;
   }
 }
 
@@ -651,7 +707,7 @@ async function refresh(){
       const info=await api('/healthz');
       $('serverRevision').textContent='Serveur · '+String(info?.build?.git_sha_short||'révision inconnue');
     }catch(_){$('serverRevision').textContent='Serveur · connexion partielle';}
-    await refreshEnginePanel();
+    const nativeEngine=await refreshEnginePanel();
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -670,13 +726,17 @@ async function refresh(){
     try{
       const capabilities=await api('/api/capabilities');
       const language=(capabilities&&capabilities.language)||{};
-      const languageReady=Boolean(language.ready);
+      const nativeReady=Boolean(nativeEngine?.ready&&nativeEngine?.probe_verified);
+      const languageReady=Boolean(language.ready||nativeReady);
+      const generationDegraded=nativeEngine?.status==='generation-degraded';
       const nativeDialogueReady=Boolean(language.native_dialogue_ready||(capabilities&&capabilities.cognition&&capabilities.cognition.ready));
-      $('languageDot').className='live-dot '+(languageReady||nativeDialogueReady?'good':'bad');
+      $('languageDot').className='live-dot '+(generationDegraded?'warn':languageReady||nativeDialogueReady?'good':'bad');
       if(languageReady){
         const provider=String(language.provider||language.last_backend||'modèle libre');
-        $('languageText').textContent='Français · modèle libre';
-        $('languageText').title='Faculté linguistique française active · '+provider+' · réponses non scriptées';
+        $('languageText').textContent=generationDegraded?'Français · génération lente':'Français · modèle libre';
+        $('languageText').title=generationDegraded
+          ?'Moteur Qwen actif : le dernier essai de conversation a échoué ('+String(nativeEngine?.generation_failure_code||'inconnu')+').'
+          :'Faculté linguistique française active · '+provider+' · réponses non scriptées';
       }else if(nativeDialogueReady){
         $('languageDot').className='live-dot warn';
         const strict=String(language.mode||'')==='natural-language-unavailable';
@@ -888,23 +948,60 @@ async function speakAura(text,ticket){
     console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
+let chatSubmitting=false;
+function showChatResult(out,pending){
+  const answer=String(out?.answer||'');
+  const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(answer);
+  pending.className='msg aura'+(unavailable?' service-msg':'');
+  pending.innerHTML='<span class="who">AURA</span>'+escapeHtml(answer);
+  $('messages').scrollTop=$('messages').scrollHeight;
+  if(!unavailable)speakAura(answer,out?.voice_ticket||'');
+  if(unavailable)void refreshEnginePanel();
+  void refresh();
+}
 async function sendMessage(text){
   try{primeVoice();}catch(_){}
   text=(text||'').trim();if(!text)return;
+  if(chatSubmitting){
+    $('chatState').textContent='AURA termine déjà la réponse en cours.';
+    return;
+  }
+  chatSubmitting=true;
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';
+  const pending=document.createElement('div');
+  pending.className='msg aura service-msg';
+  pending.innerHTML='<span class="who">AURA</span>Réponse en préparation…';
+  $('messages').appendChild(pending);
   $('messages').scrollTop=$('messages').scrollHeight;
+  $('chatState').textContent='AURA réfléchit · réponse asynchrone';
   try{
-    const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
-    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
-    $('messages').scrollTop=$('messages').scrollHeight;
-    if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
-    if(unavailable)void refreshEnginePanel();
-    refresh();
+    const created=await api('/api/chat/async',{method:'POST',
+      body:JSON.stringify({text:text,author:'Utilisateur'})});
+    if(!created.job_id)throw Error('Identifiant de réponse manquant.');
+    let finished=false;
+    for(let count=0;count<180;count++){
+      await new Promise(resolve=>setTimeout(resolve,Math.max(1000,Math.min(3000,Number(created.poll_after_ms)||1700))));
+      const status=await api('/api/chat/async/'+encodeURIComponent(created.job_id));
+      if(status.status==='done'){
+        showChatResult(status.result||{},pending);
+        $('chatState').textContent='Réponse reçue';
+        finished=true;break;
+      }
+      if(status.status==='failed')throw Error('Le traitement a échoué ; le modèle reste à vérifier.');
+      if(count>0&&count%10===0){
+        $('chatState').textContent='AURA calcule toujours · '+Math.round((count+1)*1.7)+' s';
+      }
+    }
+    if(!finished)throw Error('Le traitement dépasse cinq minutes. Vérifie le diagnostic linguistique.');
   }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
-  }
+    const msg=error?.status===404?'La session de traitement a été interrompue. Recharge la page et réessaie.'
+      :error?.status===504?'La passerelle Hostinger a expiré pendant un contrôle court. Réessaie après vérification du serveur.'
+      :String(error?.message||'Réponse momentanément indisponible.').slice(0,220);
+    pending.innerHTML='<span class="who">AURA</span>'+escapeHtml(msg);
+    $('chatState').textContent='Réponse non reçue';
+    void refreshEnginePanel();
+  }finally{chatSubmitting=false;}
 }
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});

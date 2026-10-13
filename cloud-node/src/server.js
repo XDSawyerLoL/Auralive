@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { ChatJobs } from './chat_jobs.js';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
@@ -318,6 +319,7 @@ const corsOrigins = new Set(
 );
 const metrics = new RuntimeMetrics();
 const cloudVoice = new CloudVoice();
+const chatJobs = new ChatJobs();
 const voiceStudio = new VoiceStudioProvider();
 
 const bridge = new ExecutionBridge();
@@ -1413,6 +1415,56 @@ app.post('/api/kernel/operator', async (request, reply) => {
     ? request.body.allowed_risks.map((item) => String(item))
     : [];
   return kernel.operate(task, risks);
+});
+
+// Browser chat goes through short accepted/poll requests. The old synchronous
+// POST /api/chat remains for existing API clients, but the dashboard avoids
+// one long nginx-proxied request while CPU Qwen generates its answer.
+app.post('/api/chat/async', async (request, reply) => {
+  if (!requireRuntime(reply)) return;
+  if (!isPrivate(request)
+    && !requireRateLimit(request,reply,'public-chat',
+      config.publicChatRateLimitMax,config.publicChatRateLimitWindowSeconds))return;
+  const text=String(request.body?.text||'').trim();
+  if(!text)return reply.code(422).send({error:'Message vide'});
+  if(text.length>8000)return reply.code(413).send({error:'Message trop long'});
+  const privateView=isPrivate(request);
+  const chatSessionId=ensureChatSession(request,reply);
+  const author=String(request.body?.author||'Utilisateur');
+  try{
+    const job=chatJobs.submit({
+      sessionId:chatSessionId,
+      work:async()=>{
+        const response=await kernel.chat(text,author,privateView,chatSessionId);
+        const curiosityItem=await curiosity.questionForInteraction(text).catch(()=>null);
+        const baseAnswer=String(response?.answer||'').trim();
+        const curiosityQuestion=String(curiosityItem?.question||'').trim();
+        const answer=curiosityQuestion
+          ?baseAnswer+'\\n\\n'+curiosityQuestion:baseAnswer;
+        return {...response,answer,curiosity_question:curiosityItem||null,
+          voice_profile:'mairaiy'};
+      },
+    });
+    return reply.code(202).send(job);
+  }catch(error){
+    if(error?.code==='CHAT_JOB_PENDING')
+      return reply.code(409).send({error:'Une réponse est déjà en préparation.'});
+    return reply.code(503).send({error:'File de conversation temporairement occupée.'});
+  }
+});
+app.get('/api/chat/async/:id', async (request,reply)=>{
+  if (!requireRuntime(reply)) return;
+  // Polling must NEVER create a new session or disclose another session's job.
+  const session=isPrivate(request)?'private-founder'
+    :parseChatSession(cookies(request).aura_chat_session);
+  const job=session?chatJobs.get(request.params?.id,session):null;
+  if(!job)return reply.code(404).send({error:'Réponse introuvable ou session expirée.'});
+  if(job.status==='done'){
+    const result=job.result||{};
+    return {...job,result:{...result,
+      voice_ticket:result.answer?createVoiceTicket(result.answer):''}};
+  }
+  return job;
 });
 
 app.post('/api/chat', async (request, reply) => {

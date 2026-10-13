@@ -63,7 +63,7 @@ test('living AURA map includes animated visual layers', () => {
 
 test('dashboard speaks through the tokenless Mairaiy voice ticket bridge', () => {
   assert.equal(DASHBOARD_HTML.includes('/api/voice/speak'), true);
-  assert.equal(DASHBOARD_SCRIPT.includes('out.voice_ticket'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('out?.voice_ticket'), true);
   assert.equal(DASHBOARD_SCRIPT.includes('ticket:ticket'), true);
   assert.equal(DASHBOARD_SCRIPT.includes('if(!privateConnected||!text)return'), false);
   assert.equal(DASHBOARD_HTML.includes('audio_base64'), true);
@@ -171,7 +171,7 @@ test('mobile voice primes audio but never substitutes a device TTS for Mairaiy',
 test('chat send path cannot be blocked by voice priming', () => {
   assert.match(DASHBOARD_SCRIPT, /function primeVoice\(\)/);
   assert.match(DASHBOARD_SCRIPT, /try\{primeVoice\(\);\}catch\(_\)\{\}/);
-  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat',\{method:'POST'/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat\/async',\{method:'POST'/);
 });
 
 
@@ -266,7 +266,7 @@ test('conversation remains directly usable without opening technical details', (
   assert.ok(composerIndex > chatIndex);
   assert.ok(detailsIndex > composerIndex);
   assert.match(DASHBOARD_SCRIPT, /\$\('send'\)\.onclick=function\(\)\{sendMessage\(\$\('message'\)\.value\);\};/);
-  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat',\{method:'POST'/);
+  assert.match(DASHBOARD_SCRIPT, /api\('\/api\/chat\/async',\{method:'POST'/);
 });
 
 test('technical information is collapsed by default', () => {
@@ -300,4 +300,19 @@ test('AURA immersive cockpit exposes visible live language-engine diagnosis and 
   assert.match(DASHBOARD_SCRIPT,/function renderLanguageEngine\(state\)/);
   assert.match(DASHBOARD_SCRIPT,/embedded-unsafe-redirect/);
   assert.match(DASHBOARD_SCRIPT,/if\(!unavailable\)speakAura/);
+});
+
+test('dashboard asynchronously polls a session-bound result instead of waiting on nginx',()=>{
+  assert.match(DASHBOARD_SCRIPT,/api\('\/api\/chat\/async',\{method:'POST'/);
+  assert.match(DASHBOARD_SCRIPT,/api\('\/api\/chat\/async\/'.*encodeURIComponent\(created\.job_id\)/);
+  assert.match(DASHBOARD_SCRIPT,/status\.status==='done'/);
+  assert.match(DASHBOARD_SCRIPT,/out\?\.voice_ticket/);
+  assert.match(DASHBOARD_SCRIPT,/chatSubmitting=true/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT,/api\('\/api\/chat',\{method:'POST'/);
+});
+test('nginx 504 HTML bodies are never sent raw into a user chat bubble',()=>{
+  assert.match(DASHBOARD_SCRIPT,/const html=\//);
+  assert.match(DASHBOARD_SCRIPT,/Passerelle Hostinger temporairement indisponible/);
+  assert.match(DASHBOARD_SCRIPT,/error\?\.status===504/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT,/data=\{error:text\|\|/);
 });

@@ -7,7 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
-  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot} from '../src/embedded_language.js';
+  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot,
+  nativeProcessSnapshot,nativeStartupMilestones,healthProbeResult,
+  nativeChatPayload,classifyChatError} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -582,4 +584,278 @@ test('a textual stub with no positive completion_tokens is never proof of infere
   });
   assert.equal(await runtime.start(),false);
   assert.equal(runtime.status().failure_code,'embedded-inference-probe-invalid');
+});
+
+test('proc Linux snapshot reports bounded RSS and threads but no sensitive process strings',()=>{
+  const sample=[
+    'Name: sensitive-model-path',
+    'State: S (sleeping)',
+    'Threads:\t3',
+    'VmRSS:\t409600 kB',
+    'Uid:\t1111',
+  ].join('\n');
+  const seen=[];
+  const result=nativeProcessSnapshot(4321,{
+    platform:'linux',
+    read:(name)=>{seen.push(name);return sample;},
+  });
+  assert.deepEqual(result,{state:'S',threads:3,rss_mb:400});
+  assert.deepEqual(seen,['/proc/4321/status']);
+  assert.doesNotMatch(JSON.stringify(result),/sensitive-model|Uid|proc|4321/);
+  assert.equal(nativeProcessSnapshot(-1,{platform:'linux',read:()=>sample}),null);
+  assert.equal(nativeProcessSnapshot(4321,{platform:'win32',read:()=>sample}),null);
+  assert.equal(nativeProcessSnapshot(4321,{platform:'linux',read:()=>{throw Error('access denied');}}),null);
+});
+test('startup milestones and HTTP errors preserve only allowlisted state',()=>{
+  const message='llama_model_loader: general.architecture=qwen3\nload_tensors done\n'
+    + 'private-password=/home/private/secret.gguf\nmain: server is listening on http://127.0.0.1:24112 - starting the main loop\n';
+  const stages=nativeStartupMilestones(message);
+  assert.deepEqual(stages,['model-metadata','model-tensors','http-listener']);
+  assert.doesNotMatch(JSON.stringify(stages),/private|home|secret/);
+  assert.equal(healthProbeResult({cause:{code:'ECONNREFUSED'}}),'connection-refused');
+  assert.equal(healthProbeResult({name:'TimeoutError'}),'timeout');
+  assert.equal(healthProbeResult({cause:{code:'EHOSTUNREACH'}}),'network-unreachable');
+  assert.equal(healthProbeResult(new Error('/home/private/secret.gguf')),'request-error');
+});
+test('failed Hostinger health polling exposes safe counts and preserves both attempts',async()=>{
+  let starts=0;
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/secret-model.gguf',installed:true,binFound:true,
+      modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>23312,bootTimeoutMs:35,
+    request:async()=>{const err=new Error('private host/path');err.cause={code:'ECONNREFUSED'};throw err;},
+    delay:async()=>{await new Promise(resolve=>setTimeout(resolve,2));},
+    spawnProcess:()=>{
+      starts++;
+      const child=new EventEmitter();
+      child.pid=99999999;child.exitCode=null;child.signalCode=null;
+      child.stderr=new EventEmitter();child.stdout=new EventEmitter();
+      child.kill=()=>{child.signalCode='SIGTERM';return true;};
+      setImmediate(()=>child.stderr.emit('data',Buffer.from(
+        'llama_model_loader: general.architecture=qwen3 private /home/sensitive.gguf')));
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),false);
+  const state=runtime.status();
+  assert.equal(starts,2);
+  assert.equal(state.ready,false);
+  assert.equal(state.probe_verified,false);
+  assert.equal(state.health_last_result,'connection-refused');
+  assert.ok(state.health_probe_count>=1);
+  assert.equal(state.native_output_observed,true);
+  assert.ok(state.native_startup_milestones.includes('model-metadata'));
+  assert.equal(state.boot_attempts.length,2);
+  assert.equal(state.boot_attempts[0].health_last_result,'connection-refused');
+  assert.equal(state.boot_attempts[0].native_output_observed,true);
+  assert.equal(state.boot_attempts[1].profile,'low-memory');
+  assert.doesNotMatch(JSON.stringify(state),/\/home\/sensitive|secret-model|private host/);
+});
+
+test('normal llama_model_loader progress must never misclassify a health timeout',()=>{
+  const progress='llama_model_loader: general.architecture=qwen3 loaded tensors';
+  assert.equal(classifyEmbeddedFailure(progress+' embedded-engine-startup-timeout').code,
+    'embedded-startup-timeout');
+  assert.deepEqual(embeddedLogSignals(progress),[]);
+  assert.equal(classifyEmbeddedFailure(progress+' failed to load model').code,
+    'embedded-model-load-failed');
+  assert.deepEqual(embeddedLogSignals('failed to load model'),['model-loader-failed']);
+});
+
+test('clean exit after a real Qwen proof is classified, preserved and recovery is scheduled',async()=>{
+  let child;
+  const scheduled=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    transport:'tcp',
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/qwen.gguf',installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>22401,bootTimeoutMs:1000,
+    schedule:(fn,delay)=>{
+      const timer={fn,delay,unref(){}};
+      scheduled.push(timer);return timer;
+    },
+    request:async(_url,opts)=>opts?.method==='POST'
+      ? {ok:true,json:async()=>({usage:{completion_tokens:4},
+          choices:[{message:{content:'Bonjour'}}]})}:{ok:true,status:200},
+    spawnProcess:()=>{
+      child=new EventEmitter();child.pid=null;
+      child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),true);
+  const before=runtime.status();
+  assert.equal(before.ready,true);
+  assert.equal(before.probe_verified,true);
+  assert.equal(before.last_verified_completion_tokens,4);
+  const verifiedAt=before.last_verified_probe_at;
+  child.exitCode=0;child.emit('exit',0,null);
+  const after=runtime.status();
+  assert.equal(after.status,'startup-failed');
+  assert.equal(after.ready,false);
+  assert.equal(after.probe_verified,false);
+  assert.equal(after.failure_code,'embedded-native-stopped-after-serving');
+  assert.equal(after.last_probe_at,'');
+  assert.equal(after.last_verified_probe_at,verifiedAt);
+  assert.equal(after.last_verified_completion_tokens,4);
+  assert.equal(after.process_exit.code,0);
+  assert.equal(after.boot_attempts.length,1);
+  assert.equal(after.boot_attempts[0].outcome,'stopped-after-inference');
+  assert.equal(after.boot_attempts[0].exit_code,0);
+  assert.equal(after.boot_attempts[0].inference_verified,true);
+  assert.equal(after.boot_attempts[0].verified_at,verifiedAt);
+  assert.equal(after.recovery_scheduled,true);
+  assert.equal(scheduled.length,1);
+  assert.equal(scheduled[0].delay,3000);
+  assert.equal(classifyEmbeddedFailure('harmless: error while loading shared libraries embedded-native-stopped-after-serving').code,
+    'embedded-native-stopped-after-serving');
+});
+
+test('post-inference clean exits retry only three times within a bounded window',async()=>{
+  const timers=[];const children=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    transport:'tcp',
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/qwen.gguf',installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>22402,bootTimeoutMs:1000,
+    schedule:(fn,delay)=>{
+      const timer={fn,delay,unref(){}};
+      timers.push(timer);return timer;
+    },
+    request:async(_url,opts)=>opts?.method==='POST'
+      ? {ok:true,json:async()=>({usage:{completion_tokens:1},
+        choices:[{message:{content:'Bonjour'}}]})}:{ok:true,status:200},
+    spawnProcess:()=>{
+      const child=new EventEmitter();
+      child.pid=null;child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();
+      child.kill=()=>true;children.push(child);
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),true);
+  for(let i=0;i<4;i++){
+    const child=children.at(-1);
+    child.exitCode=0;child.emit('exit',0,null);
+    assert.equal(runtime.status().ready,false);
+    if(i<3){
+      assert.equal(runtime.status().recovery_scheduled,true);
+      assert.equal(timers[i].delay,[3000,15000,60000][i]);
+      timers[i].fn();
+      assert.equal(await runtime.start(),true);
+      assert.equal(runtime.status().ready,true);
+    }
+  }
+  assert.equal(runtime.status().recovery_scheduled,false);
+  assert.equal(runtime.status().recovery_limited,true);
+  assert.equal(runtime.status().recovery_attempts_in_window,3);
+  assert.equal(children.length,4);
+  assert.equal(runtime.status().last_verified_completion_tokens,1);
+  assert.equal(runtime.status().boot_attempts.at(-1).outcome,'stopped-after-inference');
+});
+
+test('CPU-only Qwen chat payload respects standard and reduced context budgets',()=>{
+  const long='É'.repeat(18000);
+  const base=nativeChatPayload(long,long,900);
+  assert.equal(base.max_tokens,96);
+  assert.equal(base.messages[0].content.length,600);
+  assert.equal(base.messages[1].content.length,1000);
+  assert.equal(base.chat_template_kwargs.enable_thinking,false);
+  const reduced=nativeChatPayload(long,long,900,{lowMemory:true});
+  assert.equal(reduced.max_tokens,64);
+  assert.equal(reduced.messages[0].content.length,300);
+  assert.equal(reduced.messages[1].content.length,620);
+});
+test('chat-level rejection must preserve native readiness, verified probe and socket',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  runtime.ready=true;
+  runtime.lastProbeAt='2026-10-13T00:15:28.976Z';
+  runtime.lastVerifiedProbeAt=runtime.lastProbeAt;
+  runtime.lastVerifiedTokens=3;
+  runtime.healthSeen=true;
+  let kills=0;
+  runtime.child={exitCode:null,signalCode:null,kill:()=>{kills++;}};
+  let calls=0;
+  runtime.localRequest=async(_endpoint,opts)=>{
+    calls++;
+    assert.equal(JSON.parse(opts.body).max_tokens,96);
+    if(calls===1)return {ok:false,status:422};
+    return {ok:true,status:200,json:async()=>({
+      usage:{completion_tokens:11},
+      choices:[{message:{content:'<think>secret</think>Bonjour, comment allez-vous ?'}}]
+    })};
+  };
+  assert.equal(await runtime.generate('Bonjour','Tu es AURA',700),'');
+  const degraded=runtime.status();
+  assert.equal(degraded.status,'generation-degraded');
+  assert.equal(degraded.ready,true);
+  assert.equal(degraded.probe_verified,true);
+  assert.equal(degraded.failure_code,'');
+  assert.equal(degraded.generation_failure_code,'generation-context-rejected');
+  assert.equal(degraded.generation_failures_consecutive,1);
+  assert.equal(degraded.last_verified_completion_tokens,3);
+  assert.equal(degraded.native_process_running,true);
+  assert.equal(kills,0);
+  assert.equal(await runtime.generate('Bonjour','Tu es AURA',700),'Bonjour, comment allez-vous ?');
+  const recovered=runtime.status();
+  assert.equal(recovered.status,'verified-responsive');
+  assert.equal(recovered.generation_failure_code,'');
+  assert.equal(recovered.generation_failures_consecutive,0);
+  assert.ok(recovered.last_success_at);
+  assert.equal(kills,0);
+});
+test('timed-out chat must not terminate still healthy native process',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  runtime.ready=true;runtime.lastProbeAt='2026-10-13T00:15:28Z';
+  let killed=0;
+  runtime.child={exitCode:null,signalCode:null,kill:()=>{killed++;}};
+  runtime.localRequest=async()=>{const err=new Error('request timed out');err.name='TimeoutError';throw err;};
+  assert.equal(await runtime.generate('salut','français',600),'');
+  assert.equal(runtime.status().generation_failure_code,'generation-timeout');
+  assert.equal(runtime.status().status,'generation-degraded');
+  assert.equal(runtime.status().ready,true);
+  assert.equal(killed,0);
+});
+test('overlapping chats do not pile up concurrent native requests',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  runtime.ready=true;runtime.lastProbeAt='2026-10-13T00:15:28Z';
+  runtime.child={exitCode:null,signalCode:null,kill:()=>{throw Error('kill forbidden');}};
+  let resume;let requests=0;
+  runtime.localRequest=async()=>{requests++;return await new Promise(r=>{resume=r;});};
+  const first=runtime.generate('première','Tu es AURA',600);
+  assert.equal(runtime.status().generation_active,true);
+  assert.equal(await runtime.generate('deuxième','Tu es AURA',600),'');
+  assert.equal(requests,1);
+  resume({ok:true,json:async()=>({choices:[{message:{content:'Réponse valide'}}]})});
+  assert.equal(await first,'Réponse valide');
+  assert.equal(runtime.status().generation_active,false);
+});
+test('chat error classification is allowlisted; no raw paths or prompts are revealed',()=>{
+  assert.equal(classifyChatError({cause:{code:'ENOENT'}}),'generation-transport-unavailable');
+  assert.equal(classifyChatError(Error('embedded-http-503')),'generation-http-error');
+  assert.equal(classifyChatError(Error('embedded-empty-response')),'generation-empty');
+  assert.equal(classifyChatError(Error('/private/qwen/token-abcdef')),
+    'generation-request-error');
+});
+
+test('the native payload keeps the first user question even with long remaining context',()=>{
+  const prompt='Message utilisateur : salut\n'
+    +'Intention du noyau : répondre naturellement\n'+'X'.repeat(10000);
+  const base=nativeChatPayload(prompt,'Tu es AURA',28);
+  assert.equal(base.max_tokens,28);
+  assert.match(base.messages[1].content,/^Message utilisateur : salut/);
+  const low=nativeChatPayload(prompt,'Tu es AURA',28,{lowMemory:true});
+  assert.match(low.messages[1].content,/^Message utilisateur : salut/);
+  assert.equal(low.max_tokens,28);
 });
