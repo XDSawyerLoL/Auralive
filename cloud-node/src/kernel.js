@@ -1224,10 +1224,15 @@ export class CognitiveKernel {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
+    // A gateway refusal is NOT a successful conversational response:
+    // keep the cognitive plan, report the exact safe reason to the UI and
+    // avoid rewarding AURA's organism for a language failure.
+    const speechFailureCode=this.expression.lastMode==='natural-language-unavailable'
+      ?String(this.expression.lastError||'speech-unavailable').slice(0,80):'';
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
-      true,
+      !speechFailureCode,
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
@@ -1253,6 +1258,7 @@ export class CognitiveKernel {
     return {
       ok: true,
       answer,
+      speech_error_code:speechFailureCode,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,
