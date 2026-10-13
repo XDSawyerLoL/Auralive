@@ -229,3 +229,25 @@ test('natural French never emits provider reasoning into conversation', async ()
   assert.equal(cleanSpeechOutput('<think>Need to greet</think>Salut !'), 'Salut !');
   assert.equal(cleanSpeechOutput('Salut, je suis là.'), 'Salut, je suis là.');
 });
+
+test('configured Groq-style federation answers when Hostinger native loader is broken', async () => {
+  let nativeCalls = 0;
+  const embedded = {
+    status: () => ({ ready: false, failure_code: 'embedded-shared-library-unresolved' }),
+    installed: () => true,
+    canProvision: () => true,
+    async generate() { nativeCalls += 1; throw Error('libllama-common.so missing'); },
+  };
+  const ai = {
+    federation: {
+      enabled: true,
+      snapshot: () => ({ enabled: true, zero_cost_mode: true }),
+      async generate() { return { answer: 'Oui, moi aussi, ça me fait plaisir !', provider: 'groq', model: 'free' }; },
+    },
+  };
+  const faculty = new FrenchLanguageFaculty(ai, { embedded });
+  const answer = await faculty.generate({ user_text: 'oui moi aussi', act: 'respond', facts: [] });
+  assert.equal(answer, 'Oui, moi aussi, ça me fait plaisir !');
+  assert.equal(nativeCalls, 0);
+  assert.equal(faculty.lastBackend, 'groq');
+});
