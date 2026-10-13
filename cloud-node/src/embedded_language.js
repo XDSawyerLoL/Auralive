@@ -542,6 +542,9 @@ export class EmbeddedLanguageRuntime {
        recovery_attempts_in_window:this.recoveryTimes.length,
        recovery_limited:this.recoveryLimitReached,
       provisioning:this.provisioner?.snapshot?.() || {enabled:false},
+      model_canary_requested:this.provisioner?.modelVariant==='qwen3-q4-canary',
+      model_canary_active:Boolean(this.ready && this.provisionedPaths
+        && this.provisioner?.modelVariant==='qwen3-q4-canary'),
       repaired_library_aliases:this.repairedLibraryAliases.slice(0,20),
       native_library_health: item.binFound ? nativeLibraryHealth(item.executable) : null,
       launch_mode:this.launchMode,
@@ -655,8 +658,13 @@ export class EmbeddedLanguageRuntime {
     const hasInstallation=this.installed();
     const unresolvedLibraries=this.lastFailure
       && classifyEmbeddedFailure(this.lastFailure).code==='embedded-shared-library-unresolved';
-    const needsCanonical = this.canProvision()
-      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource));
+    // Existing Q8 cannot silently satisfy an explicit Q4 canary selection.
+    // A manually pinned GGUF retains precedence over the canary flag.
+    const requestedCanary=this.provisioner?.modelVariant==='qwen3-q4-canary'
+      && !process.env.AURA_EMBEDDED_LANGUAGE_MODEL;
+    const needsCanonical=this.canProvision()
+      && (!hasInstallation || requestedCanary
+        || (unresolvedLibraries && !this.canonicalSource));
     if(!hasInstallation && !needsCanonical)return false;
     this.booting=needsCanonical ? this.installAndBoot() : this.bootWithExecutable();
     try{return await this.booting;}
