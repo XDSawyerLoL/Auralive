@@ -859,3 +859,37 @@ test('the native payload keeps the first user question even with long remaining 
   assert.match(low.messages[1].content,/^Message utilisateur : salut/);
   assert.equal(low.max_tokens,28);
 });
+
+test('Q4 canary provisions its pinned model even when a Q8 file was discovered',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true,
+      gguf:'/cache/Qwen3-0.6B-Q8_0.gguf',executable:'/cache/llama-server'}),
+    provisioner:{enabled:true,modelVariant:'qwen3-q4-canary',
+      snapshot:()=>({model_variant:'qwen3-q4-canary'})},
+  });
+  let canary=0,stable=0;
+  runtime.canProvision=()=>true;
+  runtime.installAndBoot=async()=>{canary++;return true;};
+  runtime.bootWithExecutable=async()=>{stable++;return true;};
+  assert.equal(await runtime.start(),true);
+  assert.equal(canary,1);
+  assert.equal(stable,0);
+  assert.equal(runtime.status().model_canary_requested,true);
+  assert.equal(runtime.status().model_canary_active,false);
+});
+test('Q8 stays the default boot path when model canary is disabled',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true,
+      gguf:'/cache/Qwen3-0.6B-Q8_0.gguf',executable:'/cache/llama-server'}),
+    provisioner:{enabled:true,modelVariant:'qwen3-q8',
+      snapshot:()=>({model_variant:'qwen3-q8'})},
+  });
+  let canary=0,stable=0;
+  runtime.canProvision=()=>true;
+  runtime.installAndBoot=async()=>{canary++;return true;};
+  runtime.bootWithExecutable=async()=>{stable++;return true;};
+  assert.equal(await runtime.start(),true);
+  assert.equal(canary,0);
+  assert.equal(stable,1);
+  assert.equal(runtime.status().model_canary_requested,false);
+});
