@@ -8,7 +8,8 @@ import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
   nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot,
-  nativeProcessSnapshot,nativeStartupMilestones,healthProbeResult} from '../src/embedded_language.js';
+  nativeProcessSnapshot,nativeStartupMilestones,healthProbeResult,
+  nativeChatPayload,classifyChatError} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -753,4 +754,97 @@ test('post-inference clean exits retry only three times within a bounded window'
   assert.equal(children.length,4);
   assert.equal(runtime.status().last_verified_completion_tokens,1);
   assert.equal(runtime.status().boot_attempts.at(-1).outcome,'stopped-after-inference');
+});
+
+test('CPU-only Qwen chat payload respects standard and reduced context budgets',()=>{
+  const long='É'.repeat(18000);
+  const base=nativeChatPayload(long,long,900);
+  assert.equal(base.max_tokens,192);
+  assert.equal(base.messages[0].content.length,1200);
+  assert.equal(base.messages[1].content.length,1800);
+  assert.equal(base.chat_template_kwargs.enable_thinking,false);
+  const reduced=nativeChatPayload(long,long,900,{lowMemory:true});
+  assert.equal(reduced.max_tokens,96);
+  assert.equal(reduced.messages[0].content.length,450);
+  assert.equal(reduced.messages[1].content.length,700);
+});
+test('chat-level rejection must preserve native readiness, verified probe and socket',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  runtime.ready=true;
+  runtime.lastProbeAt='2026-10-13T00:15:28.976Z';
+  runtime.lastVerifiedProbeAt=runtime.lastProbeAt;
+  runtime.lastVerifiedTokens=3;
+  runtime.healthSeen=true;
+  let kills=0;
+  runtime.child={exitCode:null,signalCode:null,kill:()=>{kills++;}};
+  let calls=0;
+  runtime.localRequest=async(_endpoint,opts)=>{
+    calls++;
+    assert.equal(JSON.parse(opts.body).max_tokens,192);
+    if(calls===1)return {ok:false,status:422};
+    return {ok:true,status:200,json:async()=>({
+      usage:{completion_tokens:11},
+      choices:[{message:{content:'<think>secret</think>Bonjour, comment allez-vous ?'}}
+    })};
+  };
+  assert.equal(await runtime.generate('Bonjour','Tu es AURA',700),'');
+  const degraded=runtime.status();
+  assert.equal(degraded.status,'generation-degraded');
+  assert.equal(degraded.ready,true);
+  assert.equal(degraded.probe_verified,true);
+  assert.equal(degraded.failure_code,'');
+  assert.equal(degraded.generation_failure_code,'generation-context-rejected');
+  assert.equal(degraded.generation_failures_consecutive,1);
+  assert.equal(degraded.last_verified_completion_tokens,3);
+  assert.equal(degraded.native_process_running,true);
+  assert.equal(kills,0);
+  assert.equal(await runtime.generate('Bonjour','Tu es AURA',700),'Bonjour, comment allez-vous ?');
+  const recovered=runtime.status();
+  assert.equal(recovered.status,'verified-responsive');
+  assert.equal(recovered.generation_failure_code,'');
+  assert.equal(recovered.generation_failures_consecutive,0);
+  assert.ok(recovered.last_success_at);
+  assert.equal(kills,0);
+});
+test('timed-out chat must not terminate still healthy native process',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  runtime.ready=true;runtime.lastProbeAt='2026-10-13T00:15:28Z';
+  let killed=0;
+  runtime.child={exitCode:null,signalCode:null,kill:()=>{killed++;}};
+  runtime.localRequest=async()=>{const err=new Error('request timed out');err.name='TimeoutError';throw err;};
+  assert.equal(await runtime.generate('salut','français',600),'');
+  assert.equal(runtime.status().generation_failure_code,'generation-timeout');
+  assert.equal(runtime.status().status,'generation-degraded');
+  assert.equal(runtime.status().ready,true);
+  assert.equal(killed,0);
+});
+test('overlapping chats do not pile up concurrent native requests',async()=>{
+  const runtime=new EmbeddedLanguageRuntime({
+    discover:()=>({installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,
+  });
+  runtime.ready=true;runtime.lastProbeAt='2026-10-13T00:15:28Z';
+  runtime.child={exitCode:null,signalCode:null,kill:()=>{throw Error('kill forbidden');}};
+  let resume;let requests=0;
+  runtime.localRequest=async()=>{requests++;return await new Promise(r=>{resume=r;});};
+  const first=runtime.generate('première','Tu es AURA',600);
+  assert.equal(runtime.status().generation_active,true);
+  assert.equal(await runtime.generate('deuxième','Tu es AURA',600),'');
+  assert.equal(requests,1);
+  resume({ok:true,json:async()=>({choices:[{message:{content:'Réponse valide'}}]})});
+  assert.equal(await first,'Réponse valide');
+  assert.equal(runtime.status().generation_active,false);
+});
+test('chat error classification is allowlisted; no raw paths or prompts are revealed',()=>{
+  assert.equal(classifyChatError({cause:{code:'ENOENT'}}),'generation-transport-unavailable');
+  assert.equal(classifyChatError(Error('embedded-http-503')),'generation-http-error');
+  assert.equal(classifyChatError(Error('embedded-empty-response')),'generation-empty');
+  assert.equal(classifyChatError(Error('/private/qwen/token-abcdef')),
+    'generation-request-error');
 });
