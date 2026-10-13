@@ -26,6 +26,13 @@ export function buildAuraSpeechEnvelope(plan={}){
   const authorized_facts=(Array.isArray(plan.facts)?plan.facts:[])
     .slice(0,5).map((text,index)=>({id:'f'+(index+1),text:clean(text,210)}))
     .filter(item=>item.text);
+  if(speech_act==='ask_user_from_curiosity'){
+    const required_question=clean(plan.question_proposal,400);
+    if(!required_question.endsWith('?')||!authorized_facts.length)
+      throw Error('speech-plan-insufficient-grounding');
+    return {speech_act,communicative_goal,user_message,authorized_facts,
+      style:'français naturel, réponse proportionnée au message',required_question};
+  }
   return {speech_act,communicative_goal,user_message,authorized_facts,
     style:'français naturel, réponse proportionnée au message'};
 }
