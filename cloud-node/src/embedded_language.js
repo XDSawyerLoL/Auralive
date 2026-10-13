@@ -344,6 +344,35 @@ export function chooseNativeTransport({env=process.env,platform=process.platform
   return platform==='linux'&&env.NODE_ENV==='production'&&env.CI!=='true'
     ?'unix':'tcp';
 }
+// Bound prompt and response to the CPU-only 2048-token model context.
+// A normal chat failure must never SIGTERM an otherwise healthy llama server.
+export function nativeChatPayload(prompt,system,maxTokens=600){
+  const requested=Number(maxTokens);
+  const limit=Number.isFinite(requested)?Math.max(32,Math.min(192,Math.floor(requested))):192;
+  return {model:'local',stream:false,temperature:0.6,max_tokens:limit,
+    chat_template_kwargs:{enable_thinking:false},
+    messages:[
+      {role:'system',content:String(system??'').slice(0,1200)},
+      {role:'user',content:String(prompt??'').slice(-1800)},
+    ],
+  };
+}
+export function classifyChatError(error){
+  const code=String(error?.code||error?.cause?.code||'').toUpperCase();
+  const name=String(error?.name||'').toLowerCase();
+  const message=String(error?.message||'').toLowerCase();
+  if(name==='aborterror'||name==='timeouterror'||/timeout|timed out/.test(message))
+    return 'generation-timeout';
+  if(/embedded-http-(400|413|422)|context.*(size|length)|too many tokens/.test(message))
+    return 'generation-context-rejected';
+  if(/embedded-http-429|server is busy/.test(message))
+    return 'generation-overloaded';
+  if(/^embedded-http-5\d\d/.test(message))return 'generation-http-error';
+  if(/empty-response/.test(message))return 'generation-empty';
+  if(code==='ECONNREFUSED'||code==='ENOENT'||code==='EPIPE'||code==='ECONNRESET')
+    return 'generation-transport-unavailable';
+  return 'generation-request-error';
+}
 export function nativeBootArgs(gguf,port,{lowMemory=false,threads=1}={}){
   const context=lowMemory?768:2048;
   // In Hostinger mode, ignore old overrides that can silently restore extra workers.
@@ -420,6 +449,9 @@ export class EmbeddedLanguageRuntime {
     this.healthSeen=false;this.lastProbeAt='';this.lastProbeLatencyMs=0;
     this.lastVerifiedProbeAt='';this.lastVerifiedTokens=0;
     this.lastNativeReadyDurationMs=0;
+    this.generationActive=false;this.generationFailure='';
+    this.generationFailures=0;this.generationLastErrorAt='';
+    this.generationLastAttemptAt='';this.generationLastDurationMs=0;
     this.recoveryTimer=null;this.recoveryDueAt=0;
     this.recoveryTimes=[];this.recoveryLimitReached=false;
     this.probeTimeoutMs=30_000;
@@ -477,7 +509,8 @@ export class EmbeddedLanguageRuntime {
     return {version:'aura-llama-self-hosted-v1',enabled,installed:enabled&&item.installed,
       binary_found:item.binFound,model_found:item.modelFound,
       executable_allowed:item.executableAllowed,ready:this.ready,
-      status:this.ready && this.lastProbeAt ? 'verified-responsive'
+      status:this.ready && this.lastProbeAt && this.generationFailure ? 'generation-degraded'
+        :this.ready && this.lastProbeAt ? 'verified-responsive'
          :this.healthSeen && this.booting ? 'verifying-inference'
          :this.ready ? 'model-loaded-unverified'
         :!enabled?'disabled'
@@ -490,6 +523,12 @@ export class EmbeddedLanguageRuntime {
           :!item.executableAllowed?'Le binaire présent ne peut pas être exécuté par Hostinger.':''),
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
+      generation_active:this.generationActive,
+      generation_failure_code:this.generationFailure,
+      generation_failures_consecutive:this.generationFailures,
+      generation_last_error_at:this.generationLastErrorAt,
+      generation_last_attempt_at:this.generationLastAttemptAt,
+      generation_last_duration_ms:this.generationLastDurationMs,
        last_probe_at:this.lastProbeAt,probe_verified:Boolean(this.ready&&this.lastProbeAt),
        probe_latency_ms:this.lastProbeLatencyMs,health_seen:this.healthSeen,
        last_verified_probe_at:this.lastVerifiedProbeAt,
@@ -863,11 +902,7 @@ export class EmbeddedLanguageRuntime {
     return this.request('http://127.0.0.1:'+this.port+endpoint,options);
   }
   async generate(prompt,system,maxTokens=600){
-    // Initial model installation may transfer hundreds of MB. Do not keep a
-    // public chat request open until the first download finishes.
-    // Never keep the user's HTTP chat request open while the on-host model
-    // installs or attempts 150s boot profiles. Initiate the optional engine
-    // asynchronously; its readiness is subsequently checked and reported.
+    // Never block a chat request waiting for installation or a 150s boot.
     if(!this.ready){
       if(!this.booting && Date.now()>=this.cooldownUntil
         && (this.installed()||this.canProvision())){
@@ -875,30 +910,40 @@ export class EmbeddedLanguageRuntime {
       }
       return '';
     }
+    // One active inference on the single-thread Hostinger runtime.
+    if(this.generationActive)return '';
     if(this.child && (this.child.exitCode!==null||this.child.signalCode!==null)){
       this.fail('embedded-model-process-exited-before-generation');
       return '';
     }
     const started=Date.now();
+    this.generationActive=true;
+    this.generationLastAttemptAt=new Date(started).toISOString();
     try{
       const response=await this.localRequest('/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({model:'local',stream:false,temperature:0.6,
-          max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),
-          chat_template_kwargs:{enable_thinking:false},messages:[
-            {role:'system',content:String(system).slice(0,9000)},
-            {role:'user',content:String(prompt).slice(0,14000)}]}),
-        signal:AbortSignal.timeout(30_000)});
-      if(!response.ok)throw Error('embedded HTTP '+response.status);
+        body:JSON.stringify(nativeChatPayload(prompt,system,maxTokens)),
+        signal:AbortSignal.timeout(75_000)});
+      if(!response.ok)throw Error('embedded-http-'+response.status);
       const json=await response.json();
-      const answer=String(json?.choices?.[0]?.message?.content||'').trim();
+      const answer=String(json?.choices?.[0]?.message?.content||'')
+        .replace(/<think>[\\s\\S]*?<\\/think>/gi,'').trim();
       if(!answer)throw Error('embedded-empty-response');
-      this.lastSuccessAt=new Date().toISOString();this.lastLatencyMs=Date.now()-started;
-      this.lastFailure='';return answer;
+      this.lastSuccessAt=new Date().toISOString();
+      this.lastLatencyMs=Date.now()-started;
+      this.generationFailure='';this.generationFailures=0;
+      this.lastFailure='';
+      return answer;
     }catch(error){
-      this.fail(error);
-      try{if(this.child?.exitCode===null)this.child.kill('SIGTERM');}catch{}
+      // A user-level inference rejection is not a native process failure.
+      // Preserve the probe, process, and live socket; never send SIGTERM.
+      this.generationFailure=classifyChatError(error);
+      this.generationFailures++;
+      this.generationLastErrorAt=new Date().toISOString();
       return '';
+    }finally{
+      this.generationLastDurationMs=Date.now()-started;
+      this.generationActive=false;
     }
   }
 }
