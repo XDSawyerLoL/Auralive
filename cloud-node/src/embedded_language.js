@@ -453,6 +453,7 @@ export class EmbeddedLanguageRuntime {
     this.generationFailures=0;this.generationLastErrorAt='';
     this.generationLastAttemptAt='';this.generationLastDurationMs=0;
     this.generationLastInputChars=0;this.generationLastMaxTokens=0;
+    this.generationActiveKind='';this.generationLastKind='';
     this.canaryGenerationSamples=[];
     this.recoveryTimer=null;this.recoveryDueAt=0;
     this.recoveryTimes=[];this.recoveryLimitReached=false;
@@ -526,6 +527,8 @@ export class EmbeddedLanguageRuntime {
 
       last_success_at:this.lastSuccessAt,last_latency_ms:this.lastLatencyMs,
       generation_active:this.generationActive,
+      generation_active_kind:this.generationActive?this.generationActiveKind:'',
+      generation_last_kind:this.generationLastKind,
       generation_failure_code:this.generationFailure,
       generation_failures_consecutive:this.generationFailures,
       generation_last_error_at:this.generationLastErrorAt,
@@ -927,7 +930,7 @@ export class EmbeddedLanguageRuntime {
           ?'candidate-meets-target':'candidate-needs-review',
       target_p95_ms:30_000,model_promotion_automatic:false};
   }
-  async generate(prompt,system,maxTokens=600){
+  async generate(prompt,system,maxTokens=600,{purpose='background'}={}){
     // Never block a chat request waiting for installation or a 150s boot.
     if(!this.ready){
       if(!this.booting && Date.now()>=this.cooldownUntil
@@ -944,6 +947,10 @@ export class EmbeddedLanguageRuntime {
     }
     const started=Date.now();
     this.generationActive=true;
+    const kind=purpose==='french-chat'||purpose==='french-chat-retry'
+      ?purpose:'background';
+    this.generationActiveKind=kind;
+    this.generationLastKind=kind;
     let generatedSuccessfully=false;
     let timedOut=false;
     this.generationLastAttemptAt=new Date(started).toISOString();
@@ -984,6 +991,7 @@ export class EmbeddedLanguageRuntime {
         this.canaryGenerationSamples=this.canaryGenerationSamples.slice(-12);
       }
       this.generationActive=false;
+      this.generationActiveKind='';
     }
   }
 }
