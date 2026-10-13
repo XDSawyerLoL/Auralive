@@ -661,3 +661,96 @@ test('normal llama_model_loader progress must never misclassify a health timeout
     'embedded-model-load-failed');
   assert.deepEqual(embeddedLogSignals('failed to load model'),['model-loader-failed']);
 });
+
+test('clean exit after a real Qwen proof is classified, preserved and recovery is scheduled',async()=>{
+  let child;
+  const scheduled=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    transport:'tcp',
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/qwen.gguf',installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>22401,bootTimeoutMs:1000,
+    schedule:(fn,delay)=>{
+      const timer={fn,delay,unref(){}};
+      scheduled.push(timer);return timer;
+    },
+    request:async(_url,opts)=>opts?.method==='POST'
+      ? {ok:true,json:async()=>({usage:{completion_tokens:4},
+          choices:[{message:{content:'Bonjour'}}]})}:{ok:true,status:200},
+    spawnProcess:()=>{
+      child=new EventEmitter();child.pid=null;
+      child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=()=>true;
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),true);
+  const before=runtime.status();
+  assert.equal(before.ready,true);
+  assert.equal(before.probe_verified,true);
+  assert.equal(before.last_verified_completion_tokens,4);
+  const verifiedAt=before.last_verified_probe_at;
+  child.exitCode=0;child.emit('exit',0,null);
+  const after=runtime.status();
+  assert.equal(after.status,'startup-failed');
+  assert.equal(after.ready,false);
+  assert.equal(after.probe_verified,false);
+  assert.equal(after.failure_code,'embedded-native-stopped-after-serving');
+  assert.equal(after.last_probe_at,'');
+  assert.equal(after.last_verified_probe_at,verifiedAt);
+  assert.equal(after.last_verified_completion_tokens,4);
+  assert.equal(after.process_exit.code,0);
+  assert.equal(after.boot_attempts.length,1);
+  assert.equal(after.boot_attempts[0].outcome,'stopped-after-inference');
+  assert.equal(after.boot_attempts[0].exit_code,0);
+  assert.equal(after.boot_attempts[0].inference_verified,true);
+  assert.equal(after.boot_attempts[0].verified_at,verifiedAt);
+  assert.equal(after.recovery_scheduled,true);
+  assert.equal(scheduled.length,1);
+  assert.equal(scheduled[0].delay,3000);
+  assert.equal(classifyEmbeddedFailure('harmless: error while loading shared libraries embedded-native-stopped-after-serving').code,
+    'embedded-native-stopped-after-serving');
+});
+
+test('post-inference clean exits retry only three times within a bounded window',async()=>{
+  const timers=[];const children=[];
+  const runtime=new EmbeddedLanguageRuntime({
+    transport:'tcp',
+    discover:()=>({executable:'/tmp/aura-language-runtime/llama-server',
+      gguf:'/tmp/qwen.gguf',installed:true,binFound:true,modelFound:true,executableAllowed:true}),
+    provisioner:null,allocatePort:async()=>22402,bootTimeoutMs:1000,
+    schedule:(fn,delay)=>{
+      const timer={fn,delay,unref(){}};
+      timers.push(timer);return timer;
+    },
+    request:async(_url,opts)=>opts?.method==='POST'
+      ? {ok:true,json:async()=>({usage:{completion_tokens:1},
+        choices:[{message:{content:'Bonjour'}}]})}:{ok:true,status:200},
+    spawnProcess:()=>{
+      const child=new EventEmitter();
+      child.pid=null;child.exitCode=null;child.signalCode=null;
+      child.stdout=new EventEmitter();child.stderr=new EventEmitter();
+      child.kill=()=>true;children.push(child);
+      return child;
+    },
+  });
+  assert.equal(await runtime.start(),true);
+  for(let i=0;i<4;i++){
+    const child=children.at(-1);
+    child.exitCode=0;child.emit('exit',0,null);
+    assert.equal(runtime.status().ready,false);
+    if(i<3){
+      assert.equal(runtime.status().recovery_scheduled,true);
+      assert.equal(timers[i].delay,[3000,15000,60000][i]);
+      timers[i].fn();
+      assert.equal(await runtime.start(),true);
+      assert.equal(runtime.status().ready,true);
+    }
+  }
+  assert.equal(runtime.status().recovery_scheduled,false);
+  assert.equal(runtime.status().recovery_limited,true);
+  assert.equal(runtime.status().recovery_attempts_in_window,3);
+  assert.equal(children.length,4);
+  assert.equal(runtime.status().last_verified_completion_tokens,1);
+  assert.equal(runtime.status().boot_attempts.at(-1).outcome,'stopped-after-inference');
+});
