@@ -537,10 +537,10 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       if (agenda?.current) facts.push(`Activité actuelle : ${normalize(agenda.current)}`);
       if (agenda?.blocker) facts.push(`Blocage opérationnel enregistré : ${normalize(agenda.blocker)}`);
-      if (currentWork) facts.push(`Travail en cours : ${currentWork}`);
-      if (recentReflection?.hypothesis) facts.push(`Hypothèse interne non vérifiée : ${normalize(recentReflection.hypothesis)}`);
-      if (lesson) facts.push(`Leçon enregistrée : ${lesson}`);
       if (agenda?.next_action) facts.push(`Action suivante planifiée : ${normalize(agenda.next_action)}`);
+      if (currentWork) facts.push(`Travail en cours : ${currentWork}`);
+      if (lesson) facts.push(`Leçon enregistrée : ${lesson}`);
+      if (recentReflection?.hypothesis) facts.push(`Hypothèse interne non vérifiée : ${normalize(recentReflection.hypothesis)}`);
       if (Number(soul?.pressure || 0) > 0)
         facts.push(`Pression interne : ${Math.round(Number(soul.pressure)*100)} %`);
       if (!agenda?.blocker && !recentReflection?.hypothesis && !lesson)
