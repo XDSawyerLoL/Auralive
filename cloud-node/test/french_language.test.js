@@ -204,3 +204,20 @@ test('on-host bootstrap reports installation instead of demanding an OpenRouter 
   assert.equal(result.blocking_reason,'embedded-language-installing');
   assert.match(result.setup_hint,/Installation vérifiée/);
 });
+
+test('French verbalisation keeps ordinary conversation distinct from verified operational claims', () => {
+  const faculty = new FrenchLanguageFaculty({ federation: { enabled: false }, bridge: null });
+  const plan = {
+    act: 'social_reciprocity',
+    goal: 'Répondre naturellement à une proposition de soutien réciproque.',
+    user_text: "J'ai envie de te dire la même chose",
+    facts: ['L’utilisateur retourne une attention exprimée précédemment.'],
+    conversation_context: [
+      { role: 'assistant', content: "Salut, n’hésite pas si tu as besoin de quoi que ce soit." },
+      { role: 'user', content: "J'ai envie de te dire la même chose." },
+    ],
+  };
+  assert.match(faculty.prompt(plan), /Une réponse sociale.*ne requiert pas de preuve opérationnelle AURA/);
+  assert.match(faculty.system(), /reformuler librement les intentions relationnelles/);
+  assert.match(faculty.prompt(plan), /même chose/);
+});
