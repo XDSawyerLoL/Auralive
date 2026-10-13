@@ -66,6 +66,7 @@ export class GroqSpeechOnly {
   get enabled(){return this.env.AURA_GROQ_SPEECH_ENABLED==='true';}
   get configured(){
     return this.enabled
+      &&this.env.AURA_ZERO_COST_MODE!=='false'
       &&this.env.AURA_GROQ_FREE_PLAN_CONFIRMED==='true'
       &&Boolean(clean(this.env.AURA_GROQ_API_KEY,300));
   }
