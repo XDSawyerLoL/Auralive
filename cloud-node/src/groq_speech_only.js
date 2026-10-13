@@ -1,7 +1,7 @@
 // Groq is a replaceable, untrusted language renderer, never an AURA agent.
 // This module has no access to memory, tools, storage or the cognitive kernel.
 const ENDPOINT='https://api.groq.com/openai/v1/chat/completions';
-const MODEL='llama-3.3-70b-versatile';
+const MODEL='openai/gpt-oss-120b';
 const clean=(value,n)=>String(value??'').replace(/\s+/g,' ').trim().slice(0,n);
 const numbers=value=>new Set((String(value).match(/\b\d+(?:[.,]\d+)?\b/g)||[])
   .map(x=>x.replace(',','.')));
@@ -120,8 +120,18 @@ export class GroqSpeechOnly {
         headers:{authorization:'Bearer '+this.env.AURA_GROQ_API_KEY,
           'content-type':'application/json'},
         body:JSON.stringify({
-          model:MODEL,temperature:0.2,max_completion_tokens:180,
-          stream:false,tool_choice:'none',response_format:{type:'json_object'},
+          model:MODEL,temperature:0.2,max_completion_tokens:220,
+          reasoning_effort:'low',stream:false,tool_choice:'none',
+          response_format:{type:'json_schema',json_schema:{
+            name:'aura_speech_only',strict:true,
+            schema:{type:'object',additionalProperties:false,
+              properties:{
+                utterance:{type:'string'},
+                speech_act:{type:'string'},
+                used_fact_ids:{type:'array',items:{type:'string'}}
+              },
+              required:['utterance','speech_act','used_fact_ids']}
+          }},
           messages:[
             {role:'system',content:[
               'Tu es UNIQUEMENT le moteur de verbalisation française d’AURA.',
