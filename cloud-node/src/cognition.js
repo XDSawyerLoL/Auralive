@@ -421,7 +421,7 @@ export class CognitionEngine {
         `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
       );
       if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
-    } else if (/\\b(?:agency|agence|agentivite|agentivité)\\b/.test(q) && /\\b(?:niveau|quoi|signifie|veut dire|defin|défin|mesur|score|pourquoi|comment|100)\\b/.test(q)) {
+    } else if (/\b(?:agency|agence|agentivite|agentivité)\b/.test(q) && /\b(?:niveau|quoi|signifie|veut dire|defin|défin|mesur|score|pourquoi|comment|100)\b/.test(q)) {
       act = 'explain_agency_metric';
       goal = 'Expliquer la métrique interne d’agency à partir de son état réel, sans la présenter comme une preuve de réussite ou de liberté d’action.';
       needsSemanticSupport = false;
