@@ -202,3 +202,72 @@ test('explicit cognitive fact content remains eligible to be voiced',()=>{
     utterance:'Cela fait 12.'
   },contract).ok,true);
 });
+
+test('transient Groq HTTP 503 retries once with same cognitive plan and no extra tools',async()=>{
+  let calls=0;let firstPayload;
+  const adapter=new GroqSpeechOnly({env:env(),fetchImpl:async(_url,opts)=>{
+    calls++;
+    if(calls===1){
+      firstPayload=opts.body;
+      return {ok:false,status:503};
+    }
+    assert.equal(opts.body,firstPayload);
+    return {ok:true,status:200,json:async()=>({choices:[{message:{
+      content:JSON.stringify(speech('Salut.'))
+    }}]})};
+  }});
+  assert.equal(await adapter.generate(plan()),'Salut.');
+  assert.equal(adapter.status().local_requests_today,2);
+  assert.equal(adapter.status().last_attempt_count,2);
+  assert.equal(adapter.status().last_http_status,200);
+  assert.equal(calls,2);
+});
+
+test('Groq HTTP 429 respects retry-after and never retries blindly or passes Free cap',async()=>{
+  let now=0,calls=0;
+  const adapter=new GroqSpeechOnly({env:env(),clock:()=>now,fetchImpl:async()=>{
+    calls++;
+    return {ok:false,status:429,headers:{get:(key)=>key==='retry-after'?'3':null}};
+  }});
+  assert.equal(await adapter.generate(plan()),'');
+  assert.equal(adapter.status().last_error_code,'speech-http-429');
+  assert.equal(adapter.status().retry_after_ms,3000);
+  assert.equal(adapter.status().local_requests_today,1);
+  assert.equal(await adapter.generate(plan()),'');
+  assert.equal(adapter.status().last_error_code,'speech-rate-limit-cooldown');
+  assert.equal(calls,1);
+  now=3001;
+  assert.equal(await adapter.generate(plan()),'');
+  assert.equal(calls,2);
+  assert.equal(adapter.status().last_attempt_count,1);
+  assert.equal(adapter.status().retry_after_ms,3000);
+});
+
+test('Groq never retries an ungrounded action even if Free requests remain',async()=>{
+  let calls=0;
+  const adapter=new GroqSpeechOnly({env:env(),fetchImpl:async()=>{
+    calls++;
+    return {ok:true,status:200,json:async()=>({choices:[{message:{
+      content:JSON.stringify(speech("J'ai envoyé ton rapport."))
+    }}]})};
+  }});
+  assert.equal(await adapter.generate(plan()),'');
+  assert.equal(calls,1);
+  assert.equal(adapter.status().last_attempt_count,1);
+  assert.equal(adapter.status().last_rejected_code,'speech-unsupported-action');
+});
+
+test('if first Groq JSON response is truncated, one second request can recover',async()=>{
+  let calls=0;
+  const adapter=new GroqSpeechOnly({env:env(),fetchImpl:async()=>{
+    calls++;
+    if(calls===1)return {ok:true,status:200,json:async()=>({
+      choices:[{finish_reason:'length',message:{content:''}}]
+    })};
+    return {ok:true,status:200,json:async()=>({choices:[{message:{
+      content:JSON.stringify(speech('Salut !'))
+    }}]})};
+  }});
+  assert.equal(await adapter.generate(plan()),'Salut !');
+  assert.equal(calls,2);
+});
