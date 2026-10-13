@@ -271,3 +271,41 @@ test('if first Groq JSON response is truncated, one second request can recover',
   assert.equal(await adapter.generate(plan()),'Salut !');
   assert.equal(calls,2);
 });
+
+test('Groq speech retains the exact native question rather than deciding what AURA is curious about',()=>{
+  const question='Pour Quantic OS, quelle condition prouve que le démarrage est enfin fiable ?';
+  const intent={
+    user_text:'Je veux répondre à tes questions.',
+    act:'ask_user_from_curiosity',
+    goal:'Poser une question issue de ma cognition sur ma priorité.',
+    question_proposal:question,
+    needs_semantic_support:false,
+    facts:['Question choisie par mon noyau : '+question,
+      'Foyer opérationnel : Quantic OS'],
+  };
+  const packet=buildAuraSpeechEnvelope(intent);
+  assert.equal(packet.required_question,question);
+  const spoken={utterance:'Oui, j’aimerais mieux comprendre cela. '+question,
+    speech_act:intent.act,used_fact_ids:['f1']};
+  assert.equal(verifyGroqSpeechResponse(spoken,packet).text,spoken.utterance);
+  const short=verifyGroqSpeechResponse({...spoken,utterance:'Oui, j’aimerais mieux comprendre cela.'},packet);
+  assert.equal(short.ok,true);
+  assert.equal(short.text,'Oui, j’aimerais mieux comprendre cela. '+question);
+  const changed=verifyGroqSpeechResponse({...spoken,utterance:'Quel projet veux-tu explorer aujourd’hui ?'},packet);
+  assert.equal(changed.code,'speech-question-changed');
+  const double=verifyGroqSpeechResponse({...spoken,utterance:spoken.utterance+' Et autre chose ?'},packet);
+  assert.equal(double.code,'speech-extra-question');
+});
+
+test('Groq cannot create a curiosity question if AURA cognition has not selected one',async()=>{
+  const intent={user_text:'Pose-moi une question',
+    act:'ask_user_from_curiosity',goal:'Poser une question sur le travail.',
+    needs_semantic_support:false,facts:['Curiosité sociale : 86 %.']};
+  assert.throws(()=>buildAuraSpeechEnvelope(intent),
+    err=>err.message==='speech-plan-insufficient-grounding');
+  let called=0;
+  const adapter=new GroqSpeechOnly({env:env(),fetchImpl:async()=>{called++;}});
+  assert.equal(await adapter.generate(intent),'');
+  assert.equal(adapter.status().last_error_code,'speech-plan-insufficient-grounding');
+  assert.equal(called,0);
+});
