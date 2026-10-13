@@ -119,9 +119,11 @@ export class FrenchLanguageFaculty {
     const installing = embedded.provisioning?.enabled && !embedded.ready
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
+    const localDegraded=Boolean(embedded.ready && embedded.generation_failure_code);
     // Native files alone do not establish that a model is operational.
     const ready = Boolean(embedded.ready || federation.enabled || local);
-    const blockingReason = installing ? 'embedded-language-installing'
+    const blockingReason = localDegraded ? embedded.generation_failure_code
+      : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
@@ -141,7 +143,9 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = installing
+    const setupHint = localDegraded
+      ? 'Qwen est démarré, mais la dernière génération a échoué ('+embedded.generation_failure_code+'). Le problème concerne la lenteur ou la requête locale, pas OpenRouter.'
+      : installing
       ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
       : provisionFailed
         ? 'Impossible d’installer le moteur libre : vérifier la mémoire, le disque, le réseau HTTPS et les permissions.'
