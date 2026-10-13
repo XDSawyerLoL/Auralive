@@ -348,12 +348,12 @@ export function chooseNativeTransport({env=process.env,platform=process.platform
 // A normal chat failure must never SIGTERM an otherwise healthy llama server.
 export function nativeChatPayload(prompt,system,maxTokens=600,{lowMemory=false}={}){
   const requested=Number(maxTokens);
-  const limit=Number.isFinite(requested)?Math.max(32,Math.min(lowMemory?96:192,Math.floor(requested))):(lowMemory?96:192);
+  const limit=Number.isFinite(requested)?Math.max(24,Math.min(lowMemory?64:96,Math.floor(requested))):64;
   return {model:'local',stream:false,temperature:0.6,max_tokens:limit,
     chat_template_kwargs:{enable_thinking:false},
     messages:[
-      {role:'system',content:String(system??'').slice(0,lowMemory?450:1200)},
-      {role:'user',content:String(prompt??'').slice(lowMemory?-700:-1800)},
+      {role:'system',content:String(system??'').slice(0,lowMemory?300:600)},
+      {role:'user',content:String(prompt??'').slice(0,lowMemory?620:1000)},
     ],
   };
 }
@@ -452,6 +452,7 @@ export class EmbeddedLanguageRuntime {
     this.generationActive=false;this.generationFailure='';
     this.generationFailures=0;this.generationLastErrorAt='';
     this.generationLastAttemptAt='';this.generationLastDurationMs=0;
+    this.generationLastInputChars=0;this.generationLastMaxTokens=0;
     this.recoveryTimer=null;this.recoveryDueAt=0;
     this.recoveryTimes=[];this.recoveryLimitReached=false;
     this.probeTimeoutMs=30_000;
@@ -529,6 +530,8 @@ export class EmbeddedLanguageRuntime {
       generation_last_error_at:this.generationLastErrorAt,
       generation_last_attempt_at:this.generationLastAttemptAt,
       generation_last_duration_ms:this.generationLastDurationMs,
+      generation_last_input_chars:this.generationLastInputChars,
+      generation_last_max_tokens:this.generationLastMaxTokens,
        last_probe_at:this.lastProbeAt,probe_verified:Boolean(this.ready&&this.lastProbeAt),
        probe_latency_ms:this.lastProbeLatencyMs,health_seen:this.healthSeen,
        last_verified_probe_at:this.lastVerifiedProbeAt,
@@ -920,10 +923,15 @@ export class EmbeddedLanguageRuntime {
     this.generationActive=true;
     this.generationLastAttemptAt=new Date(started).toISOString();
     try{
+      const payload=nativeChatPayload(prompt,system,maxTokens,
+        {lowMemory:this.bootProfile==='low-memory'});
+      this.generationLastInputChars=payload.messages.reduce((sum,m)=>sum+m.content.length,0);
+      this.generationLastMaxTokens=payload.max_tokens;
+      const timeoutMs=Math.min(55_000,20_000+450*payload.max_tokens);
       const response=await this.localRequest('/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify(nativeChatPayload(prompt,system,maxTokens,{lowMemory:this.bootProfile==='low-memory'})),
-        signal:AbortSignal.timeout(75_000)});
+        body:JSON.stringify(payload),
+        signal:AbortSignal.timeout(timeoutMs)});
       if(!response.ok)throw Error('embedded-http-'+response.status);
       const json=await response.json();
       const answer=String(json?.choices?.[0]?.message?.content||'')
