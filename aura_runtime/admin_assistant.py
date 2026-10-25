@@ -25,7 +25,7 @@ CATEGORIES = {
     'identite': ('identite', 'passeport', 'permis', 'etat_civil', 'naissance'),
     'sante': ('sante', 'medical', 'ordonnance', 'consultation', 'remboursement'),
 }
-EXT_RE = re.compile(r'(?<![\w./\\])([\w .-]{1,120}\.(?:txt|md|csv|json|log|pdf|docx|xlsx))\b', re.IGNORECASE)
+EXT_RE = re.compile(r'(?<![\w./\\])([\w.-]{1,100}\.(?:txt|md|csv|json|log|pdf|docx|xlsx))\b', re.IGNORECASE)
 QUOTED_RE = re.compile(r'["«“]([^"»”\r\n]{1,180})["»”]')
 
 
