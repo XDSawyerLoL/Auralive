@@ -36,7 +36,12 @@ export function classifyInitiativeResult(kind, candidate = {}) {
     .filter(Boolean);
   const queued = Boolean(result.queued || nested.queued);
   const waitingStatus = statuses.some((status) => WAITING.has(status) || status.startsWith('waiting-'));
-  const failure = result.skipped === true || nested.skipped === true || result.ok === false || nested.ok === false
+  const steps = Array.isArray(result.steps) ? result.steps : [];
+  const stepFailure = steps.some((step) => step && step.ok === false);
+  const stepsProven = steps.length > 0 && steps.every((step) =>
+    step && step.ok === true && Object.entries(step).some(([key, value]) =>
+      !['ok', 'type', 'status', 'message', 'reason', 'source'].includes(key) && substantial(value)));
+  const failure = stepFailure || result.skipped === true || nested.skipped === true || result.ok === false || nested.ok === false
     || statuses.some((status) => FAILED.has(status) || status.endsWith('-rejected'));
   const planOnly = kind === 'operator'
     && (result.executed === false || nested.executed === false)
@@ -46,7 +51,7 @@ export function classifyInitiativeResult(kind, candidate = {}) {
   const explicitlyNotExecuted = result.executed === false || nested.executed === false;
   const positive = result.ok === true || nested.ok === true || actualExecution
     || statuses.some((status) => FINISHED.has(status));
-  const proven = hasEvidence(result) || hasEvidence(nested);
+  const proven = hasEvidence(result) || hasEvidence(nested) || stepsProven;
   const completed = !waiting && !failure && !explicitlyNotExecuted
     && statuses.every((status) => FINISHED.has(status))
     && positive && proven && (kind !== 'operator' || actualExecution);
