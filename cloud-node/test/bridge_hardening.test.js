@@ -192,6 +192,7 @@ test('Cloud rejects PDF claims without bounded extraction evidence', async () =>
     source_sha256: 'a'.repeat(64), bytes: 1400, pages: 1,
     characters_extracted: 29, previews: [{ page: 1, excerpt: '25/11/2026' }],
     dates_observed: ['25/11/2026'], limitations: ['Dates non vérifiées'],
+    invoice_references_observed: [], reference_candidates_count: 0,
     facts_count: 1,
     observed_facts: [{
       kind: 'date_limite_candidate', page: 1, raw: '25/11/2026',
@@ -208,6 +209,9 @@ test('Cloud rejects PDF claims without bounded extraction evidence', async () =>
   })), false);
   assert.equal(workerCompletionVerified('operator', wrap({
     ...pdf, facts_count: 2,
+  })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({
+    ...pdf, reference_candidates_count: 1,
   })), false);
   assert.equal(workerCompletionVerified('operator', wrap({
     ...pdf, observed_facts: [{ ...pdf.observed_facts[0], page: 8 }],
