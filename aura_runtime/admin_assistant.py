@@ -186,13 +186,13 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         'depense', 'budget', 'justificatif', 'contrat', 'salaire', 'releve',
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
         'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
-        'copie de securite', 'organis', 'impos', 'quittance', 'fiscal', 'loyer',
+        'copie de securite', 'impos', 'quittance', 'fiscal', 'loyer',
         'sauvegard',
     )
     # Whole-word patterns prevent "triste", "étrange" and unrelated
     # "classement de jeux" from launching a private folder scan.
     admin_verbs = bool(re.search(
-        r'\b(?:organis\w*|ranger|range|rangez|classer|classe|classez|trier|trie|triez|tri)\b',
+        r'\b(?:organiser?|organisation|organisez|organisons|ranger|range|rangez|classer|classe|classez|trier|trie|triez|tri)\b',
         request,
     ))
     if not any(key in request for key in domain) and not admin_verbs:
