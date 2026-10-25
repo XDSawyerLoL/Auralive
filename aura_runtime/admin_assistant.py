@@ -98,6 +98,50 @@ def administrative_inventory(root: Path, *, max_entries: int = 1000,
     }
 
 
+def locate_documents(root: Path, term: str, *, max_entries: int = 1000, max_hits: int = 30) -> dict:
+    """Local-only lookup by filename, including PDF/Office; no document content."""
+    needle = normalize(term).strip()
+    if not 2 <= len(needle) <= 100 or '/' in needle or '\\' in needle:
+        raise ValueError('Terme de recherche invalide')
+    if not root.is_dir():
+        raise NotADirectoryError(str(root))
+    entries = 0
+    matches = []
+    truncated = False
+    directories = 0
+    for current, folders, filenames in os.walk(root, followlinks=False):
+        directories += 1
+        if directories > 150:
+            truncated = True
+            break
+        folders[:] = [
+            name for name in sorted(folders)
+            if not name.startswith('.') and not (Path(current) / name).is_symlink()
+        ]
+        for name in sorted(filenames):
+            entries += 1
+            if entries > max_entries or len(matches) >= max_hits:
+                truncated = True
+                break
+            path = Path(current) / name
+            if name.startswith('.') or path.is_symlink() or not path.is_file():
+                continue
+            if path.suffix.lower() not in ALLOWED_EXTENSIONS:
+                continue
+            if needle in normalize(path.stem):
+                matches.append(str(path.relative_to(root)))
+        if truncated:
+            break
+    return {
+        'type': 'admin.locate', 'ok': True, 'verified': True,
+        'read_only': True, 'mode': 'local-filename-match',
+        'query': term, 'files_scanned': entries,
+        'matches': matches, 'matches_count': len(matches),
+        'truncated': truncated,
+        'limitations': ['Recherche uniquement dans les noms, pas dans les PDF ou documents.'],
+    }
+
+
 def _filenames(text: str) -> list[str]:
     values = [item.strip() for item in QUOTED_RE.findall(text)]
     values += [match.strip() for match in EXT_RE.findall(text)]
@@ -192,9 +236,13 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
                 ('contrat', 'contrat'), ('salaire', 'salaire'),
             ] if key in request), '')
         if term:
-            return outcome('search', 'Rechercher uniquement dans les fichiers texte autorisés.',
-                           ({'type': 'files.search', 'path': '.', 'query': term},),
-                           confidence='keyword')
+            if quoted:
+                return outcome('search', 'Rechercher une expression dans les fichiers texte autorisés.',
+                               ({'type': 'files.search', 'path': '.', 'query': term},),
+                               confidence='exact-expression')
+            return outcome('locate', 'Retrouver les documents par leur nom, y compris PDF et fichiers Office.',
+                           ({'type': 'admin.locate', 'path': '.', 'query': term},),
+                           confidence='filename-keyword')
         return outcome('search-needs-term', 'Recherche non lancée : sujet trop imprécis.',
                        needs=('Préciser un mot ou une expression à rechercher.',))
 
