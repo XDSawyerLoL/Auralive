@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import ipaddress
 import json
 import os
@@ -336,7 +337,11 @@ class RuntimeOperator:
             if path.stat().st_size > limit:
                 raise ValueError(f"Fichier trop volumineux: {path.stat().st_size} > {limit}")
             text = await asyncio.to_thread(path.read_text, encoding="utf-8")
-            return {"type": kind, "ok": True, "path": str(path), "content": text}, None
+            return {
+                "type": kind, "ok": True, "path": str(path), "content": text,
+                "bytes": len(text.encode("utf-8")),
+                "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            }, None
 
         if kind == "fs.write":
             path = self._resolve_path(action.get("path") or "")
@@ -357,6 +362,18 @@ class RuntimeOperator:
             temp = path.with_name(f".{path.name}.aura-{uuid.uuid4().hex[:8]}.tmp")
             await asyncio.to_thread(temp.write_bytes, encoded)
             await asyncio.to_thread(temp.replace, path)
+            # A filesystem write is not complete until readback matches.
+            # If the file differs, immediately restore its previous contents.
+            try:
+                observed = await asyncio.to_thread(path.read_bytes)
+                if observed != encoded:
+                    raise RuntimeError("lecture après écriture incohérente")
+            except Exception as error:
+                if existed:
+                    await asyncio.to_thread(path.write_bytes, previous)
+                elif path.exists():
+                    await asyncio.to_thread(path.unlink)
+                raise RuntimeError(f"écriture non vérifiée, état restauré: {error}") from error
             rollback = {
                 "type": "fs.write",
                 "path": str(path),
@@ -368,6 +385,8 @@ class RuntimeOperator:
                 "ok": True,
                 "path": str(path),
                 "bytes": len(encoded),
+                "sha256": hashlib.sha256(observed).hexdigest(),
+                "verified": True,
                 "rollback_available": True,
             }, rollback
 
