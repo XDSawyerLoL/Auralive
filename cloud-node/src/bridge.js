@@ -198,7 +198,9 @@ export function workerCompletionVerified(kind, payload = {}) {
       }
       if (step.type === 'fs.read') {
         return typeof step.content === 'string' && String(step.path || '').length > 0
-          && /^[a-f0-9]{64}$/.test(String(step.sha256 || ''));
+          && /^[a-f0-9]{64}$/.test(String(step.sha256 || ''))
+          && createHash('sha256').update(step.content, 'utf8').digest('hex') === step.sha256
+          && Number(step.bytes) === Buffer.byteLength(step.content, 'utf8');
       }
       return Object.entries(step).some(([key, value]) =>
         !['ok', 'type', 'status', 'message', 'reason'].includes(key)
