@@ -46,6 +46,41 @@ def render_result(report: dict[str, Any]) -> str:
             rows.append('Aucun document lu, déplacé ou envoyé. Classement à confirmer.')
             rows.extend('Prochaine étape : ' + instruction
                         for instruction in step.get('next_steps', [])[:4])
+        elif kind == 'admin.followup':
+            rows.append(
+                f"Tableau administratif : {step['task_count']} vérification(s) proposées "
+                f"sur {step['source_documents_scanned']} document(s)."
+            )
+            categories = {
+                'doublons': 'Doublons à contrôler',
+                'dates_candidates': 'Dates possibles',
+                'documents_a_lire': 'PDF sans texte',
+                'rapprochements': 'Rapprochements à confirmer',
+                'fichiers_non_lus': 'Fichiers à examiner',
+            }
+            rows.extend(
+                f"{label} : {step['categories'].get(key, 0)}"
+                for key, label in categories.items()
+            )
+            for item in step.get('tasks', [])[:80]:
+                rows.append(f"[À vérifier] {item['title']} — {item['source']}")
+                proof = item.get('evidence') or {}
+                if proof.get('date'):
+                    rows.append(
+                        f"  Date candidate : {proof['date']}, page {proof.get('page')}"
+                        f" — {proof.get('excerpt', '')}"
+                    )
+                if proof.get('transaction_file'):
+                    rows.append(
+                        f"  Opération candidate : {proof['transaction_file']}, "
+                        f"ligne {proof.get('transaction_row')} "
+                        f"({proof.get('amount_candidate', '?')} EUR)"
+                    )
+                if item['category'] == 'fichiers_non_lus':
+                    rows.append(f"  {item['detail']}")
+            if step.get('partial'):
+                rows.append('Analyse partielle : des pièces restent non vérifiées.')
+            rows.append('Ceci est un tableau provisoire, aucun rappel ni paiement confirmé.')
         elif kind == 'admin.portfolio':
             rows.append(
                 f"Documents examinés : {step['documents_scanned']}; "
