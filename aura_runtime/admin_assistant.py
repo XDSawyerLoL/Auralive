@@ -195,9 +195,6 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         r'\b(?:organiser?|organisation|organisez|organisons|ranger|range|rangez|classer|classe|classez|trier|trie|triez|tri)\b',
         request,
     ))
-    if not any(key in request for key in domain) and not admin_verbs:
-        return None
-
     def outcome(intent, summary, actions=(), needs=(), *, confidence='limited'):
         return {
             'planner': 'deterministic-french-administrative-v1',
@@ -229,9 +226,15 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     if risky_command or 'virement' in request or 'signature electronique' in request:
         return outcome(
             'external-or-destructive-request',
-            'Action administrative externe ou destructive non autorisée.',
-            needs=('Définir la démarche exacte, les documents et obtenir une validation humaine.',),
+            'Action externe ou destructive non autorisée par AURA Runtime.',
+            needs=('Obtenir un accord explicite et une capacité dédiée, actuellement absente.',),
         )
+
+    # External/destructive requests are refused even if they do not contain
+    # an administrative keyword. They must never fall back to free-form
+    # model planning with browser/automation permissions.
+    if not any(key in request for key in domain) and not admin_verbs:
+        return None
 
     if any(key in request for key in ('sauvegard', 'copie de securite')):
         files = _filenames(raw)
