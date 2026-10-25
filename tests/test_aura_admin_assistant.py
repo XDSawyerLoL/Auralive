@@ -291,6 +291,7 @@ def test_backup_phrased_as_copy_of_security_requires_explicit_filename():
     'Je suis triste.',
     "C'est étrange.",
     'Le classement de mes jeux préférés.',
+    'Cet organisme fonctionne bien.',
     'Quelle est la météo demain ?',
 ])
 def test_unrelated_french_requests_do_not_scan_administrative_files(request):
