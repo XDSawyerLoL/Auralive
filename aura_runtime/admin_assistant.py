@@ -187,6 +187,7 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
         'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
         'copie de securite', 'impos', 'quittance', 'fiscal', 'loyer',
+        'pdf',
         'sauvegard',
     )
     # Whole-word patterns prevent "triste", "étrange" and unrelated
@@ -235,6 +236,25 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     # model planning with browser/automation permissions.
     if not any(key in request for key in domain) and not admin_verbs:
         return None
+
+    # One explicitly named PDF may be inspected locally. Extraction is
+    # bounded, not an LLM summary or an automatic administrative decision.
+    if (re.search(r'\b(?:lis|lire|ouvre|ouvrir|inspecte|inspecter|examine|examiner|extrais|extraire)\b', request)
+            and ('pdf' in request or 'document' in request or 'factur' in request)):
+        files = _filenames(raw)
+        pdf_files = [name for name in files if name.lower().endswith('.pdf')]
+        if len(pdf_files) == 1 and len(files) == 1:
+            return outcome(
+                'pdf-inspect',
+                'Lire localement le texte du PDF désigné et relever ses dates explicites.',
+                ({'type': 'admin.pdf.inspect', 'path': pdf_files[0]},),
+                confidence='explicit-pdf',
+            )
+        return outcome(
+            'pdf-needs-file',
+            'Lecture PDF non lancée : indiquer un seul fichier PDF précis.',
+            needs=('Indiquer le nom exact du PDF, sans chemin externe.',),
+        )
 
     if any(key in request for key in ('sauvegard', 'copie de securite')):
         files = _filenames(raw)
