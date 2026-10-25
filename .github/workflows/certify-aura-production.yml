@@ -15,8 +15,6 @@ on:
     paths:
       - "scripts/certify-aura-production.mjs"
       - ".github/workflows/certify-aura-production.yml"
-  schedule:
-    - cron: "17 5 * * *"
 
 permissions:
   contents: read
