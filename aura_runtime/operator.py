@@ -719,6 +719,18 @@ class RuntimeOperator:
                 "source": source,
             }
 
+        # Cross-document correlations can expose invoice and bank identifiers.
+        # Keep this capability strictly LOCAL even when older file sharing is opted in.
+        if source == "aura-runtime-worker" and any(
+            action.get("type") == "admin.portfolio" for action in actions
+        ):
+            return {
+                "executed": False, "status": "not-executed",
+                "reason": "Rapprochement administratif réservé à l'interface locale.",
+                "needs": ["Utiliser AURA sur le PC et sélectionner un dossier autorisé."],
+                "source": source,
+            }
+
         if source == "aura-runtime-worker" and not bool(getattr(
             self.settings, "aura_runtime_cloud_personal_files_enabled", False
         )) and any(action.get("type") in {
