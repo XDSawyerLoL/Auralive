@@ -157,3 +157,69 @@ async def test_cloud_request_with_empty_risks_cannot_gain_local_permissions(monk
     worker = AuraRuntimeWorker(host, config, runtime_packaging='standalone-service')
     await worker._run_operator({'task': 'test'}, [])
     assert captured['risks'] == set()
+
+
+@pytest.mark.asyncio
+async def test_cloud_worker_reports_failed_operator_receipt_as_failed_job(monkeypatch, tmp_path):
+    import asyncio
+    monkeypatch.setenv('AURA_CLOUD_BASE_URL', 'https://aura.example')
+    monkeypatch.setenv('AURA_BRIDGE_TOKEN', 'test-only')
+    monkeypatch.setenv('AURA_RUNTIME_IDENTITY_FILE', str(tmp_path / 'worker-id'))
+    config = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(config)
+    worker = AuraRuntimeWorker(host, config, runtime_packaging='standalone-service')
+    receipts = []
+
+    async def execute(_job):
+        return {
+            'executed': False, 'status': 'error',
+            'steps': [{'type': 'browser.audit', 'ok': False, 'checks_total': 2, 'checks_passed': 1}],
+            'error': 'page SWAPP indisponible',
+        }
+
+    async def complete(_id, **kwargs):
+        receipts.append(kwargs)
+
+    async def lease(_id, _deadline):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(worker, '_execute', execute)
+    monkeypatch.setattr(worker, '_complete', complete)
+    monkeypatch.setattr(worker, '_lease_renewer', lease)
+    await worker._run_job({'id': 'job-failed', 'kind': 'operator', 'lease_until': 0})
+    assert receipts[0]['ok'] is False
+    assert receipts[0]['result']['steps'][0]['checks_passed'] == 1
+    assert worker.jobs_failed == 1
+    assert worker.jobs_completed == 0
+
+
+@pytest.mark.asyncio
+async def test_cloud_worker_accepts_only_proved_operator_steps(monkeypatch, tmp_path):
+    import asyncio
+    monkeypatch.setenv('AURA_CLOUD_BASE_URL', 'https://aura.example')
+    monkeypatch.setenv('AURA_BRIDGE_TOKEN', 'test-only')
+    monkeypatch.setenv('AURA_RUNTIME_IDENTITY_FILE', str(tmp_path / 'worker-id'))
+    config = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(config)
+    worker = AuraRuntimeWorker(host, config, runtime_packaging='standalone-service')
+    receipts = []
+
+    async def execute(_job):
+        return {
+            'executed': True, 'status': 'completed',
+            'steps': [{'type': 'system.info', 'ok': True, 'platform': 'test-machine'}],
+        }
+
+    async def complete(_id, **kwargs):
+        receipts.append(kwargs)
+
+    async def lease(_id, _deadline):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(worker, '_execute', execute)
+    monkeypatch.setattr(worker, '_complete', complete)
+    monkeypatch.setattr(worker, '_lease_renewer', lease)
+    await worker._run_job({'id': 'job-proved', 'kind': 'operator', 'lease_until': 0})
+    assert receipts[0]['ok'] is True
+    assert worker.jobs_completed == 1
+    assert worker.jobs_failed == 0
