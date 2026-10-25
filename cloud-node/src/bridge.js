@@ -193,6 +193,34 @@ export function workerCompletionVerified(kind, payload = {}) {
           && step.checks.every((check) =>
             check?.ok === true && /^[a-f0-9]{64}$/.test(String(check?.screenshot_sha256 || '')));
       }
+      if (step.type === 'files.search') {
+        return step.verified === true && Number.isInteger(step.matches_count)
+          && step.matches_count >= 0 && Array.isArray(step.matches)
+          && step.matches.length === step.matches_count
+          && Number.isInteger(step.files_scanned) && step.files_scanned >= 0
+          && step.matches.every((match) =>
+            Number.isInteger(match?.line) && match.line > 0
+            && /^[a-f0-9]{64}$/.test(String(match?.file_sha256 || '')));
+      }
+      if (step.type === 'data.csv.summary') {
+        return step.verified === true
+          && Number.isInteger(step.rows) && step.rows >= 0
+          && Array.isArray(step.columns) && step.columns.length > 0
+          && /^[a-f0-9]{64}$/.test(String(step.source_sha256 || ''))
+          && step.numeric && typeof step.numeric === 'object';
+      }
+      if (step.type === 'files.compare') {
+        return step.verified === true && typeof step.identical === 'boolean'
+          && /^[a-f0-9]{64}$/.test(String(step.left_sha256 || ''))
+          && /^[a-f0-9]{64}$/.test(String(step.right_sha256 || ''))
+          && Array.isArray(step.diff_lines);
+      }
+      if (step.type === 'files.backup') {
+        return step.verified === true && Number.isInteger(step.bytes)
+          && step.bytes >= 0 && String(step.backup || '') !== String(step.source || '')
+          && String(step.backup || '').length > 0
+          && /^[a-f0-9]{64}$/.test(String(step.sha256 || ''));
+      }
       if (step.type === 'fs.write') {
         return step.verified === true && /^[a-f0-9]{64}$/.test(String(step.sha256 || ''));
       }
