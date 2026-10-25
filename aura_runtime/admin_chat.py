@@ -14,6 +14,8 @@ from .personal_cli import execute_command
 def complete_followup(previous_intent: str, answer: str) -> str | None:
     """Fill one missing safe argument without generating an action implicitly."""
     names = _filenames(answer)
+    if previous_intent == 'pdf-needs-file' and len(names) == 1 and names[0].lower().endswith('.pdf'):
+        return f'Lis {names[0]}'
     if previous_intent == 'budget-needs-csv' and len(names) == 1 and names[0].lower().endswith('.csv'):
         return f'Fais le total de mes dépenses dans {names[0]}'
     if previous_intent == 'compare-needs-files' and len(names) == 2:
@@ -44,6 +46,21 @@ def render_result(report: dict[str, Any]) -> str:
             rows.append('Aucun document lu, déplacé ou envoyé. Classement à confirmer.')
             rows.extend('Prochaine étape : ' + instruction
                         for instruction in step.get('next_steps', [])[:4])
+        elif kind == 'admin.pdf.inspect':
+            rows.append(f"PDF : {step['pages']} page(s), {step['characters_extracted']} caractères extraits.")
+            rows.append(f"Empreinte SHA-256 : {step['source_sha256']}")
+            if not step.get('text_detected'):
+                rows.append('Aucune couche texte détectée : une analyse OCR serait nécessaire.')
+            rows.extend(
+                f"Page {part['page']} : {part['excerpt']}"
+                for part in step.get('previews', [])[:4]
+            )
+            if step.get('dates_observed'):
+                rows.append('Dates observées (non vérifiées) : ' + ', '.join(
+                    step['dates_observed'][:20]))
+            if step.get('text_truncated'):
+                rows.append('Extraction partielle : limite de texte atteinte.')
+            rows.append('Aucune échéance ni obligation administrative déduite automatiquement.')
         elif kind == 'admin.locate':
             rows.append(f"Fichiers dont le nom correspond : {step['matches_count']}")
             rows.extend(' - ' + name for name in step['matches'])
@@ -102,7 +119,8 @@ async def run_session(root: str) -> None:
             continue
         if not plan['actions']:
             pending = plan['intent'] if str(plan['intent']).endswith('needs-csv') or plan['intent'] in {
-                'compare-needs-files', 'backup-needs-file', 'search-needs-term'
+                'compare-needs-files', 'backup-needs-file', 'search-needs-term',
+                'pdf-needs-file'
             } else ''
             print('AURA > ' + plan['summary'])
             if plan.get('needs'):
