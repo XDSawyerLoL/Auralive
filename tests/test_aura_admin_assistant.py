@@ -312,6 +312,7 @@ def test_admin_imperatives_are_recognized_as_read_only_first_steps(request):
 
 @pytest.mark.parametrize('request', [
     'Envoie au fisc mon avis.',
+    'Envoie un email à mon ami.',
     'Supprimer mes documents.',
     'Organise mes dossiers puis envoie tout.',
     'Dépose une déclaration fiscale.',
