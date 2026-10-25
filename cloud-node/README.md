@@ -143,3 +143,33 @@ AURA_OPENROUTER_FREE_MODELS=openrouter/free
 ```
 
 Le catalogue OpenRouter `/api/v1/models` est relu périodiquement. AURA ne cible directement qu'un modèle `:free` dont les prix courants `prompt` et `completion` valent exactement zéro ; sinon elle retombe sur `openrouter/free`. Le ledger MySQL `aura_free_provider_usage` conserve le budget quotidien et `aura_free_model_scorecards` mémorise les succès, échecs et latences par modèle/rôle. Les clés ne sont jamais stockées dans ces tables.
+
+## Critère de livraison : capacité pratique prouvée
+
+Une nouvelle capacité AURA est considérée opérationnelle uniquement si une action
+a réellement été exécutée, si sa sortie a été vérifiée indépendamment, si les
+échecs sont enregistrés comme des échecs, et si le coût est maîtrisé.
+
+Vérification locale **réelle, réversible et gratuite** sur un fichier temporaire,
+sans LLM ni MySQL :
+
+```sh
+cd cloud-node
+node scripts/verify-real-action.mjs
+```
+
+La commande crée un fichier temporaire dans le workspace AURA, le relit, compare
+un SHA-256 recalculé par le noyau, supprime le fichier et vérifie la suppression.
+Elle quitte avec un code différent de zéro si une preuve manque.
+
+Audit **en lecture seule** de la disponibilité déclarée sur Hostinger :
+
+```sh
+cd cloud-node
+node scripts/audit-aura-readiness.mjs https://antiquewhite-dolphin-780448.hostingersite.com
+```
+
+Ces tests ne démontrent ni une AGI ni la correction autonome d'un service externe.
+Un plan, une recherche, un score de confiance ou une intention ne doivent jamais
+être assimilés à une opération effectivement terminée. Le mode zéro coût est
+obligatoire : relances GitHub Actions désactivées par défaut.
