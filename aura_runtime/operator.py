@@ -673,7 +673,8 @@ class RuntimeOperator:
             self.settings, "aura_runtime_cloud_personal_files_enabled", False
         )) and any(action.get("type") in {
             "files.search", "data.csv.summary", "files.compare", "files.backup",
-            "admin.locate", "admin.inventory"
+            "admin.locate", "admin.inventory",
+            "fs.list", "fs.read", "fs.write", "fs.mkdir", "process.run",
         } for action in actions):
             return {
                 "executed": False, "status": "not-executed",
