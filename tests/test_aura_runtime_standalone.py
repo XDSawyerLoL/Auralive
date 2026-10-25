@@ -121,3 +121,19 @@ def test_standalone_loads_root_dotenv_without_overriding_real_environment(monkey
     )
     _load_env_file()
     assert runtime_settings_from_env().aura_cloud_token == 'real-environment-token'
+
+
+def test_cloud_worker_bridge_token_is_the_actual_enablement_gate(monkeypatch, tmp_path):
+    monkeypatch.setenv('AURA_CLOUD_BASE_URL', 'https://aura.example')
+    monkeypatch.setenv('AURA_CLOUD_TOKEN', 'legacy-not-the-bridge')
+    monkeypatch.setenv('AURA_RUNTIME_IDENTITY_FILE', str(tmp_path / 'worker-id'))
+    monkeypatch.delenv('AURA_BRIDGE_TOKEN', raising=False)
+    monkeypatch.delenv('AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN', raising=False)
+    host = StandaloneRuntimeHost(runtime_settings_from_env())
+    worker = AuraRuntimeWorker(host, host.settings, runtime_packaging='standalone-service')
+    assert worker.enabled is False
+    assert worker.token == ''
+
+    monkeypatch.setenv('AURA_BRIDGE_TOKEN', 'local-test-bridge-token')
+    assert worker.enabled is True
+    assert worker._headers()['Authorization'] == 'Bearer local-test-bridge-token'
