@@ -316,3 +316,37 @@ risque `process` explicitement autorisé. Les commandes libres peuvent être
 réactivées par `AURA_RUNTIME_OPERATOR_UNSAFE_COMMANDS_ENABLED=true`,
 mais ce mode contourne ces limites et n'est pas recommandé.
 Le Cloud demande séparément `AURA_RUNTIME_CLOUD_PROCESS_ENABLED=true`.
+
+
+## Lecture locale de PDF administratifs
+
+Une demande française explicite, par exemple « Lis facture.pdf », permet
+désormais d'extraire **localement** le texte d'un seul PDF. L'opérateur :
+- refuse les fichiers non PDF, liens symboliques, fichiers de plus de 3 Mo et
+  documents de plus de 12 pages ;
+- extrait le texte à l'aide de la bibliothèque libre \`pypdf\` (facultative) ;
+- limite l'extraction à 16 000 caractères et 4 aperçus de 300 caractères ;
+- vérifie l'empreinte SHA-256 du fichier effectivement lu ;
+- repère les dates écrites dans le texte **sans prétendre identifier une
+  échéance juridique ou fiscale** ;
+- indique explicitement si le PDF ne contient pas de texte exploitable
+  (scan nécessitant une OCR distincte).
+
+Ce n'est ni une interprétation sémantique des obligations fiscales, ni
+un conseil juridique, ni une lecture automatique de tous les documents.
+Il n'y a **aucun OCR ni modèle payant** ; le PDF est traité comme une
+source de données non fiable. Le résultat ne peut pas être transféré à
+Hostinger sans autorisation locale spécifique de partage des documents.
+
+Le lanceur Windows \`assistant-administratif.cmd\` propose d'installer
+\`pypdf\` depuis PyPI **uniquement après accord explicite**. L'assistant
+de base ne requiert pas ce paquet.
+
+Tests reproductibles après installation gratuite de \`pypdf\` :
+
+\`\`\`powershell
+python -m pytest -q tests/test_aura_pdf_documents.py
+\`\`\`
+
+Ces tests vérifient une extraction sur un vrai PDF, la date observée,
+les refus des fichiers malformés et le parcours par l'opérateur local.
