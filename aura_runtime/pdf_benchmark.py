@@ -74,6 +74,18 @@ def run_benchmark() -> dict:
         check("Montant négatif conservé",
               any(x["value"] == "-10.50" for x in result["observed_facts"]))
 
+        from .admin_document_facts import collect_pdf_facts
+        check("Format de montant ambigu refusé",
+              collect_pdf_facts(["1,234 EUR"]) == []
+              and collect_pdf_facts(["1.234,56 EUR"]) == [])
+        labels = collect_pdf_facts([
+            "Date limite : 25/10/2026\n"
+            "Date facture : 30/10/2026"
+        ])
+        check("Échéance candidate limitée à sa propre ligne",
+              [item["kind"] for item in labels] ==
+              ["date_limite_candidate", "date_observee"])
+
         fake = root / "faux.pdf"
         fake.write_text("Je ne suis pas un PDF", encoding="utf-8")
         refused = False
