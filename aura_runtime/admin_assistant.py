@@ -169,18 +169,33 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     send these requests to an unbounded generative action planner.
     """
     raw = str(raw_request or '').strip()
-    if not raw or len(raw) > 1800:
+    if not raw:
         return None
     request = normalize(raw)
+    if len(raw) > 1800:
+        return {
+            'planner': 'deterministic-french-administrative-v1',
+            'intent': 'request-too-long',
+            'summary': 'Demande trop longue, aucune action lancée.',
+            'actions': [], 'needs': ['Rédiger une demande plus précise et courte.'],
+            'confidence': 'none',
+            'limitations': 'Entrée refusée pour éviter un plan incomplet ou risqué.',
+        }
     domain = (
         'administrat', 'document', 'papier', 'factur', 'impot', 'declar',
         'depense', 'budget', 'justificatif', 'contrat', 'salaire', 'releve',
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
         'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
-        'copie de securite', 'organis', 'class', 'rang', 'tri', 'impos', 'quittance',
-        'fiscal', 'loyer', 'sauve',
+        'copie de securite', 'organis', 'impos', 'quittance', 'fiscal', 'loyer',
+        'sauvegard',
     )
-    if not any(key in request for key in domain):
+    # Whole-word patterns prevent "triste", "étrange" and unrelated
+    # "classement de jeux" from launching a private folder scan.
+    admin_verbs = bool(re.search(
+        r'\b(?:organis\w*|ranger|range|rangez|classer|classe|classez|trier|trie|triez|tri)\b',
+        request,
+    ))
+    if not any(key in request for key in domain) and not admin_verbs:
         return None
 
     def outcome(intent, summary, actions=(), needs=(), *, confidence='limited'):
@@ -275,7 +290,7 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         return outcome('search-needs-term', 'Recherche non lancée : sujet trop imprécis.',
                        needs=('Préciser un mot ou une expression à rechercher.',))
 
-    if any(key in request for key in ('organis', 'rang', 'class', 'tri', 'administrat', 'papier', 'document', 'dossier')):
+    if admin_verbs or any(key in request for key in ('administrat', 'papier', 'document', 'dossier')):
         return outcome(
             'administrative-inventory',
             'Inventorier les documents administratifs sans les déplacer ni lire leur contenu.',
