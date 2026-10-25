@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 cd /d "%~dp0.."
 
 where python >nul 2>nul
@@ -10,6 +10,17 @@ if errorlevel 1 (
 )
 
 echo [AURA] Assistant administratif prive - local, gratuit, aucune API.
+python -c "import pypdf" >nul 2>nul
+if errorlevel 1 (
+ echo [AURA] Le module PDF gratuit pypdf n'est pas installe.
+ echo [AURA] L'assistant de base fonctionne sans ce module.
+ set /p "INSTALL_PDF=Installer pypdf gratuitement pour lire des PDF [O/N] ? "
+ if /I "!INSTALL_PDF!"=="O" (
+  python -m pip install --disable-pip-version-check "pypdf>=5,<7"
+  if errorlevel 1 echo [AURA] Installation PDF non reussie. Fonction PDF indisponible.
+ )
+)
+
 python -m aura_runtime.admin_desktop
 if errorlevel 1 (
  echo [AURA] Interface graphique non disponible.
