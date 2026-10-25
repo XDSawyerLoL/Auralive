@@ -42,6 +42,8 @@ def render_result(report: dict[str, Any]) -> str:
             if step.get('truncated'):
                 rows.append('Inventaire partiel : limite de parcours atteinte.')
             rows.append('Aucun document lu, déplacé ou envoyé. Classement à confirmer.')
+            rows.extend('Prochaine étape : ' + instruction
+                        for instruction in step.get('next_steps', [])[:4])
         elif kind == 'admin.locate':
             rows.append(f"Fichiers dont le nom correspond : {step['matches_count']}")
             rows.extend(' - ' + name for name in step['matches'])
