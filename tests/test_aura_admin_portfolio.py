@@ -146,3 +146,27 @@ async def test_cloud_cannot_read_portfolio_by_default(tmp_path):
     assert result["executed"] is False
     assert result["status"] == "not-executed"
     assert "paiements.csv" not in str(result)
+
+
+def test_invalid_bank_csv_is_reported_instead_of_silently_skipped(tmp_path):
+    prepare(tmp_path)
+    (tmp_path / "paiements.csv").write_text(
+        "colonne_inconnue;montant\nfoo;-123,45\n", encoding="utf8")
+    report = analyze_portfolio(tmp_path)
+    assert report["errors"] == [{"file": "paiements.csv", "reason": "ValueError"}]
+    assert report["payment_candidates"][0]["status"] == "unmatched_or_ambiguous"
+
+
+def test_modified_invoice_during_read_is_not_used_as_evidence(tmp_path, monkeypatch):
+    from aura_runtime import admin_portfolio
+    prepare(tmp_path)
+    real_inspect = admin_portfolio.inspect_pdf
+
+    def corrupt_before_extract(path):
+        path.write_bytes(b"MODIFIED")
+        return real_inspect(path)
+
+    monkeypatch.setattr(admin_portfolio, "inspect_pdf", corrupt_before_extract)
+    report = analyze_portfolio(tmp_path)
+    assert report["invoices"] == []
+    assert report["errors"]
