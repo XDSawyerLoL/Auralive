@@ -35,6 +35,22 @@ if errorlevel 1 (
  pause
  exit /b 1
 )
-echo [AURA] 2 suites de benchmarks locaux terminees sans API ni cout.
+echo [AURA] Verification du module PDF facultatif.
+python -c "import pypdf" >nul 2>nul
+if errorlevel 1 (
+ echo [NON CERTIFIE] Le paquet gratuit pypdf n'est pas installe.
+ echo [AURA] Les 22 tests principaux ont ete lances ; 9 tests PDF restent non verifies.
+ pause
+ exit /b 1
+)
+echo [AURA] Test de 9 extractions et refus sur des PDF TEMPORAIRES.
+python -m aura_runtime.pdf_benchmark
+if errorlevel 1 (
+ echo [ECHEC] Les tests PDF n'ont pas tous reussi.
+ pause
+ exit /b 1
+)
+echo [AURA] 31/31 controles attendus sur fichiers temporaires.
+echo [AURA] Ne valide pas le fonctionnement graphique ou le Cloud de production.
 pause
 exit /b 0
