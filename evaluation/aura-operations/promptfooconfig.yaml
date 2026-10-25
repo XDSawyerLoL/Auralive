@@ -1,0 +1,32 @@
+description: "AURA: preuves d'action vérifiables (zéro API externe)"
+prompts:
+  - "{{ case }}"
+providers:
+  - file://provider.mjs
+sharing: false
+commandLineOptions:
+  maxConcurrency: 1
+  safeMode: true
+tests:
+  - vars: { case: "research-real-evidence" }
+    assert: [{ type: equals, value: "completed" }]
+  - vars: { case: "research-status-only" }
+    assert: [{ type: equals, value: "failed" }]
+  - vars: { case: "research-unverified" }
+    assert: [{ type: equals, value: "failed" }]
+  - vars: { case: "research-running" }
+    assert: [{ type: equals, value: "waiting" }]
+  - vars: { case: "operator-proved" }
+    assert: [{ type: equals, value: "completed" }]
+  - vars: { case: "operator-plan-only" }
+    assert: [{ type: equals, value: "waiting" }]
+  - vars: { case: "operator-faked" }
+    assert: [{ type: equals, value: "failed" }]
+  - vars: { case: "worker-receipt" }
+    assert: [{ type: equals, value: "completed" }]
+  - vars: { case: "worker-empty" }
+    assert: [{ type: equals, value: "failed" }]
+  - vars: { case: "worker-rejected" }
+    assert: [{ type: equals, value: "failed" }]
+  - vars: { case: "evolution-no-change" }
+    assert: [{ type: equals, value: "completed" }]
