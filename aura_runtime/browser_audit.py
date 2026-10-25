@@ -142,3 +142,43 @@ async def audit_public_pages(
         "checks_passed": passed, "checks_total": len(rows),
         "cost_microunits": 0, "artifacts_directory": str(output), "checks": rows,
     }
+
+
+async def _main() -> int:
+    import argparse
+    import json
+    from types import SimpleNamespace
+    from .operator import RuntimeOperator
+
+    parser = argparse.ArgumentParser(description="Audit SWAPP gratuit, sans LLM ni compte.")
+    parser.add_argument("--routes", nargs="+", default=list(DEFAULT_ROUTES),
+                        help="Routes publiques SWAPP parmi / /actus /twitch /social /tv /vnhz")
+    parser.add_argument("--output", default="aura-browser-reports",
+                        help="Dossier local des preuves et du rapport JSON")
+    args = parser.parse_args()
+    output = Path(args.output).expanduser().resolve()
+    operator = RuntimeOperator(
+        None, SimpleNamespace(aura_runtime_operator_roots=[output.parent]),
+    )
+    try:
+        report = await audit_public_pages(
+            args.routes,
+            network_validator=operator._safe_public_browser_url,
+            artifacts_dir=output,
+        )
+    except Exception as error:
+        print(json.dumps({"ok": False, "executed": False,
+                          "error": f"{type(error).__name__}: {str(error)[:300]}"},
+                         ensure_ascii=False))
+        return 1
+    report_path = output / "audit-report.json"
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({"ok": report["ok"], "passed": report["checks_passed"],
+                      "total": report["checks_total"], "report": str(report_path)},
+                     ensure_ascii=False))
+    return 0 if report["ok"] else 1
+
+
+if __name__ == "__main__":
+    import asyncio
+    raise SystemExit(asyncio.run(_main()))
