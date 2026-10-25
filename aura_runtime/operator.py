@@ -67,6 +67,11 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "category": "browser",
         "risk": "browser-control",
     },
+    "admin.followup": {
+        "title": "Préparer un tableau local des contrôles administratifs non validés",
+        "category": "administrative",
+        "risk": "safe",
+    },
     "admin.portfolio": {
         "title": "Comparer localement des factures PDF et opérations CSV sans modifier les fichiers",
         "category": "administrative",
@@ -350,6 +355,12 @@ class RuntimeOperator:
         risk = definition["risk"]
         if risk not in allowed_risks:
             raise PermissionError(f"Risque {risk} non autorisé pour {kind}")
+
+        if kind == "admin.followup":
+            from .admin_portfolio import analyze_portfolio
+            from .admin_followup import build_followup_board
+            report = analyze_portfolio(self._resolve_path(action.get("path") or "."))
+            return build_followup_board(report), None
 
         if kind == "admin.portfolio":
             from .admin_portfolio import analyze_portfolio
@@ -722,7 +733,7 @@ class RuntimeOperator:
         # Cross-document correlations can expose invoice and bank identifiers.
         # Keep this capability strictly LOCAL even when older file sharing is opted in.
         if source == "aura-runtime-worker" and any(
-            action.get("type") == "admin.portfolio" for action in actions
+            action.get("type") in {"admin.portfolio", "admin.followup"} for action in actions
         ):
             return {
                 "executed": False, "status": "not-executed",
@@ -736,7 +747,7 @@ class RuntimeOperator:
         )) and any(action.get("type") in {
             "files.search", "data.csv.summary", "files.compare", "files.backup",
             "admin.locate", "admin.inventory", "admin.pdf.inspect",
-            "admin.portfolio",
+            "admin.portfolio", "admin.followup",
             "fs.list", "fs.read", "fs.write", "fs.mkdir",
         } for action in actions):
             return {
