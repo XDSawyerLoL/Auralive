@@ -155,3 +155,28 @@ test('Cloud verifies typed receipts for personal search, CSV, comparison and bac
     ...valid[3], sha256: 'not-64-hex-chars',
   })), false);
 });
+
+
+test('Cloud accepts factual administrative counts and rejects invented administrative outcomes', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const wrap = (step) => ({
+    ok: true, result: { executed: true, status: 'completed', steps: [step] },
+  });
+  const inventory = {
+    type: 'admin.inventory', ok: true, verified: true, read_only: true,
+    files_scanned: 5, files_counted: 3,
+    categories: { factures: 1, impots: 1, a_identifier: 1 },
+    limitations: ['Noms de fichiers uniquement'],
+  };
+  assert.equal(workerCompletionVerified('operator', wrap(inventory)), true);
+  assert.equal(workerCompletionVerified('operator', wrap({ ...inventory, files_counted: 9 })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({ ...inventory, verified: false })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({
+    type: 'admin.locate', ok: true, verified: true, read_only: true,
+    matches: ['facture_electricite.pdf'], matches_count: 1,
+  })), true);
+  assert.equal(workerCompletionVerified('operator', wrap({
+    type: 'admin.locate', ok: true, verified: true, read_only: true,
+    matches: [], matches_count: 1,
+  })), false);
+});
