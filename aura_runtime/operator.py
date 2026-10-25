@@ -674,7 +674,7 @@ class RuntimeOperator:
         )) and any(action.get("type") in {
             "files.search", "data.csv.summary", "files.compare", "files.backup",
             "admin.locate", "admin.inventory",
-            "fs.list", "fs.read", "fs.write", "fs.mkdir", "process.run",
+            "fs.list", "fs.read", "fs.write", "fs.mkdir",
         } for action in actions):
             return {
                 "executed": False, "status": "not-executed",
@@ -683,6 +683,17 @@ class RuntimeOperator:
                     "Effectuer la tâche avec le Runtime local ou activer explicitement le partage Cloud."
                 ],
                 "intent": str(plan.get("intent") or ""),
+                "source": source,
+            }
+        if source == "aura-runtime-worker" and not bool(getattr(
+            self.settings, "aura_runtime_cloud_process_enabled", False
+        )) and any(action.get("type") == "process.run" for action in actions):
+            return {
+                "executed": False, "status": "not-executed",
+                "reason": "Exécution de commandes depuis Cloud non autorisée.",
+                "needs": [
+                    "Activer séparément AURA_RUNTIME_CLOUD_PROCESS_ENABLED sur la machine, si nécessaire."
+                ],
                 "source": source,
             }
         reports: list[dict[str, Any]] = []
