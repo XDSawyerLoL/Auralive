@@ -1018,6 +1018,23 @@ export class CognitiveKernel {
               allowSideEffects: true,
             });
             const proof = verifyCloudWorkspaceRoundtrip(graph, result);
+            if (!proof.verified) {
+              await this.trace('operator', 'AURA Cloud sandbox verification failed', mission, {
+                delegated: false,
+                executed: false,
+                graph_id: result.graph_id,
+                verification: proof,
+              }).catch(() => {});
+              return {
+                ok: false,
+                task: mission,
+                execution_mode: 'aura-cloud-sandbox-verification-failed',
+                executed: false,
+                verification: proof,
+                graph,
+                result,
+              };
+            }
             if (proof.verified) {
               await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
                 delegated: false,
