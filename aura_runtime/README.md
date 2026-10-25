@@ -49,7 +49,7 @@ pip install -r aura_runtime/requirements.txt
 
 Browser Use et Crawl4AI font désormais partie des dépendances standard du Runtime. Sous Windows, le launcher installe aussi Chromium lors du premier bootstrap si nécessaire. Aucune API payante n'est requise : Browser Use utilise l'Ollama local configuré par AURA.
 
-3. Copier `.env.example` en `.env` à la racine du package puis renseigner au minimum `AURA_CLOUD_BASE_URL` et `AURA_CLOUD_TOKEN`. Le Runtime charge automatiquement ce fichier sans écraser les vraies variables d'environnement.
+3. Copier `.env.example` en `.env` à la racine du package puis renseigner au minimum `AURA_CLOUD_BASE_URL` et `AURA_BRIDGE_TOKEN`. Le Runtime charge automatiquement ce fichier sans écraser les vraies variables d'environnement.
 4. Sous Windows, lancer `aura_runtime\\run-aura-runtime.cmd` : le launcher crée `.env` s'il manque et installe `aiohttp` si nécessaire. Sinon lancer:
 
 ```bash
@@ -115,3 +115,19 @@ AURA_RUNTIME_DEEP_WEB_MAX_CHARS=60000
 - une mission navigateur peut utiliser jusqu'à 50 étapes, avec 25 par défaut.
 
 Pour revenir à une allowlist, mettre `AURA_RUNTIME_BROWSER_ALLOW_ALL_PUBLIC=false` puis renseigner `AURA_RUNTIME_BROWSER_DOMAINS`.
+
+## Pont Cloud : diagnostic de la connexion
+
+Le Runtime local utilise `AURA_BRIDGE_TOKEN` pour l'authentification des
+endpoints `/api/bridge/...`. Ce jeton doit être **identique** à
+`AURA_BRIDGE_TOKEN` configuré sur Hostinger. Il est distinct de
+`AURA_CLOUD_TOKEN` (accès aux autres fonctions). Le token ne doit jamais
+figurer dans GitHub ou dans les rapports.
+
+1. Définir `AURA_BRIDGE_TOKEN` sur Hostinger et sur le PC (fichier `.env` local).
+2. Définir `AURA_CLOUD_BASE_URL` sur le PC avec l'URL HTTPS du Cloud.
+3. Lancer `aura_runtime\\run-aura-runtime.cmd` sur le PC Windows.
+4. Vérifier `/api/command/status` côté Cloud : le worker doit être indiqué en ligne.
+
+Si le worker est hors ligne, aucune exécution PC ne peut être certifiée.
+Le Runtime n'ouvre aucun port entrant et ne nécessite pas de VPS.
