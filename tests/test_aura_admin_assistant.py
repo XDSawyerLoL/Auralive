@@ -224,3 +224,33 @@ async def test_cli_backup_can_be_granted_explicitly(tmp_path):
 
 def test_non_admin_request_uses_other_planner():
     assert plan_french_administrative_request('Quel temps fera-t-il demain ?') is None
+
+
+@pytest.mark.parametrize('sentence', [
+    'Trouve mes factures',
+    'Mes factures sont où ?',
+    'Montre-moi mes factures',
+    'Retrouve les factures',
+])
+def test_french_search_paraphrases_remain_deterministic(sentence):
+    plan = plan_french_administrative_request(sentence)
+    assert plan['intent'] == 'locate'
+    assert plan['actions'][0]['query'] == 'facture'
+
+
+def test_inventory_next_steps_are_grounded_in_existing_filenames(tmp_path):
+    (tmp_path / 'facture_2026.pdf').write_bytes(b'%PDF')
+    (tmp_path / 'avis_impots_2025.pdf').write_bytes(b'%PDF')
+    (tmp_path / 'inconnu.pdf').write_bytes(b'%PDF')
+    result = administrative_inventory(tmp_path)
+    instructions = ' '.join(result['next_steps'])
+    assert 'non identifiés' in instructions
+    assert 'factures' in instructions
+    assert 'fiscaux' in instructions
+    assert result['read_only'] is True
+
+
+def test_backup_phrased_as_copy_of_security_requires_explicit_filename():
+    plan = plan_french_administrative_request('Fais une copie de sécurité de notes.txt')
+    assert plan['intent'] == 'backup'
+    assert plan['actions'][0] == {'type': 'files.backup', 'path': 'notes.txt'}
