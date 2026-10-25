@@ -131,3 +131,20 @@ figurer dans GitHub ou dans les rapports.
 
 Si le worker est hors ligne, aucune exécution PC ne peut être certifiée.
 Le Runtime n'ouvre aucun port entrant et ne nécessite pas de VPS.
+
+## Audit navigateur SWAPP sans modèle payant
+
+Le Runtime comporte désormais `browser.audit`, un contrôle Playwright
+**sans Ollama ni service externe payant** sur les seules pages publiques SWAPP.
+
+Depuis la racine du dépôt, avec Python/Playwright et Chromium installés :
+
+```sh
+python -m aura_runtime.browser_audit --routes / /actus /twitch
+node evaluation/aura-operations/verify.mjs aura-browser-reports/audit-report.json
+```
+
+Le rapport indique les captures réalisées et les éventuels défauts détectés
+dans chaque viewport. Les permissions de l'opérateur imposent
+`browser-control` si l'action est déclenchée via un worker Cloud. Les
+captures ne sont pas transférées automatiquement vers Hostinger.
