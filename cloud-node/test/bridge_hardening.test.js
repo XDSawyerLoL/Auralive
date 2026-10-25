@@ -105,3 +105,24 @@ test('Cloud refuses fabricated browser audit and unsigned file write receipts', 
     type: 'fs.write', ok: true, path: 'test.txt', verified: true, sha256: 'f'.repeat(64),
   })), true);
 });
+
+test('Cloud recalculates the SHA-256 of file content instead of trusting a reported digest', async () => {
+  const { createHash } = await import('node:crypto');
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const text = 'Contenu réel du fichier AURA.';
+  const proof = {
+    ok: true, result: {
+      executed: true, status: 'completed',
+      steps: [{
+        type: 'fs.read', ok: true, path: 'allowed.txt',
+        content: text,
+        bytes: Buffer.byteLength(text, 'utf8'),
+        sha256: createHash('sha256').update(text).digest('hex'),
+      }],
+    },
+  };
+  assert.equal(workerCompletionVerified('operator', proof), true);
+  const modified = structuredClone(proof);
+  modified.result.steps[0].content = 'Contenu falsifié';
+  assert.equal(workerCompletionVerified('operator', modified), false);
+});
