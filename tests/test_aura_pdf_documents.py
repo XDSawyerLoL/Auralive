@@ -134,3 +134,17 @@ def test_negative_total_in_real_pdf_stays_negative(tmp_path):
     result = inspect_pdf(source)
     assert any(x['kind'] == 'montant_observe' and x['value'] == '-10.50'
                for x in result['observed_facts'])
+
+
+def test_reference_is_captured_with_page_even_after_short_preview(tmp_path):
+    source = tmp_path / "facture_reference_lointaine.pdf"
+    source.write_bytes(make_text_pdf(
+        "Z" * 340 + " Facture N: FAC-2026-001 Total TTC: 123,45 EUR"
+    ))
+    data = inspect_pdf(source)
+    assert data["previews"][0]["excerpt"].find("FAC-2026-001") == -1
+    assert data["reference_candidates_count"] == 1
+    ref = data["invoice_references_observed"][0]
+    assert ref["reference"] == "FAC-2026-001"
+    assert ref["page"] == 1
+    assert "FAC-2026-001" in ref["evidence"]
