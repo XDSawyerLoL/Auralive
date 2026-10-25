@@ -31,6 +31,10 @@ def argument_parser() -> argparse.ArgumentParser:
     diff.add_argument("--right", required=True)
     backup = sub.add_parser("backup", help="Créer une copie vérifiée (opération d'écriture explicite)")
     backup.add_argument("--path", required=True)
+    ask = sub.add_parser("ask", help="Demande administrative libre en français (compréhension bornée)")
+    ask.add_argument("--request", required=True, help="Ex : organise mes papiers administratifs")
+    ask.add_argument("--allow-backup", action="store_true",
+                     help="Autorise explicitement une sauvegarde, jamais un envoi/suppression")
     return parser
 
 
@@ -48,8 +52,8 @@ async def execute_command(args: argparse.Namespace) -> dict:
         "backup": {"type": "files.backup", "path": args.path}
         if args.command == "backup" else None,
     }
-    action = actions[args.command]
-    if action is None:
+    action = actions.get(args.command)
+    if args.command != "ask" and action is None:
         raise ValueError("Commande non prise en charge")
     settings = SimpleNamespace(
         aura_runtime_operator_roots=[root],
@@ -62,6 +66,12 @@ async def execute_command(args: argparse.Namespace) -> dict:
     )
     operator = RuntimeOperator(NoModel(), settings)
     risk = "local-write" if args.command == "backup" else "safe"
+    if args.command == "ask":
+        return await operator.operate(
+            args.request,
+            requested_risks={"safe", "local-write"} if args.allow_backup else {"safe"},
+            source="aura-personal-cli",
+        )
     return await operator.operate(
         json.dumps({"summary": "Tâche locale", "actions": [action]}, ensure_ascii=False),
         requested_risks={risk},
