@@ -175,7 +175,7 @@ async def test_cloud_cannot_receive_personal_document_names_by_default(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_cloud_may_receive_category_counts_not_filenames(tmp_path):
+async def test_cloud_inventory_cannot_share_even_category_counts_by_default(tmp_path):
     prepare(tmp_path)
     operator = RuntimeOperator(FailIfInvokedAI(), settings(tmp_path))
     outcome = await operator.operate(
@@ -183,9 +183,40 @@ async def test_cloud_may_receive_category_counts_not_filenames(tmp_path):
         requested_risks={'safe'},
         source='aura-runtime-worker',
     )
-    assert outcome['executed'] is True
-    assert outcome['steps'][0]['categories']['impots'] == 1
+    assert outcome['executed'] is False
+    assert outcome['status'] == 'not-executed'
+    assert 'Accès aux données personnelles' in outcome['reason']
     assert 'avis_impots_2025.pdf' not in str(outcome)
+    assert 'categories' not in outcome
+
+
+@pytest.mark.asyncio
+async def test_cloud_inventory_only_after_explicit_local_opt_in(tmp_path):
+    prepare(tmp_path)
+    config = settings(tmp_path)
+    config.aura_runtime_cloud_personal_files_enabled = True
+    operator = RuntimeOperator(FailIfInvokedAI(), config)
+    result = await operator.operate(
+        'Organise mes dossiers administratifs',
+        requested_risks={'safe'}, source='aura-runtime-worker',
+    )
+    assert result['executed'] is True
+    assert result['steps'][0]['categories']['impots'] == 1
+    assert 'avis_impots_2025.pdf' not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_unavailable_free_model_returns_factual_blocker_not_a_crash(tmp_path):
+    operator = RuntimeOperator(FailIfInvokedAI(), settings(tmp_path))
+    result = await operator.operate(
+        'Trouve-moi une solution de garde de chat demain',
+        requested_risks={'safe'}, source='local-test',
+    )
+    assert result['executed'] is False
+    assert result['status'] == 'not-executed'
+    assert result['needs']
+    assert result['error_type'] == 'AssertionError'
+
 
 
 @pytest.mark.asyncio
