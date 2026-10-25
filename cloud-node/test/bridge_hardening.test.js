@@ -59,3 +59,26 @@ test('bridge can terminalize queued or leased jobs', () => {
   assert.match(bridgeSource, /status='cancelled'/);
   assert.match(bridgeSource, /status IN \('queued','leased'\)/);
 });
+
+
+test('bridge completion requires actual executed and successful operator steps', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const good = {
+    ok: true, result: {
+      executed: true, status: 'completed',
+      steps: [{ type: 'browser.audit', ok: true, checks_passed: 2 }],
+    },
+  };
+  assert.equal(workerCompletionVerified('operator', good), true);
+  assert.equal(workerCompletionVerified('operator', {
+    ok: true, result: { executed: false, status: 'error', steps: [] },
+  }), false);
+  assert.equal(workerCompletionVerified('operator', {
+    ok: true, result: { executed: true, status: 'completed', steps: [{ type: 'browser.audit', ok: false }] },
+  }), false);
+  assert.equal(workerCompletionVerified('operator', {
+    ok: true, result: { executed: true, status: 'completed', steps: [] },
+  }), false);
+  assert.equal(workerCompletionVerified('compute', { ok: true, result: { value: 0 } }), true);
+  assert.equal(workerCompletionVerified('compute', { ok: true, result: { ok: false } }), false);
+});
