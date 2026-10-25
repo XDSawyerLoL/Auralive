@@ -180,3 +180,24 @@ test('Cloud accepts factual administrative counts and rejects invented administr
     matches: [], matches_count: 1,
   })), false);
 });
+
+
+test('Cloud rejects PDF claims without bounded extraction evidence', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const wrap = (step) => ({
+    ok: true, result: { executed: true, status: 'completed', steps: [step] },
+  });
+  const pdf = {
+    type: 'admin.pdf.inspect', ok: true, verified: true, read_only: true,
+    source_sha256: 'a'.repeat(64), bytes: 1400, pages: 1,
+    characters_extracted: 29, previews: [{ page: 1, excerpt: '25/11/2026' }],
+    dates_observed: ['25/11/2026'], limitations: ['Dates non vérifiées'],
+  };
+  assert.equal(workerCompletionVerified('operator', wrap(pdf)), true);
+  assert.equal(workerCompletionVerified('operator', wrap({ ...pdf, verified: false })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({ ...pdf, pages: 999 })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({ ...pdf, source_sha256: 'xx' })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({
+    ...pdf, previews: [{ page: 2, excerpt: 'incorrect' }],
+  })), false);
+});
