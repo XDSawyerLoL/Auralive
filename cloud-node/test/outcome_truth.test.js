@@ -92,3 +92,25 @@ test('durable evidence is required, and in-progress tasks remain waiting', () =>
     ok: true, status: 'running', evidence: ['une source'],
   }).status, 'waiting');
 });
+
+
+test('real Runtime steps count as execution evidence without pretending a status string is proof', () => {
+  assert.equal(classifyInitiativeResult('operator', {
+    executed: true, status: 'completed', steps: [
+      { type: 'browser.audit', ok: true, checks_passed: 6, checks_total: 6,
+        checks: [{ ok: true, screenshot_sha256: 'a'.repeat(64) }] },
+    ],
+  }).status, 'completed');
+  assert.equal(classifyInitiativeResult('operator', {
+    executed: true, status: 'completed', steps: [{ type: 'browser.audit', ok: true }],
+  }).status, 'failed');
+  assert.equal(classifyInitiativeResult('operator', {
+    executed: true, status: 'completed', steps: [
+      { type: 'fs.read', ok: true, path: 'allowed.txt', content: 'test' },
+      { type: 'browser.audit', ok: false, reason: 'navigation-failed' },
+    ],
+  }).status, 'failed');
+  assert.equal(classifyInitiativeResult('operator', {
+    executed: true, status: 'completed', steps: [],
+  }).status, 'failed');
+});
