@@ -179,6 +179,9 @@ def runtime_settings_from_env() -> SimpleNamespace:
         aura_runtime_cloud_personal_files_enabled=_bool(
             'AURA_RUNTIME_CLOUD_PERSONAL_FILES_ENABLED', False
         ),
+        aura_runtime_cloud_process_enabled=_bool(
+            'AURA_RUNTIME_CLOUD_PROCESS_ENABLED', False
+        ),
         aura_runtime_deep_web_enabled=_bool('AURA_RUNTIME_DEEP_WEB_ENABLED', True),
         aura_runtime_deep_web_max_chars=max(
             2_000,
