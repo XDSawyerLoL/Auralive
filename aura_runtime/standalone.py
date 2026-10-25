@@ -182,6 +182,9 @@ def runtime_settings_from_env() -> SimpleNamespace:
         aura_runtime_cloud_process_enabled=_bool(
             'AURA_RUNTIME_CLOUD_PROCESS_ENABLED', False
         ),
+        aura_runtime_operator_unsafe_commands_enabled=_bool(
+            'AURA_RUNTIME_OPERATOR_UNSAFE_COMMANDS_ENABLED', False
+        ),
         aura_runtime_deep_web_enabled=_bool('AURA_RUNTIME_DEEP_WEB_ENABLED', True),
         aura_runtime_deep_web_max_chars=max(
             2_000,
