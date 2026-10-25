@@ -55,6 +55,34 @@ const AGENT_ROLES = {
   critic: 'Tu es l’agent critique d’AURA. Cherche contradictions, hypothèses fragiles et raisons pour lesquelles le plan pourrait échouer.',
 };
 
+
+export function verifyCloudWorkspaceRoundtrip(graph = {}, outcome = {}) {
+  const actions = (Array.isArray(graph.nodes) ? graph.nodes : []).map((node) => String(node.capability || ''));
+  // A partial graph cannot establish that the requested task was completed.
+  if (!['cloud.workspace.create', 'cloud.workspace.read', 'cloud.workspace.delete']
+    .every((capability) => actions.includes(capability))) {
+    return { verified: false, reason: 'incomplete-workspace-graph' };
+  }
+  if (outcome.ok !== true || Number(outcome?.metrics?.nodes_completed || 0) !== actions.length) {
+    return { verified: false, reason: 'workspace-graph-failed' };
+  }
+  const rows = Object.values(outcome.results || {});
+  const proof = (capability) => rows.find((row) => row?.capability === capability && row?.ok === true)?.result;
+  const created = proof('cloud.workspace.create');
+  const read = proof('cloud.workspace.read');
+  const deleted = proof('cloud.workspace.delete');
+  const sha = String(created?.sha256 || '');
+  const valid = created?.created === true && read?.read === true
+    && deleted?.deleted === true && deleted?.exists_after === false
+    && String(created?.path || '') !== ''
+    && created.path === read?.path && read.path === deleted?.path
+    && /^[a-f0-9]{64}$/.test(sha) && sha === read?.sha256;
+  return valid
+    ? { verified: true, kind: 'workspace-create-read-sha256-delete',
+        sha256: sha, path: created.path, deleted: true }
+    : { verified: false, reason: 'workspace-proof-mismatch' };
+}
+
 export class CognitiveKernel {
   static VERSION = 'aura-unified-kernel-node-v3.1';
 
@@ -967,7 +995,14 @@ export class CognitiveKernel {
       try {
         const sandboxCapabilities = this.fabric.list()
           .filter((item) => String(item.provider || '') === 'aura-cloud-workspace');
-        if (sandboxCapabilities.length) {
+        // Only perform the explicitly requested sandbox test, never substitute
+        // unrelated file writes for a real incident or product repair.
+        const normalizedMission = mission.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const explicitlyRequestsRoundtrip = /\b(creer|create)\b/.test(normalizedMission)
+          && /\b(relire|lire|read)\b/.test(normalizedMission)
+          && /\b(supprimer|effacer|delete|remove)\b/.test(normalizedMission)
+          && /\bfichier de test\b/.test(normalizedMission);
+        if (sandboxCapabilities.length && explicitlyRequestsRoundtrip) {
           const compiler = new DagCompiler({ enabled: false });
           const graph = await compiler.compile(mission, sandboxCapabilities, {
             maxNodes: 8,
@@ -982,7 +1017,8 @@ export class CognitiveKernel {
               trigger: 'cloud-sandbox-operator',
               allowSideEffects: true,
             });
-            if (result.ok) {
+            const proof = verifyCloudWorkspaceRoundtrip(graph, result);
+            if (proof.verified) {
               await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
                 delegated: false,
                 executed: true,
@@ -995,6 +1031,7 @@ export class CognitiveKernel {
                 execution_mode: 'aura-cloud-sandbox',
                 executed: true,
                 authority: 'typed-reversible-cloud-workspace',
+                verification: proof,
                 graph,
                 result,
               };
