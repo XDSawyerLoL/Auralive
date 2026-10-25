@@ -414,3 +414,29 @@ désormais **43 contrôles locaux attendus** : 7 personnels, 15 administratifs,
 11 PDF et 10 de rapprochements. Un échec signifie **non certifié**.
 L'application Windows installée et la production Hostinger doivent toujours
 être testées séparément.
+
+
+## Tableau de suivi administratif local
+
+Commande française : **« Prépare mon suivi administratif »** ou bouton
+**« Mon suivi administratif »** dans la fenêtre Windows.
+
+Le tableau utilise le rapprochement local des PDF et CSV pour afficher
+des contrôles à confirmer : dates candidates avec page source, opérations
+rapprochées avec justificatifs, doublons identiques, fichiers non lus et
+documents sans texte. Il n'interprète pas une date comme une obligation
+juridique certaine ni une opération candidate comme un paiement confirmé.
+
+Les tâches ont des identifiants reproductibles (selon la preuve) et restent
+toutes au statut **À vérifier**. Le tableau ne stocke pas d'approbation, ne
+modifie aucun document, n'envoie aucune information et ne crée aucun rappel.
+Les analyses incomplètes ou tronquées sont explicitement signalées.
+
+**Confidentialité :** cette action ne peut être exécutée par le worker Cloud,
+même si d'autres accès aux fichiers locaux ont été activés. Elle reste réservée
+à la machine et au dossier que l'utilisateur sélectionne.
+
+Tests supplémentaires : `python -m aura_runtime.admin_followup_benchmark`
+(9 scénarios). Avec les autres modules, le lanceur Windows attend
+**52/52 contrôles réussis**. Cette validation couvre les modules locaux,
+pas une certification automatique de l'application Windows entière.
