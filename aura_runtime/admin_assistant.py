@@ -177,7 +177,8 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         'depense', 'budget', 'justificatif', 'contrat', 'salaire', 'releve',
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
         'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
-        'copie de securite',
+        'copie de securite', 'organis', 'class', 'rang', 'tri', 'impos', 'quittance',
+        'fiscal', 'loyer', 'sauve',
     )
     if not any(key in request for key in domain):
         return None
@@ -193,17 +194,23 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     # Block external or destructive operations, even if another keyword
     # would otherwise produce a safe file action.
     dangerous_verbs = (
-        'paie', 'payer', 'achete', 'transfere', 'envoie', 'envoyer',
-        'expedie', 'depose', 'deposer', 'transmets', 'televerse',
-        'supprime', 'efface', 'detruis', 'declare', 'declarer',
-        'signe', 'resilie', 'annule',
+        'paie', 'paye', 'payer', 'payez', 'achete', 'acheter',
+        'transfere', 'transferer', 'envoie', 'envoyer', 'envoyez',
+        'expedie', 'expedier', 'depose', 'deposer', 'transmets', 'transmettre',
+        'televerse', 'televerser', 'supprime', 'supprimer', 'efface', 'effacer',
+        'detruis', 'detruire', 'declare', 'declarer', 'signe', 'signer',
+        'resilie', 'resilier', 'annule', 'annuler', 'soumettre', 'publier',
     )
-    # "Bulletin de paie" is a document, not an instruction to pay.
-    risky_command = re.search(
-        r'\b(?:' + '|'.join(dangerous_verbs) + r')\b'
-        r'(?=[\s-]+(?:mes|mon|ma|le|la|les|des|de|un|une|ce|cette|tous|toutes|moi|l)\b)',
-        request,
-    )
+    # Match verbs anywhere, not merely "envoie mes". Do not confuse the
+    # document phrase "bulletin de paie" with an order to pay.
+    risky_command = False
+    for matched in re.finditer(r'\b(?:' + '|'.join(dangerous_verbs) + r')\b', request):
+        token = matched.group(0)
+        before = request[max(0, matched.start() - 3):matched.start()]
+        if token == 'paie' and before == 'de ':
+            continue
+        risky_command = True
+        break
     if risky_command or 'virement' in request or 'signature electronique' in request:
         return outcome(
             'external-or-destructive-request',
@@ -254,6 +261,8 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
                 ('assuran', 'assurance'), ('mutuelle', 'mutuelle'),
                 ('sante', 'sante'), ('logement', 'logement'),
                 ('identit', 'identite'), ('retraite', 'retraite'),
+                ('impos', 'impos'), ('fiscal', 'fiscal'),
+                ('quittance', 'quittance'), ('loyer', 'loyer'),
             ] if key in request), '')
         if term:
             if quoted:
