@@ -375,3 +375,42 @@ et le programme ne déclare pas le chantier entièrement validé.
 L'ensemble prouve uniquement les chemins de code examinés sur
 une machine locale ; il ne certifie ni l'installation Windows de
 l'utilisateur, ni les contenus privés, ni Hostinger.
+
+
+## Analyse locale de plusieurs factures et paiements
+
+La demande **« Analyse mes factures et paiements »** recherche dans le dossier
+explicitement autorisé les PDF de facture et CSV bancaires, en **lecture seule**.
+Le bouton est accessible dans la fenêtre Windows AURA.
+
+- Les doublons sont signalés seulement pour des fichiers strictement
+  identiques (SHA-256), sans suppression.
+- Un rapprochement est seulement **possible**, lorsque la référence de facture
+  est présente explicitement dans la transaction ET que le montant correspond.
+  Un montant identique à lui seul ne prouve rien.
+- Les paiements positifs, références partielles, multiples transactions
+  candidates et factures en doublon ne sont jamais déclarés réglés.
+- Les fichiers sont limités à 60 éléments, 500 entrées traversées,
+  20 Mo cumulés, PDF 3 Mo chacun et CSV 1 Mo chacun ; les fichiers
+  cachés et liens symboliques ne sont pas parcourus.
+- Les PDF scannés sans texte, les références absentes et les CSV non
+  conformes sont signalés, pas inventés. Les résultats peuvent être partiels.
+- Aucune confirmation de paiement, action bancaire ou fiscale ni déplacement
+  n'est effectué. Aucun modèle, API distante, OCR ni service payant.
+
+**Cette analyse reste exclusivement locale**, même si le transfert d'autres
+données personnelles vers Hostinger est explicitement activé.
+Les noms de facture, montants et références ne sont donc pas envoyés au Cloud.
+
+Vérification indépendante sur des fichiers PDF/CSV de test :
+
+```powershell
+python -m aura_runtime.admin_portfolio_benchmark
+python -m pytest -q tests/test_aura_admin_portfolio.py
+```
+
+Le bouton « Vérifier AURA » et le script `verifier-assistant.cmd` comportent
+désormais **43 contrôles locaux attendus** : 7 personnels, 15 administratifs,
+11 PDF et 10 de rapprochements. Un échec signifie **non certifié**.
+L'application Windows installée et la production Hostinger doivent toujours
+être testées séparément.
