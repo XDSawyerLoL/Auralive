@@ -551,7 +551,7 @@ class RuntimeOperator:
         configured = self.operator_allowed_risks
         requested = {
             str(item).strip().casefold()
-            for item in (requested_risks or configured)
+            for item in (configured if requested_risks is None else requested_risks)
             if str(item).strip()
         }
         allowed = configured.intersection(requested)
