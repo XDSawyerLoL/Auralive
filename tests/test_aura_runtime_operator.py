@@ -221,3 +221,18 @@ async def test_public_browser_guard_rejects_localhost(tmp_path):
     operator = RuntimeOperator(FakeAI(), settings(tmp_path))
     with pytest.raises(PermissionError, match="local"):
         await operator._safe_public_browser_url("http://localhost:3000/private")
+
+
+@pytest.mark.asyncio
+async def test_explicit_empty_risk_list_refuses_sensitive_operations(tmp_path):
+    operator = RuntimeOperator(FakeAI(), settings(tmp_path))
+    original = tmp_path / 'must-not-change.txt'
+    original.write_text('protected', encoding='utf-8')
+    result = await operator.operate(
+        '{"actions":[{"type":"fs.write","path":"must-not-change.txt","content":"bad"}]}',
+        requested_risks=set(),
+    )
+    assert result['executed'] is False
+    assert result['status'] == 'error'
+    assert 'non autorisé' in result['error']
+    assert original.read_text(encoding='utf-8') == 'protected'
