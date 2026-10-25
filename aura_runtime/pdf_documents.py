@@ -74,6 +74,8 @@ def inspect_pdf(path: Path) -> dict[str, Any]:
     # All fields are observations with a page and verbatim evidence.
     from .admin_document_facts import collect_pdf_facts
     evidence = collect_pdf_facts(page_texts, max_facts=30)
+    from .admin_document_facts import collect_invoice_references
+    invoice_refs = collect_invoice_references(page_texts, max_hits=12)
 
     # Reuse calendar-validated observations. A string such as 31/02/2026
     # must never become a factual date simply because it matched a regex.
@@ -91,6 +93,8 @@ def inspect_pdf(path: Path) -> dict[str, Any]:
         "dates_observed": list(dict.fromkeys(date_strings))[:20],
         "observed_facts": evidence,
         "facts_count": len(evidence),
+        "invoice_references_observed": invoice_refs,
+        "reference_candidates_count": len(invoice_refs),
         "mode": "local-pdf-text-extraction", "read_only": True,
         "limitations": [
             "Dates détectées dans le texte, pas des échéances juridiquement vérifiées.",
