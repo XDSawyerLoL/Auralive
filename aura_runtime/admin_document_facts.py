@@ -17,7 +17,7 @@ DATE = re.compile(
 )
 # Euro sign is not a word character, so its trailing boundary is optional.
 AMOUNT = re.compile(
-    r"(?<![\w])(?P<number>(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,9})"
+    r"(?<![\w\d])(?P<sign>[-−]?[ \u00a0\u202f]*)(?P<number>(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,9})"
     r"(?:[,.]\d{1,2})?)\s*(?P<currency>€|EUR)(?![A-Za-z])",
     re.IGNORECASE,
 )
@@ -75,7 +75,9 @@ def collect_pdf_facts(pages: list[str], *, max_facts: int = 30) -> list[dict[str
             number = match["number"].replace(" ", "").replace("\u00a0", "").replace("\u202f", "")
             try:
                 amount = Decimal(number.replace(",", "."))
-                if not amount.is_finite() or amount < 0:
+                if "-" in match["sign"] or "−" in match["sign"]:
+                    amount = -amount
+                if not amount.is_finite():
                     continue
             except InvalidOperation:
                 continue
