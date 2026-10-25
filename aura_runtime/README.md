@@ -304,3 +304,15 @@ Ce lanceur exécute le benchmark personnel (7 contrôles) puis celui des
 intentions administratives (15 contrôles) sur des fichiers temporaires.
 Si une opération échoue, le programme renvoie un code d'erreur et
 n'affiche pas de certification de réussite.
+
+
+### Exécution de commandes
+
+Les interpréteurs généraux (`python -c`, `node -e`, `npx`) sont
+refusés par défaut, même si l'exécutable figure dans la liste locale.
+Les commandes de vérification (`python -m pytest`, `python -m compileall`,
+`node --test`, `git diff`, `cargo check`) restent possibles avec le
+risque `process` explicitement autorisé. Les commandes libres peuvent être
+réactivées par `AURA_RUNTIME_OPERATOR_UNSAFE_COMMANDS_ENABLED=true`,
+mais ce mode contourne ces limites et n'est pas recommandé.
+Le Cloud demande séparément `AURA_RUNTIME_CLOUD_PROCESS_ENABLED=true`.
