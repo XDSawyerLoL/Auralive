@@ -379,3 +379,34 @@ async def test_cloud_file_opt_in_does_not_authorize_process_execution(tmp_path):
     )
     assert result['executed'] is False
     assert 'Exécution de commandes depuis Cloud non autorisée' in result['reason']
+
+
+@pytest.mark.parametrize('sentence', [
+    'Où est ma facture internet ?',
+    'Où se trouve mon bulletin de paie ?',
+    'Affiche mes factures',
+    'Je voudrais voir mes factures',
+    'Montre mes justificatifs',
+])
+def test_more_natural_french_document_lookups(sentence):
+    plan = plan_french_administrative_request(sentence)
+    assert plan is not None
+    assert plan['intent'] == 'locate'
+    assert plan['actions'][0]['type'] == 'admin.locate'
+
+
+@pytest.mark.parametrize('sentence', [
+    'Compare facture_2025.pdf avec facture_2026.pdf',
+    'Compare fichier_1.docx avec fichier_2.docx',
+])
+def test_unsupported_binary_document_comparisons_are_explained_not_executed(sentence):
+    plan = plan_french_administrative_request(sentence)
+    assert plan['intent'] == 'compare-unsupported-format'
+    assert plan['actions'] == []
+    assert plan['needs']
+
+
+def test_true_utf8_document_comparison_remains_available():
+    plan = plan_french_administrative_request('Compare version_1.txt avec version_2.txt')
+    assert plan['intent'] == 'compare'
+    assert plan['actions'][0]['type'] == 'files.compare'
