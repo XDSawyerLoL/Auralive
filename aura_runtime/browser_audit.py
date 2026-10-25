@@ -27,7 +27,7 @@ def audit_target_url(value: str) -> str:
 def grade_navigation(*, requested_path: str, final_url: str, status: int | None,
                      title: str, body_visible: bool, screenshot_digest: str,
                      page_errors: list[str], horizontal_overflow_px: int = 0,
-                     broken_images: int = 0) -> dict[str, Any]:
+                     broken_images: int = 0, visible_text_chars: int = -1) -> dict[str, Any]:
     problems = []
     try:
         final = audit_target_url(final_url)
@@ -42,6 +42,8 @@ def grade_navigation(*, requested_path: str, final_url: str, status: int | None,
         problems.append("titre-absent")
     if not body_visible:
         problems.append("contenu-invisible")
+    if visible_text_chars >= 0 and visible_text_chars < 30:
+        problems.append("interface-vide-ou-non-hydratee")
     if len(screenshot_digest) != 64 or any(c not in "0123456789abcdef" for c in screenshot_digest):
         problems.append("capture-non-verifiee")
     if page_errors:
@@ -83,7 +85,12 @@ async def audit_public_pages(
                         request = route.request
                         scheme = urlparse(request.url).scheme.casefold()
                         if scheme not in {"http", "https"}:
-                            await route.continue_()
+                            # A public page must never navigate to local
+                            # file:, browser extension, or internal schemes.
+                            if scheme in {"data", "blob"} and not request.is_navigation_request():
+                                await route.continue_()
+                            else:
+                                await route.abort()
                             return
                         if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
                             await route.abort()
@@ -109,13 +116,18 @@ async def audit_public_pages(
                         screenshot_file = ""
                         overflow_px = 0
                         broken_images = 0
+                        visible_text_chars = 0
                         try:
                             await network_validator(requested_url)
                             response = await page.goto(requested_url, wait_until="domcontentloaded", timeout=16000)
                             status = response.status if response is not None else None
                             final_url = page.url
                             title = (await page.title())[:160]
+                            # DOMContentLoaded alone misses a React SPA still
+                            # hydrating. Give the client a bounded render window.
+                            await page.wait_for_timeout(1200)
                             body_visible = bool(await page.locator("body").is_visible())
+                            visible_text_chars = len((await page.locator("body").inner_text())[:12000].strip())
                             overflow_px = int(await page.evaluate(
                                 "() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)"
                             ))
@@ -137,6 +149,7 @@ async def audit_public_pages(
                             status=status, title=title, body_visible=body_visible,
                             screenshot_digest=screenshot_digest, page_errors=errors,
                             horizontal_overflow_px=overflow_px, broken_images=broken_images,
+                            visible_text_chars=visible_text_chars,
                         )
                         rows.append({
                             "route": requested_path, "viewport": viewport_name,
@@ -145,6 +158,7 @@ async def audit_public_pages(
                             "errors": errors[:4],
                             "horizontal_overflow_px": overflow_px,
                             "broken_images": broken_images,
+                            "visible_text_chars": visible_text_chars,
                             **verdict,
                         })
                 finally:
