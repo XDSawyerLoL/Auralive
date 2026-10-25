@@ -195,7 +195,7 @@ export function workerCompletionVerified(kind, payload = {}) {
       }
       // This highly sensitive correlation is intentionally local-only.
       // Remote workers cannot assert that cross-document personal analysis ran.
-      if (step.type === 'admin.portfolio') return false;
+      if (step.type === 'admin.portfolio' || step.type === 'admin.followup') return false;
       if (step.type === 'admin.pdf.inspect') {
         return step.verified === true && step.read_only === true
           && /^([a-f0-9]{64})$/.test(String(step.source_sha256 || ''))
