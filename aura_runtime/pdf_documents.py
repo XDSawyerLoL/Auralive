@@ -75,11 +75,12 @@ def inspect_pdf(path: Path) -> dict[str, Any]:
     from .admin_document_facts import collect_pdf_facts
     evidence = collect_pdf_facts(page_texts, max_facts=30)
 
-    # Strictly observed date strings, without guessing document purpose.
-    date_strings = re.findall(
-        r"\b(?:0?[1-9]|[12][0-9]|3[01])[/.-](?:0?[1-9]|1[012])[/.-](?:20[0-9]{2}|[0-9]{2})\b",
-        extracted,
-    )
+    # Reuse calendar-validated observations. A string such as 31/02/2026
+    # must never become a factual date simply because it matched a regex.
+    date_strings = list(dict.fromkeys(
+        item["raw"] for item in evidence
+        if item["kind"] in {"date_observee", "date_limite_candidate"}
+    ))
     return {
         "type": "admin.pdf.inspect", "ok": True, "verified": True,
         "path": str(path), "source_sha256": sha256(data).hexdigest(),
