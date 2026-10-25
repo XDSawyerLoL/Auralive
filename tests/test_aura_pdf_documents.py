@@ -106,3 +106,31 @@ def test_pdf_followup_requires_explicit_file():
     from aura_runtime.admin_chat import complete_followup
     assert complete_followup('pdf-needs-file', 'facture.pdf') == 'Lis facture.pdf'
     assert complete_followup('pdf-needs-file', '../facture.pdf') is None
+
+
+def test_real_pdf_exposes_date_and_total_with_page_source(tmp_path):
+    source = tmp_path / 'test_total.pdf'
+    source.write_bytes(make_text_pdf('Date limite: 25/11/2026 Total TTC: 123,45 EUR'))
+    result = inspect_pdf(source)
+    assert result['facts_count'] == len(result['observed_facts'])
+    assert any(x['kind'] == 'total_candidat' and x['value'] == '123.45'
+               and x['page'] == 1 and '123,45' in x['evidence']
+               for x in result['observed_facts'])
+    assert any(x['kind'] == 'date_limite_candidate' and x['value'] == '2026-11-25'
+               for x in result['observed_facts'])
+
+
+def test_impossible_date_in_pdf_is_not_reported(tmp_path):
+    source = tmp_path / 'invalid_date.pdf'
+    source.write_bytes(make_text_pdf('Date limite: 31/02/2026'))
+    result = inspect_pdf(source)
+    assert result['dates_observed'] == []
+    assert result['facts_count'] == 0
+
+
+def test_negative_total_in_real_pdf_stays_negative(tmp_path):
+    source = tmp_path / 'refund.pdf'
+    source.write_bytes(make_text_pdf('Remboursement -10,50 EUR'))
+    result = inspect_pdf(source)
+    assert any(x['kind'] == 'montant_observe' and x['value'] == '-10.50'
+               for x in result['observed_facts'])
