@@ -249,6 +249,13 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     if any(key in request for key in ('compar', 'differenc', 'changement entre')):
         files = _filenames(raw)
         if len(files) == 2:
+            supported = {'.txt', '.md', '.csv', '.json', '.log'}
+            if any(Path(name).suffix.lower() not in supported for name in files):
+                return outcome(
+                    'compare-unsupported-format',
+                    'Comparaison non exécutée : seuls les fichiers texte UTF-8 sont pris en charge.',
+                    needs=('Convertir les deux documents en texte UTF-8, après validation humaine.',),
+                )
             return outcome('compare', 'Comparer deux versions textuelles désignées.',
                            ({'type': 'files.compare', 'left': files[0], 'right': files[1]},),
                            confidence='explicit-files')
@@ -266,7 +273,8 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
                        needs=('Choisir un fichier CSV de dépenses.',))
 
     if any(key in request for key in ('retrouv', 'trouv', 'cherche', 'recherch',
-                                      'ou sont', 'sont ou', 'montre')):
+                                      'ou sont', 'sont ou', 'ou est', 'ou se trouve',
+                                      'montre', 'affiche', 'voir mes', 'voir mon', 'voir ma')):
         # Search only an explicit quotation or a narrow, known subject.
         quoted = [q.strip() for q in QUOTED_RE.findall(raw)]
         if quoted and len(quoted[0]) <= 120:
