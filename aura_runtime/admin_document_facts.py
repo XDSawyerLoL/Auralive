@@ -17,7 +17,7 @@ DATE = re.compile(
 )
 # Euro sign is not a word character, so its trailing boundary is optional.
 AMOUNT = re.compile(
-    r"(?<![\w\d])(?P<sign>[-−]?[ \u00a0\u202f]*)(?P<number>(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,9})"
+    r"(?<![\w\d.,])(?P<sign>[-−]?[ \u00a0\u202f]*)(?P<number>(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,9})"
     r"(?:[,.]\d{1,2})?)\s*(?P<currency>€|EUR)(?![A-Za-z])",
     re.IGNORECASE,
 )
