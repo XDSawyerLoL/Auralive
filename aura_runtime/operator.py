@@ -68,6 +68,26 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "category": "browser",
         "risk": "browser-control",
     },
+    "files.search": {
+        "title": "Retrouver une expression dans des fichiers texte autorisés",
+        "category": "filesystem",
+        "risk": "safe",
+    },
+    "data.csv.summary": {
+        "title": "Calculer les statistiques vérifiables d'un CSV local",
+        "category": "data",
+        "risk": "safe",
+    },
+    "files.compare": {
+        "title": "Comparer deux versions texte et produire les différences",
+        "category": "filesystem",
+        "risk": "safe",
+    },
+    "files.backup": {
+        "title": "Sauvegarder une copie vérifiée sans écraser l'original",
+        "category": "filesystem",
+        "risk": "local-write",
+    },
 }
 
 
@@ -306,6 +326,23 @@ class RuntimeOperator:
         if risk not in allowed_risks:
             raise PermissionError(f"Risque {risk} non autorisé pour {kind}")
 
+        if kind in {"files.search", "data.csv.summary", "files.compare", "files.backup"}:
+            from .personal_tasks import search_text, summarize_csv, compare_text, backup_file
+            if kind == "files.search":
+                report = search_text(
+                    self._resolve_path(action.get("path") or "."),
+                    str(action.get("query") or ""),
+                )
+                return report, None
+            if kind == "data.csv.summary":
+                return summarize_csv(self._resolve_path(action.get("path") or "")), None
+            if kind == "files.compare":
+                return compare_text(
+                    self._resolve_path(action.get("left") or ""),
+                    self._resolve_path(action.get("right") or ""),
+                ), None
+            return backup_file(self._resolve_path(action.get("path") or ""))
+
         if kind == "system.info":
             return {
                 "type": kind,
@@ -540,7 +577,10 @@ class RuntimeOperator:
             try:
                 kind = rollback.get("type")
                 path = self._resolve_path(rollback.get("path") or "")
-                if kind == "fs.write":
+                if kind == "files.backup" and rollback.get("created"):
+                    if path.exists():
+                        await asyncio.to_thread(path.unlink)
+                elif kind == "fs.write":
                     if rollback.get("existed"):
                         data = bytes.fromhex(str(rollback.get("previous_hex") or ""))
                         await asyncio.to_thread(path.write_bytes, data)
