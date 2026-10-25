@@ -119,6 +119,7 @@ class AdministrativeDesktop(tk.Tk):
             self.pending_intent = plan["intent"] if plan["intent"] in {
                 "budget-needs-csv", "compare-needs-files", "backup-needs-file",
                 "search-needs-term",
+                "pdf-needs-file",
             } else ""
             details = plan["summary"]
             if plan.get("needs"):
