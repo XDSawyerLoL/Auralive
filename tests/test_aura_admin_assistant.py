@@ -327,3 +327,40 @@ def test_long_administrative_input_is_rejected_without_using_ai():
     result = plan_french_administrative_request('Organise mes documents ' + 'x' * 2000)
     assert result['actions'] == []
     assert result['intent'] == 'request-too-long'
+
+
+@pytest.mark.asyncio
+async def test_cloud_cannot_bypass_personal_guard_using_legacy_fs_read(tmp_path):
+    prepare(tmp_path)
+    operator = RuntimeOperator(FailIfInvokedAI(), settings(tmp_path))
+    result = await operator.operate(
+        '{"actions":[{"type":"fs.read","path":"notes.txt"}]}',
+        requested_risks={'safe'}, source='aura-runtime-worker',
+    )
+    assert result['executed'] is False
+    assert 'Accès aux données personnelles' in result['reason']
+    assert 'Facture réglée' not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_cloud_cannot_bypass_personal_guard_using_fs_list(tmp_path):
+    prepare(tmp_path)
+    operator = RuntimeOperator(FailIfInvokedAI(), settings(tmp_path))
+    result = await operator.operate(
+        '{"actions":[{"type":"fs.list","path":"."}]}',
+        requested_risks={'safe'}, source='aura-runtime-worker',
+    )
+    assert result['executed'] is False
+    assert 'avis_impots_2025.pdf' not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_cloud_cannot_execute_general_process_without_local_opt_in(tmp_path):
+    operator = RuntimeOperator(FailIfInvokedAI(), settings(tmp_path))
+    result = await operator.operate(
+        '{"actions":[{"type":"process.run","command":"python",'
+        '"args":["-c","print(42)"],"cwd":"."}]}',
+        requested_risks={'process'}, source='aura-runtime-worker',
+    )
+    assert result['executed'] is False
+    assert result['status'] == 'not-executed'
