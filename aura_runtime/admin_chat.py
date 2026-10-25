@@ -46,6 +46,33 @@ def render_result(report: dict[str, Any]) -> str:
             rows.append('Aucun document lu, déplacé ou envoyé. Classement à confirmer.')
             rows.extend('Prochaine étape : ' + instruction
                         for instruction in step.get('next_steps', [])[:4])
+        elif kind == 'admin.portfolio':
+            rows.append(
+                f"Documents examinés : {step['documents_scanned']}; "
+                f"doublons exacts : {len(step['duplicates_exact_sha256'])}; "
+                f"factures : {len(step['invoices'])}."
+            )
+            for group in step.get('duplicates_exact_sha256', [])[:12]:
+                rows.append("Doublons SHA-256 : " + " / ".join(group))
+            translations = {
+                'candidate_match': 'Rapprochement possible — non confirmé',
+                'unmatched_or_ambiguous': 'Aucun rapprochement unique démontré',
+                'insufficient_evidence': 'Référence ou montant insuffisant',
+                'ambiguous_shared_transaction': 'Même opération associée à plusieurs factures',
+            }
+            for item in step.get('payment_candidates', [])[:30]:
+                detail = translations.get(item.get('status'), 'À examiner')
+                rows.append(f"{item['invoice']} : {detail}")
+                if item.get('transaction_file'):
+                    rows.append(
+                        f"   À vérifier : {item['transaction_file']}, "
+                        f"ligne {item['transaction_row']} — {item['amount']} EUR"
+                    )
+            for issue in step.get('errors', [])[:10]:
+                rows.append(f"Non examiné : {issue['file']} ({issue['reason']})")
+            if step.get('limit_reached') or step.get('errors'):
+                rows.append("Analyse partielle : tous les fichiers n'ont pas été analysés.")
+            rows.append("Aucun paiement confirmé, aucun document déplacé ou supprimé.")
         elif kind == 'admin.pdf.inspect':
             rows.append(f"PDF : {step['pages']} page(s), {step['characters_extracted']} caractères extraits.")
             rows.append(f"Empreinte SHA-256 : {step['source_sha256']}")
