@@ -58,6 +58,18 @@ def render_result(report: dict[str, Any]) -> str:
             if step.get('dates_observed'):
                 rows.append('Dates observées (non vérifiées) : ' + ', '.join(
                     step['dates_observed'][:20]))
+            labels = {
+                'date_observee': 'Date observée',
+                'date_limite_candidate': 'Échéance possible (à confirmer)',
+                'montant_observe': 'Montant observé',
+                'total_candidat': 'Total possible (à confirmer)',
+            }
+            for item in step.get('observed_facts', [])[:30]:
+                rows.append(
+                    f"Page {item['page']} — "
+                    f"{labels.get(item['kind'], 'Fait observé')} : "
+                    f"{item['raw']} [preuve : {item['evidence']}]"
+                )
             if step.get('text_truncated'):
                 rows.append('Extraction partielle : limite de texte atteinte.')
             rows.append('Aucune échéance ni obligation administrative déduite automatiquement.')
