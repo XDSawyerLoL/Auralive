@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-import aiohttp
 
 from .open_capabilities import OpenCapabilities
 
@@ -515,6 +514,9 @@ class RuntimeOperator:
             return result, None
 
         if kind == "http.get":
+            # Administrative local mode requires only the Python standard
+            # library; optional HTTP dependencies are loaded on demand.
+            import aiohttp
             url = await self._safe_public_url(str(action.get("url") or ""))
             timeout = aiohttp.ClientTimeout(
                 total=int(getattr(self.settings, "aura_runtime_operator_http_timeout_seconds", 20))
