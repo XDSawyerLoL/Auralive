@@ -41,6 +41,13 @@ def _context(text: str, start: int, end: int, *, before: int = 75, after: int = 
     return " ".join(text[from_pos:to_pos].split())[:175]
 
 
+def _prefix(text: str, start: int, *, max_chars: int = 65) -> str:
+    """Only preceding content on the SAME line can label a value."""
+    previous_line = text.rfind("\n", max(0, start - max_chars), start)
+    beginning = max(0, start - max_chars, previous_line + 1)
+    return text[beginning:start]
+
+
 def collect_pdf_facts(pages: list[str], *, max_facts: int = 30) -> list[dict[str, Any]]:
     """Observe facts present verbatim on specific pages, in bounded numbers."""
     facts: list[dict[str, Any]] = []
@@ -53,7 +60,7 @@ def collect_pdf_facts(pages: list[str], *, max_facts: int = 30) -> list[dict[str
             except ValueError:
                 continue
             context = _context(text, match.start(), match.end())
-            prefix = context[:context.find(match.group(0))].strip()
+            prefix = _prefix(text, match.start()).strip()
             kind = "date_limite_candidate" if DUE_HINT.search(prefix) else "date_observee"
             facts.append({
                 "kind": kind, "page": page_number, "raw": match.group(0),
