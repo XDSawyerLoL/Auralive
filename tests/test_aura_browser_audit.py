@@ -91,3 +91,15 @@ async def test_browser_audit_requires_browser_control_permission(monkeypatch, tm
     )
     assert result["executed"] is False and result["status"] == "error"
     assert "non autorisé" in result["error"]
+
+
+def test_mobile_overflow_and_broken_images_are_falsifiable_failures():
+    base = dict(
+        requested_path="/twitch", final_url="https://swapp.tv/twitch", status=200,
+        title="Live SWAPP", body_visible=True, screenshot_digest="b" * 64,
+        page_errors=[],
+    )
+    assert grade_navigation(**base)["ok"]
+    assert "debordement-horizontal" in grade_navigation(**base, horizontal_overflow_px=24)["problems"]
+    assert "images-cassees" in grade_navigation(**base, broken_images=2)["problems"]
+    assert grade_navigation(**base, horizontal_overflow_px=4)["ok"]
