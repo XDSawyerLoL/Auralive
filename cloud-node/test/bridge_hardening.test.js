@@ -216,3 +216,23 @@ test('Cloud rejects PDF claims without bounded extraction evidence', async () =>
     ...pdf, observed_facts: [{ ...pdf.observed_facts[0], certainty: 'legalement_verifie' }],
   })), false);
 });
+
+
+test('Cloud refuses all administrative portfolio receipts even if a worker claims success', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const claimed = {
+    ok: true,
+    result: {
+      executed: true, status: 'completed',
+      steps: [{
+        type: 'admin.portfolio', ok: true, verified: true, read_only: true,
+        mode: 'local-multi-document-evidence', documents_scanned: 2,
+        duplicates_exact_sha256: [], payment_candidates: [{
+          invoice: 'facture.pdf', status: 'candidate_match',
+          reference: 'FAC-2026-001', amount: '123.45',
+        }],
+      }],
+    },
+  };
+  assert.equal(workerCompletionVerified('operator', claimed), false);
+});
