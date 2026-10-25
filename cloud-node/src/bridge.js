@@ -193,6 +193,21 @@ export function workerCompletionVerified(kind, payload = {}) {
           && step.checks.every((check) =>
             check?.ok === true && /^[a-f0-9]{64}$/.test(String(check?.screenshot_sha256 || '')));
       }
+      if (step.type === 'admin.inventory') {
+        return step.verified === true && step.read_only === true
+          && Number.isInteger(step.files_counted) && step.files_counted >= 0
+          && Number.isInteger(step.files_scanned) && step.files_scanned >= step.files_counted
+          && step.categories && typeof step.categories === 'object'
+          && Object.values(step.categories).every((count) =>
+            Number.isInteger(count) && count >= 0)
+          && Object.values(step.categories).reduce((a, b) => a + b, 0) === step.files_counted
+          && Array.isArray(step.limitations);
+      }
+      if (step.type === 'admin.locate') {
+        return step.verified === true && step.read_only === true
+          && Array.isArray(step.matches) && step.matches.length === step.matches_count
+          && step.matches.every((name) => typeof name === 'string' && name.length > 0);
+      }
       if (step.type === 'files.search') {
         return step.verified === true && Number.isInteger(step.matches_count)
           && step.matches_count >= 0 && Array.isArray(step.matches)
