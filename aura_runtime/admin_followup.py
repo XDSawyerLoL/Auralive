@@ -78,11 +78,12 @@ def build_followup_board(portfolio: dict[str, Any]) -> dict[str, Any]:
                       f'Date figurant dans le document : {day}. '
                       'Sa signification et les éventuelles obligations restent à confirmer.',
                       filename, proof={'page': page, 'date': day,
-                                       'excerpt': evidence, 'certainty': 'candidate_only'}))
+                                       'excerpt': evidence, 'certainty': 'candidate_only',
+                                       'source_sha256': invoice.get('source_sha256', '')}))
         if not invoice.get('text_detected', False):
             add(_task('documents_a_lire', 'PDF sans texte exploitable',
                       'Lecture de la couche texte impossible ; examen manuel ou OCR local nécessaire.',
-                      filename))
+                      filename, proof={'source_sha256': invoice.get('source_sha256', '')}))
 
     for match in portfolio.get('payment_candidates', [])[:30]:
         filename = str(match.get('invoice') or '')
@@ -99,7 +100,9 @@ def build_followup_board(portfolio: dict[str, Any]) -> dict[str, Any]:
                       'Vérifier avec les justificatifs : aucun paiement n’est déclaré confirmé.',
                       filename, proof={'transaction_file': origin[:180],
                                        'transaction_row': line, 'amount_candidate': amount[:32],
-                                       'invoice_reference': reference[:60]}))
+                                       'invoice_reference': reference[:60],
+                                       'invoice_sha256': match.get('invoice_sha256', ''),
+                                       'transaction_sha256': match.get('transaction_sha256', '')}))
         elif status in ('unmatched_or_ambiguous', 'ambiguous_shared_transaction',
                         'insufficient_evidence'):
             explanation = {
@@ -109,7 +112,8 @@ def build_followup_board(portfolio: dict[str, Any]) -> dict[str, Any]:
             }[status]
             add(_task('rapprochements', 'Contrôler les justificatifs manquants',
                       explanation + ' Ne pas conclure que la facture est impayée.',
-                      filename, proof={'source_status': status}))
+                      filename, proof={'source_status': status,
+                                       'invoice_sha256': match.get('invoice_sha256', '')}))
 
     for error in portfolio.get('errors', [])[:30]:
         filename = str(error.get('file') or '')
