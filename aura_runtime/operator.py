@@ -641,7 +641,16 @@ class RuntimeOperator:
         }
         allowed = configured.intersection(requested)
         steps_limit = max(1, min(int(max_steps or 6), 8))
-        plan = await self._plan(str(task or ""), steps_limit, allowed)
+        try:
+            plan = await self._plan(str(task or ""), steps_limit, allowed)
+        except Exception as exc:
+            return {
+                "executed": False, "status": "not-executed",
+                "reason": "Planification indisponible ou demande non comprise.",
+                "error_type": type(exc).__name__,
+                "needs": ["Préciser une opération disponible ou connecter un modèle local."],
+                "allowed_risks": sorted(allowed), "source": source,
+            }
         actions = [
             item for item in list(plan.get("actions") or [])[:steps_limit]
             if isinstance(item, dict)
@@ -662,7 +671,7 @@ class RuntimeOperator:
             self.settings, "aura_runtime_cloud_personal_files_enabled", False
         )) and any(action.get("type") in {
             "files.search", "data.csv.summary", "files.compare", "files.backup",
-            "admin.locate"
+            "admin.locate", "admin.inventory"
         } for action in actions):
             return {
                 "executed": False, "status": "not-executed",
