@@ -151,8 +151,7 @@ def analyze_portfolio(root: Path) -> dict[str, Any]:
             errors.append({'file': doc['name'], 'reason': 'Fichier modifié pendant lecture'})
             continue
         total_candidates = sorted({x['value'] for x in pdf['observed_facts'] if x['kind'] == 'total_candidat'})
-        references = sorted({found.upper() for preview in pdf['previews']
-                             for found in REF.findall(preview['excerpt'])})
+        references = sorted({item['reference'] for item in pdf['invoice_references_observed']})
         invoices.append({'file': doc['name'], 'source_sha256': doc['sha256'],
                          'references': references, 'total_candidates': total_candidates,
                          'text_detected': pdf['text_detected'],
