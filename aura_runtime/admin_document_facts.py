@@ -15,11 +15,6 @@ DATE = re.compile(
     r"(?P<month>0?[1-9]|1[012])[/.-]"
     r"(?P<year>20\d\d)(?!\d)"
 )
-AMOUNT = re.compile(
-    r"(?<![\w])(?P<number>(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,9})"
-    r"(?:[,.]\d{1,2})?)\s*(?P<currency>€|EUR)\b?",
-    re.IGNORECASE,
-)
 # Euro sign is not a word character, so its trailing boundary is optional.
 AMOUNT = re.compile(
     r"(?<![\w])(?P<number>(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,9})"
