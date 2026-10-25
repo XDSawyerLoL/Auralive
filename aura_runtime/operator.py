@@ -68,6 +68,11 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "category": "browser",
         "risk": "browser-control",
     },
+    "admin.inventory": {
+        "title": "Établir un inventaire administratif local sans lire de documents",
+        "category": "administrative",
+        "risk": "safe",
+    },
     "files.search": {
         "title": "Retrouver une expression dans des fichiers texte autorisés",
         "category": "filesystem",
@@ -225,6 +230,12 @@ class RuntimeOperator:
         direct = _json_object(task)
         if isinstance(direct.get("actions"), list):
             return direct
+        # French administrative requests bypass generative planning. A broad
+        # request is converted to a read-only inventory or a specific blocker.
+        from .admin_assistant import plan_french_administrative_request
+        administrative = plan_french_administrative_request(task)
+        if administrative is not None:
+            return administrative
 
         catalog = [
             {
@@ -325,6 +336,10 @@ class RuntimeOperator:
         risk = definition["risk"]
         if risk not in allowed_risks:
             raise PermissionError(f"Risque {risk} non autorisé pour {kind}")
+
+        if kind == "admin.inventory":
+            from .admin_assistant import administrative_inventory
+            return administrative_inventory(self._resolve_path(action.get("path") or ".")), None
 
         if kind in {"files.search", "data.csv.summary", "files.compare", "files.backup"}:
             from .personal_tasks import search_text, summarize_csv, compare_text, backup_file
@@ -624,12 +639,28 @@ class RuntimeOperator:
             return {
                 "executed": False,
                 "status": "not-executed",
-                "reason": "Aucune action opérateur sûre proposée.",
+                "reason": str(plan.get("summary") or "Aucune action opérateur sûre proposée.")[:2000],
+                "needs": list(plan.get("needs") or [])[:5],
+                "intent": str(plan.get("intent") or ""),
                 "summary": str(plan.get("summary") or "")[:2000],
                 "allowed_risks": sorted(allowed),
                 "source": source,
             }
 
+        if source == "aura-runtime-worker" and not bool(getattr(
+            self.settings, "aura_runtime_cloud_personal_files_enabled", False
+        )) and any(action.get("type") in {
+            "files.search", "data.csv.summary", "files.compare", "files.backup"
+        } for action in actions):
+            return {
+                "executed": False, "status": "not-executed",
+                "reason": "Accès aux données personnelles depuis Cloud non autorisé.",
+                "needs": [
+                    "Effectuer la tâche avec le Runtime local ou activer explicitement le partage Cloud."
+                ],
+                "intent": str(plan.get("intent") or ""),
+                "source": source,
+            }
         reports: list[dict[str, Any]] = []
         rollback_stack: list[dict[str, Any]] = []
         try:
@@ -650,6 +681,8 @@ class RuntimeOperator:
                 "executed": True,
                 "status": "completed",
                 "summary": str(plan.get("summary") or "")[:2000],
+                "intent": str(plan.get("intent") or ""),
+                "limitations": str(plan.get("limitations") or ""),
                 "steps": reports,
                 "allowed_risks": sorted(allowed),
                 "rollback_available": bool(rollback_stack),
@@ -663,6 +696,7 @@ class RuntimeOperator:
                 "status": "error",
                 "error": self.last_error,
                 "summary": str(plan.get("summary") or "")[:2000],
+                "intent": str(plan.get("intent") or ""),
                 "steps": reports,
                 "rollback": rollback_results,
                 "allowed_risks": sorted(allowed),
