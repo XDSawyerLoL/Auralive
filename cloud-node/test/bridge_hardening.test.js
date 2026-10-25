@@ -126,3 +126,32 @@ test('Cloud recalculates the SHA-256 of file content instead of trusting a repor
   modified.result.steps[0].content = 'Contenu falsifié';
   assert.equal(workerCompletionVerified('operator', modified), false);
 });
+
+
+test('Cloud verifies typed receipts for personal search, CSV, comparison and backup tasks', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const wrap = (step) => ({
+    ok: true, result: { executed: true, status: 'completed', steps: [step] },
+  });
+  const valid = [
+    { type: 'files.search', ok: true, verified: true, matches_count: 1,
+      files_scanned: 1, matches: [{ line: 3, file_sha256: 'a'.repeat(64) }] },
+    { type: 'data.csv.summary', ok: true, verified: true, rows: 3,
+      columns: ['montant'], numeric: { montant: { sum: '18.00' } },
+      source_sha256: 'b'.repeat(64) },
+    { type: 'files.compare', ok: true, verified: true, identical: false,
+      left_sha256: 'a'.repeat(64), right_sha256: 'b'.repeat(64), diff_lines: ['+nouveau'] },
+    { type: 'files.backup', ok: true, verified: true,
+      source: 'notes.txt', backup: 'notes.txt.bak', bytes: 10, sha256: 'c'.repeat(64) },
+  ];
+  for (const step of valid) {
+    assert.equal(workerCompletionVerified('operator', wrap(step)), true, step.type);
+    assert.equal(workerCompletionVerified('operator', wrap({ ...step, verified: false })), false, step.type);
+  }
+  assert.equal(workerCompletionVerified('operator', wrap({
+    ...valid[0], matches_count: 3,
+  })), false);
+  assert.equal(workerCompletionVerified('operator', wrap({
+    ...valid[3], sha256: 'not-64-hex-chars',
+  })), false);
+});
