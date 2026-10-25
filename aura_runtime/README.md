@@ -350,3 +350,28 @@ python -m pytest -q tests/test_aura_pdf_documents.py
 
 Ces tests vérifient une extraction sur un vrai PDF, la date observée,
 les refus des fichiers malformés et le parcours par l'opérateur local.
+
+
+### Montants et dates : preuves, pas décisions
+
+La lecture PDF fournit désormais \`observed_facts\`, un tableau limité à
+30 éléments, chacun avec type, page, extrait source et valeur normalisée :
+
+- \`date_observee\` : date calendaire existante (les dates impossibles sont rejetées) ;
+- \`date_limite_candidate\` : une mention comme « Date limite » sur la même ligne ;
+- \`montant_observe\` : somme en euros présente dans le texte, signe conservé ;
+- \`total_candidat\` : mention « Total TTC » ou similaire sur la même ligne.
+
+Aucune date n'est automatiquement ajoutée au calendrier. Aucun montant
+n'est considéré comme une dette réelle. Le système rejette les nombres
+ambigus plutôt que d'en deviner la signification.
+
+\`aura_runtime/verifier-assistant.cmd\` exécute, après les 22 contrôles
+personnels et administratifs, **11 contrôles PDF** supplémentaires avec
+des fichiers temporaires. Le total attendu est **33/33**.
+Si le paquet libre \`pypdf\` manque, les tests PDF restent non vérifiés
+et le programme ne déclare pas le chantier entièrement validé.
+
+L'ensemble prouve uniquement les chemins de code examinés sur
+une machine locale ; il ne certifie ni l'installation Windows de
+l'utilisateur, ni les contenus privés, ni Hostinger.
