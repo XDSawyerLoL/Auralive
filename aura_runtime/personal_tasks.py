@@ -45,36 +45,50 @@ def search_text(directory: Path, phrase: str, *, max_files: int = 100, max_hits:
     found: list[dict[str, Any]] = []
     scanned = 0
     skipped = 0
-    for candidate in sorted(directory.rglob('*')):
-        if scanned >= max_files or len(found) >= max_hits:
+    directories_seen = 0
+    files_seen = 0
+    truncated = False
+    for current, folders, filenames in os.walk(directory, followlinks=False):
+        directories_seen += 1
+        if directories_seen > 300:
+            truncated = True
             break
-        # Skip hidden/private files and symlinks; never walk outside the root.
-        relative = candidate.relative_to(directory)
-        if any(part.startswith('.') for part in relative.parts) or candidate.is_symlink():
-            continue
-        if not candidate.is_file() or candidate.suffix.lower() not in SEARCH_SUFFIXES:
-            continue
-        scanned += 1
-        try:
-            raw = _safe_bytes(candidate)
-            content = raw.decode('utf-8-sig')
-        except (ValueError, UnicodeError, OSError):
-            skipped += 1
-            continue
-        for line_number, line in enumerate(content.splitlines(), 1):
-            if needle.casefold() not in line.casefold():
-                continue
-            found.append({
-                'file': str(relative), 'line': line_number, 'excerpt': line[:200],
-                'file_sha256': _sha(raw),
-            })
-            if len(found) >= max_hits:
+        folders[:] = [name for name in sorted(folders)
+                      if not name.startswith('.') and not (Path(current) / name).is_symlink()]
+        for filename in sorted(filenames):
+            files_seen += 1
+            if files_seen > 2000 or scanned >= max_files or len(found) >= max_hits:
+                truncated = True
                 break
+            candidate = Path(current) / filename
+            relative = candidate.relative_to(directory)
+            if filename.startswith('.') or candidate.is_symlink():
+                continue
+            if not candidate.is_file() or candidate.suffix.lower() not in SEARCH_SUFFIXES:
+                continue
+            scanned += 1
+            try:
+                raw = _safe_bytes(candidate)
+                content = raw.decode('utf-8-sig')
+            except (ValueError, UnicodeError, OSError):
+                skipped += 1
+                continue
+            for line_number, line in enumerate(content.splitlines(), 1):
+                if needle.casefold() not in line.casefold():
+                    continue
+                found.append({
+                    'file': str(relative), 'line': line_number, 'excerpt': line[:200],
+                    'file_sha256': _sha(raw),
+                })
+                if len(found) >= max_hits:
+                    break
+        if truncated:
+            break
     return {
         'type': 'files.search', 'ok': True, 'query': needle,
         'directory': str(directory), 'files_scanned': scanned,
         'files_skipped': skipped, 'matches': found,
-        'matches_count': len(found), 'limit_reached': scanned >= max_files or len(found) >= max_hits,
+        'matches_count': len(found), 'limit_reached': truncated or scanned >= max_files or len(found) >= max_hits,
         'verified': True,
     }
 
