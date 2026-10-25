@@ -488,8 +488,14 @@ class StandaloneRuntimeHost:
 
 async def run_forever() -> None:
     settings = runtime_settings_from_env()
-    if not settings.aura_cloud_base_url or not settings.aura_cloud_token:
-        raise RuntimeError('AURA_CLOUD_BASE_URL et AURA_CLOUD_TOKEN sont requis')
+    bridge_token = str(os.getenv('AURA_BRIDGE_TOKEN', '')).strip()
+    legacy_allowed = str(os.getenv('AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN', '')).strip().casefold() in {
+        '1', 'true', 'yes', 'oui', 'on'
+    }
+    if not settings.aura_cloud_base_url or not (
+        bridge_token or (legacy_allowed and settings.aura_cloud_token)
+    ):
+        raise RuntimeError('AURA_CLOUD_BASE_URL et AURA_BRIDGE_TOKEN sont requis')
 
     host = StandaloneRuntimeHost(settings)
     await host.ai.start()
