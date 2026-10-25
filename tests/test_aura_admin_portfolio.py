@@ -170,3 +170,15 @@ def test_modified_invoice_during_read_is_not_used_as_evidence(tmp_path, monkeypa
     report = analyze_portfolio(tmp_path)
     assert report["invoices"] == []
     assert report["errors"]
+
+
+def test_reference_after_pdf_preview_limit_is_still_detected(tmp_path):
+    (tmp_path / "facture_longue.pdf").write_bytes(make_text_pdf(
+        "Z" * 340 + " Facture N: FAC-2026-001 Total TTC: 123,45 EUR"
+    ))
+    (tmp_path / "paiements.csv").write_text(
+        "reference;montant\nFAC-2026-001;-123,45\n", encoding="utf8"
+    )
+    report = analyze_portfolio(tmp_path)
+    assert report["invoices"][0]["references"] == ["FAC-2026-001"]
+    assert report["payment_candidates"][0]["status"] == "candidate_match"
