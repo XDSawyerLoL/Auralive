@@ -202,6 +202,19 @@ export function workerCompletionVerified(kind, payload = {}) {
           && step.characters_extracted >= 0
           && Array.isArray(step.previews)
           && Array.isArray(step.dates_observed)
+          && Array.isArray(step.observed_facts)
+          && Number.isInteger(step.facts_count) && step.facts_count >= 0
+          && step.facts_count === step.observed_facts.length
+          && step.facts_count <= 30
+          && step.observed_facts.every((fact) =>
+            ['date_observee', 'date_limite_candidate',
+              'montant_observe', 'total_candidat'].includes(fact?.kind)
+            && Number.isInteger(fact?.page) && fact.page >= 1
+            && fact.page <= step.pages
+            && typeof fact.raw === 'string' && fact.raw.length > 0
+            && typeof fact.value === 'string' && fact.value.length > 0
+            && typeof fact.evidence === 'string' && fact.evidence.length > 0
+            && fact.certainty === 'texte_observe_non_verifie')
           && step.previews.every((part) =>
             Number.isInteger(part?.page) && part.page >= 1
             && part.page <= step.pages && typeof part.excerpt === 'string')
