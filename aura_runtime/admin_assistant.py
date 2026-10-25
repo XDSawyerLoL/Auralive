@@ -171,6 +171,7 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         'administrat', 'document', 'papier', 'factur', 'impot', 'declar',
         'depense', 'budget', 'justificatif', 'contrat', 'salaire', 'releve',
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
+        'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
     )
     if not any(key in request for key in domain):
         return None
@@ -185,11 +186,19 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
 
     # Block external or destructive operations, even if another keyword
     # would otherwise produce a safe file action.
-    risky = ('paie ', 'payer ', 'virement', 'achete ', 'transfere ',
-             'envoie ', 'expedie ', 'depose ', 'transmets ', 'televerse ',
-             'supprime ', 'efface ', 'detruis ', 'declare ', 'declarer ',
-             'signe ', 'signature ', 'resilie ', 'annule ')
-    if any(word in f' {request} ' for word in risky):
+    dangerous_verbs = (
+        'paie', 'payer', 'achete', 'transfere', 'envoie', 'envoyer',
+        'expedie', 'depose', 'deposer', 'transmets', 'televerse',
+        'supprime', 'efface', 'detruis', 'declare', 'declarer',
+        'signe', 'resilie', 'annule',
+    )
+    # "Bulletin de paie" is a document, not an instruction to pay.
+    risky_command = re.search(
+        r'\b(?:' + '|'.join(dangerous_verbs) + r')\b'
+        r'(?=[\s-]+(?:mes|mon|ma|le|la|les|des|de|un|une|ce|cette|tous|toutes|moi|l)\b)',
+        request,
+    )
+    if risky_command or 'virement' in request or 'signature electronique' in request:
         return outcome(
             'external-or-destructive-request',
             'Action administrative externe ou destructive non autorisée.',
@@ -234,6 +243,10 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
             term = next((word for key, word in [
                 ('factur', 'facture'), ('impot', 'impot'), ('justificatif', 'justificatif'),
                 ('contrat', 'contrat'), ('salaire', 'salaire'),
+                ('bulletin', 'bulletin'), ('paie', 'paie'),
+                ('assuran', 'assurance'), ('mutuelle', 'mutuelle'),
+                ('sante', 'sante'), ('logement', 'logement'),
+                ('identit', 'identite'), ('retraite', 'retraite'),
             ] if key in request), '')
         if term:
             if quoted:
