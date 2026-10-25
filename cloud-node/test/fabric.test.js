@@ -248,3 +248,37 @@ test('DAG executor applies explicit capability-output verification feedback', as
   assert.equal(result.results.answer.semantic_feedback.applied, true);
   assert.ok(fabric.registry.get('semantic.dag').semantic_failures >= 1);
 });
+
+
+test('AURA recovers an empty AI DAG with an authorized read-only research action', async () => {
+  const compiler = new DagCompiler({ enabled: true, async generate() { return ''; } });
+  const graph = await compiler.compile('Diagnostiquer un incident SWAPP', [
+    { id: 'web.research', tags: ['research', 'evidence'], side_effects: false },
+    { id: 'cloud.workspace.delete', tags: ['delete'], side_effects: true },
+  ]);
+  assert.deepEqual(graph.nodes.map((node) => node.capability), ['web.research']);
+  assert.equal(graph.budget_microunits, 0);
+});
+test('AURA recovers free model failure without inventing machine permissions', async () => {
+  const compiler = new DagCompiler({ enabled: true, async generate() { throw Error('free model offline'); } });
+  const graph = await compiler.compile('Inspecter un service', [
+    { id: 'web.research', tags: ['research'], side_effects: false },
+    { id: 'cloud.workspace.delete', tags: ['delete'], side_effects: true },
+  ]);
+  assert.equal(graph.nodes[0].capability, 'web.research');
+});
+test('AURA rejects unknown model capabilities in favor of authorized read-only research', async () => {
+  const compiler = new DagCompiler({ enabled: true, async generate() {
+    return JSON.stringify({ nodes: [{ id: 'x', capability: 'remote.shell', depends_on: [] }] });
+  } });
+  const graph = await compiler.compile('Analyser un incident', [
+    { id: 'web.research', tags: ['research'], side_effects: false },
+  ]);
+  assert.equal(graph.nodes[0].capability, 'web.research');
+});
+test('AURA refuses an empty DAG if no safe research capability is registered', async () => {
+  const compiler = new DagCompiler({ enabled: true, async generate() { return '{"nodes":[]}'; } });
+  await assert.rejects(compiler.compile('Réparer un service', [
+    { id: 'cloud.workspace.delete', side_effects: true, tags: ['delete'] },
+  ]), /aucune capacité de recherche sûre/);
+});
