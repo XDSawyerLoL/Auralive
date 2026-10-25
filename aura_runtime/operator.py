@@ -73,6 +73,11 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "category": "administrative",
         "risk": "safe",
     },
+    "admin.locate": {
+        "title": "Retrouver un document par son nom sans ouvrir le fichier",
+        "category": "administrative",
+        "risk": "safe",
+    },
     "files.search": {
         "title": "Retrouver une expression dans des fichiers texte autorisés",
         "category": "filesystem",
@@ -340,6 +345,12 @@ class RuntimeOperator:
         if kind == "admin.inventory":
             from .admin_assistant import administrative_inventory
             return administrative_inventory(self._resolve_path(action.get("path") or ".")), None
+        if kind == "admin.locate":
+            from .admin_assistant import locate_documents
+            return locate_documents(
+                self._resolve_path(action.get("path") or "."),
+                str(action.get("query") or ""),
+            ), None
 
         if kind in {"files.search", "data.csv.summary", "files.compare", "files.backup"}:
             from .personal_tasks import search_text, summarize_csv, compare_text, backup_file
@@ -650,7 +661,8 @@ class RuntimeOperator:
         if source == "aura-runtime-worker" and not bool(getattr(
             self.settings, "aura_runtime_cloud_personal_files_enabled", False
         )) and any(action.get("type") in {
-            "files.search", "data.csv.summary", "files.compare", "files.backup"
+            "files.search", "data.csv.summary", "files.compare", "files.backup",
+            "admin.locate"
         } for action in actions):
             return {
                 "executed": False, "status": "not-executed",
