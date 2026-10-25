@@ -57,7 +57,14 @@ if errorlevel 1 (
  pause
  exit /b 1
 )
-echo [AURA] 43/43 controles attendus sur fichiers temporaires.
+echo [AURA] Test de 9 controles du tableau de suivi sur fichiers TEMPORAIRES.
+python -m aura_runtime.admin_followup_benchmark
+if errorlevel 1 (
+ echo [ECHEC] Tableau de suivi non certifie.
+ pause
+ exit /b 1
+)
+echo [AURA] 52/52 controles attendus sur fichiers temporaires.
 echo [AURA] Ne valide pas le fonctionnement graphique ou le Cloud de production.
 pause
 exit /b 0
