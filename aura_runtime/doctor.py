@@ -14,8 +14,13 @@ def inspect_environment(environ: dict[str, str] | None = None) -> dict:
     env = os.environ if environ is None else environ
     base = str(env.get("AURA_CLOUD_BASE_URL") or "").strip()
     parsed = urlparse(base)
+    try:
+        port = parsed.port
+    except ValueError:
+        port = -1
     cloud_url_safe = (
         parsed.scheme == "https" and bool(parsed.hostname)
+        and port in (None, 443) and parsed.path in ("", "/")
         and parsed.username is None and parsed.password is None
         and not parsed.query and not parsed.fragment
     )
