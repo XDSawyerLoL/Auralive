@@ -365,3 +365,17 @@ async def test_cloud_cannot_execute_general_process_without_local_opt_in(tmp_pat
     )
     assert result['executed'] is False
     assert result['status'] == 'not-executed'
+
+@pytest.mark.asyncio
+async def test_cloud_file_opt_in_does_not_authorize_process_execution(tmp_path):
+    config = settings(tmp_path)
+    config.aura_runtime_cloud_personal_files_enabled = True
+    config.aura_runtime_cloud_process_enabled = False
+    operator = RuntimeOperator(FailIfInvokedAI(), config)
+    result = await operator.operate(
+        '{"actions":[{"type":"process.run","command":"python",'
+        '"args":["-c","print(42)"],"cwd":"."}]}',
+        requested_risks={'process'}, source='aura-runtime-worker',
+    )
+    assert result['executed'] is False
+    assert 'Exécution de commandes depuis Cloud non autorisée' in result['reason']
