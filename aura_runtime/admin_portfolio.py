@@ -82,7 +82,7 @@ def _payment_candidates(records: list[tuple[str, bytes]], errors: list[dict[str,
                     amount = -abs(amount)
                 if amount >= 0:
                     continue
-                matches.append({'file': filename, 'row': row_number, 'description': reference[:180], 'amount': str(-amount)})
+                matches.append({'file': filename, 'row': row_number, 'description': reference[:180], 'amount': str(-amount), 'source_sha256': sha256(raw).hexdigest()})
                 if len(matches) >= 2000:
                     errors.append({'file': filename, 'reason': 'Transactions limitées à 2 000'})
                     return matches
@@ -164,19 +164,19 @@ def analyze_portfolio(root: Path) -> dict[str, Any]:
         amount = invoice['total_candidates']
         if len(reference) != 1 or len(amount) != 1:
             proposals.append({'invoice': invoice['file'], 'status': 'insufficient_evidence',
-                              'reason': 'Référence ou total unique absent', 'requires_confirmation': True})
+                              'reason': 'Référence ou total unique absent', 'invoice_sha256': invoice['source_sha256'], 'requires_confirmation': True})
             continue
         exact = [t for t in transactions if re.search(r'(?<![A-Z0-9-])' + re.escape(reference[0]) + r'(?![A-Z0-9-])', t['description'].upper())
                  and _money(t['amount']) == _money(amount[0])]
         if len(exact) != 1:
             proposals.append({'invoice': invoice['file'], 'status': 'unmatched_or_ambiguous',
-                              'candidate_count': len(exact), 'requires_confirmation': True})
+                              'candidate_count': len(exact), 'invoice_sha256': invoice['source_sha256'], 'requires_confirmation': True})
             continue
         key = (exact[0]['file'], exact[0]['row'])
         claimed_transactions[key].append(invoice['file'])
         proposals.append({'invoice': invoice['file'], 'status': 'candidate_match',
                           'transaction_file': key[0], 'transaction_row': key[1],
-                          'reference': reference[0], 'amount': amount[0],
+                          'reference': reference[0], 'amount': amount[0], 'invoice_sha256': invoice['source_sha256'], 'transaction_sha256': exact[0]['source_sha256'],
                           'requires_confirmation': True})
     for proposal in proposals:
         if proposal['status'] == 'candidate_match' and len(claimed_transactions[
