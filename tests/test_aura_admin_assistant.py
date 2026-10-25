@@ -285,3 +285,44 @@ def test_backup_phrased_as_copy_of_security_requires_explicit_filename():
     plan = plan_french_administrative_request('Fais une copie de sécurité de notes.txt')
     assert plan['intent'] == 'backup'
     assert plan['actions'][0] == {'type': 'files.backup', 'path': 'notes.txt'}
+
+
+@pytest.mark.parametrize('request', [
+    'Je suis triste.',
+    "C'est étrange.",
+    'Le classement de mes jeux préférés.',
+    'Quelle est la météo demain ?',
+])
+def test_unrelated_french_requests_do_not_scan_administrative_files(request):
+    assert plan_french_administrative_request(request) is None
+
+
+@pytest.mark.parametrize('request', [
+    'Range ces documents.',
+    'Trie ce dossier.',
+    'Classe mes factures.',
+    'Organise.',
+])
+def test_admin_imperatives_are_recognized_as_read_only_first_steps(request):
+    result = plan_french_administrative_request(request)
+    assert result['intent'] == 'administrative-inventory'
+    assert result['actions'] == [{'type': 'admin.inventory', 'path': '.'}]
+
+
+@pytest.mark.parametrize('request', [
+    'Envoie au fisc mon avis.',
+    'Supprimer mes documents.',
+    'Organise mes dossiers puis envoie tout.',
+    'Dépose une déclaration fiscale.',
+])
+def test_external_verbs_block_all_administrative_dispatch(request):
+    result = plan_french_administrative_request(request)
+    assert result is not None
+    assert result['actions'] == []
+    assert result['intent'] == 'external-or-destructive-request'
+
+
+def test_long_administrative_input_is_rejected_without_using_ai():
+    result = plan_french_administrative_request('Organise mes documents ' + 'x' * 2000)
+    assert result['actions'] == []
+    assert result['intent'] == 'request-too-long'
