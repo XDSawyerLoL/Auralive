@@ -25,6 +25,7 @@ def test_unsafe_cloud_url_is_refused_before_network():
     for url in (
         "http://aura.example", "https://user:password@aura.example",
         "https://aura.example/?token=x",
+        "https://aura.example:not-a-port",
     ):
         report = inspect_environment({
             "AURA_CLOUD_BASE_URL": url,
