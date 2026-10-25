@@ -182,3 +182,94 @@ def test_reference_after_pdf_preview_limit_is_still_detected(tmp_path):
     report = analyze_portfolio(tmp_path)
     assert report["invoices"][0]["references"] == ["FAC-2026-001"]
     assert report["payment_candidates"][0]["status"] == "candidate_match"
+
+
+# -- Local, evidence-based follow-up board ---------------------------------
+
+from aura_runtime.admin_followup import build_followup_board
+
+
+def test_real_followup_board_has_only_unconfirmed_tasks(tmp_path):
+    prepare(tmp_path)
+    (tmp_path / 'facture_client.pdf').write_bytes(make_text_pdf(
+        'Facture N: FAC-2026-001 Date limite: 30/11/2026 Total TTC: 123,45 EUR'))
+    report = build_followup_board(analyze_portfolio(tmp_path))
+    assert report['verified'] and report['read_only']
+    assert report['categories']['dates_candidates'] == 1
+    assert report['categories']['rapprochements'] == 1
+    assert all(x['status'] == 'a_verifier' for x in report['tasks'])
+    assert all(x['requires_human_confirmation'] and not x['action_taken']
+               for x in report['tasks'])
+    assert any(item['evidence'].get('date') == '2026-11-30'
+               and '30/11/2026' in item['evidence'].get('excerpt', '')
+               for item in report['tasks'])
+
+
+def test_followup_invalid_report_refused():
+    for report in [{}, {'type': 'admin.portfolio', 'ok': True, 'verified': False,
+                        'read_only': True},
+                   {'type': 'admin.portfolio', 'ok': True, 'verified': True,
+                    'read_only': False}]:
+        with pytest.raises(ValueError):
+            build_followup_board(report)
+
+
+def test_followup_duplicate_requires_review_not_deletion(tmp_path):
+    prepare(tmp_path)
+    (tmp_path / 'facture_copie.pdf').write_bytes(
+        (tmp_path / 'facture_client.pdf').read_bytes())
+    result = build_followup_board(analyze_portfolio(tmp_path))
+    assert result['categories']['doublons'] == 1
+    assert all(not item['action_taken'] for item in result['tasks'])
+
+
+def test_followup_bank_amount_alone_not_payment_evidence(tmp_path):
+    prepare(tmp_path)
+    (tmp_path / 'paiements.csv').write_text(
+        'reference;montant\nAUTRE;-123,45\n', encoding='utf8')
+    result = build_followup_board(analyze_portfolio(tmp_path))
+    assert not any(item['evidence'].get('transaction_file')
+                   for item in result['tasks'])
+
+
+def test_followup_corrupt_bank_csv_is_reported_as_partial(tmp_path):
+    prepare(tmp_path)
+    (tmp_path / 'paiements.csv').write_text(
+        'colonne_inconnue;montant\nfoo;-123,45\n', encoding='utf8')
+    result = build_followup_board(analyze_portfolio(tmp_path))
+    assert result['partial']
+    assert result['categories']['fichiers_non_lus'] == 1
+
+
+def test_followup_keeps_files_byte_identical(tmp_path):
+    prepare(tmp_path)
+    before = {p.name: sha256(p.read_bytes()).hexdigest()
+              for p in tmp_path.iterdir() if p.is_file()}
+    result = build_followup_board(analyze_portfolio(tmp_path))
+    assert result['ok']
+    after = {p.name: sha256(p.read_bytes()).hexdigest()
+             for p in tmp_path.iterdir() if p.is_file()}
+    assert before == after
+
+
+def test_followup_ids_are_repeatable(tmp_path):
+    prepare(tmp_path)
+    portfolio = analyze_portfolio(tmp_path)
+    first = build_followup_board(portfolio)
+    second = build_followup_board(portfolio)
+    assert [x['id'] for x in first['tasks']] == [x['id'] for x in second['tasks']]
+
+
+@pytest.mark.asyncio
+async def test_cloud_cannot_read_administrative_followup_even_with_file_sharing_opt_in(tmp_path):
+    prepare(tmp_path)
+    setting = settings(tmp_path)
+    setting.aura_runtime_cloud_personal_files_enabled = True
+    operator = RuntimeOperator(NoModel(), setting)
+    result = await operator.operate(
+        'Prépare mon suivi administratif',
+        requested_risks={'safe'}, source='aura-runtime-worker',
+    )
+    assert result['executed'] is False
+    assert result['status'] == 'not-executed'
+    assert 'facture_client.pdf' not in str(result)
