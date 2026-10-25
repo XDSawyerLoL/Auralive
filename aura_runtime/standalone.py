@@ -140,7 +140,7 @@ def runtime_settings_from_env() -> SimpleNamespace:
             )
         ).strip(),
         evolution_github_token=str(os.getenv('AURA_RUNTIME_GITHUB_TOKEN', '')).strip(),
-        evolution_auto_submit=_bool('AURA_RUNTIME_EVOLUTION_AUTO_SUBMIT', True),
+        evolution_auto_submit=_bool('AURA_RUNTIME_EVOLUTION_AUTO_SUBMIT', False),
         aura_runtime_operator_roots=[
             Path(item).expanduser()
             for item in _list('AURA_RUNTIME_OPERATOR_ROOTS', os.getcwd())
