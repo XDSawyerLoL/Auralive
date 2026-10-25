@@ -148,3 +148,23 @@ Le rapport indique les captures réalisées et les éventuels défauts détecté
 dans chaque viewport. Les permissions de l'opérateur imposent
 `browser-control` si l'action est déclenchée via un worker Cloud. Les
 captures ne sont pas transférées automatiquement vers Hostinger.
+
+## Diagnostic Runtime sans connexion ni API
+
+Depuis la racine du dépôt :
+
+```sh
+python -m aura_runtime.doctor
+```
+
+Le diagnostic affiche uniquement des booléens de configuration :
+disponibilité d'aiohttp et Playwright, adresse HTTPS valide et présence
+du jeton `AURA_BRIDGE_TOKEN`. **Il n'affiche jamais la valeur du jeton**
+et ne contacte pas Hostinger. `ready_for_bridge_start` signifie que
+les prérequis locaux sont présents, pas que le Cloud a accepté la connexion.
+
+Les actions locales `fs.write` et `fs.read` émettent dorénavant des
+empreintes SHA-256; `fs.write` relit le fichier et restaure la version
+précédente en cas d'incohérence détectée. Les missions `browser.audit`
+renvoient des résultats mesurés (captures, succès/échecs, contrôles mobile).
+Un accusé de réception seul ne doit jamais marquer la mission terminée.
