@@ -92,3 +92,27 @@ def collect_pdf_facts(pages: list[str], *, max_facts: int = 30) -> list[dict[str
             if len(facts) >= max_facts:
                 break
     return facts
+
+
+INVOICE_REF = re.compile(
+    r'\b(?:facture|invoice)\s*'
+    r'(?:n(?:[°ºo.]|(?=\s*:))|num[eé]ro|#|r[eé]f[eé]rence)\s*[:#-]?\s*'
+    r'(?P<reference>[A-Z0-9][A-Z0-9-]{6,31})\b',
+    re.IGNORECASE,
+)
+
+
+def collect_invoice_references(pages: list[str], *, max_hits: int = 12) -> list[dict[str, Any]]:
+    """Only explicitly labelled invoice references with page-backed evidence."""
+    found = []
+    for page_number, text in enumerate(pages, 1):
+        for match in INVOICE_REF.finditer(text):
+            found.append({
+                'page': page_number,
+                'reference': match['reference'].upper(),
+                'evidence': _context(text, match.start(), match.end()),
+                'certainty': 'texte_observe_non_verifie',
+            })
+            if len(found) >= max_hits:
+                return found
+    return found
