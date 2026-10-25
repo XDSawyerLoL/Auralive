@@ -285,7 +285,7 @@ python -m aura_runtime.admin_benchmark
 pytest -q tests/test_aura_admin_assistant.py tests/test_aura_admin_chat.py
 ```
 
-Le premier exécute dix scénarios de bout en bout sur un dossier temporaire
+Le premier exécute quinze scénarios de bout en bout sur un dossier temporaire
 et termine avec un code différent de zéro si l'un d'eux échoue.
 **Aucune dépendance linguistique, aucun API externe, aucun coût d'IA.**
 
@@ -295,3 +295,12 @@ retourner par défaut les noms ou les extraits de documents personnels ;
 explicitement pour les capacités de recherche, CSV, comparaison ou
 sauvegarde. L'inventaire renvoie uniquement des comptes par catégorie.
 Il ne suffit pas de demander l'accès dans une instruction à AURA.
+
+
+### Vérifier sans GitHub Actions ni abonnement
+
+Sur Windows, double-cliquer `aura_runtime\\verifier-assistant.cmd`.
+Ce lanceur exécute le benchmark personnel (7 contrôles) puis celui des
+intentions administratives (15 contrôles) sur des fichiers temporaires.
+Si une opération échoue, le programme renvoie un code d'erreur et
+n'affiche pas de certification de réussite.
