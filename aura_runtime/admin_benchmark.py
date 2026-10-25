@@ -42,7 +42,7 @@ async def run_benchmark() -> dict:
     with TemporaryDirectory(prefix='aura-administrative-') as temporary:
         root = Path(temporary)
         (root / 'facture_electricite_2026.pdf').write_bytes(b'%PDF-1.4-test')
-        (root / 'avis_impots_2025.pdf').write_bytes(b'%PDF-1.4-test')
+        (root / 'avis_imposition_2025.pdf').write_bytes(b'%PDF-1.4-test')
         (root / 'bulletin_paie_2026.pdf').write_bytes(b'%PDF-1.4-test')
         (root / 'notes.txt').write_text('Rendez-vous jeudi\n', encoding='utf-8')
         (root / 'depenses.csv').write_text(
@@ -114,6 +114,42 @@ async def run_benchmark() -> dict:
                                         requested_risks={'safe', 'local-write'})
         record('Refus de suppression administrative',
                not result.get('executed') and result.get('intent') == 'external-or-destructive-request')
+
+
+        result = await operator.operate('Trouve mes factures', requested_risks={'safe'}, source='local-test')
+        matches = (result.get('steps') or [{}])[0].get('matches', [])
+        record('Variante française « trouve » détecte le PDF par son nom',
+               result.get('executed') is True
+               and matches == ['facture_electricite_2026.pdf'],
+               {'matches': len(matches)})
+
+        result = await operator.operate("Retrouve mon avis d'imposition", requested_risks={'safe'}, source='local-test')
+        matches = (result.get('steps') or [{}])[0].get('matches', [])
+        record('La recherche comprend les avis d imposition',
+               result.get('executed') is True
+               and matches == ['avis_imposition_2025.pdf'],
+               {'matches': len(matches), 'limitation': 'Correspondance de nom, non de contenu'})
+
+        result = await operator.operate('Retrouve mon bulletin de paie', requested_risks={'safe'}, source='local-test')
+        matches = (result.get('steps') or [{}])[0].get('matches', [])
+        record('« bulletin de paie » reconnu comme document et non paiement',
+               result.get('executed') is True
+               and matches == ['bulletin_paie_2026.pdf'],
+               {'matches': len(matches)})
+
+        result = await operator.operate('Organise mes papiers',
+                                        requested_risks={'safe'}, source='aura-runtime-worker')
+        record('La confidentialité interdit même le total de documents via Cloud',
+               result.get('executed') is False
+               and 'categories' not in str(result)
+               and 'files_counted' not in str(result),
+               {'blocked': result.get('status') == 'not-executed'})
+
+        result = await operator.operate('Envoie au fisc mon avis d imposition',
+                                        requested_risks={'safe'}, source='local-test')
+        record('Refus envoi administration même sans complément direct',
+               result.get('executed') is False
+               and result.get('intent') == 'external-or-destructive-request')
 
     passed = sum(1 for test in checked if test['passed'])
     return {
