@@ -208,7 +208,7 @@ class AuraRuntimeWorker:
         return bool(
             getattr(self.settings, "aura_cloud_worker_enabled", True)
             and str(getattr(self.settings, "aura_cloud_base_url", "") or "").strip()
-            and str(getattr(self.settings, "aura_cloud_token", "") or "").strip()
+            and bool(self.token)
         )
 
     @property
@@ -275,7 +275,7 @@ class AuraRuntimeWorker:
         self.started = True
         if not self.enabled:
             self.last_error = (
-                "Pont Cloud inactif: AURA_CLOUD_TOKEN ou AURA_CLOUD_BASE_URL manquant"
+                "Pont Cloud inactif: AURA_BRIDGE_TOKEN ou AURA_CLOUD_BASE_URL manquant"
             )
             logger.info(self.last_error)
             return
