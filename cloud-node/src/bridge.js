@@ -170,6 +170,22 @@ const settings = Object.freeze({
   meshMoaMaxAgents: intEnv('AURA_MESH_MOA_MAX_AGENTS', 3, 2, 4),
 });
 
+// Only independently reported, completed operator steps count as success.
+// A worker's transport-level "ok" is insufficient proof of execution.
+export function workerCompletionVerified(kind, payload = {}) {
+  if (payload.ok === false) return false;
+  const result = payload.result ?? payload;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
+  if (result.ok === false || ['failed', 'error', 'not-executed', 'waiting'].includes(
+    String(result.status || '').trim().toLowerCase()
+  )) return false;
+  if (kind !== 'operator') return true;
+  return result.executed === true && result.status === 'completed'
+    && Array.isArray(result.steps) && result.steps.length > 0
+    && result.steps.every((step) =>
+      step && typeof step === 'object' && step.ok === true && String(step.type || '').trim());
+}
+
 export class ExecutionBridge {
   static VERSION = 'aura-cloud-local-bridge-v2';
 
@@ -419,14 +435,14 @@ export class ExecutionBridge {
   async complete(id, workerId, payload = {}) {
     const worker = String(workerId || '').trim().slice(0, 160);
     const row = await one(
-      'SELECT id,status,lease_owner,assigned_at FROM aura_execution_jobs WHERE id=?',
+      'SELECT id,status,kind,lease_owner,assigned_at FROM aura_execution_jobs WHERE id=?',
       [String(id)],
     );
     if (!row) throw new Error('job inconnu');
     if (row.status !== 'leased') throw new Error(`job non exécutable: ${row.status}`);
     if (String(row.lease_owner || '') !== worker) throw new Error('lease worker invalide');
 
-    const ok = payload.ok !== false;
+    const ok = workerCompletionVerified(String(row.kind || ''), payload);
     const resultPayload = payload.result ?? payload;
     const error = ok
       ? ''
