@@ -182,8 +182,28 @@ export function workerCompletionVerified(kind, payload = {}) {
   if (kind !== 'operator') return true;
   return result.executed === true && result.status === 'completed'
     && Array.isArray(result.steps) && result.steps.length > 0
-    && result.steps.every((step) =>
-      step && typeof step === 'object' && step.ok === true && String(step.type || '').trim());
+    && result.steps.every((step) => {
+      if (!step || typeof step !== 'object' || step.ok !== true || !String(step.type || '').trim()) {
+        return false;
+      }
+      if (step.type === 'browser.audit') {
+        const total = Number(step.checks_total || 0);
+        return total > 0 && Number(step.checks_passed) === total
+          && Array.isArray(step.checks) && step.checks.length === total
+          && step.checks.every((check) =>
+            check?.ok === true && /^[a-f0-9]{64}$/.test(String(check?.screenshot_sha256 || '')));
+      }
+      if (step.type === 'fs.write') {
+        return step.verified === true && /^[a-f0-9]{64}$/.test(String(step.sha256 || ''));
+      }
+      if (step.type === 'fs.read') {
+        return typeof step.content === 'string' && String(step.path || '').length > 0
+          && /^[a-f0-9]{64}$/.test(String(step.sha256 || ''));
+      }
+      return Object.entries(step).some(([key, value]) =>
+        !['ok', 'type', 'status', 'message', 'reason'].includes(key)
+        && value !== null && value !== undefined && value !== '');
+    });
 }
 
 export class ExecutionBridge {
