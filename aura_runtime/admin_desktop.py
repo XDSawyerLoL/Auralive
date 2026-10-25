@@ -65,6 +65,10 @@ class AdministrativeDesktop(tk.Tk):
             extra, text="Factures + paiements : rechercher doublons et rapprochements",
             command=lambda: self.run_example("Analyse mes factures et paiements"),
         ).pack(side="left")
+        ttk.Button(
+            extra, text="Mon suivi administratif",
+            command=lambda: self.run_example("Prépare mon suivi administratif"),
+        ).pack(side="left", padx=8)
 
         results = ttk.LabelFrame(body, text="3. Résultats et éléments vérifiés", padding=10)
         results.pack(fill="both", expand=True)
