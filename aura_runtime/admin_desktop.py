@@ -164,8 +164,14 @@ class AdministrativeDesktop(tk.Tk):
             except Exception as exc:
                 third = {"ok": False, "checks_total": 0, "checks_passed": 0,
                          "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+            try:
+                from .admin_portfolio_benchmark import run_benchmark as portfolio
+                fourth = portfolio()
+            except Exception as exc:
+                fourth = {"ok": False, "checks_total": 0, "checks_passed": 0,
+                          "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
             return {"mode": "diagnostic", "personal": first,
-                    "administrative": second, "pdf": third}
+                    "administrative": second, "pdf": third, "portfolio": fourth}
 
         self.current_job = self.executor.submit(lambda: asyncio.run(benchmark()))
         self.after(100, self.check_job)
@@ -179,15 +185,16 @@ class AdministrativeDesktop(tk.Tk):
         try:
             result = self.current_job.result()
             if result.get("mode") == "diagnostic":
-                first, second, third = (
-                    result["personal"], result["administrative"], result["pdf"]
+                first, second, third, fourth = (
+                    result["personal"], result["administrative"],
+                    result["pdf"], result["portfolio"]
                 )
-                suites = (first, second, third)
+                suites = (first, second, third, fourth)
                 passed = sum(int(x.get("checks_passed", 0)) for x in suites)
                 total = sum(int(x.get("checks_total", 0)) for x in suites)
                 verified = (
                     all(x.get("ok") is True for x in suites)
-                    and total == 33 and passed == total
+                    and total == 43 and passed == total
                 )
                 failed = [
                     item.get("name", "inconnu")
@@ -196,6 +203,8 @@ class AdministrativeDesktop(tk.Tk):
                 ]
                 if third.get("error"):
                     failed.append("PDF non vérifié : " + str(third["error"])[:140])
+                if fourth.get("error"):
+                    failed.append("Rapprochements non vérifiés : " + str(fourth["error"])[:140])
                 self.append(
                     f"AURA : {passed}/{total} contrôles locaux réussis. "
                     + ("Tous les benchmarks locaux ont réussi." if verified
