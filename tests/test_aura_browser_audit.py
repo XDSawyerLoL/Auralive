@@ -103,3 +103,18 @@ def test_mobile_overflow_and_broken_images_are_falsifiable_failures():
     assert "debordement-horizontal" in grade_navigation(**base, horizontal_overflow_px=24)["problems"]
     assert "images-cassees" in grade_navigation(**base, broken_images=2)["problems"]
     assert grade_navigation(**base, horizontal_overflow_px=4)["ok"]
+
+
+def test_empty_js_shell_is_not_considered_a_rendered_page():
+    base = dict(
+        requested_path="/", final_url="https://swapp.tv/", status=200,
+        title="SWAPP", body_visible=True, screenshot_digest="a" * 64, page_errors=[],
+    )
+    result = grade_navigation(**base, visible_text_chars=0)
+    assert result["ok"] is False
+    assert "interface-vide-ou-non-hydratee" in result["problems"]
+    assert grade_navigation(**base, visible_text_chars=120)["ok"] is True
+
+def test_local_file_navigation_is_refused_by_swapp_audit():
+    with pytest.raises(PermissionError):
+        audit_target_url("file:///C:/Users/test/secrets.txt")
