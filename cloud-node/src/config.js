@@ -312,7 +312,7 @@ export const config = Object.freeze({
       'XDSawyerLoL/Human-Agency-Engine',
     ].join(','),
   ),
-  commandCenterAutoRerunFailedCi: bool('AURA_COMMAND_AUTO_RERUN_FAILED_CI', true),
+  commandCenterAutoRerunFailedCi: bool('AURA_COMMAND_AUTO_RERUN_FAILED_CI', false),
   commandCenterAutoCreateFailureIssue: bool('AURA_COMMAND_AUTO_CREATE_FAILURE_ISSUE', true),
   commandCenterAutoCreateChangePr: bool('AURA_COMMAND_AUTO_CREATE_CHANGE_PR', true),
   commandCenterChangePrMinConfidence: num('AURA_COMMAND_CHANGE_PR_MIN_CONFIDENCE', 0.72, 0.5, 1),
