@@ -13,7 +13,7 @@ if errorlevel 1 (
 if not exist ".env" (
   if exist ".env.example" copy /Y ".env.example" ".env" >nul
   echo [AURA] Configuration creee: .env
-  echo Renseigne AURA_CLOUD_BASE_URL et AURA_CLOUD_TOKEN puis relance.
+  echo Renseigne AURA_CLOUD_BASE_URL et AURA_BRIDGE_TOKEN puis relance.
   start "" notepad ".env"
   pause
   exit /b 1
