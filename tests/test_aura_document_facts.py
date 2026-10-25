@@ -58,3 +58,16 @@ def test_facts_include_page_of_origin():
     assert len(facts) == 1
     assert facts[0]["page"] == 2
     assert "25/11/2026" in facts[0]["evidence"]
+
+
+
+def test_ambiguous_number_format_cannot_be_truncated_into_false_amount():
+    assert collect_pdf_facts(["1,234 EUR"]) == []
+    assert collect_pdf_facts(["1.234,56 EUR"]) == []
+
+
+def test_explicit_french_grouping_and_negative_sign_are_exact():
+    facts = collect_pdf_facts(["Total TTC : 1 234,56 EUR\nRemboursement : -9,00 EUR"])
+    assert [(f["value"], f["kind"]) for f in facts] == [
+        ("1234.56", "total_candidat"), ("-9.00", "montant_observe")
+    ]
