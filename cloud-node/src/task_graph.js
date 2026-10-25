@@ -372,6 +372,11 @@ export class TaskGraphExecutor {
           node.timeout_ms,
           node.id,
         );
+        // A handler may return {ok:false} without throwing. This is a failed
+        // node, never a successful execution receipt.
+        if (!outcome || outcome.ok === false) {
+          throw new Error(`capability ${node.capability} failed: ${String(outcome?.error || outcome?.reason || outcome?.result?.error || 'no successful result').slice(0, 240)}`);
+        }
         return { node, outcome };
       }));
 
@@ -413,7 +418,9 @@ export class TaskGraphExecutor {
     }
 
     const finalResult = {
-      ok: errors.length === 0,
+      ok: errors.length === 0
+        && results.size === valid.nodes.length
+        && [...results.values()].every((item) => item.ok),
       graph_id: valid.id,
       objective: valid.objective,
       results: Object.fromEntries(results),
