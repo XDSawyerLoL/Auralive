@@ -57,6 +57,8 @@ class AdministrativeDesktop(tk.Tk):
             "Organise toute ma vie administrative")).pack(side="left", padx=8)
         ttk.Button(tools, text="Retrouver les factures", command=lambda: self.run_example(
             "Retrouve mes factures")).pack(side="left")
+        ttk.Button(tools, text="Vérifier AURA", command=self.verify_runtime).pack(
+            side="right")
 
         results = ttk.LabelFrame(body, text="3. Résultats et éléments vérifiés", padding=10)
         results.pack(fill="both", expand=True)
@@ -143,6 +145,23 @@ class AdministrativeDesktop(tk.Tk):
         )
         self.after(100, self.check_job)
 
+    def verify_runtime(self) -> None:
+        """Execute real local benchmarks without touching user documents."""
+        if self.current_job and not self.current_job.done():
+            self.status.set("Une tâche est déjà en cours.")
+            return
+        self.append("AURA : vérification des tâches locales sur des fichiers temporaires.")
+        self.status.set("Tests d'intégration locaux en cours…")
+
+        async def benchmark():
+            from .personal_benchmark import run_benchmark as personal
+            from .admin_benchmark import run_benchmark as admin
+            first, second = await personal(), await admin()
+            return {"mode": "diagnostic", "personal": first, "administrative": second}
+
+        self.current_job = self.executor.submit(lambda: asyncio.run(benchmark()))
+        self.after(100, self.check_job)
+
     def check_job(self) -> None:
         if not self.current_job:
             return
@@ -151,12 +170,34 @@ class AdministrativeDesktop(tk.Tk):
             return
         try:
             result = self.current_job.result()
-            self.append("AURA : " + render_result(result))
-            self.status.set(
-                "Action vérifiée localement." if result.get("executed") is True
-                else "Action refusée, incomplète ou en échec."
-            )
-            if not result.get("executed") and result.get("needs"):
+            if result.get("mode") == "diagnostic":
+                first = result["personal"]
+                second = result["administrative"]
+                passed = int(first.get("checks_passed", 0)) + int(second.get("checks_passed", 0))
+                total = int(first.get("checks_total", 0)) + int(second.get("checks_total", 0))
+                verified = (
+                    first.get("ok") is True and second.get("ok") is True and total == 22
+                    and passed == total
+                )
+                failed = [
+                    item.get("name", "inconnu")
+                    for suite in (first, second) for item in suite.get("checks", [])
+                    if not item.get("passed")
+                ]
+                self.append(
+                    f"AURA : {passed}/{total} scénarios réels réussis. "
+                    + ("Tests locaux réussis." if verified
+                       else "ÉCHEC : " + (", ".join(failed[:8]) or "résultat incomplet"))
+                )
+                self.status.set("Tests locaux vérifiés." if verified
+                                else "Des tests ont échoué ; système non certifié.")
+            else:
+                self.append("AURA : " + render_result(result))
+                self.status.set(
+                    "Action vérifiée localement." if result.get("executed") is True
+                    else "Action refusée, incomplète ou en échec."
+                )
+            if result.get("mode") != "diagnostic" and not result.get("executed") and result.get("needs"):
                 self.pending_intent = str(result.get("intent") or "")
         except Exception as error:
             self.append(f"AURA : Erreur : {type(error).__name__}: {str(error)[:300]}")
