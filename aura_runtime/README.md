@@ -168,3 +168,55 @@ empreintes SHA-256; `fs.write` relit le fichier et restaure la version
 précédente en cas d'incohérence détectée. Les missions `browser.audit`
 renvoient des résultats mesurés (captures, succès/échecs, contrôles mobile).
 Un accusé de réception seul ne doit jamais marquer la mission terminée.
+
+## Actions quotidiennes réellement exécutables, hors Quantic/SWAPP
+
+AURA Runtime possède désormais quatre outils déterministes qui utilisent les
+fichiers choisis par l'utilisateur. Ils ne demandent **ni modèle, ni Cloud,
+ni clé API**. Les opérations passent par le même opérateur local typé et
+son contrôle de permissions.
+
+Depuis la racine du dépôt, remplacer le chemin d'exemple par un dossier
+que tu autorises explicitement :
+
+```powershell
+python -m aura_runtime.personal_cli --root "C:\Users\Utilisateur\Documents" search --query "facture"
+python -m aura_runtime.personal_cli --root "C:\Users\Utilisateur\Documents" csv --path "depenses.csv"
+python -m aura_runtime.personal_cli --root "C:\Users\Utilisateur\Documents" compare --left "avant.txt" --right "apres.txt"
+python -m aura_runtime.personal_cli --root "C:\Users\Utilisateur\Documents" backup --path "important.txt"
+```
+
+- **Recherche** : fichiers texte UTF-8 uniquement, sous-dossiers autorisés,
+  100 fichiers / 30 correspondances maximum, aucun fichier caché.
+- **CSV** : calcul de colonnes numériques (dont virgule décimale française),
+  5000 lignes, 32 colonnes, 1 Mo maximum ; retourne total, moyenne, min/max
+  sans avoir besoin d'un LLM.
+- **Comparaison** : différences des 100 premières lignes du diff sur deux
+  textes de 200 Ko maximum, avec les empreintes de chaque version.
+- **Sauvegarde** : copie distincte de 2 Mo maximum, créée avec exclusivité,
+  relue et vérifiée par SHA-256 ; permission d'écriture obligatoire, sans
+  écraser l'original. Une transaction annulée supprime sa nouvelle copie.
+
+Les chemins sont résolus sous la racine autorisée et les tentatives de sortie
+sont rejetées. Les résultats sont affichés **localement** ; ils peuvent
+contenir des extraits des documents demandés et ne doivent pas être
+publiés dans les journaux GitHub. L'utilisation **par Cloud** des mêmes
+actions transmettrait le résultat à Hostinger : limiter les autorisations
+et éviter les données confidentielles.
+
+### Mesure reproductible : tâches réelles, pas intention d'agir
+
+```powershell
+python -m aura_runtime.personal_benchmark
+```
+
+Le benchmark crée son propre dossier temporaire, puis mesure 7 scénarios
+avec le véritable opérateur AURA : recherche, budget, diff, sauvegarde,
+refus sans permission, refus hors dossier et rollback après échec.
+Le résultat JSON comporte `checks_passed`, `checks_total` et `ok`.
+Il doit retourner un code d'erreur si un seul scénario échoue.
+
+Cela démontre uniquement les **capacités opérationnelles testées**, pas
+une conversation autonome, la gestion des emails ou l'exécution effective
+des actions depuis une interface Hostinger. Aucun benchmark ne doit
+être considéré comme réussi avant son lancement sur un Runtime installé.
