@@ -237,6 +237,20 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     if not any(key in request for key in domain) and not admin_verbs:
         return None
 
+    # A review board is only a snapshot of work for the person to confirm.
+    if (any(word in request for word in ('suivi administrat', 'tableau de suivi',
+                                          'tableau de bord administrat',
+                                          'echeances a verifier', 'echeances a controler',
+                                          'suivi de mes factur', 'suivi des factur'))
+            or ('prepar' in request and 'echeanc' in request)):
+        return outcome(
+            'administrative-followup-board',
+            'Préparer des contrôles à confirmer à partir des pièces locales,'
+            ' sans fixer de vraie échéance, enregistrer de paiement ou modifier de fichiers.',
+            ({'type': 'admin.followup', 'path': '.'},),
+            confidence='read-only-evidence',
+        )
+
     # An explicit multi-document request runs ONLY a bounded local audit.
     # Duplicate detection does not delete, merge or re-file documents.
     if (any(word in request for word in ('doublon', 'rapproch', 'factures et paiements',
