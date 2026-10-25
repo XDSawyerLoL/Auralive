@@ -29,3 +29,7 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local AURA browser audit artifacts - never push screenshots or reports.
+aura-browser-reports/
+aura-browser-audits/
