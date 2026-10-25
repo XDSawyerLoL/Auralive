@@ -59,6 +59,12 @@ class AdministrativeDesktop(tk.Tk):
             "Retrouve mes factures")).pack(side="left")
         ttk.Button(tools, text="Vérifier AURA", command=self.verify_runtime).pack(
             side="right")
+        extra = ttk.Frame(ask)
+        extra.pack(fill="x", pady=(8, 0))
+        ttk.Button(
+            extra, text="Factures + paiements : rechercher doublons et rapprochements",
+            command=lambda: self.run_example("Analyse mes factures et paiements"),
+        ).pack(side="left")
 
         results = ttk.LabelFrame(body, text="3. Résultats et éléments vérifiés", padding=10)
         results.pack(fill="both", expand=True)
