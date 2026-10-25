@@ -66,7 +66,13 @@ test('bridge completion requires actual executed and successful operator steps',
   const good = {
     ok: true, result: {
       executed: true, status: 'completed',
-      steps: [{ type: 'browser.audit', ok: true, checks_passed: 2 }],
+      steps: [{
+        type: 'browser.audit', ok: true, checks_passed: 2, checks_total: 2,
+        checks: [
+          { ok: true, screenshot_sha256: 'a'.repeat(64) },
+          { ok: true, screenshot_sha256: 'b'.repeat(64) },
+        ],
+      }],
     },
   };
   assert.equal(workerCompletionVerified('operator', good), true);
@@ -81,4 +87,21 @@ test('bridge completion requires actual executed and successful operator steps',
   }), false);
   assert.equal(workerCompletionVerified('compute', { ok: true, result: { value: 0 } }), true);
   assert.equal(workerCompletionVerified('compute', { ok: true, result: { ok: false } }), false);
+});
+
+
+test('Cloud refuses fabricated browser audit and unsigned file write receipts', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const envelope = (step) => ({
+    ok: true, result: { executed: true, status: 'completed', steps: [step] },
+  });
+  assert.equal(workerCompletionVerified('operator', envelope({
+    type: 'browser.audit', ok: true, checks_passed: 2, checks_total: 2, checks: [],
+  })), false);
+  assert.equal(workerCompletionVerified('operator', envelope({
+    type: 'fs.write', ok: true, path: 'test.txt', verified: false,
+  })), false);
+  assert.equal(workerCompletionVerified('operator', envelope({
+    type: 'fs.write', ok: true, path: 'test.txt', verified: true, sha256: 'f'.repeat(64),
+  })), true);
 });
