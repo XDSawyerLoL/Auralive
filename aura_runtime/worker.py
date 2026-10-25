@@ -621,7 +621,7 @@ class AuraRuntimeWorker:
         requested = {str(item).casefold() for item in requested_risks if str(item).strip()}
         # Une mission Cloud ne peut jamais élargir la politique locale : elle ne
         # peut demander qu'un sous-ensemble de ce qu'AURA Runtime autorise.
-        allowed = configured.intersection(requested or configured)
+        allowed = configured.intersection(requested)
         return await operator.operate(
             str(payload.get("task") or ""),
             max_steps=max(1, min(int(payload.get("max_steps") or 6), 8)),
@@ -785,6 +785,36 @@ class AuraRuntimeWorker:
         )
         try:
             result = await self._execute(job)
+            # A response is not evidence that the operator actually ran.
+            # Propagate the failure receipt instead of laundering it into
+            # a successful Cloud job or increasing the success counter.
+            failed_receipt = isinstance(result, dict) and (
+                result.get("ok") is False
+                or str(result.get("status") or "").casefold() in {
+                    "error", "failed", "not-executed", "waiting"
+                }
+            )
+            if self.last_job_kind == "operator":
+                steps = result.get("steps") if isinstance(result, dict) else None
+                failed_receipt = failed_receipt or not (
+                    isinstance(result, dict)
+                    and result.get("executed") is True
+                    and result.get("status") == "completed"
+                    and isinstance(steps, list) and bool(steps)
+                    and all(isinstance(step, dict) and step.get("ok") is True for step in steps)
+                )
+            if failed_receipt:
+                self.jobs_failed += 1
+                self.last_error = str(
+                    (result.get("error") or result.get("reason"))
+                    if isinstance(result, dict) else "operator result missing"
+                )[:1000] or "execution evidence missing"
+                await self._complete(
+                    job_id, ok=False,
+                    result=result if isinstance(result, dict) else {},
+                    error=self.last_error,
+                )
+                return
             await self._complete(job_id, ok=True, result=result)
             self.jobs_completed += 1
             self.last_error = ""
