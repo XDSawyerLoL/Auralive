@@ -187,7 +187,7 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
         'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
         'copie de securite', 'impos', 'quittance', 'fiscal', 'loyer',
-        'pdf',
+        'pdf', 'doublon', 'rapproch', 'paiement', 'portfolio',
         'sauvegard',
     )
     # Whole-word patterns prevent "triste", "étrange" and unrelated
@@ -236,6 +236,19 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
     # model planning with browser/automation permissions.
     if not any(key in request for key in domain) and not admin_verbs:
         return None
+
+    # An explicit multi-document request runs ONLY a bounded local audit.
+    # Duplicate detection does not delete, merge or re-file documents.
+    if (any(word in request for word in ('doublon', 'rapproch', 'factures et paiements',
+                                        'factures et mes paiements', 'factures avec paiements'))
+            or ('analys' in request and 'factur' in request)):
+        return outcome(
+            'administrative-portfolio',
+            'Comparer localement PDF et CSV, signaler les doublons exacts et proposer'
+            ' des rapprochements à confirmer, sans déplacer ni payer.',
+            ({'type': 'admin.portfolio', 'path': '.'},),
+            confidence='read-only-evidence',
+        )
 
     # One explicitly named PDF may be inspected locally. Extraction is
     # bounded, not an LLM summary or an automatic administrative decision.
