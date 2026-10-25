@@ -251,3 +251,24 @@ test('configured Groq-style federation answers when Hostinger native loader is b
   assert.equal(nativeCalls, 0);
   assert.equal(faculty.lastBackend, 'groq');
 });
+
+test('the production English chain-of-thought preamble is rejected', async () => {
+  const { cleanSpeechOutput } = await import('../src/french_language.js');
+  assert.equal(cleanSpeechOutput("The user is asking what I'm doing. According to the core's decision, I should respond naturally."), '');
+  assert.equal(cleanSpeechOutput('Selon ma dernière vérification, aucune action n’est terminée.'), 'Selon ma dernière vérification, aucune action n’est terminée.');
+});
+test('free federation retries in French instead of publishing internal narration', async () => {
+  let calls = 0;
+  const faculty = new FrenchLanguageFaculty({
+    federation: {
+      enabled: true,
+      snapshot: () => ({ enabled: true, zero_cost_mode: true }),
+      async generate() {
+        calls++;
+        return { answer: calls === 1 ? 'The user is asking what to do. I should respond.' : 'Je vérifie les résultats.', provider: 'free', model: 'free:test' };
+      },
+    },
+  }, { embedded: { status: () => ({ ready: false }), installed: () => false } });
+  assert.equal(await faculty.generate({ user_text: 'Tu fais quoi ?', act: 'respond' }), 'Je vérifie les résultats.');
+  assert.equal(calls, 2);
+});
