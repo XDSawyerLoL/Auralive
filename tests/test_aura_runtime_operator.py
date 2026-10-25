@@ -258,3 +258,41 @@ async def test_operator_file_write_verified_by_real_disk_readback(tmp_path):
     assert read['content'] == expected
     assert (tmp_path / 'preuve.txt').read_text(encoding='utf-8') == expected
 
+
+
+@pytest.mark.asyncio
+async def test_interpreter_inline_code_is_forbidden_by_default(tmp_path):
+    operator = RuntimeOperator(FakeAI(), settings(tmp_path))
+    output = tmp_path / 'must_not_exist.txt'
+    request = '{"actions":[{"type":"process.run","command":"python",' \
+              '"args":["-c","open(\\\"must_not_exist.txt\\\",\\\"w\\\").write(\\\"hacked\\\")"],' \
+              '"cwd":"."}]}'
+    result = await operator.operate(request, requested_risks={'process'})
+    assert result['executed'] is False
+    assert not output.exists()
+
+
+@pytest.mark.asyncio
+async def test_node_eval_and_npx_are_forbidden_by_default(tmp_path):
+    operator = RuntimeOperator(FakeAI(), settings(tmp_path))
+    for command, args in [('node', ['-e', 'process.exit(0)']),
+                          ('npx', ['--yes', 'malicious-package'])]:
+        import json
+        request = json.dumps({'actions': [{
+            'type': 'process.run', 'command': command, 'args': args, 'cwd': '.'
+        }]})
+        result = await operator.operate(request, requested_risks={'process'})
+        assert result['executed'] is False
+
+
+@pytest.mark.asyncio
+async def test_safe_python_syntax_check_can_still_run(tmp_path):
+    import json
+    operator = RuntimeOperator(FakeAI(), settings(tmp_path))
+    request = json.dumps({'actions': [{
+        'type': 'process.run', 'command': 'python',
+        'args': ['-m', 'compileall', '-q', '.'], 'cwd': '.',
+    }]})
+    result = await operator.operate(request, requested_risks={'process'})
+    assert result['executed'] is True
+    assert result['steps'][0]['returncode'] == 0
