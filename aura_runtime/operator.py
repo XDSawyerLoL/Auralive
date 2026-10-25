@@ -62,6 +62,11 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "category": "browser",
         "risk": "browser-control",
     },
+    "browser.audit": {
+        "title": "Auditer les pages publiques SWAPP avec captures et preuves",
+        "category": "browser",
+        "risk": "browser-control",
+    },
 }
 
 
@@ -161,6 +166,11 @@ class RuntimeOperator:
             return bool(
                 self.open_capabilities.browser_enabled
                 and self.open_capabilities.browser_use_available
+            )
+        if name == "browser.audit":
+            return bool(
+                self.open_capabilities.browser_enabled
+                and self.open_capabilities.playwright_available
             )
         return True
 
@@ -460,6 +470,20 @@ class RuntimeOperator:
             )
             return {"type": kind, **result}, None
 
+        if kind == "browser.audit":
+            from .browser_audit import DEFAULT_ROUTES, audit_public_pages
+            requested_routes = action.get("routes", list(DEFAULT_ROUTES))
+            if not isinstance(requested_routes, (list, tuple)):
+                raise ValueError("browser.audit exige une liste de routes")
+            routes = [str(route) for route in requested_routes]
+            result = await audit_public_pages(
+                routes,
+                network_validator=self._safe_public_browser_url,
+                artifacts_dir=self._resolve_path("aura-browser-audits"),
+                browser_engine="chromium",
+            )
+            return {"type": kind, **result}, None
+
         if kind == "browser.task":
             result = await self.open_capabilities.browser_task(
                 str(action.get("task") or ""),
@@ -555,6 +579,10 @@ class RuntimeOperator:
                 reports.append(report)
                 if rollback:
                     rollback_stack.append(rollback)
+                # A tool returning ok:false is not a completed mission. Store
+                # the failed receipt and roll back previous local writes.
+                if report.get("ok") is False:
+                    raise RuntimeError(f"{str(action.get('type') or '')} verification failed")
             self.last_error = ""
             self.last_run_at = __import__("datetime").datetime.now(
                 __import__("datetime").timezone.utc
