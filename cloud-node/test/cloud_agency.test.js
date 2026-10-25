@@ -106,3 +106,43 @@ test('swarm dispatches independent agents concurrently before synthesis', async 
   assert.ok(maxActive >= 2);
   assert.deepEqual(result.agents.map((item) => item.agent), ['planner', 'research', 'dev', 'critic']);
 });
+
+
+test('failed capability result cannot be silently completed by DAG executor', async () => {
+  const fabric = {
+    async execute() { return { ok: false, error: 'write refused' }; },
+  };
+  const executor = new TaskGraphExecutor(fabric);
+  const graph = { id: 'failed-action', objective: 'Test refusal',
+    nodes: [{ id: 'attempt', capability: 'cloud.workspace.create',
+      depends_on: [], verification: 'side-effect' }] };
+  const result = await executor.execute(graph, { allowSideEffects: true });
+  assert.equal(result.ok, false);
+  assert.equal(result.metrics.nodes_completed, 0);
+  assert.match(result.errors[0]?.error || '', /write refused/);
+});
+
+test('cloud sandbox produces cryptographically consistent proof before reporting executed', async () => {
+  const fabric = new CapabilityFabric();
+  const kernel = new CognitiveKernel({ enabled: false, async generate() { return ''; } },
+    null, { enabled: false, async workerOnline() { return false; } }, null, fabric);
+  kernel.trace = async () => {};
+  kernel.runAgent = async () => ({ agent: 'operator', answer: 'safe plan' });
+  const result = await kernel.operate('Créer un fichier de test, relire son contenu, puis le supprimer.', ['safe']);
+  assert.equal(result.executed, true);
+  assert.equal(result.verification?.verified, true);
+  assert.equal(result.verification?.kind, 'workspace-create-read-sha256-delete');
+  assert.match(result.verification?.sha256 || '', /^[a-f0-9]{64}$/);
+  assert.equal(result.verification?.deleted, true);
+});
+
+test('unrelated real-world repair is not replaced with an irrelevant sandbox write', async () => {
+  const fabric = new CapabilityFabric();
+  const kernel = new CognitiveKernel({ enabled: false, async generate() { return ''; } },
+    null, { enabled: false, async workerOnline() { return false; } }, null, fabric);
+  kernel.trace = async () => {};
+  kernel.runAgent = async () => ({ agent: 'operator', answer: 'Action impossible sans connecteur.' });
+  const result = await kernel.operate('Réparer la panne du lecteur vidéo SWAPP.', []);
+  assert.equal(result.executed, false);
+  assert.equal(result.execution_mode, 'plan-only-fallback');
+});
