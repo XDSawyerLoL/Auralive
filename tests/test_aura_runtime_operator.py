@@ -236,3 +236,25 @@ async def test_explicit_empty_risk_list_refuses_sensitive_operations(tmp_path):
     assert result['status'] == 'error'
     assert 'non autorisé' in result['error']
     assert original.read_text(encoding='utf-8') == 'protected'
+
+@pytest.mark.asyncio
+async def test_operator_file_write_verified_by_real_disk_readback(tmp_path):
+    import hashlib
+    operator = RuntimeOperator(FakeAI(), settings(tmp_path))
+    expected = 'AURA écrit et vérifie réellement ses fichiers.'
+    response = await operator.operate(
+        '{"summary":"écriture vérifiée","actions":['
+        '{"type":"fs.write","path":"preuve.txt","content":"'
+        + expected +
+        '"},{"type":"fs.read","path":"preuve.txt"}]}',
+        requested_risks={'safe', 'local-write'},
+    )
+    assert response['status'] == 'completed'
+    assert response['executed'] is True
+    written, read = response['steps']
+    assert written['verified'] is True
+    assert written['sha256'] == hashlib.sha256(expected.encode('utf-8')).hexdigest()
+    assert read['sha256'] == written['sha256']
+    assert read['content'] == expected
+    assert (tmp_path / 'preuve.txt').read_text(encoding='utf-8') == expected
+
