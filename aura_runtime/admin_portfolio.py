@@ -68,7 +68,7 @@ def _rows(raw: bytes) -> list[dict[str, str]]:
     return rows
 
 
-def _payment_candidates(records: list[tuple[str, bytes]]) -> list[dict[str, Any]]:
+def _payment_candidates(records: list[tuple[str, bytes]], errors: list[dict[str, str]]) -> list[dict[str, Any]]:
     matches = []
     for filename, raw in records:
         try:
@@ -83,9 +83,13 @@ def _payment_candidates(records: list[tuple[str, bytes]]) -> list[dict[str, Any]
                 if amount >= 0:
                     continue
                 matches.append({'file': filename, 'row': row_number, 'description': reference[:180], 'amount': str(-amount)})
-        except (UnicodeError, ValueError, csv.Error):
+                if len(matches) >= 2000:
+                    errors.append({'file': filename, 'reason': 'Transactions limitées à 2 000'})
+                    return matches
+        except (UnicodeError, ValueError, csv.Error) as exc:
+            errors.append({'file': filename, 'reason': type(exc).__name__})
             continue
-    return matches[:2000]
+    return matches
 
 
 def analyze_portfolio(root: Path) -> dict[str, Any]:
@@ -153,7 +157,7 @@ def analyze_portfolio(root: Path) -> dict[str, Any]:
                          'references': references, 'total_candidates': total_candidates,
                          'text_detected': pdf['text_detected'],
                          'deadline_candidates': [x for x in pdf['observed_facts'] if x['kind'] == 'date_limite_candidate'][:5]})
-    transactions = _payment_candidates([(x['name'], x['bytes']) for x in documents if x['type'] == '.csv'])
+    transactions = _payment_candidates([(x['name'], x['bytes']) for x in documents if x['type'] == '.csv'], errors)
     proposals = []
     claimed_transactions = defaultdict(list)
     for invoice in invoices:
@@ -183,7 +187,7 @@ def analyze_portfolio(root: Path) -> dict[str, Any]:
             'mode': 'local-multi-document-evidence', 'documents_scanned': len(documents),
             'bytes_scanned': total_bytes, 'duplicates_exact_sha256': duplicates,
             'invoices': invoices[:30], 'payment_candidates': proposals[:30],
-            'errors': errors[:30], 'limit_reached': limit_reached,
+            'errors': errors[:30], 'limit_reached': limit_reached or len(invoices) > 30 or len(proposals) > 30 or len(errors) > 30,
             'limitations': [
                 'Doublons certains uniquement pour des octets identiques (SHA-256).',
                 'Rapprochements candidats uniquement : même référence explicite et montant unique.',
