@@ -227,11 +227,21 @@ AURA dispose d'un **routeur d'intentions limité**, pas d'une intelligence
 administrative autonome. Il reconnaît des demandes précises et s'arrête
 lorsqu'une donnée ou une autorisation manque.
 
-Sur Windows, depuis le dépôt téléchargé :
+Sur Windows, depuis le dépôt téléchargé, double-cliquer :
 
 ```text
 aura_runtime\assistant-administratif.cmd
 ```
+
+Cela ouvre une **fenêtre native** : choisir un dossier, saisir sa demande
+en français, lire le résultat local. Aucune installation de modèle, aucune
+API, aucun serveur ou jeton Hostinger requis. La fenêtre reste réactive
+durant le parcours des fichiers. En cas d'absence de Tkinter, le lanceur
+propose le mode texte.
+
+Les données sont **locales par défaut**, y compris les statistiques des
+catégories administratives. Les fonctions de lecture HTTP nécessitent
+aiohttp uniquement lorsqu'elles sont demandées, pas pour cet assistant.
 
 Choisir un dossier d'accès **limité** à des documents que tu autorises,
 puis demander par exemple :
