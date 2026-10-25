@@ -375,3 +375,7 @@ test('mission cancellation propagates to Runtime jobs', () => {
   assert.match(commandSource, /mission_steps ms[\s\S]*aura_initiatives i/);
   assert.match(commandSource, /i\.status IN \('queued','running','waiting'\)/);
 });
+
+test('zero-cost default never automatically reruns failed GitHub CI', () => {
+  assert.match(configSource, /commandCenterAutoRerunFailedCi: bool\('AURA_COMMAND_AUTO_RERUN_FAILED_CI', false\)/);
+});
