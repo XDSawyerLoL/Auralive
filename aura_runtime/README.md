@@ -220,3 +220,68 @@ Cela démontre uniquement les **capacités opérationnelles testées**, pas
 une conversation autonome, la gestion des emails ou l'exécution effective
 des actions depuis une interface Hostinger. Aucun benchmark ne doit
 être considéré comme réussi avant son lancement sur un Runtime installé.
+
+## Comprendre une demande administrative en français (local, sans modèle)
+
+AURA dispose d'un **routeur d'intentions limité**, pas d'une intelligence
+administrative autonome. Il reconnaît des demandes précises et s'arrête
+lorsqu'une donnée ou une autorisation manque.
+
+Sur Windows, depuis le dépôt téléchargé :
+
+```text
+aura_runtime\assistant-administratif.cmd
+```
+
+Choisir un dossier d'accès **limité** à des documents que tu autorises,
+puis demander par exemple :
+
+```text
+Organise toute ma vie administrative
+Retrouve mes factures
+Retrouve mon bulletin de paie
+Fais le total de mes dépenses
+Compare avant.txt avec apres.txt
+Sauvegarde notes.txt
+```
+
+La première demande déclenche **seulement un inventaire en lecture seule**
+fondé sur le nom des documents : catégories « factures », « impôts »,
+« emploi », « assurances », « logement », « banque », « identité »,
+« santé », et « à identifier ». Il ne déplace aucun document, ne lit pas le
+contenu des PDF et ne prend aucune décision administrative.
+
+« Retrouve mes factures » cherche par **nom de fichier**, y compris les PDF.
+Une recherche d'une expression entre guillemets cherche dans le contenu
+des fichiers texte compatibles, pas dans les PDF.
+
+Si la demande « fais le total de mes dépenses » ne précise pas de CSV,
+AURA demande le nom du fichier et peut reprendre cette action au
+tour suivant. Les sauvegardes demandent une confirmation distincte
+\`OUI\`. Envoyer un dossier, payer une facture, déclarer des impôts, supprimer
+des fichiers et signer un document ne sont jamais exécutés par ce parcours.
+
+On peut aussi demander une seule action, sans conversation :
+
+```powershell
+python -m aura_runtime.personal_cli --root "C:\Users\Utilisateur\Documents" ask --request "Organise toute ma vie administrative"
+python -m aura_runtime.personal_cli --root "C:\Users\Utilisateur\Documents" ask --request "Retrouve mes factures"
+```
+
+### Benchmark local reproductible
+
+```powershell
+python -m aura_runtime.admin_benchmark
+pytest -q tests/test_aura_admin_assistant.py tests/test_aura_admin_chat.py
+```
+
+Le premier exécute dix scénarios de bout en bout sur un dossier temporaire
+et termine avec un code différent de zéro si l'un d'eux échoue.
+**Aucune dépendance linguistique, aucun API externe, aucun coût d'IA.**
+
+**Confidentialité** : une mission provenant du worker Cloud ne peut pas
+retourner par défaut les noms ou les extraits de documents personnels ;
+\`AURA_RUNTIME_CLOUD_PERSONAL_FILES_ENABLED\` devra être activé
+explicitement pour les capacités de recherche, CSV, comparaison ou
+sauvegarde. L'inventaire renvoie uniquement des comptes par catégorie.
+Il ne suffit pas de demander l'accès dans une instruction à AURA.
