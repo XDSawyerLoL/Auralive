@@ -1,0 +1,15 @@
+export const cases = Object.freeze([
+  { id: 'research-real-evidence', kind: 'research',
+    result: { ok: true, session_id: 'research-001', evidence: ['source-officielle'], conclusion: 'Informations relevées' },
+    expected: 'completed' },
+  { id: 'research-status-only', kind: 'research', result: { status: 'completed' }, expected: 'failed' },
+  { id: 'research-unverified', kind: 'research', result: { status: 'unknown' }, expected: 'failed' },
+  { id: 'research-running', kind: 'research', result: { status: 'running', ok: true, evidence: ['x'] }, expected: 'waiting' },
+  { id: 'operator-proved', kind: 'operator', result: { ok: true, executed: true, result: { changed: 1 } }, expected: 'completed' },
+  { id: 'operator-plan-only', kind: 'operator', result: { ok: true, executed: false, plan: 'plus tard' }, expected: 'waiting' },
+  { id: 'operator-faked', kind: 'operator', result: { ok: true, executed: true, message: 'fait' }, expected: 'failed' },
+  { id: 'worker-receipt', kind: 'worker', result: { status: 'completed', artifact: 'signed-result.json' }, expected: 'completed' },
+  { id: 'worker-empty', kind: 'worker', result: { status: 'completed' }, expected: 'failed' },
+  { id: 'worker-rejected', kind: 'worker', result: { status: 'security-rejected', artifact: 'fake.json' }, expected: 'failed' },
+  { id: 'evolution-no-change', kind: 'evolution', result: { status: 'no-change', diagnosis: { diagnosis: 'Aucune modification nécessaire' } }, expected: 'completed' },
+]);
