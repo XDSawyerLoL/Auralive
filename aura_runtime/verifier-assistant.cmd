@@ -50,7 +50,14 @@ if errorlevel 1 (
  pause
  exit /b 1
 )
-echo [AURA] 33/33 controles attendus sur fichiers temporaires.
+echo [AURA] Test de 10 rapprochements multi-documents TEMPORAIRES.
+python -m aura_runtime.admin_portfolio_benchmark
+if errorlevel 1 (
+ echo [ECHEC] Analyse factures et paiements non validee.
+ pause
+ exit /b 1
+)
+echo [AURA] 43/43 controles attendus sur fichiers temporaires.
 echo [AURA] Ne valide pas le fonctionnement graphique ou le Cloud de production.
 pause
 exit /b 0
