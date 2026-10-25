@@ -67,6 +67,11 @@ _ACTIONS: dict[str, dict[str, str]] = {
         "category": "browser",
         "risk": "browser-control",
     },
+    "admin.portfolio": {
+        "title": "Comparer localement des factures PDF et opérations CSV sans modifier les fichiers",
+        "category": "administrative",
+        "risk": "safe",
+    },
     "admin.pdf.inspect": {
         "title": "Lire le texte et constater les dates d'un seul PDF local autorisé",
         "category": "administrative",
@@ -345,6 +350,10 @@ class RuntimeOperator:
         risk = definition["risk"]
         if risk not in allowed_risks:
             raise PermissionError(f"Risque {risk} non autorisé pour {kind}")
+
+        if kind == "admin.portfolio":
+            from .admin_portfolio import analyze_portfolio
+            return analyze_portfolio(self._resolve_path(action.get("path") or ".")), None
 
         if kind == "admin.pdf.inspect":
             from .pdf_documents import inspect_pdf
@@ -715,6 +724,7 @@ class RuntimeOperator:
         )) and any(action.get("type") in {
             "files.search", "data.csv.summary", "files.compare", "files.backup",
             "admin.locate", "admin.inventory", "admin.pdf.inspect",
+            "admin.portfolio",
             "fs.list", "fs.read", "fs.write", "fs.mkdir",
         } for action in actions):
             return {
