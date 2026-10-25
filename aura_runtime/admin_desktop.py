@@ -158,7 +158,14 @@ class AdministrativeDesktop(tk.Tk):
             from .personal_benchmark import run_benchmark as personal
             from .admin_benchmark import run_benchmark as admin
             first, second = await personal(), await admin()
-            return {"mode": "diagnostic", "personal": first, "administrative": second}
+            try:
+                from .pdf_benchmark import run_benchmark as pdf
+                third = pdf()
+            except Exception as exc:
+                third = {"ok": False, "checks_total": 0, "checks_passed": 0,
+                         "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+            return {"mode": "diagnostic", "personal": first,
+                    "administrative": second, "pdf": third}
 
         self.current_job = self.executor.submit(lambda: asyncio.run(benchmark()))
         self.after(100, self.check_job)
@@ -172,26 +179,31 @@ class AdministrativeDesktop(tk.Tk):
         try:
             result = self.current_job.result()
             if result.get("mode") == "diagnostic":
-                first = result["personal"]
-                second = result["administrative"]
-                passed = int(first.get("checks_passed", 0)) + int(second.get("checks_passed", 0))
-                total = int(first.get("checks_total", 0)) + int(second.get("checks_total", 0))
+                first, second, third = (
+                    result["personal"], result["administrative"], result["pdf"]
+                )
+                suites = (first, second, third)
+                passed = sum(int(x.get("checks_passed", 0)) for x in suites)
+                total = sum(int(x.get("checks_total", 0)) for x in suites)
                 verified = (
-                    first.get("ok") is True and second.get("ok") is True and total == 22
-                    and passed == total
+                    all(x.get("ok") is True for x in suites)
+                    and total == 31 and passed == total
                 )
                 failed = [
                     item.get("name", "inconnu")
-                    for suite in (first, second) for item in suite.get("checks", [])
+                    for suite in suites for item in suite.get("checks", [])
                     if not item.get("passed")
                 ]
+                if third.get("error"):
+                    failed.append("PDF non vérifié : " + str(third["error"])[:140])
                 self.append(
-                    f"AURA : {passed}/{total} scénarios réels réussis. "
-                    + ("Tests locaux réussis." if verified
-                       else "ÉCHEC : " + (", ".join(failed[:8]) or "résultat incomplet"))
+                    f"AURA : {passed}/{total} contrôles locaux réussis. "
+                    + ("Tous les benchmarks locaux ont réussi." if verified
+                       else "Contrôles incomplets : "
+                       + (", ".join(failed[:8]) or "résultat incomplet"))
                 )
-                self.status.set("Tests locaux vérifiés." if verified
-                                else "Des tests ont échoué ; système non certifié.")
+                self.status.set("Benchmarks locaux vérifiés (hors interface Windows)."
+                                if verified else "Des contrôles sont non vérifiés ou en échec.")
             else:
                 self.append("AURA : " + render_result(result))
                 self.status.set(
