@@ -62,3 +62,33 @@ test('a completed transport job that only planned is not completed work', () => 
     ok: true, executed: false, plan: 'Non exécuté',
   }).status, 'failed');
 });
+
+test('incomplete or unknown outcomes never masquerade as completed work', () => {
+  for (const candidate of [
+    { status: 'unknown' },
+    { message: 'starting soon' },
+    { status: 'completed' },
+    { status: 'completed', result: { status: 'completed' } },
+    { ok: true, message: 'I plan to begin tomorrow' },
+    { ok: true, evidence: [] },
+  ]) {
+    assert.equal(classifyInitiativeResult('research', candidate).status, 'failed', JSON.stringify(candidate));
+  }
+});
+test('durable evidence is required, and in-progress tasks remain waiting', () => {
+  assert.equal(classifyInitiativeResult('research', {
+    ok: true, session_id: 'session', conclusion: 'Preuves encore insuffisantes', evidence_count: 0,
+  }).status, 'completed');
+  assert.equal(classifyInitiativeResult('reflection', {
+    ok: true, reflection: { id: 'ref', summary: 'Une réflexion sauvegardée.' },
+  }).status, 'completed');
+  assert.equal(classifyInitiativeResult('evolution', {
+    status: 'no-change', diagnosis: { worth_changing: false, diagnosis: 'Rien à modifier' },
+  }).status, 'completed');
+  assert.equal(classifyInitiativeResult('operator', {
+    ok: true, executed: true, result: { changed: 0 },
+  }).status, 'failed');
+  assert.equal(classifyInitiativeResult('research', {
+    ok: true, status: 'running', evidence: ['une source'],
+  }).status, 'waiting');
+});
