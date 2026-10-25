@@ -240,3 +240,21 @@ test('Cloud refuses all administrative portfolio receipts even if a worker claim
   };
   assert.equal(workerCompletionVerified('operator', claimed), false);
 });
+
+
+test('AURA follow-up checklist cannot be attested by a remote worker', async () => {
+  const { workerCompletionVerified } = await import('../src/bridge.js');
+  const response = {
+    ok: true,
+    result: {
+      executed: true, status: 'completed',
+      steps: [{
+        type: 'admin.followup', ok: true, verified: true, read_only: true,
+        mode: 'observed-administrative-snapshot', task_count: 1,
+        tasks: [{ title: 'Confirmer un rapprochement possible',
+                  status: 'a_verifier', action_taken: false }],
+      }],
+    },
+  };
+  assert.equal(workerCompletionVerified('operator', response), false);
+});
