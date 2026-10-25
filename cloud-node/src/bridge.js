@@ -205,6 +205,17 @@ export function workerCompletionVerified(kind, payload = {}) {
           && step.characters_extracted >= 0
           && Array.isArray(step.previews)
           && Array.isArray(step.dates_observed)
+          && Array.isArray(step.invoice_references_observed)
+          && Number.isInteger(step.reference_candidates_count)
+          && step.reference_candidates_count === step.invoice_references_observed.length
+          && step.reference_candidates_count <= 12
+          && step.invoice_references_observed.every((item) =>
+            Number.isInteger(item?.page) && item.page >= 1
+            && item.page <= step.pages
+            && typeof item.reference === 'string'
+            && /^[A-Z0-9-]{7,32}$/.test(item.reference)
+            && typeof item.evidence === 'string' && item.evidence.length > 0
+            && item.certainty === 'texte_observe_non_verifie')
           && Array.isArray(step.observed_facts)
           && Number.isInteger(step.facts_count) && step.facts_count >= 0
           && step.facts_count === step.observed_facts.length
