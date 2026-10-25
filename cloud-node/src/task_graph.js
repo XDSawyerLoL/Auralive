@@ -308,16 +308,43 @@ export class DagCompiler {
       'Objectif: ' + goal,
     ].join('\n');
 
-    const raw = await this.ai.generate(
-      prompt,
-      'Tu es le compilateur de graphes d’AURA. Tu planifies; tu ne prends pas de permissions et tu ne crées pas de nouveau type d’action.',
-      1800,
-      'reasoning',
-    );
-    const parsed = parseJsonObject(raw);
-    parsed.objective = goal;
-    parsed.budget_microunits = Math.max(0, Number(parsed.budget_microunits || budgetMicrounits));
-    return validateTaskGraph(parsed, { maxNodes, maxParallel });
+    // A free model can fail or emit an empty graph. Recover only with an
+    // existing read-only research tool: no writes, shell, or new permissions.
+    try {
+      const raw = await this.ai.generate(
+        prompt,
+        'Tu es le compilateur de graphes d’AURA. Tu planifies; tu ne prends pas de permissions et tu ne crées pas de nouveau type d’action.',
+        1800,
+        'reasoning',
+      );
+      const parsed = parseJsonObject(raw);
+      parsed.objective = goal;
+      parsed.budget_microunits = Math.max(0, Number(parsed.budget_microunits || budgetMicrounits));
+      const graph = validateTaskGraph(parsed, { maxNodes, maxParallel });
+      const availableIds = new Set(available.map((item) => item.id));
+      if (graph.nodes.some((node) => !availableIds.has(node.capability))) {
+        throw new Error('DAG references unknown capability');
+      }
+      return graph;
+    } catch {
+      const safe = available.filter((item) => !item.side_effects);
+      const research = safe.find((item) => item.id === 'web.research')
+        || safe.find((item) => item.tags.includes('research'));
+      if (!research) throw new Error('aucune capacité de recherche sûre disponible pour ce DAG');
+      return validateTaskGraph({
+        objective: goal,
+        budget_microunits: 0,
+        max_parallel: 1,
+        nodes: [{
+          id: 'research',
+          capability: research.id,
+          input: { question: goal, objective: goal, stage: 'research' },
+          depends_on: [],
+          expected_output: 'evidence',
+          verification: 'evidence',
+        }],
+      }, { maxNodes, maxParallel });
+    }
   }
 }
 
