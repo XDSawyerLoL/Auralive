@@ -480,6 +480,38 @@ class RuntimeOperator:
                 for item in args
             ):
                 raise ValueError("Argument process invalide")
+            # An allowlisted executable is not automatically an allowlisted
+            # command. '-c', '-e', npx and arbitrary package scripts can
+            # execute unreviewed code or touch files outside the workspace.
+            if not bool(getattr(self.settings, "aura_runtime_operator_unsafe_commands_enabled", False)):
+                lowered = [argument.casefold() for argument in args]
+                if command_name in {"python", "python3"}:
+                    permitted = (
+                        len(lowered) >= 2 and lowered[0] == "-m"
+                        and lowered[1] in {"pytest", "compileall"}
+                    )
+                elif command_name == "node":
+                    permitted = bool(lowered and lowered[0] in {"--check", "--test"})
+                elif command_name == "git":
+                    permitted = bool(lowered and lowered[0] in {
+                        "status", "diff", "log", "show", "rev-parse", "ls-files",
+                    })
+                elif command_name == "pytest":
+                    permitted = True
+                elif command_name == "cargo":
+                    permitted = bool(lowered and lowered[0] in {"check", "test"})
+                elif command_name == "npm":
+                    permitted = lowered == ["test"] or lowered == ["run", "test"]
+                else:
+                    permitted = False
+                if not permitted:
+                    raise PermissionError(
+                        f"Arguments non autorisés pour {command_name}; "
+                        "exécution d'un interpréteur général bloquée par défaut"
+                    )
+                if any(item in {"-c", "-e", "--eval", "--require", "--import",
+                                "--loader", "--experimental-loader"} for item in lowered):
+                    raise PermissionError("Injection de code ou de module refusée")
             cwd = self._resolve_path(action.get("cwd") or ".")
             if not cwd.is_dir():
                 raise FileNotFoundError(str(cwd))
