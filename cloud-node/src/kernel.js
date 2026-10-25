@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
@@ -76,7 +76,12 @@ export function verifyCloudWorkspaceRoundtrip(graph = {}, outcome = {}) {
     && deleted?.deleted === true && deleted?.exists_after === false
     && String(created?.path || '') !== ''
     && created.path === read?.path && read.path === deleted?.path
-    && /^[a-f0-9]{64}$/.test(sha) && sha === read?.sha256;
+    && /^[a-f0-9]{64}$/.test(sha) && sha === read?.sha256
+    && typeof read?.content === 'string'
+    && createHash('sha256').update(read.content).digest('hex') === sha
+    && Number(created?.bytes || 0) > 0
+    && created.bytes === read?.bytes
+    && Buffer.byteLength(read.content, 'utf8') === read.bytes;
   return valid
     ? { verified: true, kind: 'workspace-create-read-sha256-delete',
         sha256: sha, path: created.path, deleted: true }
