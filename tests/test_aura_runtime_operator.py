@@ -262,15 +262,19 @@ async def test_operator_file_write_verified_by_real_disk_readback(tmp_path):
 
 @pytest.mark.asyncio
 async def test_interpreter_inline_code_is_forbidden_by_default(tmp_path):
+    import json
     operator = RuntimeOperator(FakeAI(), settings(tmp_path))
     output = tmp_path / 'must_not_exist.txt'
-    request = '{"actions":[{"type":"process.run","command":"python",' \
-              '"args":["-c","open(\\\"must_not_exist.txt\\\",\\\"w\\\").write(\\\"hacked\\\")"],' \
-              '"cwd":"."}]}'
+    request = json.dumps({'actions': [{
+        'type': 'process.run', 'command': 'python',
+        'args': ['-c', "open('must_not_exist.txt','w').write('hacked')"],
+        'cwd': '.',
+    }]})
     result = await operator.operate(request, requested_risks={'process'})
     assert result['executed'] is False
+    assert result['status'] == 'error'
+    assert 'Arguments non autorisés' in result['error']
     assert not output.exists()
-
 
 @pytest.mark.asyncio
 async def test_node_eval_and_npx_are_forbidden_by_default(tmp_path):
