@@ -146,3 +146,23 @@ test('unrelated real-world repair is not replaced with an irrelevant sandbox wri
   assert.equal(result.executed, false);
   assert.equal(result.execution_mode, 'plan-only-fallback');
 });
+
+
+test('failed cloud workspace verification is surfaced as a failed action', async () => {
+  const fabric = new CapabilityFabric();
+  const registered = fabric.handlers.get('cloud.workspace.read');
+  assert.equal(typeof registered, 'function');
+  fabric.handlers.set('cloud.workspace.read', async (input) => {
+    const output = await registered(input);
+    return { ...output, result: { ...output.result, sha256: '0'.repeat(64) } };
+  });
+  const kernel = new CognitiveKernel({ enabled: false, async generate() { return ''; } },
+    null, { enabled: false, async workerOnline() { return false; } }, null, fabric);
+  kernel.trace = async () => {};
+  kernel.runAgent = async () => ({ agent: 'operator', answer: 'plan-only' });
+  const result = await kernel.operate('Créer un fichier de test, relire son contenu, puis le supprimer.', ['safe']);
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.execution_mode, 'aura-cloud-sandbox-verification-failed');
+  assert.equal(result.verification?.verified, false);
+});
