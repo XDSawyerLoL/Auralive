@@ -26,7 +26,8 @@ def audit_target_url(value: str) -> str:
 
 def grade_navigation(*, requested_path: str, final_url: str, status: int | None,
                      title: str, body_visible: bool, screenshot_digest: str,
-                     page_errors: list[str]) -> dict[str, Any]:
+                     page_errors: list[str], horizontal_overflow_px: int = 0,
+                     broken_images: int = 0) -> dict[str, Any]:
     problems = []
     try:
         final = audit_target_url(final_url)
@@ -45,6 +46,10 @@ def grade_navigation(*, requested_path: str, final_url: str, status: int | None,
         problems.append("capture-non-verifiee")
     if page_errors:
         problems.append("exception-javascript")
+    if horizontal_overflow_px > 8:
+        problems.append("debordement-horizontal")
+    if broken_images > 0:
+        problems.append("images-cassees")
     return {"ok": not problems, "problems": problems}
 
 async def audit_public_pages(
@@ -102,6 +107,8 @@ async def audit_public_pages(
                         body_visible = False
                         screenshot_digest = ""
                         screenshot_file = ""
+                        overflow_px = 0
+                        broken_images = 0
                         try:
                             await network_validator(requested_url)
                             response = await page.goto(requested_url, wait_until="domcontentloaded", timeout=16000)
@@ -109,6 +116,12 @@ async def audit_public_pages(
                             final_url = page.url
                             title = (await page.title())[:160]
                             body_visible = bool(await page.locator("body").is_visible())
+                            overflow_px = int(await page.evaluate(
+                                "() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth)"
+                            ))
+                            broken_images = int(await page.evaluate(
+                                "() => Array.from(document.images).filter(i => i.complete && i.currentSrc && i.naturalWidth === 0).length"
+                            ))
                             filename = f"{run_id}-{viewport_name}-{requested_path.strip('/') or 'home'}.png"
                             image = await page.screenshot(full_page=False, timeout=6000)
                             screenshot_digest = hashlib.sha256(image).hexdigest()
@@ -123,12 +136,16 @@ async def audit_public_pages(
                             requested_path=requested_path, final_url=final_url,
                             status=status, title=title, body_visible=body_visible,
                             screenshot_digest=screenshot_digest, page_errors=errors,
+                            horizontal_overflow_px=overflow_px, broken_images=broken_images,
                         )
                         rows.append({
                             "route": requested_path, "viewport": viewport_name,
                             "http_status": status, "title": title, "final_url": final_url,
                             "screenshot_sha256": screenshot_digest, "screenshot_file": screenshot_file,
-                            "errors": errors[:4], **verdict,
+                            "errors": errors[:4],
+                            "horizontal_overflow_px": overflow_px,
+                            "broken_images": broken_images,
+                            **verdict,
                         })
                 finally:
                     await context.close()
