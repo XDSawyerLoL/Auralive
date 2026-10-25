@@ -138,3 +138,22 @@ def test_cloud_worker_bridge_token_is_the_actual_enablement_gate(monkeypatch, tm
     monkeypatch.setenv('AURA_BRIDGE_TOKEN', 'local-test-bridge-token')
     assert worker.enabled is True
     assert worker._headers()['Authorization'] == 'Bearer local-test-bridge-token'
+
+
+@pytest.mark.asyncio
+async def test_cloud_request_with_empty_risks_cannot_gain_local_permissions(monkeypatch, tmp_path):
+    monkeypatch.setenv('AURA_CLOUD_BASE_URL', 'https://aura.example')
+    monkeypatch.setenv('AURA_BRIDGE_TOKEN', 'test-only')
+    monkeypatch.setenv('AURA_RUNTIME_IDENTITY_FILE', str(tmp_path / 'worker-id'))
+    config = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(config)
+    captured = {}
+
+    async def fake_operate(task, *, max_steps, requested_risks, source):
+        captured['risks'] = requested_risks
+        return {'executed': False, 'status': 'not-executed'}
+
+    monkeypatch.setattr(host.operator, 'operate', fake_operate)
+    worker = AuraRuntimeWorker(host, config, runtime_packaging='standalone-service')
+    await worker._run_operator({'task': 'test'}, [])
+    assert captured['risks'] == set()
