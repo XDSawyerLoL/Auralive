@@ -91,7 +91,12 @@ def administrative_inventory(root: Path, *, max_entries: int = 1000,
             'Les dossiers cachés et les liens symboliques ne sont pas inspectés.',
         ],
         'next_steps': [
-            'Vérifier manuellement les catégories proposées.',
+            *(['Examiner les documents non identifiés avant de les classer.']
+              if counts['a_identifier'] else []),
+            *(['Vérifier quelles périodes sont couvertes par les factures.']
+              if counts['factures'] else []),
+            *(['Vérifier les années couvertes par les documents fiscaux, sans présumer des obligations.']
+              if counts['impots'] else []),
             'Choisir les documents à examiner avant toute décision.',
             'Autoriser explicitement toute opération qui modifierait les fichiers.',
         ],
@@ -172,6 +177,7 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
         'depense', 'budget', 'justificatif', 'contrat', 'salaire', 'releve',
         'dossier', 'fichier', 'sauvegard', 'compar', 'assuranc',
         'bulletin', 'paie', 'mutuelle', 'sante', 'logement', 'identit', 'retraite',
+        'copie de securite',
     )
     if not any(key in request for key in domain):
         return None
@@ -234,7 +240,8 @@ def plan_french_administrative_request(raw_request: str) -> dict | None:
                        'Budget non calculé : aucun fichier CSV exact désigné.',
                        needs=('Choisir un fichier CSV de dépenses.',))
 
-    if any(key in request for key in ('retrouv', 'cherche', 'recherch', 'ou sont')):
+    if any(key in request for key in ('retrouv', 'trouv', 'cherche', 'recherch',
+                                      'ou sont', 'sont ou', 'montre')):
         # Search only an explicit quotation or a narrow, known subject.
         quoted = [q.strip() for q in QUOTED_RE.findall(raw)]
         if quoted and len(quoted[0]) <= 120:
