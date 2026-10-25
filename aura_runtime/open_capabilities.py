@@ -37,6 +37,10 @@ class OpenCapabilities:
         return self._installed("browser_use")
 
     @property
+    def playwright_available(self) -> bool:
+        return self._installed("playwright")
+
+    @property
     def deep_web_enabled(self) -> bool:
         return bool(getattr(self.settings, "aura_runtime_deep_web_enabled", True))
 
