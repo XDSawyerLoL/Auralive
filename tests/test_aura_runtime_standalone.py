@@ -129,8 +129,9 @@ def test_cloud_worker_bridge_token_is_the_actual_enablement_gate(monkeypatch, tm
     monkeypatch.setenv('AURA_RUNTIME_IDENTITY_FILE', str(tmp_path / 'worker-id'))
     monkeypatch.delenv('AURA_BRIDGE_TOKEN', raising=False)
     monkeypatch.delenv('AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN', raising=False)
-    host = StandaloneRuntimeHost(runtime_settings_from_env())
-    worker = AuraRuntimeWorker(host, host.settings, runtime_packaging='standalone-service')
+    config = runtime_settings_from_env()
+    host = StandaloneRuntimeHost(config)
+    worker = AuraRuntimeWorker(host, config, runtime_packaging='standalone-service')
     assert worker.enabled is False
     assert worker.token == ''
 
