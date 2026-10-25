@@ -8,7 +8,7 @@ export function cleanSpeechOutput(value) {
   let speech = String(value || '').trim();
   // Reasoning and model instructions are not user-facing conversation.
   speech = speech.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  if (/<think>|<\/think>|(?:^|\s)(?:The user said|The communicative goal|The speech act|The factual constraints|The conversation history|Now we need to respond|Should be brief|Maybe \x22|The goal is to greet|We need to respond naturally)/i.test(speech)) return '';
+  if (/<think>|<\/think>|(?:^|\s)(?:The user said|The user is (?:asking|saying|requesting|trying|wondering)|According to the core(?:'s)? decision|I should (?:respond|answer|explain)|The response should|My mood is|The relationship shows|The communicative goal|The speech act|The factual constraints|The conversation history|Now we need to respond|Should be brief|Maybe \x22|The goal is to greet|We need to respond naturally)/i.test(speech)) return '';
   if (/^(?:analysis|reasoning|thought process|assistant analysis)\s*:/i.test(speech)) return '';
   if (/\b(?:communicative goal|speech act|factual constraints|conversation history)\b/i.test(speech)) return '';
   if (!speech || /^(?:\x22|“)[^\x22”]*$/.test(speech)) return '';
