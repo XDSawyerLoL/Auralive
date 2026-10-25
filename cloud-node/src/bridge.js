@@ -193,6 +193,20 @@ export function workerCompletionVerified(kind, payload = {}) {
           && step.checks.every((check) =>
             check?.ok === true && /^[a-f0-9]{64}$/.test(String(check?.screenshot_sha256 || '')));
       }
+      if (step.type === 'admin.pdf.inspect') {
+        return step.verified === true && step.read_only === true
+          && /^([a-f0-9]{64})$/.test(String(step.source_sha256 || ''))
+          && Number.isInteger(step.bytes) && step.bytes > 0
+          && Number.isInteger(step.pages) && step.pages >= 1 && step.pages <= 12
+          && Number.isInteger(step.characters_extracted)
+          && step.characters_extracted >= 0
+          && Array.isArray(step.previews)
+          && Array.isArray(step.dates_observed)
+          && step.previews.every((part) =>
+            Number.isInteger(part?.page) && part.page >= 1
+            && part.page <= step.pages && typeof part.excerpt === 'string')
+          && Array.isArray(step.limitations);
+      }
       if (step.type === 'admin.inventory') {
         return step.verified === true && step.read_only === true
           && Number.isInteger(step.files_counted) && step.files_counted >= 0
