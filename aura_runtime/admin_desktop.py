@@ -187,7 +187,7 @@ class AdministrativeDesktop(tk.Tk):
                 total = sum(int(x.get("checks_total", 0)) for x in suites)
                 verified = (
                     all(x.get("ok") is True for x in suites)
-                    and total == 31 and passed == total
+                    and total == 33 and passed == total
                 )
                 failed = [
                     item.get("name", "inconnu")
