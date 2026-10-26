@@ -117,3 +117,31 @@ DIAGNOSTIC D'UN ANCIEN DÉPLOIEMENT
 - Si la page affiche "Accès privé", AURA_CLOUD_TOKEN à saisir, ou un badge antérieur à 2.2.1 :
   Hostinger sert encore un ancien paquet ou un ancien processus.
 - Redéployer l'artefact aura-cloud-hostinger et redémarrer l'application.
+
+DIAGNOSTIC FRENCH / OCTOBRE 2026
+--------------------------------
+La phrase « Ma faculté de français naturel est indisponible... » provient
+de cloud-node/src/expression.js. Elle apparaît quand aucun modèle de parole
+ne réussit. Ne pas désactiver AURA_FRENCH_LANGUAGE_REQUIRED pour masquer le
+problème : cela déclenche des réponses de secours non générées.
+
+1) GET /api/aura/capabilities : inspecter language.blocking_reason,
+   language.setup_hint, language.last_backend. Aucun jeton n'est exposé.
+2) Si le moteur GGUF Hostinger échoue par manque de RAM, ne pas lancer
+   plusieurs processus llama.cpp en parallèle.
+3) Si le compte GROQ utilise un plan Free sans facturation, renseigner
+   AURA_GROQ_API_KEY, AURA_GROQ_SPEECH_FREE_ENABLED=true,
+   AURA_GROQ_FREE_PLAN_CONFIRMED=true. Modèle qwen/qwen3.8-27b.
+   Garder AURA_ZERO_COST_MODE=true et AURA_FRENCH_LANGUAGE_REQUIRED=true.
+   Ne JAMAIS afficher ni publier la clé API dans GitHub.
+4) Redémarrer seulement après avoir déployé la branche testée.
+5) Tester « Cool », une relance conversationnelle, puis lire
+   /api/aura/capabilities. language.last_backend doit devenir
+   groq-free-verified-response et verified_ready true après une
+   génération effectivement réussie.
+6) Sans clé ou hors plan Free, ne pas activer ce fournisseur ; utiliser
+   le Runtime local sur Windows. Les modèles retirés de Groq
+   (llama-3.3-70b-versatile depuis le 16/08/2026) ne doivent plus être utilisés.
+
+AURA Groq ne sert QUE la parole ; l'agent de décision, la mémoire et les
+actions demeurent dans le noyau / Runtime. Déploiement manuel Hostinger.
