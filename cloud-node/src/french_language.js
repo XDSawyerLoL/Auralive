@@ -102,9 +102,12 @@ export class FrenchLanguageFaculty {
     const installing = embedded.provisioning?.enabled && !embedded.ready
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
+    const groqSpeechVerified = Boolean(groq.enabled && this.lastMode === 'groq-free-speech'
+      && groq.last_success_at && (Date.now() - Date.parse(groq.last_success_at)) < 3_600_000);
     // Native files alone do not establish that a model is operational.
     const ready = Boolean(embedded.ready || federation.enabled || local || groq.enabled);
-    const blockingReason = installing ? 'embedded-language-installing'
+    const blockingReason = groqSpeechVerified ? ''
+      : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !groq.enabled && !['zero-cost-federation','runtime-local','groq-free-speech'].includes(this.lastMode)
@@ -130,7 +133,8 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = groqFailure || failed?.code || blockingReason;
-    const setupHint = installing
+    const setupHint = groqSpeechVerified ? ''
+      : installing
       ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
       : provisionFailed
         ? 'Impossible d’installer le moteur libre : vérifier la mémoire, le disque, le réseau HTTPS et les permissions.'
@@ -159,8 +163,7 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free-speech'
-          && groq.last_success_at && (Date.now() - Date.parse(groq.last_success_at)) < 3_600_000)
+      verified_ready: Boolean(groqSpeechVerified
         || (embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
       primary: groq.enabled ? 'groq-free-speech'
