@@ -9,7 +9,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
 
 from .admin_assistant import plan_french_administrative_request
 from .admin_chat import complete_followup, render_result
@@ -29,6 +29,7 @@ class AdministrativeDesktop(tk.Tk):
         self.pending_intent = ""
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aura-admin")
         self.current_job = None
+        self.job_root = ""
 
         self.configure(background="#11151d")
         body = ttk.Frame(self, padding=20)
@@ -69,6 +70,12 @@ class AdministrativeDesktop(tk.Tk):
             extra, text="Mon suivi administratif",
             command=lambda: self.run_example("Prépare mon suivi administratif"),
         ).pack(side="left", padx=8)
+        saved = ttk.Frame(ask)
+        saved.pack(fill="x", pady=(8, 0))
+        ttk.Button(saved, text="Mes contrôles enregistrés", command=self.show_saved).pack(side="left")
+        ttk.Button(saved, text="Marquer examiné", command=self.mark_reviewed).pack(side="left", padx=6)
+        ttk.Button(saved, text="Créer un rappel confirmé", command=self.schedule_reminder).pack(side="left")
+        ttk.Button(saved, text="Rappels dus", command=self.show_due).pack(side="left", padx=6)
 
         results = ttk.LabelFrame(body, text="3. Résultats et éléments vérifiés", padding=10)
         results.pack(fill="both", expand=True)
@@ -98,6 +105,7 @@ class AdministrativeDesktop(tk.Tk):
                 self.pending_intent = ""
                 self.status.set(f"Dossier autorisé : {path}. Aucune lecture automatique.")
                 self.append("AURA : Dossier autorisé. Donnez une instruction pour commencer.")
+                self.show_due(silent_empty=True)
 
     def run_example(self, message: str) -> None:
         self.prompt.set(message)
@@ -149,6 +157,7 @@ class AdministrativeDesktop(tk.Tk):
                 self.append("AURA : Sauvegarde annulée. Aucun fichier créé.")
                 return
         self.status.set("Exécution locale en cours…")
+        self.job_root = root
         self.current_job = self.executor.submit(
             lambda: asyncio.run(execute_command(Namespace(
                 root=root, command="ask", request=request, allow_backup=backup,
@@ -234,6 +243,22 @@ class AdministrativeDesktop(tk.Tk):
                                 if verified else "Des contrôles sont non vérifiés ou en échec.")
             else:
                 self.append("AURA : " + render_result(result))
+                if result.get("executed") is True and self.job_root == self.root_directory.get():
+                    for step in result.get("steps") or []:
+                        if step.get("type") == "admin.followup" and messagebox.askyesno(
+                            "Mémoire AURA locale",
+                            "Enregistrer les contrôles et leurs empreintes dans une base privée sur ce PC ? "
+                            "Aucun document complet ne sera conservé dans la base.",
+                        ):
+                            try:
+                                from .admin_durable import DurableReviews, local_db_path
+                                store = DurableReviews(local_db_path(Path(self.job_root)))
+                                outcome = store.save_snapshot(step)
+                                self.append(f"AURA : {outcome['saved']} contrôle(s) conservé(s), "
+                                            f"{outcome['new']} nouveau(x), "
+                                            f"{outcome['changed_reset']} validation(s) invalidée(s).")
+                            except Exception as exc:
+                                self.append(f"AURA : enregistrement impossible : {type(exc).__name__}: {exc}")
                 self.status.set(
                     "Action vérifiée localement." if result.get("executed") is True
                     else "Action refusée, incomplète ou en échec."
@@ -244,6 +269,111 @@ class AdministrativeDesktop(tk.Tk):
             self.append(f"AURA : Erreur : {type(error).__name__}: {str(error)[:300]}")
             self.status.set("L'action n'a pas été certifiée.")
         self.current_job = None
+
+    def _existing_store(self):
+        root = self.root_directory.get()
+        if not root or not Path(root).is_dir():
+            messagebox.showwarning("Dossier requis", "Choisissez un dossier autorisé.")
+            return None
+        from .admin_durable import DurableReviews, local_db_path
+        location = local_db_path(Path(root))
+        if not location.is_file():
+            messagebox.showinfo("Mémoire AURA", "Aucun suivi sauvegardé pour ce dossier.")
+            return None
+        return DurableReviews(location)
+
+    def show_saved(self) -> None:
+        try:
+            store = self._existing_store()
+            if store is None:
+                return
+            tasks = store.list_reviews()
+            self.append(
+                "AURA : contrôles locaux conservés :\n"
+                + ("\n".join(
+                    f"{item['task_id']} — {item['status']} — {item['title']} — {item['source']}"
+                    for item in tasks
+                ) if tasks else "Aucun contrôle actif.")
+            )
+        except Exception as exc:
+            messagebox.showerror("Mémoire AURA", f"{type(exc).__name__}: {exc}")
+
+    def mark_reviewed(self) -> None:
+        try:
+            store = self._existing_store()
+            if store is None:
+                return
+            key = simpledialog.askstring("Contrôle humain", "Identifiant exact de la tâche (16 caractères) :")
+            if not key:
+                return
+            if not messagebox.askyesno(
+                "Contrôle humain",
+                "As-tu personnellement examiné cette vérification ? "
+                "Cela ne signifie pas qu'une facture est payée.",
+            ):
+                return
+            store.decide(key.strip(), "reviewed")
+            self.append(f"AURA : {key.strip()} marqué examiné après confirmation humaine.")
+        except Exception as exc:
+            messagebox.showerror("Contrôle humain", f"{type(exc).__name__}: {exc}")
+
+    def schedule_reminder(self) -> None:
+        try:
+            store = self._existing_store()
+            if store is None:
+                return
+            key = simpledialog.askstring("Rappel local", "Identifiant d'une tâche déjà examinée :")
+            if not key:
+                return
+            when = simpledialog.askstring(
+                "Rappel local", "Date et heure AVEC fuseau : 2026-11-25T09:00:00+01:00"
+            )
+            if not when:
+                return
+            identifier = store.propose_reminder(key.strip(), when.strip())
+            if messagebox.askyesno(
+                "Autoriser ce rappel ?",
+                f"Confirmer ce rappel local au {when} ? "
+                "Il n'est visible que quand l'assistant est ouvert ; aucun envoi externe.",
+            ):
+                store.approve_reminder(identifier)
+                self.append(f"AURA : rappel local approuvé : {identifier}")
+            else:
+                self.append("AURA : rappel seulement proposé, non activé.")
+        except Exception as exc:
+            messagebox.showerror("Rappel local", f"{type(exc).__name__}: {exc}")
+
+    def show_due(self, *, silent_empty: bool = False) -> None:
+        root = self.root_directory.get()
+        if not root or not Path(root).is_dir():
+            if not silent_empty:
+                messagebox.showwarning("Dossier requis", "Choisis d'abord un dossier autorisé.")
+            return
+        try:
+            from .admin_durable import DurableReviews, local_db_path
+            location = local_db_path(Path(root))
+            if not location.is_file():
+                return
+            store = DurableReviews(location)
+            due = store.due_reminders()
+            if not due:
+                if not silent_empty:
+                    messagebox.showinfo("Rappels AURA", "Aucun rappel approuvé échu.")
+                return
+            shown = due[:10]
+            messagebox.showinfo(
+                "Rappels AURA à vérifier",
+                "\n".join(
+                    f"{entry['title']} — {entry['due_at']} ({entry['task_id']})"
+                    for entry in shown
+                ),
+            )
+            # Only acknowledge what was displayed after the user closes the alert.
+            for entry in shown:
+                store.acknowledge_reminder(entry["id"])
+            self.append(f"AURA : {len(shown)} rappel(s) affiché(s) et acquitté(s).")
+        except Exception as exc:
+            messagebox.showerror("Rappels AURA", f"{type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)
