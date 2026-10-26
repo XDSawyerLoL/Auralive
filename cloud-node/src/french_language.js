@@ -104,9 +104,12 @@ export class FrenchLanguageFaculty {
     const provisionFailed = stage === 'blocked';
     const groqSpeechVerified = Boolean(groq.enabled && this.lastMode === 'groq-free-speech'
       && groq.last_success_at && (Date.now() - Date.parse(groq.last_success_at)) < 3_600_000);
+    const groqFailure = groq.enabled && this.lastMode === 'degraded'
+      ? String(groq.last_error || '').slice(0, 100) : '';
     // Native files alone do not establish that a model is operational.
     const ready = Boolean(embedded.ready || federation.enabled || local || groq.enabled);
     const blockingReason = groqSpeechVerified ? ''
+      : groqFailure ? groqFailure
       : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
@@ -123,17 +126,22 @@ export class FrenchLanguageFaculty {
             : (Array.isArray(federation.configured_models) && !federation.configured_models.length
               ? 'no-free-model-selected'
               : 'free-federation-disabled'))));
-    // Groq is an optional *speech-only* provider: do not emit OpenRouter
-    // key instructions when the actual failed service is Groq Free.
-    const groqFailure = groq.enabled && this.lastMode === 'degraded'
-      ? String(groq.last_error || '').slice(0, 100)
-      : '';
+    // Groq failures are reported as such, even when the optional native
+    // loader also fails under Hostinger memory limits.
     const failed = blockingReason === 'free-language-provider-failed'
       && !groqFailure
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = groqFailure || failed?.code || blockingReason;
     const setupHint = groqSpeechVerified ? ''
+      : groqFailure
+        ? groqFailure === 'groq-free-http-429'
+          ? 'Quota gratuit Groq (429) : attendre ou utiliser le Runtime local, sans mode payant.'
+          : groqFailure === 'groq-free-http-401'
+            ? 'Clé Groq refusée (401) : vérifier AURA_GROQ_API_KEY en privé.'
+            : groqFailure === 'groq-free-daily-budget-reached'
+              ? 'Plafond de demandes Groq atteint sur ce processus.'
+              : 'Verbalisation Groq indisponible : consulter language.blocking_reason dans les capacités AURA.'
       : installing
       ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
       : provisionFailed
@@ -143,14 +151,6 @@ export class FrenchLanguageFaculty {
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
-      : groqFailure
-        ? (groqFailure === 'groq-free-http-429'
-          ? 'Groq Free a atteint une limite (429). Vérifier les quotas gratuits de ce modèle et réessayer plus tard, sans basculer vers une offre payante.'
-          : groqFailure === 'groq-free-http-401'
-            ? 'Groq a refusé la clé (401). Vérifier AURA_GROQ_API_KEY, jamais l’afficher publiquement.'
-            : groqFailure === 'groq-free-daily-budget-reached'
-              ? 'Plafond local quotidien Groq atteint. Utiliser le Runtime local ou attendre la remise à zéro.'
-              : 'La verbalisation Groq Free a échoué : consulter le code d’erreur expurgé dans GET /api/aura/capabilities. Aucun modèle payant ne sera appelé.')
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
         : blockingReason === 'free-federation-disabled'
