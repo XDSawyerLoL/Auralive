@@ -408,7 +408,7 @@ class AdministrativeDesktop(tk.Tk):
             # The alert is shown only after a fresh, complete re-analysis.
             messagebox.showinfo(
                 "Rappels AURA à vérifier",
-                "\\n".join(
+                "\n".join(
                     f"{entry['title']} — {entry['due_at']} ({entry['task_id']})"
                     for entry in due
                 ),
