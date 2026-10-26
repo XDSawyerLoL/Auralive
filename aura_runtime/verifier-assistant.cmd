@@ -64,7 +64,14 @@ if errorlevel 1 (
  pause
  exit /b 1
 )
-echo [AURA] 52/52 controles attendus sur fichiers temporaires.
+echo [AURA] Test de 10 controles de memoire SQLite et rappels confirmes.
+python -m aura_runtime.admin_durable_benchmark
+if errorlevel 1 (
+ echo [ECHEC] Memoire locale persistante non certifiee.
+ pause
+ exit /b 1
+)
+echo [AURA] 62/62 controles attendus sur fichiers temporaires.
 echo [AURA] Ne valide pas le fonctionnement graphique ou le Cloud de production.
 pause
 exit /b 0
