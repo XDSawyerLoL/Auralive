@@ -1,4 +1,5 @@
 import { embeddedLanguageRuntime } from './embedded_language.js';
+import { groqFreeSpeech } from './groq_free_speech.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -68,9 +69,10 @@ function compactContext(rows = []) {
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
-  constructor(ai, { embedded = embeddedLanguageRuntime } = {}) {
+  constructor(ai, { embedded = embeddedLanguageRuntime, groq = groqFreeSpeech } = {}) {
     this.ai = ai;
     this.embedded = embedded;
+    this.groq = groq;
     this.lastError = '';
     this.lastBackend = '';
     this.lastModel = '';
@@ -94,13 +96,14 @@ export class FrenchLanguageFaculty {
     const federation = this.federation?.snapshot?.() || {};
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
+    const groq = this.groq?.snapshot?.() || { enabled: false };
     const embeddedInstalled = Boolean(embedded.installed);
     const stage = embedded.provisioning?.stage || '';
     const installing = embedded.provisioning?.enabled && !embedded.ready
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(embedded.ready || federation.enabled || local);
+    const ready = Boolean(embedded.ready || federation.enabled || local || groq.enabled);
     const blockingReason = installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
@@ -142,15 +145,19 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free-speech' && groq.last_success_at)
+        || (embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: embedded.ready ? 'hostinger-embedded'
+      primary: groq.enabled ? 'groq-free-speech'
+        : embedded.ready ? 'hostinger-embedded'
         : federation.enabled ? 'zero-cost-federation'
           : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
+      groq,
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
+      groq_ready: Boolean(groq.enabled),
       last_mode: this.lastMode,
       last_backend: this.lastBackend,
       last_model: this.lastModel,
@@ -255,6 +262,23 @@ export class FrenchLanguageFaculty {
         return '';
       }
     };
+    // Explicitly confirmed Groq Free plan is used for SPEECH only. The
+    // cognitive core and any administrative operator never call this adapter.
+    if (this.groq?.enabled) {
+      const answer = cleanSpeechOutput(await this.groq.generate(
+        prompt, system, Math.min(600, Math.max(120, Number(maxTokens) || 400)),
+      ));
+      if (answer) {
+        this.lastMode = 'groq-free-speech';
+        this.lastBackend = 'groq-free-verified-response';
+        this.lastModel = this.groq.lastModel || this.groq.model || '';
+        this.lastLatencyMs = Date.now() - started;
+        this.lastError = '';
+        return answer;
+      }
+      this.lastError = String(this.groq.lastError || 'groq-free-empty-response').slice(0, 120);
+    }
+
     // Without federation, use the local runtime if it is healthy.
     if (!this.federation?.enabled) {
       const localAnswer = await tryEmbedded();
