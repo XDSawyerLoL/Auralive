@@ -203,9 +203,16 @@ class AdministrativeDesktop(tk.Tk):
             except Exception as exc:
                 sixth = {"ok": False, "checks_total": 0, "checks_passed": 0,
                          "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
+            try:
+                from .admin_end_to_end_benchmark import run_benchmark as end_to_end
+                seventh = await end_to_end()
+            except Exception as exc:
+                seventh = {"ok": False, "checks_total": 0, "checks_passed": 0,
+                           "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
             return {"mode": "diagnostic", "personal": first,
                     "administrative": second, "pdf": third,
-                    "portfolio": fourth, "followup": fifth, "durable": sixth}
+                    "portfolio": fourth, "followup": fifth,
+                    "durable": sixth, "end_to_end": seventh}
 
         self.current_job = self.executor.submit(lambda: asyncio.run(benchmark()))
         self.after(100, self.check_job)
@@ -219,17 +226,17 @@ class AdministrativeDesktop(tk.Tk):
         try:
             result = self.current_job.result()
             if result.get("mode") == "diagnostic":
-                first, second, third, fourth, fifth, sixth = (
+                first, second, third, fourth, fifth, sixth, seventh = (
                     result["personal"], result["administrative"],
                     result["pdf"], result["portfolio"], result["followup"],
-                    result["durable"]
+                    result["durable"], result["end_to_end"]
                 )
-                suites = (first, second, third, fourth, fifth, sixth)
+                suites = (first, second, third, fourth, fifth, sixth, seventh)
                 passed = sum(int(x.get("checks_passed", 0)) for x in suites)
                 total = sum(int(x.get("checks_total", 0)) for x in suites)
                 verified = (
                     all(x.get("ok") is True for x in suites)
-                    and total == 62 and passed == total
+                    and total == 72 and passed == total
                 )
                 failed = [
                     item.get("name", "inconnu")
@@ -244,6 +251,8 @@ class AdministrativeDesktop(tk.Tk):
                     failed.append("Suivi non vérifié : " + str(fifth["error"])[:140])
                 if sixth.get("error"):
                     failed.append("Mémoire SQLite non vérifiée : " + str(sixth["error"])[:140])
+                if seventh.get("error"):
+                    failed.append("Mission complète non vérifiée : " + str(seventh["error"])[:140])
                 self.append(
                     f"AURA : {passed}/{total} contrôles locaux réussis. "
                     + ("Tous les benchmarks locaux ont réussi." if verified
