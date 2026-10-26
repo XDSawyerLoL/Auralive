@@ -124,3 +124,42 @@ test('Full expression pipeline uses actual Groq response, never the unavailable 
   assert.equal(expression.lastMode, 'french-language-faculty');
   assert.notEqual(answer, 'SECOURS DETERM');
 });
+
+
+test('Hostinger native engine failure does not mark successful Groq speech unavailable', async () => {
+  const groq = new GroqFreeSpeech({
+    env: freeEnv(),
+    request: async () => response('Je suis disponible et je peux répondre.'),
+  });
+  const embeddedBroken = {
+    status: () => ({
+      installed: true, binary_found: true, ready: false,
+      failure_code: 'embedded-insufficient-memory',
+      setup_hint: 'Le processus a été arrêté faute de mémoire.',
+      provisioning: { stage: 'blocked' },
+    }),
+  };
+  const ai = { federation: { enabled: false, snapshot: () => ({ enabled: false, zero_cost_mode: true }) } };
+  const faculty = new FrenchLanguageFaculty(ai, { groq, embedded: embeddedBroken });
+  assert.match(await faculty.generate({ user_text: 'Cool', act: 'reply' }), /disponible/);
+  const status = await faculty.status();
+  assert.equal(status.verified_ready, true);
+  assert.equal(status.blocking_reason, '');
+  assert.equal(status.primary, 'groq-free-speech');
+});
+
+
+test('429 in confirmed Groq Free route is diagnosed as Groq rather than OpenRouter', async () => {
+  const groq = new GroqFreeSpeech({
+    env: freeEnv(), request: async () => response('', 429),
+  });
+  const ai = { federation: { enabled: false, snapshot: () => ({
+    enabled: false, zero_cost_mode: true,
+  }) } };
+  const faculty = new FrenchLanguageFaculty(ai, { groq, embedded: embeddedOff() });
+  assert.equal(await faculty.generate({ user_text: 'Cool' }), '');
+  const state = await faculty.status();
+  assert.equal(state.verified_ready, false);
+  assert.equal(state.blocking_reason, 'groq-free-http-429');
+  assert.match(state.setup_hint, /Groq Free/);
+});
