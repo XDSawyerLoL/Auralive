@@ -71,7 +71,14 @@ if errorlevel 1 (
  pause
  exit /b 1
 )
-echo [AURA] 62/62 controles attendus sur fichiers temporaires.
+echo [AURA] Preuve AUTONOMIE: demande francaise, mission, memoire, humain, reprise.
+python -m aura_runtime.admin_end_to_end_benchmark
+if errorlevel 1 (
+ echo [ECHEC] La mission autonome de bout en bout est non certifiee.
+ pause
+ exit /b 1
+)
+echo [AURA] 72/72 controles attendus sur fichiers temporaires.
 echo [AURA] Ne valide pas le fonctionnement graphique ou le Cloud de production.
 pause
 exit /b 0
