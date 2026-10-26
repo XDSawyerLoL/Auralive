@@ -479,3 +479,26 @@ Le fichier `verifier-assistant.cmd` attend maintenant **62 contrôles**
 
 Étude des projets open source et étapes restantes :
 [`docs/AURA-AUTONOMIE-OPEN-SOURCE-2026.md`](../docs/AURA-AUTONOMIE-OPEN-SOURCE-2026.md).
+
+## Preuve d'autonomie de bout en bout et moteur français
+
+`python -m aura_runtime.admin_end_to_end_benchmark` réalise une **mission
+entièrement hors réseau** : phrase française -> plan contrôlé -> vraie lecture
+de PDF/CSV de test -> tableau -> validation humaine simulée -> SQLite ->
+rappel approuvé -> fermeture/réouverture -> modification d'une facture ->
+annulation de l'ancienne validation. Ce benchmark contient 10 contrôles ;
+le vérificateur Windows attend désormais **72 contrôles**.
+
+Le module Cloud `cloud-node/src/groq_free_speech.js` ajoute une voie de
+verbalisation Groq Free, uniquement activée après confirmation explicite
+que le compte est non facturable. Aucun appel d'outil, aucune délégation
+de décision ou action n'est autorisé au fournisseur. La clé API reste dans
+les variables privées Hostinger. Modèle par défaut au 26/10/2026 :
+`qwen/qwen3.8-27b` ; anciens identifiants Groq dépréciés sont refusés.
+
+Cette intégration est **sur une branche non déployée** : le screenshot
+Hostinger restera inchangé jusqu'au déploiement et à la configuration
+d'un moteur réellement fonctionnel. En son absence, il est trompeur
+d'affirmer qu'AURA parle naturellement.
+
+Voir `cloud-node/HOSTINGER-QUICKSTART.txt` pour diagnostic et activation.
