@@ -78,6 +78,12 @@ class AdministrativeDesktop(tk.Tk):
         ttk.Button(saved, text="Marquer examiné", command=self.mark_reviewed).pack(side="left", padx=6)
         ttk.Button(saved, text="Créer un rappel confirmé", command=self.schedule_reminder).pack(side="left")
         ttk.Button(saved, text="Rappels dus", command=self.show_due).pack(side="left", padx=6)
+        scheduler = ttk.Frame(ask)
+        scheduler.pack(fill="x", pady=(7, 0))
+        ttk.Button(scheduler, text="Activer rappels Windows (1 h)",
+                   command=self.enable_hourly).pack(side="left")
+        ttk.Button(scheduler, text="Désactiver rappels Windows",
+                   command=self.disable_hourly).pack(side="left", padx=6)
 
         results = ttk.LabelFrame(body, text="3. Résultats et éléments vérifiés", padding=10)
         results.pack(fill="both", expand=True)
@@ -431,6 +437,44 @@ class AdministrativeDesktop(tk.Tk):
             messagebox.showerror("Rappels AURA", f"{type(exc).__name__}: {exc}")
         finally:
             self.reminder_job = None
+
+    def enable_hourly(self) -> None:
+        root = self.root_directory.get()
+        if not root or not Path(root).is_dir():
+            messagebox.showwarning("Dossier requis", "Choisis un dossier administratif.")
+            return
+        if not messagebox.askyesno(
+            "Autoriser le Planificateur Windows",
+            "Créer une tâche Windows locale toutes les heures, uniquement "
+            "lorsque ta session est ouverte ? Les documents seront revérifiés "
+            "avant tout rappel. Pas de paiement ni de réseau.",
+        ):
+            return
+        try:
+            from .admin_windows_scheduler import scheduled_task
+            report = scheduled_task(Path(root), enable=True)
+            self.append("AURA : rappel Windows horaire activé après consentement. "
+                        + report["task_name"])
+        except Exception as exc:
+            messagebox.showerror("Rappels Windows", f"{type(exc).__name__}: {exc}")
+
+    def disable_hourly(self) -> None:
+        root = self.root_directory.get()
+        if not root or not Path(root).is_dir():
+            messagebox.showwarning("Dossier requis", "Choisis un dossier administratif.")
+            return
+        if not messagebox.askyesno(
+            "Supprimer la tâche planifiée",
+            "Désactiver les vérifications horaires Windows pour ce dossier ? "
+            "Les validations sauvegardées restent sur ce PC.",
+        ):
+            return
+        try:
+            from .admin_windows_scheduler import scheduled_task
+            scheduled_task(Path(root), enable=False)
+            self.append("AURA : vérification horaire Windows désactivée.")
+        except Exception as exc:
+            messagebox.showerror("Rappels Windows", f"{type(exc).__name__}: {exc}")
 
     def close(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)
