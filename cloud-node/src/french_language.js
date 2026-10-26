@@ -107,7 +107,7 @@ export class FrenchLanguageFaculty {
     const blockingReason = installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
-      && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
+      && !groq.enabled && !['zero-cost-federation','runtime-local','groq-free-speech'].includes(this.lastMode)
       ? embedded.failure_code
       : ready
       ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
@@ -135,7 +135,7 @@ export class FrenchLanguageFaculty {
       : provisionFailed
         ? 'Impossible d’installer le moteur libre : vérifier la mémoire, le disque, le réseau HTTPS et les permissions.'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
-      && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
+      && !groq.enabled && !['zero-cost-federation','runtime-local','groq-free-speech'].includes(this.lastMode)
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
