@@ -30,6 +30,8 @@ class AdministrativeDesktop(tk.Tk):
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="aura-admin")
         self.current_job = None
         self.job_root = ""
+        self.reminder_job = None
+        self.reminder_root = ""
 
         self.configure(background="#11151d")
         body = ttk.Frame(self, padding=20)
@@ -358,31 +360,68 @@ class AdministrativeDesktop(tk.Tk):
             if not silent_empty:
                 messagebox.showwarning("Dossier requis", "Choisis d'abord un dossier autorisé.")
             return
-        try:
-            from .admin_durable import DurableReviews, local_db_path
-            location = local_db_path(Path(root))
-            if not location.is_file():
-                return
+        if self.reminder_job and not self.reminder_job.done():
+            self.status.set("Vérification des rappels déjà en cours.")
+            return
+        from .admin_durable import local_db_path
+        location = local_db_path(Path(root))
+        if not location.is_file():
+            if not silent_empty:
+                messagebox.showinfo("Rappels AURA", "Aucun suivi local enregistré.")
+            return
+
+        def verify_due():
+            from .admin_durable import DurableReviews
+            from .admin_portfolio import analyze_portfolio
+            from .admin_followup import build_followup_board
             store = DurableReviews(location)
-            due = store.due_reminders()
-            if not due:
-                if not silent_empty:
-                    messagebox.showinfo("Rappels AURA", "Aucun rappel approuvé échu.")
+            pending = store.due_reminders()
+            if not pending:
+                return {"due": []}
+            board = build_followup_board(analyze_portfolio(Path(root)))
+            if board.get("partial"):
+                return {"error": "Analyse incomplète : contrôle manuel des sources nécessaire. "
+                        "Le rappel reste enregistré sans acquittement."}
+            store.save_snapshot(board)
+            return {"due": store.due_reminders()[:10]}
+
+        self.reminder_root = root
+        self.reminder_job = self.executor.submit(verify_due)
+        self.after(100, self.check_due_job)
+
+    def check_due_job(self) -> None:
+        if not self.reminder_job:
+            return
+        if not self.reminder_job.done():
+            self.after(100, self.check_due_job)
+            return
+        try:
+            result = self.reminder_job.result()
+            if self.root_directory.get() != self.reminder_root:
                 return
-            shown = due[:10]
+            if result.get("error"):
+                messagebox.showwarning("Rappel à revérifier", result["error"])
+                return
+            due = result.get("due") or []
+            if not due:
+                return
+            # The alert is shown only after a fresh, complete re-analysis.
             messagebox.showinfo(
                 "Rappels AURA à vérifier",
-                "\n".join(
+                "\\n".join(
                     f"{entry['title']} — {entry['due_at']} ({entry['task_id']})"
-                    for entry in shown
+                    for entry in due
                 ),
             )
-            # Only acknowledge what was displayed after the user closes the alert.
-            for entry in shown:
-                store.acknowledge_reminder(entry["id"])
-            self.append(f"AURA : {len(shown)} rappel(s) affiché(s) et acquitté(s).")
+            from .admin_durable import DurableReviews, local_db_path
+            store = DurableReviews(local_db_path(Path(self.reminder_root)))
+            for item in due:
+                store.acknowledge_reminder(item["id"])
+            self.append(f"AURA : {len(due)} rappel(s) revérifié(s), affiché(s) et acquitté(s).")
         except Exception as exc:
             messagebox.showerror("Rappels AURA", f"{type(exc).__name__}: {exc}")
+        finally:
+            self.reminder_job = None
 
     def close(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=True)
