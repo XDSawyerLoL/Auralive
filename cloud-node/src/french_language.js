@@ -136,7 +136,7 @@ export class FrenchLanguageFaculty {
     const setupHint = groqSpeechVerified ? ''
       : groqFailure
         ? groqFailure === 'groq-free-http-429'
-          ? 'Quota gratuit Groq (429) : attendre ou utiliser le Runtime local, sans mode payant.'
+          ? 'Groq Free : quota gratuit atteint (429). Attendre ou utiliser le Runtime local, sans mode payant.'
           : groqFailure === 'groq-free-http-401'
             ? 'Clé Groq refusée (401) : vérifier AURA_GROQ_API_KEY en privé.'
             : groqFailure === 'groq-free-daily-budget-reached'
