@@ -440,3 +440,42 @@ Tests supplémentaires : `python -m aura_runtime.admin_followup_benchmark`
 (9 scénarios). Avec les autres modules, le lanceur Windows attend
 **52/52 contrôles réussis**. Cette validation couvre les modules locaux,
 pas une certification automatique de l'application Windows entière.
+
+
+## Mémoire durable et rappels après validation (SQLite local)
+
+AURA sait désormais **conserver sur l'ordinateur** l'état d'un tableau
+administratif, relire les contrôles après un redémarrage, mémoriser les
+examens confirmés, invalider les anciennes validations si leur empreinte
+de preuve change et proposer un rappel à une heure choisie.
+
+- **Aucune API ni serveur de base de données** : `sqlite3` de Python.
+- Les PDF, les extraits et le contenu des CSV ne sont pas copiés dans
+  la mémoire durable ; seules des métadonnées et empreintes le sont.
+- Dans Windows, après « Prépare mon suivi administratif », choisir
+  **Oui** si on souhaite conserver le tableau ; sinon aucune base créée.
+- Les boutons « Mes contrôles enregistrés », « Marquer examiné »,
+  « Créer un rappel confirmé » et « Rappels dus » fonctionnent uniquement
+  sur la base privée locale du dossier choisi.
+- **Examiné ne veut jamais dire payé.** Aucune date détectée ne crée
+  automatiquement de rappel.
+- Les rappels ne sont visibles que si l'assistant Windows est ouvert,
+  ou via le CLI `due` ; aucune tâche planifiée Windows ou email n'est
+  créée automatiquement pour l'instant.
+- La base SQLite n'est **pas chiffrée** : utiliser les protections du
+  compte Windows et du disque.
+
+Exemple CLI :
+
+```powershell
+python -m aura_runtime.admin_durable_cli --root "C:\\MesDocuments" snapshot
+python -m aura_runtime.admin_durable_cli --root "C:\\MesDocuments" list
+python -m aura_runtime.admin_durable_cli --root "C:\\MesDocuments" due
+```
+
+Tests : `python -m aura_runtime.admin_durable_benchmark` (10 scénarios).
+Le fichier `verifier-assistant.cmd` attend maintenant **62 contrôles**
+(les 52 précédents et ces 10 supplémentaires), sans GitHub Actions.
+
+Étude des projets open source et étapes restantes :
+[`docs/AURA-AUTONOMIE-OPEN-SOURCE-2026.md`](../docs/AURA-AUTONOMIE-OPEN-SOURCE-2026.md).
