@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import sqlite3
 from types import SimpleNamespace
 
 import pytest
@@ -85,24 +86,32 @@ def test_future_reminder_causes_no_early_notification(tmp_path, monkeypatch):
 
 def test_changed_invoice_invalidates_approved_reminder_before_alert(tmp_path, monkeypatch):
     root, db, reminder = fixtures(tmp_path, monkeypatch)
-    # Simulate the due date: we don't bypass the database checks by faking
-    # a clock. Only documents drift is tested here.
+    # Make the synthetic reminder due now; this is test-only direct DB manipulation.
+    with sqlite3.connect(db.path) as connection:
+        connection.execute(
+            "UPDATE reminders SET due_at=? WHERE id=?",
+            ((datetime.now(timezone.utc)-timedelta(minutes=2)).isoformat(), reminder),
+        )
     (root / "facture_client.pdf").write_bytes(
         _make_pdf("Facture N: FAC-2026-001 Date limite 30/11/2026 Total TTC 223,45 EUR")
     )
-    assert check_due(root)[1]["state"] == "no-approved-reminders-due"
-    # On its actual due date, the check re-analyzes and cancels the stale item.
-    assert db.due_reminders(at=datetime.now(timezone.utc)+timedelta(days=2))
+    result = check_due(root)[1]
+    assert result["state"] == "verified-before-alert"
+    assert result["due"] == []
+    assert db.due_reminders() == []
 
 
 def test_partial_document_recheck_keeps_approved_reminder(tmp_path, monkeypatch):
     root, db, reminder = fixtures(tmp_path, monkeypatch)
-    # Existing approved reminder is not due until tomorrow.
-    # Bad input must never automatically cancel it on an incomplete scan.
+    with sqlite3.connect(db.path) as connection:
+        connection.execute(
+            "UPDATE reminders SET due_at=? WHERE id=?",
+            ((datetime.now(timezone.utc)-timedelta(minutes=2)).isoformat(), reminder),
+        )
     (root / "operations.csv").write_text(
         "INVALID_HEADER;montant\nx;-123,45\n", encoding="utf8"
     )
-    board = build_followup_board(analyze_portfolio(root))
-    assert board["partial"]
-    assert db.due_reminders(at=datetime.now(timezone.utc)+timedelta(days=2))
+    status = check_due(root)[1]
+    assert status["state"] == "document-recheck-incomplete"
+    assert db.due_reminders()
     assert db.list_reviews()
