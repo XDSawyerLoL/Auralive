@@ -120,10 +120,16 @@ export class FrenchLanguageFaculty {
             : (Array.isArray(federation.configured_models) && !federation.configured_models.length
               ? 'no-free-model-selected'
               : 'free-federation-disabled'))));
+    // Groq is an optional *speech-only* provider: do not emit OpenRouter
+    // key instructions when the actual failed service is Groq Free.
+    const groqFailure = groq.enabled && this.lastMode === 'degraded'
+      ? String(groq.last_error || '').slice(0, 100)
+      : '';
     const failed = blockingReason === 'free-language-provider-failed'
+      && !groqFailure
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
-    const failureCode = failed?.code || blockingReason;
+    const failureCode = groqFailure || failed?.code || blockingReason;
     const setupHint = installing
       ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
       : provisionFailed
@@ -133,6 +139,14 @@ export class FrenchLanguageFaculty {
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
       ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
+      : groqFailure
+        ? (groqFailure === 'groq-free-http-429'
+          ? 'Groq Free a atteint une limite (429). Vérifier les quotas gratuits de ce modèle et réessayer plus tard, sans basculer vers une offre payante.'
+          : groqFailure === 'groq-free-http-401'
+            ? 'Groq a refusé la clé (401). Vérifier AURA_GROQ_API_KEY, jamais l’afficher publiquement.'
+            : groqFailure === 'groq-free-daily-budget-reached'
+              ? 'Plafond local quotidien Groq atteint. Utiliser le Runtime local ou attendre la remise à zéro.'
+              : 'La verbalisation Groq Free a échoué : consulter le code d’erreur expurgé dans GET /api/aura/capabilities. Aucun modèle payant ne sera appelé.')
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
         : blockingReason === 'free-federation-disabled'
@@ -145,7 +159,8 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free-speech' && groq.last_success_at)
+      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free-speech'
+          && groq.last_success_at && (Date.now() - Date.parse(groq.last_success_at)) < 3_600_000)
         || (embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
       primary: groq.enabled ? 'groq-free-speech'
