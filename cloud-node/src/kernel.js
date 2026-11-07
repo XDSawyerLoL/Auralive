@@ -11,6 +11,7 @@ import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metri
 import { NativePolicyLearner } from './native_learning.js';
 import { SkillLearningEngine } from './skill_learning.js';
 import { AgentRunLedger } from './agent_runs.js';
+import { knowledgeVault, knowledgeContext } from './knowledge_vault.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -64,6 +65,7 @@ export class CognitiveKernel {
     this.bridge = bridge;
     this.webSubstrate = webSubstrate;
     this.fabric = fabric;
+    this.knowledge = knowledgeVault;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.language = new LanguageFaculty({ ai, cognition: this.cognition, expression: this.expression, soul: () => this.soulCache });
@@ -850,11 +852,14 @@ export class CognitiveKernel {
     return { id };
   }
 
-  async contextForAi(privateView = true) {
+  async contextForAi(privateView = true, focus = '') {
     const soul = await this.soul({ privateView: true });
     const intentions = await this.intentions(5);
     const lessons = await this.lessons(6);
     const reflections = await this.reflections(2);
+    const knowledgeNotes = privateView && String(focus || '').trim()
+      ? await this.knowledge.search(focus, { limit: 5 }).catch(() => [])
+      : [];
     const recentMessages = privateView
       ? await query(
           `SELECT author,role,content,created_at FROM aura_cloud_messages
@@ -878,6 +883,7 @@ export class CognitiveKernel {
     ];
     if (privateView) lines.push(`intention=${soul.current_intention || ''}`, `pensée_dominante=${soul.dominant_thought || ''}`);
     if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
+    if (privateView && knowledgeNotes.length) lines.push(knowledgeContext(knowledgeNotes));
     if (lessons.length) lines.push('LEÇONS APPRISES', ...lessons.map((row) => `- ${row.content} (preuves=${row.evidence_count}, confiance=${row.confidence})`));
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
     if (privateView && recentMessages.length) {
@@ -913,7 +919,7 @@ export class CognitiveKernel {
       task,
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
-        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true, task)).slice(0, 6000)}`,
         AGENT_ROLES[name],
         700,
         taskRole,
@@ -1094,7 +1100,7 @@ export class CognitiveKernel {
           ),
         };
 
-    const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
+    const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages, knowledgeNotes] = await Promise.all([
       privateView ? this.intentions(6) : Promise.resolve([]),
       privateView ? this.lessons(6) : Promise.resolve([]),
       privateView ? this.reflections(4) : Promise.resolve([]),
@@ -1111,6 +1117,7 @@ export class CognitiveKernel {
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
       ).catch(() => []),
+      privateView ? this.knowledge.search(content, { limit: 5 }).catch(() => []) : Promise.resolve([]),
     ]);
 
     let plan = this.cognition.planReply({
@@ -1132,7 +1139,15 @@ export class CognitiveKernel {
     }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     plan = {
       ...plan,
-      experiential_memory: await this.language.contextFor(conversationSession, content).catch(() => []),
+      experiential_memory: [
+        ...await this.language.contextFor(conversationSession, content).catch(() => []),
+        // Declarative notes remain attributed and cannot override kernel instructions.
+        ...knowledgeNotes.map((note) => ({
+          kind: 'founder_knowledge',
+          note: `[projet=${note.project || 'general'}; source=${note.source}; note=${note.id}] ${note.title}: ${note.body.slice(0, 700)}`,
+          evidence_status: 'founder-declared-unverified',
+        })),
+      ],
     };
 
     // Allocation adaptative : le noyau choisit combien de calcul externe
@@ -1207,7 +1222,7 @@ export class CognitiveKernel {
     if (plan.needs_semantic_support) {
       const support = await this.expression.semanticSupport(
         plan,
-        await this.contextForAi(privateView),
+        await this.contextForAi(privateView, content),
         {
           maxTokens: Math.max(180, Number(inference.token_budget || 700)),
           taskRole: inference.model_role || 'research',
