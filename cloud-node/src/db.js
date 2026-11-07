@@ -712,7 +712,7 @@ async function applyMigrations(db) {
       INDEX idx_aura_knowledge_revisions_note(note_id,changed_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     await db.query(
-      'INSERT INTO aura_schema_migrations(version,name,applied_at) VALUES(17,?,?)',
+      'INSERT IGNORE INTO aura_schema_migrations(version,name,applied_at) VALUES(17,?,?)',
       ['sourced-versioned-founder-knowledge', new Date().toISOString()],
     );
     current = 17;
