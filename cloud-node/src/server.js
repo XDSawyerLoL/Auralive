@@ -28,6 +28,7 @@ import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
+import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
 import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
@@ -1319,6 +1320,76 @@ app.get('/api/kernel/lessons', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.lessons(request.query?.limit)
     : undefined);
+
+// Founder-only knowledge endpoints. No public-chat access or implicit ingestion.
+app.get('/api/knowledge/notes', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return { notes: await knowledgeVault.list({
+    project: String(request.query?.project || ''),
+    limit: request.query?.limit,
+  }) };
+});
+
+app.get('/api/knowledge/notes/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const note = await knowledgeVault.get(request.params.id);
+  return note || reply.code(404).send({ error: 'Note inconnue' });
+});
+
+app.get('/api/knowledge/search', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const text = String(request.query?.q || '').trim();
+  return { notes: await knowledgeVault.search(text, {
+    project: String(request.query?.project || ''),
+    limit: request.query?.limit,
+  }) };
+});
+
+app.post('/api/knowledge/notes', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return reply.code(201).send(await knowledgeVault.create(request.body || {}));
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error).slice(0, 240) });
+  }
+});
+
+app.patch('/api/knowledge/notes/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await knowledgeVault.revise(
+      request.params.id, request.body || {}, request.body?.expected_version,
+    );
+  } catch (error) {
+    const message = String(error?.message || error);
+    return reply.code(message === 'VERSION_CONFLICT' ? 409 : message === 'Note introuvable' ? 404 : 422)
+      .send({ error: message.slice(0, 240) });
+  }
+});
+
+app.delete('/api/knowledge/notes/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const current = await knowledgeVault.get(request.params.id);
+    if (!current) return reply.code(404).send({ error: 'Note inconnue' });
+    return await knowledgeVault.revise(current.id, { retract: true }, current.version);
+  } catch (error) {
+    const message = String(error?.message || error);
+    return reply.code(message === 'VERSION_CONFLICT' ? 409 : 422)
+      .send({ error: message.slice(0, 240) });
+  }
+});
+
+app.get('/api/knowledge/export', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const notes = await knowledgeVault.list({ project: String(request.query?.project || ''), limit: 300 });
+  const format = String(request.query?.format || 'markdown').toLowerCase();
+  if (format === 'jsoncanvas') return { format: 'jsoncanvas', canvas: toJsonCanvas(notes), count: notes.length };
+  if (format !== 'markdown') return reply.code(422).send({ error: 'Format attendu: markdown ou jsoncanvas' });
+  return { format: 'markdown', files: notes.map((note) => ({
+    name: note.id + '.md', content: toMarkdown(note),
+  })), count: notes.length };
+});
 
 app.get('/api/kernel/intentions', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
