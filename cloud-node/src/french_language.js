@@ -255,11 +255,10 @@ export class FrenchLanguageFaculty {
         return '';
       }
     };
-    // Without federation, use the local runtime if it is healthy.
-    if (!this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
-    }
+    // A verified, responsive embedded model is the first choice.
+    // A mere installed binary is not enough: readiness is checked above.
+    const embeddedAnswer = await tryEmbedded();
+    if (embeddedAnswer) return embeddedAnswer;
 
     if (this.federation?.enabled) {
       try {
@@ -290,12 +289,6 @@ export class FrenchLanguageFaculty {
       } catch (error) {
         this.lastError = safeError(error);
       }
-    }
-
-    // Federation was preferred; if unavailable, a healthy local engine can still answer.
-    if (this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
     }
 
     if (await this.localAvailable()) {
