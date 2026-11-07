@@ -162,7 +162,11 @@ export class KnowledgeVault {
           next.confidence, retract ? 'retracted' : 'active', stamp, current.id],
       );
       await connection.commit();
-      return retract ? { id: current.id, retracted: true, version: current.version + 1 } : this.get(current.id);
+      // Do not query the pool again before releasing this transaction connection:
+      // Hostinger may run with DB_CONNECTION_LIMIT=1.
+      return retract
+        ? { id: current.id, retracted: true, version: current.version + 1 }
+        : { ...current, ...next, status: 'active', version: current.version + 1, updated_at: stamp };
     } catch (error) {
       await connection.rollback();
       throw error;
