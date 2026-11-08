@@ -636,7 +636,18 @@ export class CognitiveKernel {
     if (!config.cognitiveEnabled && !force) return { ok: false, skipped: true, reason: 'noyau cognitif désactivé' };
     if (this.tickRunning) return { ok: true, skipped: true, reason: 'un cycle cognitif est déjà en cours' };
     this.tickRunning = true;
+    let telemetryId = '';
+    let telemetryFailed = false;
+    const emit = (stage, status = 'done', details = {}) => {
+      try {
+        if (telemetryId) this.autonomyTelemetry?.mark(telemetryId, stage, status, details);
+      } catch (_) { /* Never break cognitive execution for visual diagnostics. */ }
+    };
     try {
+      telemetryId = this.autonomyTelemetry?.startAutonomy(trigger) || '';
+    } catch (_) { /* Telemetry is optional. */ }
+    try {
+      emit('regulation', 'running');
       const timestamp = now();
       this.lastTickAt = timestamp;
       this.soulCache.cycles = Number(this.soulCache.cycles || 0) + 1;
@@ -648,6 +659,11 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      emit('regulation', 'done', {
+        delta_stability: Number(idle.effect?.stabilite || 0),
+        delta_curiosity: Number(idle.effect?.curiosite || 0),
+        delta_frustration: Number(idle.effect?.frustration || 0),
+      });
       if (idle.activity !== 'presence' || idle.dream) {
         await this.recordOrganismEvent('idle-life', idle.activity_label || 'vie intérieure', {
           activity: idle.activity,
@@ -668,6 +684,10 @@ export class CognitiveKernel {
         || (continuity.due && underLimit);
       await this.saveSoul();
       if (!shouldReflect) {
+        emit('context_auto', 'skipped');
+        emit('reflection_auto', 'skipped', { cycle_reflected: false });
+        emit('execution_auto', 'skipped');
+        emit('commit_auto', 'done');
         return {
           ok: true,
           skipped: true,
@@ -679,7 +699,13 @@ export class CognitiveKernel {
         };
       }
 
+      emit('context_auto', 'running');
       const bundle = await this.contextBundle(text);
+      emit('context_auto', 'done', {
+        stimuli_count: Array.isArray(bundle.stimuli) ? bundle.stimuli.length : 0,
+        lessons_count: Array.isArray(bundle.lessons) ? bundle.lessons.length : 0,
+      });
+      emit('reflection_auto', 'running');
       // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
       // les intentions ne dépendent d’aucun fournisseur de langage.
       const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger: effectiveTrigger, text });
@@ -741,8 +767,16 @@ export class CognitiveKernel {
         language_model_used_for_decision: false,
       };
       await this.trace('reflection', title, summary, reflection);
+      emit('reflection_auto', 'done', { confidence, cycle_reflected: true });
+      emit('execution_auto', 'skipped');
+      emit('commit_auto', 'done');
       return { ok: true, reflection, soul: await this.soul() };
+    } catch (error) {
+      telemetryFailed = true;
+      throw error;
     } finally {
+      try { if (telemetryId) this.autonomyTelemetry?.finish(telemetryId, telemetryFailed ? 'error' : 'done'); }
+      catch (_) { /* Observability is never a dependency of autonomy. */ }
       this.tickRunning = false;
     }
   }
