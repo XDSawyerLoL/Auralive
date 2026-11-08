@@ -332,15 +332,33 @@ function renderToolMirror(){
  }
 }
 
+function renderRuntimeIncident(){
+ const incident=$('runtimeIncident'),diag=state.data?.runtime_diagnostic||{};
+ const offline=state.data?.runtime_ready!==true;
+ incident.hidden=!offline;
+ if(!offline){setText('runtimeFeedback','');return;}
+ setText('runtimeTitle',diag.title||'Noyau indisponible · diagnostic incomplet');
+ setText('runtimeMessage',diag.action||
+   'Le navigateur reçoit la page, mais le serveur n’a pas confirmé le démarrage du noyau.');
+ setText('runtimeMeta','État : '+(diag.code||'inconnu')+
+   ' · MySQL : '+(diag.db_ready?'connecté':diag.db_configured?'configuré, non confirmé':'non configuré')+
+   ' · dernière tentative : '+shortTime(diag.last_attempt_at));
+ $('runtimeRetry').disabled=diag.code==='database-unconfigured' || diag.code==='gateway-only' || !!diag.ready;
+ $('runtimeRetry').title=$('runtimeRetry').disabled
+   ?'Une modification Hostinger est requise avant de relancer.'
+   :'Relance protégée par une session propriétaire AURA.';
+}
 function renderKPIs(){
  const d=state.data;if(!d)return;
+ renderRuntimeIncident();
  setText('kModules',d.nodes?.length||0);
- setText('kHops',d.observed_hop_count||0);
- setText('kFlows',d.flows?.length||0);
- setText('kSignals',d.recent_signal_count||0);
- setText('kTools',d.observed_tools?.length||0);
+ setText('kHops',d.database_observations_available===false?'—':(d.observed_hop_count||0));
+ setText('kFlows',d.database_observations_available===false?'—':(d.flows?.length||0));
+ setText('kSignals',d.database_observations_available===false?'—':(d.recent_signal_count||0));
+ setText('kTools',d.database_observations_available===false?'—':(d.observed_tools?.length||0));
  setText('kOrganism',shortTime(d.telemetry?.source?.updated_at));
- $('graphClock').textContent='Relevé : '+stamp(d.sampled_at)+' · '+(d.database_observations_available?'observations publiques':'journal indisponible');
+ $('graphClock').textContent='Relevé : '+stamp(d.sampled_at)+' · '+
+  (d.database_observations_available?'observations publiques confirmées':'journal indisponible — aucune activité vérifiable');
  $('onlineState').dataset.state=d.runtime_ready?'active':'error';
  $('onlineState').lastChild.textContent=d.runtime_ready?'Noyau joignable':'Noyau indisponible';
  $('graphCaption').textContent=d.database_observations_available===false
@@ -584,10 +602,47 @@ async function poll(){
    if(data.version!=='brain-flow-v1'||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Schéma réseau invalide');
    state.data=data;if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;if(!findNode(state.selected))state.selected='kernel';state.lastError='';renderAll();
  }catch(err){
-   state.lastError=String(err&&err.message||err).slice(0,120);$('onlineState').dataset.state='error';$('onlineState').lastChild.textContent='API indisponible · '+state.lastError;$('graphClock').textContent='Requête échouée · aucune donnée fraîche';
+   state.lastError=String(err&&err.message||err).slice(0,120);
+   $('onlineState').dataset.state='error';
+   $('onlineState').lastChild.textContent='API indisponible · '+state.lastError;
+   $('graphClock').textContent='Requête échouée · aucune donnée fraîche';
+   $('runtimeIncident').hidden=false;
+   setText('runtimeTitle','Connexion au serveur interrompue');
+   setText('runtimeMessage','Le relevé du noyau est impossible : '+state.lastError);
+   setText('runtimeMeta','Aucune activité, mémoire ni exécution ne peut être confirmée.');
+   $('runtimeRetry').hidden=true;
  }finally{state.pollInFlight=false;}
 }
-$('refreshMap').onclick=poll;setInterval(()=>{if(!document.hidden)poll();},state.busy?900:5000);
+$('refreshMap').onclick=poll;
+$('runtimeCheck').onclick=()=>void poll();
+$('runtimeRetry').onclick=async()=>{
+ const button=$('runtimeRetry');if(button.disabled)return;
+ button.disabled=true;setText('runtimeFeedback','Demande de redémarrage envoyée à l’API privée…');
+ try{
+  const res=await fetch('/api/bootstrap/retry',{
+   method:'POST',credentials:'same-origin',
+   headers:{Accept:'application/json','Content-Type':'application/json'},
+   body:'{}',
+  });
+  if(res.status===401||res.status===403)
+   setText('runtimeFeedback','Session propriétaire requise : aucune relance effectuée.');
+  else if(!res.ok)
+   setText('runtimeFeedback','Relance refusée (HTTP '+res.status+'). Vérifier le journal Hostinger.');
+  else {
+   const data=await res.json();
+   setText('runtimeFeedback',data.runtime_ready
+     ?'Noyau démarré et confirmé.' : 'Relance terminée, mais le noyau reste indisponible. Vérifier la configuration Hostinger.');
+   await poll();
+  }
+ }catch{
+   setText('runtimeFeedback','Relance impossible : API indisponible.');
+ }finally{button.disabled=false;}
+};
+fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'})
+ .then(r=>r.ok?r.json():null)
+ .then(result=>{$('runtimeRetry').hidden=result?.authenticated!==true;})
+ .catch(()=>{$('runtimeRetry').hidden=true;});
+setInterval(()=>{if(!document.hidden)poll();},state.busy?900:5000);
 // Extra poll while an AURA response is in flight: the graph can show database-
 // committed module hops BEFORE the model produces its final answer.
 setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
