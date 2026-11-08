@@ -1272,7 +1272,7 @@ export class CognitiveKernel {
       await brainHop(externalResearch?'web':'cognition','semantic','semantic-support');
     }
 
-    await brainHop('cognition','language','request-formulation','attempted');
+    await brainHop(plan.semantic_support?'semantic':'cognition','language','request-formulation','attempted');
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
@@ -1280,7 +1280,13 @@ export class CognitiveKernel {
     const languageUnavailable = !answer
       && this.expression.lastMode === 'natural-language-unavailable';
     const languageProvider = String(this.expression.language.lastBackend||this.expression.lastMode||'').slice(0,70);
-    await brainHop('language','coherence','response-validation',
+    const providerNode = languageProvider.includes('groq')?'groq'
+      :languageProvider.includes('federation')||languageProvider.includes('openrouter')?'openrouter'
+      :languageProvider.includes('embedded')||languageProvider.includes('local')?'local':'';
+    if(providerNode){
+      await brainHop('language',providerNode,'provider-result',answer?'ok':'unavailable',languageProvider);
+    }
+    await brainHop(providerNode||'language','coherence','response-validation',
       answer?'ok':'unavailable',languageProvider);
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
