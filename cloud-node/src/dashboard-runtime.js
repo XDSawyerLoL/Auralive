@@ -966,5 +966,7 @@ $('cogDiagnostics').onclick=function(){
   this.textContent=visible?'Masquer les diagnostics':'Diagnostics';
 };
 try{initCognitiveGraph();void loopCognitiveTrace();}catch(error){console.warn('AURA cognitive graph unavailable; dialogue and metrics continue.',error);}
+// Ensure the signed browser cookie exists before opening the live event stream.
+void refreshCognitiveTrace().then(function(){if(cogGraphReady)connectCognitiveEventStream();});
 updateClock();refresh();setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
