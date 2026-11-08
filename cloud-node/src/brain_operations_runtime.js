@@ -339,8 +339,8 @@ function drawNetworkStructure(edges){
    ?'89,235,244':src?.group==='core'||src?.group==='execution'
    ?'255,136,119':'219,106,246';
   const observed=edge.observed_count>0;
-  for(let k=1;k<=24;k++){
-    const t=k/25,p=edgePoint(a,b,t),wiggle=Math.sin((k+i*7)*1.7)*Math.sin(Math.PI*t);
+  for(let k=1;k<=12;k++){
+    const t=k/13,p=edgePoint(a,b,t),wiggle=Math.sin((k+i*7)*1.7)*Math.sin(Math.PI*t);
     const dx=b.x-a.x,dy=b.y-a.y,mag=Math.max(1,Math.hypot(dx,dy));
     const spread=(i%3+1)*1.7*wiggle*scale;
     const x=p.x-dy/mag*spread,y=p.y+dx/mag*spread;
@@ -384,9 +384,10 @@ function draw(){
    const a=project(edge.from),b=project(edge.to);const key=edge.from+'>'+edge.to;
    const selected=selectedEdgeSet.has(key);const observed=edge.observed_count>0;const age=edge.last_observed_at?now-Date.parse(edge.last_observed_at):Infinity;const recent=edge.signal_recent===true&&age>=0&&age<20000;
    ctx.save();ctx.globalAlpha=inLens(edge.from)||inLens(edge.to)?1:.12;ctx.lineCap='round';ctx.setLineDash(selected||recent?[]:[4,7]);
-   ctx.lineWidth=selected?2.8:recent?2.1:observed?1.15:.8;
-   ctx.strokeStyle=selected?'rgba(255,186,104,.95)':recent?'rgba(101,255,225,.95)':observed?'rgba(224,112,245,.50)':'rgba(194,115,229,.17)';
-   ctx.shadowBlur=selected?21:recent?18:0;ctx.shadowColor=selected?'rgba(255,186,104,.96)':'rgba(95,255,229,.98)';
+   const replayActive=Boolean(replaying&&activeReplayEdge&&activeReplayEdge.from===edge.from&&activeReplayEdge.to===edge.to);
+   ctx.lineWidth=replayActive?2.5:recent?1.7:selected?1.3:observed?1:.7;
+   ctx.strokeStyle=replayActive?'rgba(255,194,121,.86)':recent?'rgba(101,255,225,.78)':selected?'rgba(224,166,115,.42)':observed?'rgba(154,164,206,.32)':'rgba(105,125,153,.16)';
+   ctx.shadowBlur=replayActive?13:recent?10:0;ctx.shadowColor=replayActive?'rgba(255,186,104,.72)':'rgba(95,255,229,.62)';
    drawEdge(a,b);ctx.stroke();ctx.restore();
    if(!reduced){
      const replayPulse=Boolean(replaying&&activeReplayEdge&&activeReplayEdge.from===edge.from&&activeReplayEdge.to===edge.to);
