@@ -7,6 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
+import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { SkillLearningEngine } from './skill_learning.js';
@@ -1376,18 +1377,22 @@ export class CognitiveKernel {
       || this.soulCache?.current_intention || '',
     ).replace(/\s+/g, ' ').trim().slice(0, 1600);
 
-    return {
+    return groundAgenda({
       current,
       why,
       since,
+      last_updated_at: initiative?.updated_at || mission?.updated_at
+        || mission?.started_at || intention?.updated_at || intention?.created_at || '',
       next_action: nextAction,
       blocker,
       status: String(initiative?.status || mission?.status || (intention ? 'active' : 'idle')),
+      source: initiative ? 'initiative-record' : mission ? 'mission-record'
+        : intention ? 'intention-record' : 'memory-fallback',
       mission_id: mission?.id || '',
       initiative_id: initiative?.id || '',
       intention_id: intention?.id || '',
       reflection_id: reflection?.id || '',
-    };
+    });
   }
 
   async publicAgendaSnapshot() {
@@ -1402,29 +1407,32 @@ export class CognitiveKernel {
       const focus = String(
         this.soulCache?.existence?.current_focus || this.soulCache?.current_intention || '',
       ).replace(/\s+/g, ' ').trim().slice(0, 500);
-      return {
+      return groundAgenda({
         current: focus,
-        why: focus ? 'Foyer autonome actuellement enregistré par AURA.' : '',
+        why: focus ? 'Intention enregistrée dans la mémoire, sans preuve d’exécution en cours.' : '',
         since: '',
-        next_action: focus ? `Poursuivre et réévaluer : ${focus}` : '',
+        next_action: focus ? `Intention mémorisée : ${focus}` : '',
         blocker: '',
         status: focus ? 'active' : 'idle',
-      };
+        source: 'soul-memory',
+      });
     }
     const title = String(initiative.title || 'initiative active').replace(/\s+/g, ' ').trim().slice(0, 500);
     const domain = String(initiative.domain || 'AURA').replace(/\s+/g, ' ').trim().slice(0, 120);
     const status = String(initiative.status || 'queued');
-    return {
+    return groundAgenda({
       current: title,
-      why: `Priorité opérationnelle publique de ${domain}.`,
+      why: `Priorité enregistrée dans le suivi de ${domain}; pas une preuve d’activité actuelle.`,
       since: String(initiative.updated_at || ''),
+      last_updated_at: initiative.updated_at || '',
       next_action: status === 'waiting'
-        ? `Réévaluer le blocage public de ${title}`
-        : `Faire avancer ${title}`,
-      blocker: status === 'waiting' ? 'En attente d’une dépendance ou d’un signal.' : '',
+        ? `Piste mémorisée : revérifier la situation de ${title}`
+        : `Proposition enregistrée : avancer sur ${title}`,
+      blocker: status === 'waiting' ? 'L’initiative était indiquée « en attente » dans la base.' : '',
       status,
+      source: 'public-initiative-record',
       initiative_id: String(initiative.id || ''),
-    };
+    });
   }
 
   async publicWorkItems(limit = 5) {
