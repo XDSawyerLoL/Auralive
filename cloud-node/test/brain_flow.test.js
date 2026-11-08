@@ -132,7 +132,8 @@ test('kernel records real stage transitions with unique IDs and no message conte
  const src=fs.readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  assert.match(src,/const brainFlowId = randomUUID\(\)/);
  assert.match(src,/this\.trace\('brain-hop'/);
- assert.match(src,/brainHop\('input','homeostasis'/);
+ assert.match(src,/brainHop\('input','kernel','chat-received'/);
+ assert.match(src,/brainHop\('kernel','homeostasis','beforeInteraction'/);
  assert.match(src,/brainHop\('homeostasis','memory'/);
  assert.match(src,/brainHop\('memory','cognition'/);
  assert.match(src,/brainHop\('language',providerNode/);
@@ -181,4 +182,25 @@ test('a real tool route displays invocation while plan-only never claims executi
  assert.ok(graph.observed_tools.some(tool=>tool.id==='fabric'));
  assert.ok(graph.observed_tools.some(tool=>tool.id==='agent'));
  assert.equal(graph.observed_tools.every(tool=>tool.execution_verified===false),true);
+});
+
+
+test('a real chat route passes through the central Kernel, never a fake decorative core',()=>{
+ const rows=[
+   hop(31,'nucleus-route','input','kernel',2800),
+   hop(32,'nucleus-route','kernel','homeostasis',2600),
+   hop(33,'nucleus-route','homeostasis','memory',2400),
+   hop(34,'nucleus-route','memory','cognition',2100),
+   hop(35,'nucleus-route','cognition','language',1500),
+   hop(36,'nucleus-route','language','groq',1200,'ok','groq-free'),
+   hop(37,'nucleus-route','groq','coherence',900,'ok','groq-free'),
+   hop(38,'nucleus-route','coherence','output',700),
+ ];
+ const graph=buildBrainFlowGraph({telemetry,traceRows:rows},now);
+ assert.equal(graph.observed_hop_count,8);
+ assert.ok(graph.flows[0].steps.some(x=>x.from==='input'&&x.to==='kernel'));
+ assert.ok(graph.flows[0].steps.some(x=>x.from==='kernel'&&x.to==='homeostasis'));
+ assert.equal(graph.nodes.find(x=>x.id==='kernel').activity_verified,true);
+ assert.ok(graph.edges.find(x=>x.from==='input'&&x.to==='kernel').signal_recent);
+ assert.ok(graph.edges.find(x=>x.from==='kernel'&&x.to==='homeostasis').signal_recent);
 });
