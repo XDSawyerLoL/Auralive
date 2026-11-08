@@ -119,3 +119,19 @@ test('full AURA UI includes autonomy first, revenue second, and no simulated col
   assert.match(DASHBOARD_HTML,/Non activées/);
   assert.match(DASHBOARD_HTML,/PAPER ONLY/);
 });
+
+
+test('owner authentication uses existing secure cookie session, never stores the secret',()=>{
+  assert.match(DASHBOARD_HTML,/id="ownerSessionToken"/);
+  assert.match(DASHBOARD_HTML,/id="ownerConnect"/);
+  assert.match(DASHBOARD_HTML,/id="ownerDisconnect"/);
+  assert.match(DASHBOARD_SCRIPT,/api\('\/api\/auth\/session'/);
+  assert.match(DASHBOARD_SCRIPT,/ownerSessionAuthenticated/);
+  assert.match(DASHBOARD_SCRIPT,/input\.value=''/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT,/localStorage\.setItem\('aura_token'/);
+  assert.doesNotMatch(DASHBOARD_SCRIPT,/sessionStorage\.setItem\('aura_token'/);
+  const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+  assert.match(server,/app\.post\('\/api\/auth\/session'/);
+  assert.match(server,/HttpOnly; Secure; SameSite=Lax/);
+  assert.match(server,/app\.delete\('\/api\/auth\/session'/);
+});
