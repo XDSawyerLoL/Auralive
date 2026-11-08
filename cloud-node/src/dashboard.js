@@ -136,7 +136,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 
 /* AURA Cognitive Trace — genuine instrumented events, no synthetic neural activity. */
 .main{grid-template-columns:minmax(0,1fr)}
-.side{display:none;grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.side{display:none;order:1;grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .side.diagnostics-open{display:grid}
 @media(max-width:720px){.side.diagnostics-open{grid-template-columns:1fr}}
 
