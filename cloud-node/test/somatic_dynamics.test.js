@@ -62,6 +62,7 @@ test('idle time produces homeostatic recovery from a failure',()=>{
 test('bounded algorithmic uncertainty is replayable, persists, and cannot saturate key states',()=>{
   const organism=new AuraOrganism({sensor:{sample:()=>low}});
   const initial=organism.defaultState();
+  initial.homeostasis.seed=0x12345678;
   const a=evolveHomeostasis(initial,{signal:'interaction',seconds:60,sensor:low,nowMs:timestamp});
   const b=evolveHomeostasis(initial,{signal:'interaction',seconds:60,sensor:low,nowMs:timestamp});
   assert.deepEqual(a,b);
@@ -118,4 +119,18 @@ test('public telemetry separates process measurement from functional emotional e
   },{},timestamp+400_000);
   assert.equal(stale.somatic.heap_utilization,null);
   assert.equal(stale.somatic.source,'unavailable');
+});
+
+test('cognition prioritizes restoring resource stability on measured overload',async()=>{
+  const { CognitionEngine } = await import('../src/cognition.js');
+  const organism = new AuraOrganism({sensor:{sample:()=>high}});
+  const state = organism.defaultState();
+  const pressured = evolveHomeostasis(state,{signal:'event',seconds:180,sensor:high,nowMs:timestamp});
+  const plan = new CognitionEngine().reflect(
+    {stimuli:[],intentions:[],lessons:[],outcomes:[],horizon:''},
+    {organism:pressured,current_intention:''},{trigger:'test'},
+  );
+  assert.equal(plan.title,'Régulation de charge');
+  assert.ok(plan.basis.compute_pressure>=.75);
+  assert.equal(plan.basis.compute_source,'node-process');
 });
