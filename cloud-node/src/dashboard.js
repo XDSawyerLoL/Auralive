@@ -218,7 +218,7 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
 .owner-connect-row{display:flex;gap:6px}
 .owner-connect-row input{min-width:0;flex:1;width:100%;border-radius:8px;background:rgba(8,13,30,.95);border:1px solid rgba(166,157,243,.21);color:#f8f6ff;padding:9px;font-size:11px}
 .owner-connect-row button,.owner-login>button{border:1px solid rgba(171,165,239,.3);border-radius:8px;color:#e9e4ff;background:rgba(166,161,240,.10);padding:9px 10px;font-size:11px;white-space:nowrap}
-.owner-login>button{width:max-content}
+.owner-login>button{width:max-content}.owner-connect-row[hidden],#ownerDisconnect[hidden]{display:none!important}
 @media(max-width:490px){.owner-connect-row{flex-wrap:wrap}.owner-connect-row input,.owner-connect-row button{width:100%}}
 </style>
 </head>
