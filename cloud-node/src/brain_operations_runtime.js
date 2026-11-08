@@ -76,9 +76,9 @@ function renderInspect(){
 function renderRoute(){
  const root=$('routeSteps');root.replaceChildren();
  if(!state.flow){
-   setText('flowState','Sélectionne un trajet réellement enregistré.');
-   setText('currentFlowLabel','Aucun trajet sélectionné');
-   setText('currentFlowSummary','Envoie une requête à AURA puis observe la chaîne de traitement et les modules effectivement traversés.');
+   setText('flowState',state.busy?'Requête transmise, en attente de transitions persistées…':'Sélectionne un trajet réellement enregistré.');
+   setText('currentFlowLabel',state.busy?'Réponse en cours':'Aucun trajet sélectionné');
+   setText('currentFlowSummary',state.busy?'Les passages confirmés apparaissent sur le réseau en cyan. Leur association précise à ta requête sera vérifiée à réception du flow_id.':'Envoie une requête à AURA puis observe la chaîne de traitement et les modules effectivement traversés.');
    return;
  }
  const label=(state.flow.state==='completed'?'Réponse produite':'Parcours partiel / incident');
@@ -297,7 +297,7 @@ const history=$('chatHistory');
 $('chatExpand').onclick=()=>{const open=!history.classList.contains('open');history.classList.toggle('open',open);$('chatExpand').setAttribute('aria-expanded',String(open));};
 function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;$('chatExpand').setAttribute('aria-expanded','true');}
 $('chatSend').onclick=async()=>{
- const field=$('chatInput');const msg=field.value.trim();if(!msg||state.busy)return;state.busy=true;$('chatSend').disabled=true;field.value='';state.lastPrompt=msg;setText('requestPreview',msg);chatLine('VOUS',msg,'user');
+ const field=$('chatInput');const msg=field.value.trim();if(!msg||state.busy)return;state.busy=true;state.flow=null;state.replayStarted=0;$('chatSend').disabled=true;field.value='';state.lastPrompt=msg;setText('requestPreview',msg);chatLine('VOUS',msg,'user');renderRoute();draw();
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),60000);
  try{
    void poll();
