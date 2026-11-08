@@ -25,6 +25,7 @@ import {
 } from './db.js';
 import { DASHBOARD_HTML } from './dashboard.js';
 import { BRAIN_HTML } from './brain_console.js';
+import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { buildBrainFlowGraph } from './brain_flow.js';
 import { query as readBrainTraceRows } from './db.js';
@@ -526,6 +527,10 @@ app.addHook('onSend', async (_request, reply, payload) => {
 });
 
 app.get('/cerveau', async (_request, reply) => {
+  reply.header('Cache-Control','no-cache');
+  return reply.type('text/html; charset=utf-8').send(BRAIN_OPERATIONS_HTML);
+});
+app.get('/cerveau/anatomie', async (_request, reply) => {
   reply.header('Cache-Control','no-cache');
   return reply.type('text/html; charset=utf-8').send(BRAIN_HTML);
 });
