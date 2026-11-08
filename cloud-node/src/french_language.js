@@ -133,6 +133,10 @@ export class FrenchLanguageFaculty {
     return this.ai?.federation || null;
   }
 
+  get groq() {
+    return this.ai?.groq || null;
+  }
+
   async localAvailable() {
     try {
       return Boolean(this.ai?.bridge?.enabled && await this.ai.bridge.workerOnline());
@@ -143,6 +147,7 @@ export class FrenchLanguageFaculty {
 
   async status() {
     const federation = this.federation?.snapshot?.() || {};
+    const groq = this.groq?.snapshot?.() || {};
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
     const embeddedInstalled = Boolean(embedded.installed);
@@ -151,16 +156,17 @@ export class FrenchLanguageFaculty {
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(embedded.ready || federation.enabled || local);
+    const ready = Boolean(groq.enabled || embedded.ready || federation.enabled || local);
     const blockingReason = installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
-      && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
+      && !['groq-free','zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.failure_code
       : ready
       ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
       : (!federation.api_key_configured
-        ? 'openrouter-free-key-missing'
+        ? (groq.free_plan_operator_confirmed && !groq.api_key_configured
+          ? 'groq-free-key-missing' : 'openrouter-free-key-missing')
         : (federation.zero_cost_mode === false
           ? 'zero-cost-mode-disabled'
           : (!federation.endpoint_verified
@@ -179,8 +185,10 @@ export class FrenchLanguageFaculty {
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.setup_hint
+      : blockingReason === 'groq-free-key-missing'
+      ? 'Définir AURA_GROQ_API_KEY dans Hostinger. Vérifier que l’organisation Groq reste sur Free, puis confirmer AURA_GROQ_FREE_PLAN_CONFIRMED=true.'
       : blockingReason === 'openrouter-free-key-missing'
-      ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
+      ? 'Utiliser GroqCloud Free : AURA_GROQ_API_KEY et AURA_GROQ_FREE_PLAN_CONFIRMED=true, ou OpenRouter : AURA_OPENROUTER_API_KEY. Ne jamais activer une offre facturée.'
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
         : blockingReason === 'free-federation-disabled'
@@ -193,13 +201,16 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free')
+        || (embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: embedded.ready ? 'hostinger-embedded'
+      primary: groq.enabled ? 'groq-free'
+        : embedded.ready ? 'hostinger-embedded'
         : federation.enabled ? 'zero-cost-federation'
           : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
-      zero_cost: Boolean(federation.zero_cost_mode ?? true),
+      groq,
+      zero_cost: Boolean(groq.enabled || (federation.zero_cost_mode ?? true)),
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
       last_mode: this.lastMode,
@@ -287,6 +298,30 @@ export class FrenchLanguageFaculty {
     const system = this.system();
     const started = Date.now();
     this.lastError = '';
+    // GroqCloud Free is the preferred conversational model when the operator
+    // explicitly confirms their organization has NO paid Developer billing.
+    // Never interpret a configured key alone as proof of a free plan.
+    if(this.groq?.enabled){
+      try{
+        const result=await this.groq.generate(
+          compactFrenchPrompt(plan),
+          compactFrenchSystem(),
+          Math.max(500,Math.min(Number(maxTokens)||700,900)),
+        );
+        const answer=cleanSpeechOutput(result?.answer||'');
+        if(answer){
+          this.lastMode='groq-free';
+          this.lastBackend='groq-free';
+          this.lastModel=String(result?.model||'');
+          this.lastLatencyMs=Date.now()-started;
+          this.lastError='';
+          return answer;
+        }
+        this.lastError='Groq Free empty completion';
+      }catch(error){
+        this.lastError=safeError(error);
+      }
+    }
     // A broken optional native runtime must never block a configured cloud speech provider.
     // Run local inference only when health and inference have already been verified.
     const tryEmbedded = async () => {
@@ -375,7 +410,8 @@ export class FrenchLanguageFaculty {
     }
 
     this.lastMode = 'degraded';
-    this.lastError = this.lastError || (this.federation?.enabled ? 'free-provider-empty-response' : 'no-free-provider-connected');
+    this.lastError = this.lastError
+      || ((this.groq?.enabled || this.federation?.enabled) ? 'free-provider-empty-response' : 'no-free-provider-connected');
     this.lastBackend = '';
     this.lastModel = '';
     this.lastLatencyMs = Date.now() - started;
