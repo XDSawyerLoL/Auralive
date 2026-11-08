@@ -52,7 +52,9 @@ test('spoken text removes markdown, code and raw URLs before pronunciation',()=>
   const value=clean('**Bonjour**. [Guide](https://example.org) '+fence+'js\nconst secret = 1;\n'+fence+' Consulte https://example.org');
   assert.match(value,/Bonjour/);
   assert.match(value,/Guide/);
-  assert.doesNotMatch(value,/https:|const secret|\\*\\*/);
+  assert.equal(value.includes('https:'),false);
+  assert.equal(value.includes('const secret'),false);
+  assert.equal(value.includes('**'),false);
 });
 
 test('long responses are split into short speech utterances',()=>{
