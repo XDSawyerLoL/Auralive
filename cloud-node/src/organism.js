@@ -11,7 +11,11 @@ export class AuraOrganism {
   constructor({ sensor = new ProcessSomaticSensor() } = {}) { this.sensor = sensor; }
 
   regulate(state, signal = 'ambient', seconds = 30) {
-    Object.assign(state, evolveHomeostasis(state, { signal, seconds, sensor: this.sensor.sample() }));
+    // Catch up after suspended timers or process restarts, bounded to one hour.
+    const lastAt = Date.parse(String(state.homeostasis?.last_at || ''));
+    const elapsed = Number.isFinite(lastAt) ? Math.max(0, (Date.now() - lastAt) / 1000) : 0;
+    const duration = Math.max(Number(seconds) || 0, Math.min(3600, elapsed));
+    Object.assign(state, evolveHomeostasis(state, { signal, seconds: duration, sensor: this.sensor.sample() }));
     return state.homeostasis;
   }
 
