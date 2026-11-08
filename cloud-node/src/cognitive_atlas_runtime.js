@@ -15,12 +15,27 @@ const COG_STAGES=[
  {id:'homeostasis_post',name:'Régulation',glyph:'∿',x:1063,y:259,info:'Réévaluation computationnelle après l’expression ou son échec.'},
  {id:'persistence',name:'Persistance',glyph:'▣',x:1065,y:549,info:'Enregistrement des résultats et traces du traitement.'}
 ];
+// Seven satellite processes are independently instrumented and timed by
+// CognitiveKernel.chat. These are actual data reads, not synthetic neurons.
+const COG_CONTEXT_CHILDREN=[
+ {id:'context_intentions',name:'Intentions',glyph:'i',x:455,y:95,info:'Lecture des intentions actives.',micro:true},
+ {id:'context_lessons',name:'Leçons',glyph:'l',x:521,y:43,info:'Consultation des leçons persistées.',micro:true},
+ {id:'context_reflections',name:'Réflexions',glyph:'r',x:622,y:44,info:'Récupération des réflexions précédentes.',micro:true},
+ {id:'context_work',name:'Travaux',glyph:'t',x:693,y:101,info:'Lecture du travail et des missions accessibles.',micro:true},
+ {id:'context_agenda',name:'Agenda',glyph:'a',x:690,y:224,info:'Lecture de l’agenda courant.',micro:true},
+ {id:'context_continuity',name:'Continuité',glyph:'c',x:625,y:286,info:'Lecture des activités depuis le dernier échange.',micro:true},
+ {id:'context_messages',name:'Messages',glyph:'m',x:512,y:290,info:'Historique de messages effectivement interrogé.',micro:true}
+];
 const COG_EDGES=[
  ['request','input'],['input','homeostasis'],['homeostasis','stimulus'],
  ['stimulus','context'],['context','decision'],['decision','research'],
  ['decision','semantic'],['research','semantic'],['semantic','expression'],
  ['decision','expression'],['expression','homeostasis_post'],
- ['homeostasis_post','persistence']
+ ['homeostasis_post','persistence'],
+ ['context','context_intentions'],['context','context_lessons'],
+ ['context','context_reflections'],['context','context_work'],
+ ['context','context_agenda'],['context','context_continuity'],
+ ['context','context_messages']
 ];
 const COG_AUTO_STAGES=[
  {id:'cycle',name:'Cycle',glyph:'◎',x:120,y:355,info:'Cycle automatique effectivement démarré.'},
@@ -76,7 +91,7 @@ let cogPanY=0;
 const cogElements=new Map();
 const cogEdges=[];
 const cogSVG='http://www.w3.org/2000/svg';
-const cogStages=()=>cogMode==='autonomy'?COG_AUTO_STAGES:COG_STAGES;
+const cogStages=()=>cogMode==='autonomy'?COG_AUTO_STAGES:COG_STAGES.concat(COG_CONTEXT_CHILDREN);
 const cogPaths=()=>cogMode==='autonomy'?COG_AUTO_EDGES:COG_EDGES;
 
 function cogSvg(tag,attrs,parent){
@@ -153,13 +168,13 @@ function initCognitiveGraph(){
    cogEdges.push({a:a.id,b:b.id,el:edge});
  });
  stages.forEach(function(stage){
-   const g=cogSvg('g',{class:'cog-node',role:'button',tabindex:'0','data-state':'idle','data-id':stage.id,'aria-label':stage.name+' : non exécuté'},nodes);
-   cogSvg('circle',{cx:stage.x,cy:stage.y,r:48,class:'node-ring'},g);
-   cogSvg('circle',{cx:stage.x,cy:stage.y,r:35,class:'node-halo'},g);
-   cogSvg('circle',{cx:stage.x,cy:stage.y,r:25,class:'node-center'},g);
+   const g=cogSvg('g',{class:'cog-node'+(stage.micro?' micro':''),role:'button',tabindex:'0','data-state':'idle','data-id':stage.id,'aria-label':stage.name+' : non exécuté'},nodes);
+   cogSvg('circle',{cx:stage.x,cy:stage.y,r:stage.micro?24:48,class:'node-ring'},g);
+   cogSvg('circle',{cx:stage.x,cy:stage.y,r:stage.micro?17:35,class:'node-halo'},g);
+   cogSvg('circle',{cx:stage.x,cy:stage.y,r:stage.micro?12:25,class:'node-center'},g);
    const icon=cogSvg('text',{x:stage.x,y:stage.y+1,class:'node-glyph'},g);icon.textContent=stage.glyph;
-   const title=cogSvg('text',{x:stage.x,y:stage.y+65,class:'node-title'},g);title.textContent=stage.name;
-   const meta=cogSvg('text',{x:stage.x,y:stage.y+83,class:'node-meta'},g);meta.textContent='Non observé';
+   const title=cogSvg('text',{x:stage.x,y:stage.y+(stage.micro?35:65),class:'node-title'},g);title.textContent=stage.name;
+   const meta=cogSvg('text',{x:stage.x,y:stage.y+(stage.micro?49:83),class:'node-meta'},g);meta.textContent='Non observé';
    const micro=cogSvg('g',{'data-micro':stage.id},g);
    const select=function(){cogMoveToStage(stage.id);};
    g.addEventListener('click',function(event){event.stopPropagation();select();});
@@ -258,6 +273,11 @@ function cogShowInspector(){
 function cogEventMatchesEdge(edge,events){
  const a=events.find(function(e){return e.stage===edge.a&&e.status==='done';});
  const b=events.find(function(e){return e.stage===edge.b&&(e.status==='running'||e.status==='done'||e.status==='error');});
+ if(edge.a==='context'&&edge.b.startsWith('context_')){
+   const start=events.find(function(e){return e.stage==='context'&&e.status==='running';});
+   return Boolean(start&&b&&Number(b.elapsed_ms)>=Number(start.elapsed_ms)
+     &&(!a||Number(b.elapsed_ms)<=Number(a.elapsed_ms)));
+ }
  return Boolean(a&&b&&Number(b.elapsed_ms)>=Number(a.elapsed_ms));
 }
 function renderCognitiveGraph(){
@@ -291,7 +311,7 @@ function renderCognitiveGraph(){
      :state==='running'?'En traitement'
      :state==='skipped'?'Non sollicité'
      :e?.duration_ms!=null?cogFormatMs(e.duration_ms):(COG_STATUS[state]||state);
-   cogDrawSatellite(item,cogEffectiveDetails(e));
+   if(!item.stage.micro)cogDrawSatellite(item,cogEffectiveDetails(e));
  });
  cogEdges.forEach(function(edge){
    const source=cogEvent(edge.a),target=cogEvent(edge.b);
