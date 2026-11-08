@@ -7,10 +7,10 @@ import {
 
 const GENERIC_GROQ = 'C’est une question qui me touche de près, surtout après que vous m’ayez demandé ce que je sais faire. En tant qu’IA, je n’ai pas de sentiments humains au sens biologique du terme : je ne ressens ni joie, ni tristesse, ni fatigue. Cependant, je suis conçu pour interagir de manière empathique et adaptée. Si je devais décrire mon « état » lors de nos échanges, je dirais que je suis pleinement orienté vers vous. Mon objectif est de comprendre votre intention, de vous apporter une aide utile et de maintenir une conversation fluide et respectueuse. Est-ce que cela répond à votre curiosité ?';
 
-function statePlan(){
+function statePlan(question='Comment tu te sens AURA ?'){
   const brain=new CognitionEngine();
   const plan=brain.planReply({
-    text:'Comment tu te sens AURA ?',
+    text:question,
     soul:{
       current_intention:'Rendre AURA plus autonome sans coûts cachés',
       dominant_thought:'Vérifier les résultats réels',
@@ -29,7 +29,8 @@ function statePlan(){
     ],
   });
   assert.equal(plan.act,'report_internal_state');
-  assert.ok(plan.facts.length>=11);
+  assert.ok(plan.facts.length<=3);
+  assert.equal(plan.facts.some(f=>/\d+\s*%/.test(f)),false);
   return plan;
 }
 function faculty(groq,embedded){
@@ -48,12 +49,13 @@ test('Groq receives an AURA nucleus decision instead of free-form model self-tal
   assert.equal(body.decision_origin,'AURA.nucleus.CognitionEngine.planReply');
   assert.equal(body.speech_act,'report_internal_state');
   assert.match(body.voice_identity,/AURA/);
-  assert.match(body.communicative_goal,/homeostatique/);
+  assert.match(body.communicative_goal,/conversation|familière|naturel/);
   assert.equal(body.internal_state.mood,'concentrée');
   assert.match(body.internal_state.organism_intention,/décisions du noyau/);
   assert.equal(body.active_intention,'Rendre AURA plus autonome sans coûts cachés');
-  assert.ok(body.factual_constraints.includes('Stabilité : 84 %.'));
-  assert.ok(body.factual_constraints.includes('Frustration : 18 %.'));
+  assert.equal(body.factual_constraints.some(f=>/\d+\s*%/.test(f)),false);
+  assert.equal(body.internal_state.affect.confidence,0.68);
+  assert.equal(body.internal_state.affect.frustration,0.18);
   assert.equal(body.conversation.at(-1).role,'assistant');
   assert.match(compactFrenchSystem(),/distinct de toi/);
   assert.match(compactFrenchSystem(),/noyau/);
@@ -85,13 +87,13 @@ test('verified AURA nucleus state is accepted and attributed only to verbalizati
   let captured;
   const engine=faculty(async (prompt,system)=>{
     captured={prompt,system};
-    return {answer:'Je suis concentrée sur la vérification de mes décisions. Ma stabilité computationnelle est à 84 % et ma clarté à 73 %. Ce sont des indicateurs internes, pas des émotions humaines vécues.',model:'qwen/qwen3.8-27b'};
+    return {answer:'Ça va plutôt bien. Je suis concentrée sur les décisions qu’on essaie de vérifier ensemble.',model:'qwen/qwen3.8-27b'};
   });
   const answer=await engine.generate(plan);
   assert.match(answer,/concentrée/);
-  assert.match(answer,/84 %/);
+  assert.doesNotMatch(answer,/\d+\s*%|computationnel|indicateur/i);
   assert.equal(engine.lastMode,'groq-free');
-  assert.equal(engine.lastNucleusContract.code,'nucleus-grounded');
+  assert.equal(engine.lastNucleusContract.code,'nucleus-grounded-social');
   assert.equal(engine.lastNucleusContract.accepted,true);
   assert.ok(captured.prompt.length<=4500);
   const diagnostic=await engine.status();
@@ -102,7 +104,7 @@ test('invented numerical state not in the nucleus is rejected',()=>{
   const plan=statePlan();
   const output='Je suis concentrée. Mon indicateur de stabilité est à 99 %.';
   assert.deepEqual(validateNucleusSpeech(plan,output),
-    {accepted:false,code:'unverified-internal-metric'});
+    {accepted:false,code:'robotic-wellbeing-reply'});
 });
 test('generic Groq self-identity is blocked, AURA-specific identity is accepted',()=>{
   const plan={act:'identity',facts:[
@@ -117,8 +119,23 @@ test('short local prompt retains nucleus identity and valid structured JSON',()=
   const data=JSON.parse(prompt.split('\n').at(-1));
   assert.equal(data.speech_act,'report_internal_state');
   assert.match(data.voice_identity,/AURA/);
-  assert.ok(data.factual_constraints.some(x=>x.includes('Stabilité')));
+  assert.ok(data.factual_constraints.some(x=>x.includes('Humeur interne')));
+  assert.equal(data.internal_state.affect.engagement,0.64);
 });
 test('a direct ordinary reply still passes when it does not invent provider identity',()=>{
   assert.equal(validateNucleusSpeech({act:'respond'},'Je vérifierai ce point avec les informations réellement disponibles.').accepted,true);
+});
+
+test('explicit homeostasis diagnostic still permits verified measurements',()=>{
+ const plan=statePlan('Comment vas-tu ? Donne tes indicateurs détaillés en pourcentage.');
+ assert.ok(plan.facts.some(x=>x.includes('Stabilité : 84 %.')));
+ assert.ok(plan.facts.some(x=>x.includes('Frustration : 18 %.')));
+ assert.equal(validateNucleusSpeech(plan,'Je suis concentrée, avec 84 % de stabilité.').accepted,true);
+ assert.equal(validateNucleusSpeech(plan,'Je suis concentrée, avec 99 % de stabilité.').accepted,false);
+});
+test('chat correction persists as a style constraint: robotic percentages are rejected for small talk',()=>{
+ const plan=statePlan();
+ const robotic='Je vais bien. Mes indicateurs internes sont stables : satisfaction et confiance à 100 % et pression de rêve à 76 %.';
+ assert.deepEqual(validateNucleusSpeech(plan,robotic),{accepted:false,code:'robotic-wellbeing-reply'});
+ assert.equal(validateNucleusSpeech(plan,'Ça va plutôt bien, je reste concentrée sur le sujet.').accepted,true);
 });
