@@ -830,6 +830,7 @@ const COG_FIELDS={messages:'messages',intentions:'intentions',lessons:'leçons',
 const COG_LANGUAGE={'french-language-faculty':'modèle français actif','natural-language-unavailable':'moteur français indisponible','deterministic-emergency-fallback':'réponse de secours déterministe',unknown:'non identifié'};
 let cogMode='dialogue';
 let cogTrace=null;
+let cogTraceOrigin='poll';
 let cogSelected='';
 let cogTraceId='';
 let cogAwaitingReply=false;
@@ -901,9 +902,10 @@ function renderCognitiveGraph(){
   const available=Boolean(cogTrace&&cogTrace.available);
   const runState=String(cogTrace&&cogTrace.state||'idle');
   const hasError=events.some(function(event){return event.status==='error';});
-  $('cogState').textContent=!available?'Aucun traitement enregistré'
+  const baseState=!available?'Aucun traitement enregistré'
     :runState==='running'?(cogMode==='autonomy'?'Cycle autonome en cours':'Requête en traitement · événements réels')
       :runState==='error'?'Traitement interrompu':hasError?'Terminé avec anomalie':'Dernier traitement terminé';
+  $('cogState').textContent=baseState+(available&&cogTraceOrigin==='reply'?' · trace jointe':'');
   const chosen=cogSelected ? cogStages().find(function(s){return s.id===cogSelected;}) : null;
   const defaultStage=latest && cogStages().find(function(s){return s.id===latest.stage;});
   const stage=chosen||defaultStage;
@@ -914,7 +916,7 @@ function renderCognitiveGraph(){
     const value=pair[0]==='language_mode'?(COG_LANGUAGE[pair[1]]||pair[1]):pair[1];
     return key+' : '+(typeof value==='boolean'?(value?'oui':'non'):String(value));
   }).join(' · ');
-  const title=stage?stage.name:'AURA en attente de message';
+  const title=stage?stage.name:(cogMode==='autonomy'?'Aucun cycle autonome observé':'AURA en attente de message');
   const body=stage?(stage.info+'. '+(evt?'État : '+(COG_STATUS[evt.status]||evt.status)+'.':'Aucune exécution observée.')+(detailLine?' '+detailLine:''))
     :'En attente d’une requête. Aucun processus n’est animé sans événement reçu.';
   $('cogDetail').replaceChildren();
@@ -944,6 +946,7 @@ function switchCognitiveMode(next){
   cogAutonomyForbidden=false;
   cogSelected='';
   cogTrace=null;
+  cogTraceOrigin='poll';
   $('cogModeDialogue').setAttribute('aria-pressed',String(mode==='dialogue'));
   $('cogModeAutonomy').setAttribute('aria-pressed',String(mode==='autonomy'));
   initCognitiveGraph();
@@ -963,6 +966,14 @@ async function refreshCognitiveTrace(){
       const parameter=mode==='dialogue'&&cogTraceId?'?id='+encodeURIComponent(cogTraceId):'';
       const data=await api(mode==='autonomy'?'/api/cognition/autonomy':'/api/cognition/trace'+parameter);
       if(mode!==cogMode)return;
+      // Cross-site cookies can be blocked: retain the verified snapshot from
+      // POST /api/chat rather than replacing it with a different empty session.
+      if(mode==='dialogue'&&!data.available&&cogTrace?.available&&cogTrace?.id===cogTraceId){
+        cogTraceOrigin='reply';
+        renderCognitiveGraph();
+        return;
+      }
+      cogTraceOrigin='poll';
       cogTrace=data;
       renderCognitiveGraph();
     }catch(error){
@@ -1092,6 +1103,9 @@ async function sendMessage(text){
   if(cogMode!=='dialogue')switchCognitiveMode('dialogue');
   cogAwaitingReply=true;
   cogTraceId='';
+  cogTrace=null;
+  cogTraceOrigin='poll';
+  renderCognitiveGraph();
   $('send').disabled=true;
   // Establish the per-visitor session cookie before the long-running chat request.
   await refreshCognitiveTrace();
@@ -1101,6 +1115,11 @@ async function sendMessage(text){
   try{
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
     if(out.trace_id)cogTraceId=String(out.trace_id);
+    if(out.trace?.available && out.trace?.id===cogTraceId){
+      cogTrace=out.trace;
+      cogTraceOrigin='reply';
+      renderCognitiveGraph();
+    }
     await refreshCognitiveTrace();
     const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
