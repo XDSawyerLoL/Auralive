@@ -34,6 +34,25 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     origin:'AuraOrganism.publicState',
     measured:false, // deterministic software-state index, not a biological reading
   }));
+  // Physical telemetry is only from the current Node process, never synthetic.
+  const processSample=live&&organism.homeostasis?.sensor?.source==='node-process'
+    ?organism.homeostasis.sensor:null;
+  const processFreshness=processSample?evaluateTelemetryFreshness(processSample.sampled_at,nowMs)
+    :{status:'unavailable',updated_at:null,age_seconds:null};
+  const measured=processFreshness.status==='recent';
+  const somatic={
+    freshness:processFreshness,
+    source:measured?'node-process':'unavailable',
+    heap_utilization:measured?boundedMetric(processSample.heap_utilization):null,
+    cpu_utilization:measured?boundedMetric(processSample.cpu_utilization):null,
+    compute_pressure:measured?boundedMetric(processSample.compute_pressure):null,
+    rss_mib:measured&&Number.isFinite(Number(processSample.rss_bytes))
+      ?Math.round(Number(processSample.rss_bytes)/1048576):null,
+    last_signal:live?safeText(organism.homeostasis?.last_signal||'',60):'',
+    regulation_steps:live&&Number.isFinite(Number(organism.homeostasis?.steps))
+      ?Number(organism.homeostasis.steps):null,
+    evidence:'Mesures de processus, pas mesures corporelles ni preuve de sentiments.',
+  };
   const counts=publicState.kernel_status?.counts||{};
   const number=(v)=>v===null||v===undefined||v===''?null:
     Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
@@ -59,7 +78,9 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
       detail:live?'Noyau accessible via la projection publique.':'Noyau non disponible ou démarrage en cours.',
       source:'CognitiveKernel.status'},
     {id:'homeostasis',title:'Homéostasie',state:live&&source.status==='recent'?'active':source.status,
-      detail:source.updated_at?'Dernière mise à jour : '+source.updated_at:'Pas de télémétrie d’organisme vérifiable.',
+      detail:source.updated_at
+         ?'État logiciel : '+source.updated_at+' · capteurs processus : '+processFreshness.status
+         :'Pas de télémétrie d’organisme vérifiable.',
       source:'AuraOrganism.publicState'},
     {id:'cognition',title:'CognitionEngine',state:live?'available':'unavailable',
       detail:'Le noyau calcule des plans de réponse. Le nombre d’opérations en cours n’est pas mesuré ici.',
@@ -84,7 +105,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     version:'brain-telemetry-v1',
     sampled_at:new Date(nowMs).toISOString(),
     runtime_ready:live,
-    source, metrics,
+    source, metrics, somatic,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
