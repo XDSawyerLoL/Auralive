@@ -22,8 +22,8 @@ test('strict French mode refuses to impersonate natural conversation with script
   });
 
   const answer = await expression.verbalize(plan);
-  assert.match(answer, /faculté de français naturel est indisponible/i);
-  assert.doesNotMatch(answer, /libllama|hbuilds|hostingersite|\.so\.0/i);
+  assert.equal(answer, '', 'A failed model must never impersonate AURA with scripted text');
+  assert.equal(expression.lastMode,'natural-language-unavailable');
   assert.doesNotMatch(answer, /Valider les tests/);
   const diagnostic = await expression.diagnostic();
   assert.equal(diagnostic.mode, 'natural-language-unavailable');
