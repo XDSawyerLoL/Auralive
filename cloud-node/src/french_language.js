@@ -449,13 +449,26 @@ export class FrenchLanguageFaculty {
     // Never interpret a configured key alone as proof of a free plan.
     if(this.groq?.enabled){
       try{
-        const result=await this.groq.generate(
-          compactFrenchPrompt(plan, {maxChars:4500}),
+        const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
+        let result=await this.groq.generate(
+          basePrompt,
           compactFrenchSystem(),
           Math.max(500,Math.min(Number(maxTokens)||700,900)),
         );
-        const candidate=cleanSpeechOutput(result?.answer||'');
-        const answer=accept(candidate);
+        let candidate=cleanSpeechOutput(result?.answer||'');
+        let answer=accept(candidate);
+        // A genuine provider reply may violate the style contract. Give the
+        // already configured free provider one bounded chance to repair it.
+        // No action is retried, and a rejected response never reaches the user.
+        if(!answer && candidate && this.lastNucleusContract.code==='robotic-wellbeing-reply'){
+          result=await this.groq.generate(
+            basePrompt+'\nLa réponse précédente a été refusée : récitation de jauges ou jargon. Reformule en UNE phrase naturelle, sans pourcentage ni termes techniques, et garde seulement l’humeur réellement fournie.',
+            compactFrenchSystem(),
+            Math.max(250,Math.min(Number(maxTokens)||700,600)),
+          );
+          candidate=cleanSpeechOutput(result?.answer||'');
+          answer=accept(candidate);
+        }
         if(answer){
           this.lastMode='groq-free';
           this.lastBackend='groq-free';
