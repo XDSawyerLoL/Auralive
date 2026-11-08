@@ -1437,7 +1437,7 @@ function openCognitiveEventStream(request, reply, session, currentSnapshot) {
   const send = (payload) => {
     if (closed || raw.destroyed || raw.writableEnded) return;
     try {
-      raw.write('event: trace\\ndata: ' + JSON.stringify(payload) + '\\n\\n');
+      raw.write('event: trace\ndata: ' + JSON.stringify(payload) + '\n\n');
     } catch (_) { cleanup(); }
   };
   const unsubscribe = cognitiveTrace.subscribe(session, send);
@@ -1464,10 +1464,10 @@ function openCognitiveEventStream(request, reply, session, currentSnapshot) {
   });
   raw.once('close', cleanup);
   raw.once('error', cleanup);
-  raw.write('retry: 5000\\n\\n');
+  raw.write('retry: 5000\n\n');
   send(currentSnapshot());
   heartbeat = setInterval(() => {
-    if (!closed && !raw.destroyed) raw.write(': heartbeat\\n\\n');
+    if (!closed && !raw.destroyed) raw.write(': heartbeat\n\n');
   }, 15000);
   heartbeat.unref?.();
   lifetime = setTimeout(() => {
