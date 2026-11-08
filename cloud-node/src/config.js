@@ -187,7 +187,7 @@ export const config = Object.freeze({
   groqApiKey: process.env.AURA_GROQ_API_KEY || process.env.GROQ_API_KEY
     // Support pre-existing OpenAI-compatible Groq configuration only if
     // the endpoint is the exact official Groq API. No arbitrary URL/key reuse.
-    || (String(process.env.AI_BASE_URL || '').replace(/\\/$/, '') === 'https://api.groq.com/openai/v1'
+    || (String(process.env.AI_BASE_URL || '').replace(/[/]$/, '') === 'https://api.groq.com/openai/v1'
       ? LEGACY_GEMINI_API_KEY : ''),
   groqFreePlanConfirmed: bool('AURA_GROQ_FREE_PLAN_CONFIRMED', false),
   groqFreeModel: String(process.env.AURA_GROQ_FREE_MODEL || 'openai/gpt-oss-20b').trim(),
