@@ -1341,7 +1341,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   if(bootstrap.dbReady){
     const results=await Promise.allSettled([
       readBrainTraceRows(
-        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
       readBrainTraceRows(
         'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
       readBrainTraceRows(
