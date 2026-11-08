@@ -6,6 +6,9 @@ let livingScene = null;
 let voicePlayer = null;
 let voiceAudioContext = null;
 let voicePrimed = false;
+let localVoiceOptIn = false;
+let localVoiceGeneration = 0;
+try { localVoiceOptIn = localStorage.getItem('aura_local_voice_opt_in') === '1'; } catch (_) {}
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
 const AURA_API_BASE=(function(){
   try{
@@ -788,6 +791,95 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
+// Zero-euro emergency voice: installed French voice on the user's device only.
+// This is NOT the historical Mairaiy / Aoede voice. It is never sent to a provider.
+function localFrenchVoice(){
+  const synth=window.speechSynthesis;
+  if(!synth || typeof window.SpeechSynthesisUtterance !== 'function') return null;
+  const voices=(synth.getVoices()||[]).filter(function(voice){
+    return voice && voice.localService === true && /^fr(?:-|$)/i.test(voice.lang||'');
+  });
+  voices.sort(function(a,b){
+    function score(voice){
+      const name=String(voice.name||'');
+      return (/^fr-FR$/i.test(voice.lang||'')?20:0)+(/natural|neural/i.test(name)?10:0);
+    }
+    return score(b)-score(a);
+  });
+  return voices[0] || null;
+}
+function stopLocalFrenchVoice(){
+  localVoiceGeneration++;
+  if(window.speechSynthesis){try{window.speechSynthesis.cancel();}catch(_){}}
+}
+function updateLocalVoiceButton(){
+  const button=$('localVoiceBtn');
+  if(!button)return;
+  const ready=Boolean(localFrenchVoice());
+  button.textContent=localVoiceOptIn?'Voix locale : ON':'Voix locale : OFF';
+  button.setAttribute('aria-pressed',localVoiceOptIn?'true':'false');
+  button.title=ready
+    ? 'Voix française installée sur cet appareil, 0 €. Secours différent d’Aoede.'
+    : 'Aucune voix française hors ligne détectée sur cet appareil.';
+}
+function spokenFrenchText(text){
+  return String(text||'')
+    .replace(/\x60\x60\x60[\s\S]*?\x60\x60\x60/g,' Un extrait de code est affiché. ')
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,'$1')
+    .replace(/https?:\/\/\S+/g,' un lien ')
+    .replace(/[*#_~\x60]/g,'')
+    .replace(/[\[\]{}]/g,' ')
+    .replace(/\s+/g,' ').trim().slice(0,3200);
+}
+function spokenFrenchChunks(text,maxSize){
+  const tokens=spokenFrenchText(text).match(/\S+\s*/g)||[];
+  const chunks=[];let current='';
+  const max=Math.max(80,Math.min(220,Number(maxSize)||170));
+  for(const token of tokens){
+    if(current.length+token.length>max && current){
+      chunks.push(current.trim());current='';
+    }
+    if(token.length>max){
+      for(let i=0;i<token.length;i+=max)chunks.push(token.slice(i,i+max));
+    }else current+=token;
+  }
+  if(current.trim())chunks.push(current.trim());
+  return chunks;
+}
+async function speakLocalFrench(text){
+  const synth=window.speechSynthesis;
+  const voice=localFrenchVoice();
+  if(!synth || !voice)throw new Error('Aucune voix française installée hors ligne. Ajoute une voix française dans Windows puis recharge cette page.');
+  const chunks=spokenFrenchChunks(text,170);
+  if(!chunks.length)throw new Error('Aucun texte lisible à prononcer.');
+  const generation=++localVoiceGeneration;
+  try{synth.cancel();}catch(_){}
+  document.body.classList.add('aura-speaking');
+  $('voiceText').textContent='AURA · voix locale (secours)';
+  try{
+    for(const textChunk of chunks){
+      if(generation!==localVoiceGeneration)return;
+      await new Promise(function(resolve,reject){
+        const utterance=new window.SpeechSynthesisUtterance(textChunk);
+        utterance.voice=voice;
+        utterance.lang=voice.lang||'fr-FR';
+        utterance.rate=0.98;
+        utterance.pitch=1;
+        utterance.volume=1;
+        utterance.onend=resolve;
+        utterance.onerror=function(event){
+          reject(new Error('Lecture locale interrompue : '+String(event&&event.error||'inconnue')));
+        };
+        synth.speak(utterance);
+      });
+    }
+  }finally{
+    if(generation===localVoiceGeneration){
+      document.body.classList.remove('aura-speaking');
+      $('voiceText').textContent='AURA · secours local 0 €';
+    }
+  }
+}
 function primeVoice(){
   if(voicePrimed)return;
   voicePrimed=true;
@@ -877,8 +969,17 @@ async function speakAura(text,ticket){
     $('voiceText').textContent='Mairaiy · en ligne';
   }catch(error){
     document.body.classList.remove('aura-speaking');
+    if(localVoiceOptIn){
+      try{
+        await speakLocalFrench(text);
+        $('chatState').textContent='Réponse prononcée avec la voix locale 0 € (pas Aoede).';
+        return;
+      }catch(localError){
+        $('chatState').textContent=String(localError&&localError.message||localError).slice(0,170);
+      }
+    }
     $('voiceText').textContent='Mairaiy · indisponible';
-    $('voiceText').title='Voix Aoede indisponible · aucun autre timbre utilisé';
+    $('voiceText').title='Aoede indisponible · la voix locale 0 € reste facultative';
     const reason=String(error&&error.message||'');
     $('chatState').textContent=reason.includes('free-tier-unconfirmed')
       ? 'Réponse texte prête · Aoede bloquée par le garde-fou zéro-coût'
@@ -912,6 +1013,30 @@ document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=fun
 $('refreshMap').onclick=refresh;
 $('modeBtn').onclick=refresh;
 $('engineRefresh').onclick=refreshEnginePanel;
+$('localVoiceBtn').onclick=function(){
+  if(localVoiceOptIn){
+    localVoiceOptIn=false;
+    stopLocalFrenchVoice();
+    try{localStorage.removeItem('aura_local_voice_opt_in');}catch(_){}
+    $('chatState').textContent='Voix de secours locale désactivée.';
+    updateLocalVoiceButton();
+    return;
+  }
+  if(!localFrenchVoice()){
+    $('chatState').textContent='Aucune voix française installée hors ligne n’est disponible dans ce navigateur.';
+    updateLocalVoiceButton();
+    return;
+  }
+  localVoiceOptIn=true;
+  try{localStorage.setItem('aura_local_voice_opt_in','1');}catch(_){}
+  updateLocalVoiceButton();
+  void speakLocalFrench('Bonjour. Je suis AURA. La voix française locale de secours est activée.')
+    .catch(function(error){$('chatState').textContent=String(error&&error.message||error).slice(0,170);});
+};
+if(window.speechSynthesis && 'onvoiceschanged' in window.speechSynthesis){
+  window.speechSynthesis.addEventListener('voiceschanged',updateLocalVoiceButton);
+}
+updateLocalVoiceButton();
 $('voiceBtn').onclick=function(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){$('message').placeholder='Reconnaissance vocale non disponible sur ce navigateur.';return;}
