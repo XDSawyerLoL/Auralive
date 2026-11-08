@@ -810,6 +810,9 @@ const COG_EDGES=[
   ['decision','expression'],['expression','homeostasis_post'],
   ['homeostasis_post','persistence']
 ];
+const COG_STATUS={running:'en cours',done:'exécuté',skipped:'non sollicité',error:'échec',idle:'non exécuté'};
+const COG_FIELDS={messages:'messages',intentions:'intentions',lessons:'leçons',reflections:'réflexions',work_items:'travaux',memory_items:'souvenirs',research_evidence:'preuves externes',answer_chars:'caractères générés',token_budget:'budget de tokens',semantic_requested:'support sémantique requis',semantic_available:'support obtenu',external_required:'recherche requise',confidence:'confiance',delta_stability:'variation de stabilité',delta_curiosity:'variation de curiosité',delta_frustration:'variation de frustration',decision_act:'action retenue',language_mode:'moteur linguistique'};
+const COG_LANGUAGE={'french-language-faculty':'modèle français actif','natural-language-unavailable':'moteur français indisponible','deterministic-emergency-fallback':'réponse de secours déterministe',unknown:'non identifié'};
 let cogTrace=null;
 let cogSelected='';
 let cogTraceId='';
@@ -874,17 +877,22 @@ function renderCognitiveGraph(){
   });
   const available=Boolean(cogTrace&&cogTrace.available);
   const runState=String(cogTrace&&cogTrace.state||'idle');
+  const hasError=events.some(function(event){return event.status==='error';});
   $('cogState').textContent=!available?'Aucun traitement enregistré'
     :runState==='running'?'Requête en traitement · événements réels'
-      :runState==='error'?'Traitement interrompu':'Dernier traitement terminé';
+      :runState==='error'?'Traitement interrompu':hasError?'Terminé avec anomalie':'Dernier traitement terminé';
   const chosen=cogSelected ? COG_STAGES.find(function(s){return s.id===cogSelected;}) : null;
   const defaultStage=latest && COG_STAGES.find(function(s){return s.id===latest.stage;});
   const stage=chosen||defaultStage;
   const evt=stage?cogEventState(stage.id):null;
   const details=evt&&evt.details?evt.details:{};
-  const detailLine=Object.entries(details).map(function(pair){return pair[0].replace(/_/g,' ')+' : '+String(pair[1]);}).join(' · ');
+  const detailLine=Object.entries(details).map(function(pair){
+    const key=COG_FIELDS[pair[0]]||pair[0].replace(/_/g,' ');
+    const value=pair[0]==='language_mode'?(COG_LANGUAGE[pair[1]]||pair[1]):pair[1];
+    return key+' : '+(typeof value==='boolean'?(value?'oui':'non'):String(value));
+  }).join(' · ');
   const title=stage?stage.name:'AURA en attente de message';
-  const body=stage?(stage.info+'. '+(evt?'État : '+evt.status+'.':'Aucune exécution observée.')+(detailLine?' '+detailLine:''))
+  const body=stage?(stage.info+'. '+(evt?'État : '+(COG_STATUS[evt.status]||evt.status)+'.':'Aucune exécution observée.')+(detailLine?' '+detailLine:''))
     :'En attente d’une requête. Aucun processus n’est animé sans événement reçu.';
   $('cogDetail').replaceChildren();
   const strong=document.createElement('strong');strong.textContent=title;
@@ -898,7 +906,7 @@ function renderCognitiveGraph(){
     const el=document.createElement('span');
     el.className='cog-event';el.dataset.state=event.status;
     const st=COG_STAGES.find(function(n){return n.id===event.stage;});
-    el.textContent=(st?st.name:event.stage)+' · '+event.status+' · '+event.elapsed_ms+' ms';
+    el.textContent=(st?st.name:event.stage)+' · '+(COG_STATUS[event.status]||event.status)+' · '+event.elapsed_ms+' ms';
     list.appendChild(el);
   });
 }
