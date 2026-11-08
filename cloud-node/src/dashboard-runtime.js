@@ -788,6 +788,138 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
+
+/* Live cognitive trace: exclusively server-emitted milestones. No fabricated pulses. */
+const COG_STAGES=[
+  {id:'request',name:'Requête',x:100,y:202,info:'Traitement reçu par le serveur'},
+  {id:'input',name:'Entrée',x:242,y:202,info:'Message enregistré en base'},
+  {id:'homeostasis',name:'Homéostasie',x:382,y:94,info:'État recalculé avant l'analyse'},
+  {id:'stimulus',name:'Stimulus',x:382,y:304,info:'Événement transmis au noyau'},
+  {id:'context',name:'Mémoire',x:538,y:94,info:'Contexte et souvenirs récupérés'},
+  {id:'decision',name:'Décision',x:538,y:304,info:'Plan calculé par le moteur cognitif'},
+  {id:'research',name:'Recherche',x:692,y:55,info:'Vérification externe, si déclenchée'},
+  {id:'semantic',name:'Sémantique',x:693,y:186,info:'Support linguistique, si appelé'},
+  {id:'expression',name:'Expression',x:825,y:303,info:'Réponse formulée'},
+  {id:'homeostasis_post',name:'Régulation',x:954,y:171,info:'État mis à jour après la réponse'},
+  {id:'persistence',name:'Mémoire écrite',x:950,y:351,info:'Réponse persistée et journalisée'}
+];
+const COG_EDGES=[
+  ['request','input'],['input','homeostasis'],['homeostasis','stimulus'],
+  ['stimulus','context'],['context','decision'],['decision','research'],
+  ['decision','semantic'],['research','semantic'],['semantic','expression'],
+  ['decision','expression'],['expression','homeostasis_post'],
+  ['homeostasis_post','persistence']
+];
+let cogTrace=null;
+let cogSelected='';
+let cogTraceId='';
+let cogAwaitingReply=false;
+let cogFetchBusy=false;
+const cogElements=new Map();
+const cogEdges=[];
+function cogSvgNode(tag,attrs,parent){
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  Object.entries(attrs||{}).forEach(function(entry){el.setAttribute(entry[0],String(entry[1]));});
+  if(parent)parent.appendChild(el);
+  return el;
+}
+function initCognitiveGraph(){
+  const svg=$('cogGraph');if(!svg)return;
+  const defs=cogSvgNode('defs',{},svg);
+  const glow=cogSvgNode('filter',{id:'cogBloom',x:'-90%',y:'-90%',width:'280%',height:'280%'},defs);
+  cogSvgNode('feGaussianBlur',{stdDeviation:'3',result:'blur'},glow);
+  const group=cogSvgNode('g',{id:'cogLinks'},svg);
+  const nodes=cogSvgNode('g',{id:'cogNodes'},svg);
+  COG_EDGES.forEach(function(edge){
+    const a=COG_STAGES.find(function(n){return n.id===edge[0];});
+    const b=COG_STAGES.find(function(n){return n.id===edge[1];});
+    const dx=(b.x-a.x)*0.58;
+    const d='M '+a.x+' '+a.y+' C '+(a.x+dx)+' '+a.y+', '+(b.x-dx)+' '+b.y+', '+b.x+' '+b.y;
+    const path=cogSvgNode('path',{d:d,class:'cog-edge','data-from':a.id,'data-to':b.id},group);
+    cogEdges.push({a:a.id,b:b.id,el:path});
+  });
+  COG_STAGES.forEach(function(stage){
+    const g=cogSvgNode('g',{class:'cog-node','data-state':'idle',tabindex:'0',role:'button','aria-label':stage.name+' : état non exécuté'},nodes);
+    cogSvgNode('circle',{cx:stage.x,cy:stage.y,r:'25'},g);
+    cogSvgNode('circle',{cx:stage.x,cy:stage.y,r:'35',fill:'none',stroke:'rgba(125,196,212,.09)','stroke-width':'1'},g);
+    const label=cogSvgNode('text',{x:stage.x,y:stage.y+49,'text-anchor':'middle'},g);
+    label.textContent=stage.name;
+    const view=function(){cogSelected=stage.id;renderCognitiveGraph();};
+    g.addEventListener('click',view);
+    g.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();view();}});
+    cogElements.set(stage.id,g);
+  });
+  renderCognitiveGraph();
+}
+function cogEventState(stage){
+  const events=Array.isArray(cogTrace&&cogTrace.events)?cogTrace.events:[];
+  for(let i=events.length-1;i>=0;i--)if(events[i].stage===stage)return events[i];
+  return null;
+}
+function renderCognitiveGraph(){
+  const events=Array.isArray(cogTrace&&cogTrace.events)?cogTrace.events:[];
+  const latest=events.length?events[events.length-1]:null;
+  COG_STAGES.forEach(function(stage){
+    const el=cogElements.get(stage.id);if(!el)return;
+    const state=cogEventState(stage.id);
+    const status=state?state.status:'idle';
+    el.setAttribute('data-state',status);
+    el.setAttribute('aria-label',stage.name+' : '+(status==='done'?'exécuté':status==='running'?'en cours':status==='error'?'échec':status==='skipped'?'ignoré':'non exécuté'));
+    el.classList.toggle('selected',cogSelected===stage.id);
+  });
+  cogEdges.forEach(function(edge){
+    const a=cogEventState(edge.a),b=cogEventState(edge.b);
+    edge.el.classList.toggle('active',Boolean(a&&b&&a.status==='done'&&b.status==='running'));
+    edge.el.classList.toggle('error',Boolean(b&&b.status==='error'));
+  });
+  const available=Boolean(cogTrace&&cogTrace.available);
+  const runState=String(cogTrace&&cogTrace.state||'idle');
+  $('cogState').textContent=!available?'Aucun traitement enregistré'
+    :runState==='running'?'Requête en traitement · événements réels'
+      :runState==='error'?'Traitement interrompu':'Dernier traitement terminé';
+  const chosen=cogSelected ? COG_STAGES.find(function(s){return s.id===cogSelected;}) : null;
+  const defaultStage=latest && COG_STAGES.find(function(s){return s.id===latest.stage;});
+  const stage=chosen||defaultStage;
+  const evt=stage?cogEventState(stage.id):null;
+  const details=evt&&evt.details?evt.details:{};
+  const detailLine=Object.entries(details).map(function(pair){return pair[0].replace(/_/g,' ')+' : '+String(pair[1]);}).join(' · ');
+  const title=stage?stage.name:'AURA en attente de message';
+  const body=stage?(stage.info+'. '+(evt?'État : '+evt.status+'.':'Aucune exécution observée.')+(detailLine?' '+detailLine:''))
+    :'En attente d’une requête. Aucun processus n’est animé sans événement reçu.';
+  $('cogDetail').replaceChildren();
+  const strong=document.createElement('strong');strong.textContent=title;
+  const desc=document.createElement('span');desc.textContent=body;
+  $('cogDetail').append(strong,desc);
+  $('cogDuration').textContent=available
+    ? (runState==='running'?'En cours · ':'Durée · ')+((cogTrace.duration_ms??latest?.elapsed_ms??0)/1000).toFixed(2)+' s':'—';
+  const list=$('cogEvents');list.replaceChildren();
+  events.slice(-10).reverse().forEach(function(event){
+    if(event.stage==='request'&&event.status==='running')return;
+    const el=document.createElement('span');
+    el.className='cog-event';el.dataset.state=event.status;
+    const st=COG_STAGES.find(function(n){return n.id===event.stage;});
+    el.textContent=(st?st.name:event.stage)+' · '+event.status+' · '+event.elapsed_ms+' ms';
+    list.appendChild(el);
+  });
+}
+async function refreshCognitiveTrace(){
+  if(cogFetchBusy)return;
+  cogFetchBusy=true;
+  try{
+    const parameter=(!cogAwaitingReply&&cogTraceId)?'?id='+encodeURIComponent(cogTraceId):'';
+    cogTrace=await api('/api/cognition/trace'+parameter);
+    renderCognitiveGraph();
+  }catch(error){
+    $('cogState').textContent='Télémétrie indisponible';
+    $('cogDetail').textContent='Impossible de vérifier les événements du noyau : '+String(error.message||'réseau');
+    $('cogDuration').textContent='—';
+  }finally{cogFetchBusy=false;}
+}
+async function loopCognitiveTrace(){
+  await refreshCognitiveTrace();
+  setTimeout(loopCognitiveTrace,cogAwaitingReply?750:3200);
+}
+
 function primeVoice(){
   if(voicePrimed)return;
   voicePrimed=true;
@@ -889,13 +1021,21 @@ async function speakAura(text,ticket){
   }
 }
 async function sendMessage(text){
+  if(cogAwaitingReply)return;
   try{primeVoice();}catch(_){}
   text=(text||'').trim();if(!text)return;
+  cogAwaitingReply=true;
+  cogTraceId='';
+  $('send').disabled=true;
+  // Establish the per-visitor session cookie before the long-running chat request.
+  await refreshCognitiveTrace();
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';
   $('messages').scrollTop=$('messages').scrollHeight;
   try{
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
+    if(out.trace_id)cogTraceId=String(out.trace_id);
+    await refreshCognitiveTrace();
     const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
@@ -904,6 +1044,10 @@ async function sendMessage(text){
     refresh();
   }catch(error){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
+    await refreshCognitiveTrace();
+  }finally{
+    cogAwaitingReply=false;
+    $('send').disabled=false;
   }
 }
 $('send').onclick=function(){sendMessage($('message').value);};
@@ -919,5 +1063,6 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
+initCognitiveGraph();void loopCognitiveTrace();
 updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
