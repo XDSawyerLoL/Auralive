@@ -33,6 +33,18 @@ export const BRAIN_NODES=Object.freeze([
  ['audit','Revenue Audit','tools','revenue_audit.js'],
  ['voice','CloudVoice','language','voice.js'],
  ['peer','PeerMesh','execution','peer_mesh.js'],
+ // These modules are concrete imports used by CognitiveKernel / Cloud Node.
+ ['dialogue','DialogueStateTracker','core','dialogue_model.js'],
+ ['nativelearning','NativePolicyLearner','research','native_learning.js'],
+ ['skilllearning','SkillLearningEngine','research','skill_learning.js'],
+ ['reflex','ReflexMetrics','research','reflex_metrics.js'],
+ ['truth','ActivityTruth','security','activity_truth.js'],
+ ['linguisticmemory','LanguageFaculty','memory','language_faculty.js'],
+ ['federation','ZeroCostFederation','provider','free_federation.js'],
+ ['runtime','RuntimeMetrics','core','metrics.js'],
+ ['voicefabric','VoiceStudioProvider','language','voice_fabric.js'],
+ ['expert','ExpertBridge','execution','expert_bridge.js'],
+ ['horizon','HorizonBridge','execution','horizon.js'],
 ]);
 const CORE_EDGES=Object.freeze([
  ['input','kernel'],['kernel','homeostasis'],['homeostasis','memory'],['memory','cognition'],
@@ -46,6 +58,12 @@ const CORE_EDGES=Object.freeze([
  ['command','fabric'],['command','audit'],['command','trading'],
  ['kernel','curiosity'],['kernel','scout'],['kernel','evolution'],
  ['kernel','peer'],['output','voice'],['kernel','journal'],
+ // A verified 'affect-context-provided' hop is persisted by CognitiveKernel.chat.
+ ['homeostasis','language'],
+ ['cognition','dialogue'],['kernel','nativelearning'],['kernel','skilllearning'],
+ ['kernel','reflex'],['kernel','truth'],['memory','linguisticmemory'],
+ ['language','federation'],['kernel','runtime'],['voice','voicefabric'],
+ ['command','expert'],['command','horizon'],
 ]);
 const ids=new Set(BRAIN_NODES.map(n=>n[0]));
 const CATEGORIES=Object.freeze({
