@@ -209,8 +209,13 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   }
   if (plan.act === 'report_internal_state') {
     const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\d+\s*%/.test(String(fact)));
-    if (!detailed && (/\d+\s*%/.test(answer) || /\b(?:[eé]tat computationnel|indicateurs internes|pression de r[eê]ve|agency|hom[eé]ostasie|m[eé]triques internes)\b/i.test(answer)))
-      return {accepted:false, code:'robotic-wellbeing-reply'};
+    if (!detailed) {
+      if (/\d+\s*%/.test(answer) || /\b(?:[eé]tat computationnel|indicateurs internes|pression de r[eê]ve|agency|hom[eé]ostasie|m[eé]triques internes)\b/i.test(answer))
+        return {accepted:false, code:'robotic-wellbeing-reply'};
+      // The mood is an input for style, not a mandatory word to recite.
+      // A brief, nontechnical social reply is still nucleus-grounded.
+      return {accepted:true, code:'nucleus-grounded-social'};
+    }
     const state = normalize(plan.mood || '').toLowerCase();
     const facts = (Array.isArray(plan.facts) ? plan.facts : []).map(String);
     const permittedNumbers = new Set(facts.flatMap(fact =>
