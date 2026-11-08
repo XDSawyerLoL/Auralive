@@ -1303,6 +1303,7 @@ export class CognitiveKernel {
       taskRole: 'conversation',
     });
     const languageMode = String(this.expression.lastMode || 'unknown');
+    const languageGenerated = languageMode === 'french-language-faculty';
     observe('expression', languageMode === 'natural-language-unavailable' ? 'error' : 'done', {
       answer_chars: String(answer || '').length, language_mode: languageMode,
     });
@@ -1310,7 +1311,7 @@ export class CognitiveKernel {
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
-      true,
+      languageGenerated,
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
@@ -1318,6 +1319,7 @@ export class CognitiveKernel {
       author: String(author).slice(0,120),
       act: plan.act || 'respond',
       post_delta: post.post_delta || {},
+      language_generated: languageGenerated,
     });
     await this.saveSoul();
     observe('homeostasis_post', 'done', {
@@ -1328,10 +1330,14 @@ export class CognitiveKernel {
     });
     observe('persistence', 'running');
 
-    await query(
-      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
-      [conversationSession, String(answer).slice(0, 12000), now()],
-    );
+    // A diagnostic is not an AURA conversation turn. Preserve the user's
+    // request, but never pollute the conversational memory with fake replies.
+    if (languageGenerated || languageMode === 'deterministic-emergency-fallback') {
+      await query(
+        "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
+        [conversationSession, String(answer).slice(0, 12000), now()],
+      );
+    }
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,
@@ -1344,6 +1350,8 @@ export class CognitiveKernel {
     return {
       ok: true,
       answer,
+      response_mode: languageMode,
+      language_generated: languageGenerated,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,
