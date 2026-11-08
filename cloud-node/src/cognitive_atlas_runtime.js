@@ -57,7 +57,7 @@ const COG_FIELDS={
  token_budget:'Budget de tokens',semantic_requested:'Support requis',semantic_available:'Support obtenu',
  external_required:'Recherche requise',confidence:'Confiance calculée',delta_stability:'Δ Stabilité',
  delta_curiosity:'Δ Curiosité',delta_frustration:'Δ Frustration',decision_act:'Acte retenu',
- language_mode:'Mode linguistique',stimuli_count:'Stimuli',lessons_count:'Leçons consultées',
+ language_mode:'Mode linguistique',language_backend:'Moteur réellement employé',stimuli_count:'Stimuli',lessons_count:'Leçons consultées',
  cycle_reflected:'Réflexion produite',execution_confirmed:'Exécution confirmée',
  operation_kind:'Type opération',trigger_kind:'Déclencheur',
  state_stability:'Stabilité',state_clarity:'Clarté',state_curiosity:'Curiosité',
