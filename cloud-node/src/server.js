@@ -29,6 +29,7 @@ import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { CognitionEngine } from './cognition.js';
+import { CognitiveTraceLedger } from './cognitive_trace.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';
@@ -317,6 +318,7 @@ const corsOrigins = new Set(
     .filter(Boolean),
 );
 const metrics = new RuntimeMetrics();
+const cognitiveTrace = new CognitiveTraceLedger();
 const cloudVoice = new CloudVoice();
 const voiceStudio = new VoiceStudioProvider();
 
@@ -1415,6 +1417,13 @@ app.post('/api/kernel/operator', async (request, reply) => {
   return kernel.operate(task, risks);
 });
 
+// A private-by-session read-only trace feed. No raw prompts, retrieved text or model internals.
+app.get('/api/cognition/trace', async (request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  const session = ensureChatSession(request, reply);
+  return cognitiveTrace.snapshot(session, String(request.query?.id || '').slice(0, 64));
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
@@ -1431,20 +1440,30 @@ app.post('/api/chat', async (request, reply) => {
   if (!text) return reply.code(422).send({ error: 'Message vide' });
   const privateView = isPrivate(request);
   const chatSessionId = ensureChatSession(request, reply);
-  const response = await kernel.chat(
-    text,
-    String(request.body?.author || 'Utilisateur'),
-    privateView,
-    chatSessionId,
-  );
+  const traceId = cognitiveTrace.start(chatSessionId);
+  let response;
+  try {
+    response = await kernel.chat(
+      text,
+      String(request.body?.author || 'Utilisateur'),
+      privateView,
+      chatSessionId,
+      (stage, status, details) => cognitiveTrace.mark(traceId, stage, status, details),
+    );
+  } catch (error) {
+    cognitiveTrace.finish(traceId, 'error');
+    throw error;
+  }
   const curiosityItem = await curiosity.questionForInteraction(text).catch(() => null);
   const baseAnswer = String(response?.answer || '').trim();
   const curiosityQuestion = String(curiosityItem?.question || '').trim();
   const answer = curiosityQuestion
     ? `${baseAnswer}\n\n${curiosityQuestion}`
     : baseAnswer;
+  cognitiveTrace.finish(traceId, 'done');
   return {
     ...response,
+    trace_id: traceId,
     answer,
     curiosity_question: curiosityItem || null,
     voice_ticket: answer ? createVoiceTicket(answer) : '',
