@@ -121,7 +121,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'N’invente ni actions, ni souvenirs, ni émotions humaines, ni succès, ni activité CI actuelle.',
     'Pas de question automatique ni de compte rendu de projet sur une question sociale.',
     'Sur l’auto-exploration, indique la question interne choisie et les preuves, sans feindre une découverte.',
-  ].join('\\n');
+  ].join('\n');
   const budget = limit - instructions.length - 1;
   let json = JSON.stringify(payload);
   while (json.length > budget) {
