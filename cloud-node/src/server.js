@@ -26,6 +26,8 @@ import {
 import { DASHBOARD_HTML } from './dashboard.js';
 import { BRAIN_HTML } from './brain_console.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
+import { buildBrainFlowGraph } from './brain_flow.js';
+import { query as readBrainTraceRows } from './db.js';
 import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
@@ -1319,6 +1321,43 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
     },
   });
 });
+
+// Read-only operational cartography. Real routes are read from durable DB rows,
+// never from generated particle effects or the contents of private conversations.
+// Anonymous visitors see topology but NO private event/flow history.
+app.get('/api/brain/graph', async (request, reply) => {
+  reply.header('Cache-Control','private, no-store');
+  const authorized=isPrivate(request);
+  const current=await publicOperationalSnapshot();
+  const groq=ai.groq?.snapshot?.()||{};
+  const telemetry=buildBrainTelemetry(current,{language:{
+    enabled:groq.enabled===true,last_status:String(groq.last_status||''),
+    model:String(groq.model||''),last_model:String(groq.last_model||''),
+  }});
+  let traceRows=[],commandRows=[],organismRows=[],dataAvailable=false;
+  if(authorized && bootstrap.dbReady){
+    const results=await Promise.allSettled([
+      readBrainTraceRows(
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
+      readBrainTraceRows(
+        'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
+      readBrainTraceRows(
+        'SELECT id,kind,created_at FROM aura_organism_events ORDER BY id DESC LIMIT 60'),
+    ]);
+    dataAvailable=results.every(item=>item.status==='fulfilled');
+    traceRows=results[0].status==='fulfilled'?results[0].value:[];
+    commandRows=results[1].status==='fulfilled'?results[1].value:[];
+    organismRows=results[2].status==='fulfilled'?results[2].value:[];
+  }
+  return {
+    ...buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows}),
+    authorized,
+    database_observations_available:dataAvailable,
+    observation_access:authorized?'authenticated-founder':'owner-login-required',
+    no_private_contents_exposed:true,
+  };
+});
+
 
 app.get('/api/language/embedded/status', async () => ({
   // Public, path-free diagnostics. Does not disclose server folders or secrets.
