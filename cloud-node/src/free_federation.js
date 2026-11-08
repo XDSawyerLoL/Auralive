@@ -561,7 +561,7 @@ export class ZeroCostFederation {
         // Account restrictions, quota and financial guard failures should
         // never trigger a second call, paid or free.
         if (this.quarantined.has('openrouter')
-          || /\\bhttp\\s*(?:401|402|403|429)\\b|budget.exhausted|daily.budget.exhausted|cooldown.active/i.test(failure)) {
+          || /\bhttp\s*(?:401|402|403|429)\b|budget.exhausted|daily.budget.exhausted|cooldown.active/i.test(failure)) {
           throw primaryError;
         }
         const empty = /openrouter free response empty/i.test(failure);
