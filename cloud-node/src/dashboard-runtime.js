@@ -1037,6 +1037,56 @@ async function sendMessage(text){
     $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
   }
 }
+// AURA Trading Lab: explicit paper backtest only. No live orders or broker credentials.
+function tradingEuro(number){
+  return Number(number||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2});
+}
+function renderTradingSimulation(report){
+  if(!report||report.status!=='simulation_only'||report.real_money_traded!==false)
+    throw new Error('Rapport de trading fictif invalide');
+  const pnl=Number(report.virtual_pnl_eur||0);
+  $('tradePnl').textContent=(pnl>0?'+':'')+tradingEuro(pnl);
+  $('tradePnl').style.color=pnl<0?'#ff9caa':pnl>0?'#9cf8d4':'#f3fffc';
+  $('tradeDrawdown').textContent=Number(report.max_drawdown_pct||0).toFixed(2)+' %';
+  $('tradeCount').textContent=String(report.closed_trades||0);
+  $('tradeStatus').textContent='SIMULATION · '+String(report.price_candles||0)+
+    ' bougies closes · '+String(report.requested_pair||'')+' · '+
+    'Résultat virtuel, jamais un gain encaissé.';
+  const series=Array.isArray(report.equity_curve)?report.equity_curve:[];
+  if(series.length>=2){
+    const values=series.map(x=>Number(x.equity_eur)||0);
+    const low=Math.min(...values),high=Math.max(...values);
+    const diff=Math.max(1,high-low);
+    const d=values.map((v,i)=>{
+      const px=10+(380*i/Math.max(1,values.length-1));
+      const py=76-65*(v-low)/diff;
+      return (i?'L':'M')+px.toFixed(1)+' '+py.toFixed(1);
+    }).join(' ');
+    $('tradeChartPath').setAttribute('d',d);
+    $('tradeChartPath').setAttribute('stroke',pnl>=0?'#78ddc8':'#fc9ba2');
+  }
+  const events=Array.isArray(report.trades)?report.trades.slice(-6).reverse():[];
+  $('tradeTrades').innerHTML=events.map(event=>
+    '<div class="trade-event"><span>'+escapeHtml(event.type==='buy'?'ACHAT FICTIF':'VENTE FICTIVE')+
+    ' · '+escapeHtml(new Date(event.time*1000).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+
+    '</span><span>'+escapeHtml(event.type==='buy'?tradingEuro(event.invested_eur):tradingEuro(event.pnl_eur))+'</span></div>'
+  ).join('');
+}
+$('tradeBacktest').onclick=async function(){
+  const button=$('tradeBacktest');
+  button.disabled=true;button.textContent='Analyse…';
+  $('tradeStatus').textContent='Chargement des cours publics et simulation hors marché réel…';
+  try{
+    const result=await api('/api/trading/paper/backtest',{
+      method:'POST',body:JSON.stringify({pair:$('tradePair').value}),
+    });
+    renderTradingSimulation(result);
+  }catch(error){
+    $('tradeStatus').textContent=error.status===401||error.status===403
+      ?'Connexion privée AURA requise pour la simulation.'
+      :'Simulation indisponible : '+String(error.message||error).slice(0,170);
+  }finally{button.disabled=false;button.textContent='Tester la stratégie';}
+};
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
 document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
