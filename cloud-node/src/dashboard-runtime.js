@@ -793,7 +793,7 @@ async function refresh(){
 const COG_STAGES=[
   {id:'request',name:'Requête',x:100,y:202,info:'Traitement reçu par le serveur'},
   {id:'input',name:'Entrée',x:242,y:202,info:'Message enregistré en base'},
-  {id:'homeostasis',name:'Homéostasie',x:382,y:94,info:'État recalculé avant l'analyse'},
+  {id:'homeostasis',name:'Homéostasie',x:382,y:94,info:"État recalculé avant l'analyse"},
   {id:'stimulus',name:'Stimulus',x:382,y:304,info:'Événement transmis au noyau'},
   {id:'context',name:'Mémoire',x:538,y:94,info:'Contexte et souvenirs récupérés'},
   {id:'decision',name:'Décision',x:538,y:304,info:'Plan calculé par le moteur cognitif'},
