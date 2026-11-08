@@ -12,8 +12,10 @@ removebg|remove.bg|https://www.remove.bg|image|image supprimer fond détourer ph
 cleanup|Cleanup.pictures|https://cleanup.pictures|image|effacer objet retouche image photo supprimer|external-upload|freemium|file-transfer|Téléversement externe; accord indispensable.
 tinywow|TinyWow|https://tinywow.com|documents|pdf fichiers convertir fusionner compression édition|external-upload|freemium|file-transfer|Ne jamais transférer de documents privés sans consentement.
 ilovepdf|iLovePDF|https://www.ilovepdf.com|documents|pdf fusion scinder diviser compresser convertir|external-upload|freemium|file-transfer|Service externe; privilégier une alternative locale pour les pièces sensibles.
+pdfcpu|pdfcpu|https://github.com/pdfcpu/pdfcpu|documents|pdf compresser compression optimiser fusionner scinder diviser chiffrer local|local-install|free|local|CLI libre pour PDF confidentiels; exécution future uniquement dans AURA Runtime avec permission.
+qpdf|qpdf|https://github.com/qpdf/qpdf|documents|pdf fusionner diviser compresser structure protéger local pages|local-install|free|local|Transformations PDF sans transfert cloud; le gain de taille dépend du fichier.
 photopea|Photopea|https://www.photopea.com|image|image photo retouche graphisme photoshop calque|browser|freemium|browser-session|Éditeur en navigateur; vérifier les conditions de confidentialité et publicités.
-squoosh|Squoosh|https://squoosh.app|image|optimiser image compression jpeg png webp avif taille poids|browser-local|free|browser-local|Traitement des images dans le navigateur; le site utilise des mesures analytics.
+squoosh|Squoosh|https://squoosh.app|image|optimiser image compresser compression jpeg png webp avif taille poids|browser-local|free|browser-local|Traitement des images dans le navigateur; le site utilise des mesures analytics.
 excalidraw|Excalidraw|https://excalidraw.com|visual|schéma diagramme tableau blanc croquis présentation|self-hostable|free|browser-session|Projet ouvert, auto-hébergement possible; collaboration externe optionnelle.
 carbon|Carbon|https://carbon.now.sh|development|capture image code snippet syntaxe|manual|free|public-query|Éviter d'y coller du code propriétaire ou des secrets.
 regex101|regex101|https://regex101.com|development|expression régulière regex motif tester déboguer|manual|free|public-query|Ne pas soumettre de données de production; test local préférable.
@@ -50,7 +52,7 @@ figma|Figma|https://www.figma.com|visual|maquette design interface prototype ui 
 canva|Canva|https://www.canva.com|visual|graphisme présentation affiches réseaux sociaux|account-required|freemium|account|Compte externe et contenus créatifs soumis à ses conditions.
 ytdlp|yt-dlp|https://github.com/yt-dlp/yt-dlp|media|vidéo téléchargement médias sauvegarde extraction youtube|local-install|free|local|Uniquement contenus détenus ou téléchargements autorisés par leurs droits et conditions.
 handbrake|HandBrake|https://handbrake.fr|media|encoder compresser convertir vidéo h264 h265 av1|local-install|free|local|Intégrable plus tard à AURA Runtime local; pas d'exécution dans Cloud Node.
-localsend|LocalSend|https://localsend.org|privacy|transfert fichier local pc téléphone réseau lan partage|local-install|free|local|Transfert réseau local privé sans cloud; pertinent pour AURA Runtime.
+localsend|LocalSend|https://localsend.org|privacy|transfert transférer fichier local pc téléphone réseau lan partage partager|local-install|free|local|Transfert réseau local privé sans cloud; pertinent pour AURA Runtime.
 `.trim();
 
 const ALLOWED_ACCESS = new Set(['api-conditional', 'lookup-only', 'blocked', 'public-api', 'catalog-only', 'manual', 'external-upload', 'browser', 'browser-local', 'self-hostable', 'sensitive-manual', 'account-required', 'public-api-optional', 'local-install', 'local-app']);
@@ -95,18 +97,26 @@ export function discoverResources(question, {category='',limit=5,includeBlocked=
     const terms=foldResourceQuery(item.keywords);
     const cat=foldResourceQuery(item.category);
     let score=0;
+    let match_count=0;
     for(const word of words){
-      if(name.split(' ').includes(word))score+=12;
-      if(terms.split(' ').includes(word))score+=7;
-      else if(terms.includes(word))score+=3;
-      if(cat===word)score+=5;
+      let matched=false;
+      if(name.split(' ').includes(word)){score+=12;matched=true;}
+      if(terms.split(' ').includes(word)){score+=7;matched=true;}
+      else if(terms.includes(word)){score+=3;matched=true;}
+      if(cat===word){score+=5;matched=true;}
+      if(matched)match_count++;
     }
     // Prefer local tools for equal relevance. A free tier is not a promise of zero cost.
     if(score>0&&item.privacy==='local')score+=2;
     if(score>0&&item.privacy==='file-transfer')score-=2;
-    return {...item,score};
+    return {...item,score,match_count};
   }).filter((item)=>item.score>0).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'fr'));
-  return results.slice(0,Math.max(1,Math.min(12,Number(limit)||5)));
+  // For specific multi-word tasks, a single generic word is not sufficient.
+  const strongest = Math.max(0,...results.map((item)=>item.match_count));
+  const filtered = words.length > 1 && strongest >= 2
+    ? results.filter((item)=>item.match_count>=2)
+    : results;
+  return filtered.slice(0,Math.max(1,Math.min(12,Number(limit)||5)));
 }
 
 export function isToolDiscoveryRequest(value){
