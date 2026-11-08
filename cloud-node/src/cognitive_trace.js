@@ -15,7 +15,7 @@ const ALLOWED_DETAILS = new Set([
   'memory_items', 'research_evidence', 'answer_chars', 'token_budget',
   'semantic_requested', 'semantic_available', 'external_required',
   'confidence', 'delta_stability', 'delta_curiosity', 'delta_frustration',
-  'decision_act', 'language_mode', 'stimuli_count', 'lessons_count',
+  'decision_act', 'language_mode', 'language_backend', 'stimuli_count', 'lessons_count',
   'cycle_reflected', 'execution_confirmed', 'operation_kind', 'trigger_kind',
   'state_stability', 'state_clarity', 'state_curiosity', 'state_confidence',
   'state_frustration', 'state_engagement', 'state_mood',
@@ -39,6 +39,10 @@ const cleanDetails = (details = {}) => {
       result[key] = ['ambient', 'manual', 'continuity', 'scheduled', 'event', 'other'].includes(value) ? value : 'other';
     } else if (key === 'operation_kind' && typeof value === 'string') {
       result[key] = ['agent', 'swarm', 'operator', 'outcome'].includes(value) ? value : 'other';
+    } else if (key === 'language_backend' && typeof value === 'string') {
+      const allowed = ['hostinger-embedded-llama','groq-free','aura-runtime-local',
+        'openrouter','openrouter-free','unavailable'];
+      result[key] = allowed.includes(value) ? value : 'other';
     } else if (key === 'language_mode' && typeof value === 'string') {
       const modes = ['french-language-faculty', 'natural-language-unavailable', 'deterministic-emergency-fallback'];
       result[key] = modes.includes(value) ? value : 'unknown';
