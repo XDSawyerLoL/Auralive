@@ -881,6 +881,13 @@ app.get('/api/capabilities', async (request) => {
       native_dialogue_version: CognitionEngine.VERSION,
       faculty_version: String(expressionDiagnostic.language?.version || ''),
       provider: String(expressionDiagnostic.language?.primary || 'unavailable'),
+      groq_free: {
+        configured: Boolean(expressionDiagnostic.language?.groq?.api_key_configured),
+        plan_confirmed: Boolean(expressionDiagnostic.language?.groq?.free_plan_confirmed),
+        enabled: Boolean(expressionDiagnostic.language?.groq?.enabled),
+        last_error_code: String(expressionDiagnostic.language?.groq?.last_error_code || ''),
+        cooldown_until: expressionDiagnostic.language?.groq?.cooldown_until || null,
+      },
       local_worker: Boolean(bridgeStatus?.worker_online),
       fallback_only: !expressionDiagnostic.natural_french_ready,
       mode: String(expressionDiagnostic.mode || 'unavailable'),
