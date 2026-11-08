@@ -140,7 +140,7 @@ export class FrenchLanguageFaculty {
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
-      ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
+      ? 'Aucun fournisseur gratuit prêt : définir AURA_GROQ_API_KEY avec AURA_GROQ_FREE_PLAN_CONFIRMED=true (compte Groq Free uniquement), ou AURA_OPENROUTER_API_KEY. Garder AURA_ZERO_COST_MODE=true.'
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
         : blockingReason === 'free-federation-disabled'
