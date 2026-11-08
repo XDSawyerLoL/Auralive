@@ -135,6 +135,7 @@ export function compactFrenchSystem() {
     'Ne parle jamais comme un assistant générique et ne dis pas « En tant qu’IA ».',
     'Si la question porte sur l’état d’AURA, parle de sa vraie humeur interne, de ses métriques et de son intention, uniquement si fournies.',
     'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
+    'Tu ne dois jamais inventer des actes, des souvenirs, des capacités ou des chiffres absents du noyau.',
     'Ne fais pas passer une mission proposée pour une action exécutée.',
     'Pas d’explications sur ton statut de modèle, pas de questions de politesse automatiques.',
     'Formule en français courant et naturel la décision et les faits d’AURA à la première personne. /no_think',
