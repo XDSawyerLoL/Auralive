@@ -80,6 +80,26 @@ export class CognitiveTraceLedger {
     return this.snapshot('__internal_autonomy__', requestedId);
   }
 
+  recordOperation(kind, executed = false) {
+    if (!['agent', 'swarm', 'operator'].includes(kind)) return '';
+    const id = this.startAutonomy('event');
+    this.mark(id, 'regulation', 'skipped');
+    this.mark(id, 'context_auto', 'skipped');
+    if (kind === 'agent' || kind === 'swarm') {
+      // Agent output is an actual inference artifact, not proof of an external action.
+      this.mark(id, 'reflection_auto', 'done', { operation_kind: kind });
+      this.mark(id, 'execution_auto', 'skipped', { execution_confirmed: false });
+    } else {
+      this.mark(id, 'reflection_auto', 'skipped');
+      this.mark(id, 'execution_auto', executed ? 'done' : 'skipped', {
+        operation_kind: kind, execution_confirmed: executed === true,
+      });
+    }
+    this.mark(id, 'commit_auto', 'done');
+    this.finish(id);
+    return id;
+  }
+
   mark(id, stage, status = 'done', details = {}) {
     const run = this.runs.get(id);
     if (!run || run.state !== 'running' || !STAGES.has(stage) || !STATES.has(status)) return false;
