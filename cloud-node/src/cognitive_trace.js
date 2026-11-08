@@ -12,7 +12,7 @@ const ALLOWED_DETAILS = new Set([
   'memory_items', 'research_evidence', 'answer_chars', 'token_budget',
   'semantic_requested', 'semantic_available', 'external_required',
   'confidence', 'delta_stability', 'delta_curiosity', 'delta_frustration',
-  'decision_act',
+  'decision_act', 'language_mode',
 ]);
 const LIMIT = 120;
 const TTL_MS = 20 * 60_000;
@@ -23,6 +23,9 @@ const cleanDetails = (details = {}) => {
     if (typeof value === 'boolean') result[key] = value;
     else if (typeof value === 'number' && Number.isFinite(value)) {
       result[key] = Math.max(-100000, Math.min(100000, Math.round(value * 1000) / 1000));
+    } else if (key === 'language_mode' && typeof value === 'string') {
+      const modes = ['french-language-faculty', 'natural-language-unavailable', 'deterministic-emergency-fallback'];
+      result[key] = modes.includes(value) ? value : 'unknown';
     } else if (key === 'decision_act' && typeof value === 'string') {
       result[key] = /^[a-zA-Z_-]{1,48}$/.test(value) ? value : 'other';
     }
