@@ -292,3 +292,67 @@ test('French free routing avoids mandatory hidden-reasoning models when verified
   assert.match(payload.result.answer,/Bonjour/);
   assert.equal(payload.result.costMicrounits,0);
 });
+
+
+test('empty OpenRouter free router reply recovers with a verified free chat model', () => {
+  const script = [
+    "process.env.AURA_ZERO_COST_MODE='true';",
+    "process.env.AI_MODE='off';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+    "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='true';",
+    "process.env.AURA_OPENROUTER_API_KEY='mock-key';",
+    "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+    "let catalogs=0; const called=[];",
+    "global.fetch=async(url,opts={})=>{",
+    "  if(String(url).endsWith('/models')) {",
+    "    catalogs++;",
+    "    const data=catalogs===1 ? [] : [",
+    "      {id:'trial/conversation:free',name:'French multilingual conversation',context_length:32000,pricing:{prompt:'0',completion:'0'},architecture:{output_modalities:['text']},reasoning:{mandatory:false}},",
+    "      {id:'trial/paid:free',name:'French multilingual conversation',context_length:200000,pricing:{prompt:'0.001',completion:'0'},architecture:{output_modalities:['text']}},",
+    "    ];",
+    "    return new Response(JSON.stringify({data}),{status:200});",
+    "  }",
+    "  const body=JSON.parse(opts.body);called.push(body.model);",
+    "  if(body.model==='openrouter/free') return new Response(JSON.stringify({",
+    "    model:'trial/reasoning:free',choices:[{finish_reason:'length',message:{content:null,reasoning:'not visible'}}],",
+    "    usage:{cost:0,completion_tokens:900,completion_tokens_details:{reasoning_tokens:900}}",
+    "  }),{status:200});",
+    "  return new Response(JSON.stringify({model:body.model,choices:[{message:{content:'Bonjour, je peux vous répondre en français.'}}],usage:{cost:0,completion_tokens:20}}),{status:200});",
+    "};",
+    "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+    "const federation=new ZeroCostFederation();",
+    "const result=await federation.generate('lu','Tu réponds naturellement',700,'french');",
+    "console.log(JSON.stringify({result,called,status:federation.snapshot()}));",
+  ].join('\n');
+  const completed=run(script);
+  assert.equal(completed.status,0,completed.stderr||completed.stdout);
+  const data=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(data.result.answer,'Bonjour, je peux vous répondre en français.');
+  assert.deepEqual(data.called,['openrouter/free','trial/conversation:free']);
+  assert.equal(data.status.process_requests_today,2);
+  assert.match(data.status.last_error,/free model fallback:/);
+  assert.equal(data.result.costMicrounits,0);
+});
+
+test('OpenRouter authentication errors do not trigger a chargeable or repeated request', () => {
+  const script = [
+    "process.env.AURA_ZERO_COST_MODE='true';",
+    "process.env.AI_MODE='off';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+    "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';",
+    "process.env.AURA_OPENROUTER_API_KEY='invalid-key';",
+    "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+    "let calls=0;",
+    "global.fetch=async()=>{calls++;return new Response('invalid_api_key',{status:401});};",
+    "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+    "const federation=new ZeroCostFederation();",
+    "let error='';try{await federation.generate('lu','Réponds en français',700,'french');}catch(e){error=e.message;}",
+    "console.log(JSON.stringify({calls,error,status:federation.snapshot()}));",
+  ].join('\n');
+  const completed=run(script);
+  assert.equal(completed.status,0,completed.stderr||completed.stdout);
+  const data=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(data.calls,1);
+  assert.match(data.error,/HTTP 401/);
+  assert.equal(data.status.process_requests_today,1);
+});
