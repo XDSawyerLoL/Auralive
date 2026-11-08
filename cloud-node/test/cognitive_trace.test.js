@@ -162,3 +162,58 @@ test('parallel context lookups remain distinct, measured, and bounded', () => {
   assert.ok(snap.events.length>32);
   assert.ok(snap.events.length<=96);
 });
+
+
+test('live telemetry delivers source events only to the owning signed session', () => {
+  const ledger = new CognitiveTraceLedger();
+  const own = [];
+  const other = [];
+  const stopOwn = ledger.subscribe('browser-a', (value) => own.push(value));
+  const stopOther = ledger.subscribe('browser-b', (value) => other.push(value));
+  const id = ledger.start('browser-a');
+  ledger.mark(id, 'homeostasis', 'running', { note: 'never exported', state_stability: 0.6 });
+  ledger.mark(id, 'homeostasis', 'done', { state_stability: 0.8 });
+  ledger.finish(id);
+  assert.ok(own.length >= 4);
+  assert.equal(other.length, 0);
+  assert.equal(own.at(-1).state, 'done');
+  assert.equal(own.at(-1).id, id);
+  assert.doesNotMatch(JSON.stringify(own), /never exported/);
+  stopOwn();
+  stopOther();
+  assert.equal(ledger.listenerCount, 0);
+  assert.equal(ledger.listeners.size, 0);
+});
+
+test('live event stream subscribers are bounded and isolated from handler failures', () => {
+  const ledger = new CognitiveTraceLedger();
+  const stops = Array.from({ length: 4 }, () => ledger.subscribe('same-browser', () => {
+    throw new Error('simulated broken browser');
+  }));
+  assert.equal(stops.every(Boolean), true);
+  assert.equal(ledger.subscribe('same-browser', () => {}), null);
+  const id = ledger.start('same-browser');
+  assert.equal(ledger.mark(id, 'input', 'done'), true);
+  assert.equal(ledger.finish(id), true);
+  for (const stop of stops) stop();
+  stops[0]();
+  assert.equal(ledger.listenerCount, 0);
+  assert.equal(ledger.subscribe('same-browser', () => {}) instanceof Function, true);
+});
+
+test('autonomous live stream cannot receive conversation events, or vice versa', () => {
+  const ledger = new CognitiveTraceLedger();
+  const liveAutonomy = [];
+  const publicView = [];
+  const stopAutonomy = ledger.subscribe('__internal_autonomy__', snapshot => liveAutonomy.push(snapshot));
+  const stopPublic = ledger.subscribe('public', snapshot => publicView.push(snapshot));
+  const convo = ledger.start('public');
+  const autonomy = ledger.startAutonomy('ambient');
+  ledger.mark(autonomy, 'regulation', 'done', { state_curiosity: .82 });
+  ledger.finish(autonomy);
+  assert.equal(liveAutonomy.every(snapshot => snapshot.kind === 'autonomy'), true);
+  assert.equal(publicView.every(snapshot => snapshot.id === convo), true);
+  assert.equal(ledger.snapshot('public', autonomy).available, false);
+  stopAutonomy();
+  stopPublic();
+});
