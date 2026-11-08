@@ -1474,6 +1474,7 @@ app.post('/api/chat', async (request, reply) => {
   return {
     ...response,
     trace_id: traceId,
+    trace: cognitiveTrace.snapshot(chatSessionId, traceId),
     answer,
     curiosity_question: curiosityItem || null,
     voice_ticket: answer ? createVoiceTicket(answer) : '',
