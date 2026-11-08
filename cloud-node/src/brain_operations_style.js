@@ -261,4 +261,38 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
 @media(max-width:920px){.chat-main{grid-template-columns:115px minmax(0,1fr) auto auto}.chat-main strong{display:none}}
 @media(max-width:640px){.chat-main{grid-template-columns:100px minmax(0,1fr) auto}.chat-main button.secondary{grid-column:1/-1}.chat-main input{font-size:16px}.chat-main strong{display:none}#chatMode{font-size:10px;padding:8px 3px}}
 
+
+/* Observatory: information density without overlapping floating capsules. */
+.module-toolbar{display:grid;gap:7px}
+.module-toolbar select,#graphLens{width:100%;min-width:0;background:#111622;border:1px solid rgba(126,150,180,.32);border-radius:7px;color:#dbe7f3;font-size:11px;padding:7px 8px}
+.module-toolbar #moduleSummary{font-size:10px;line-height:1.45;color:#8e9db1}
+.group-label{font-size:10px;letter-spacing:.075em;color:#a9bcd1;padding:10px 7px 4px;border-bottom:1px solid rgba(121,146,165,.1)}
+.module-row{min-height:46px;gap:8px;padding:7px 8px;background:rgba(14,22,36,.65);border-color:rgba(102,124,156,.16)}
+.module-row:hover,.module-row.selected{background:linear-gradient(90deg,rgba(33,55,76,.85),rgba(20,28,47,.85));border-color:rgba(104,202,215,.46)}
+.module-description{min-width:0;display:flex;flex-direction:column;gap:4px;text-align:left}
+.module-description .name{font-size:11px;color:#e3eaf3;line-height:1.15;white-space:normal;overflow-wrap:anywhere}
+.module-description small{font-size:9px;color:#768ca5;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.module-row .state{font-size:8px;max-width:92px;color:#90a5ba;white-space:normal;line-height:1.3;text-align:right}
+.module-row.recent .state{color:#78e9d7}
+.graph-controls{display:flex;align-items:center;gap:5px}
+#graphLens{width:auto;min-width:140px;max-width:200px;padding:7px 10px}
+#graphLabels{min-width:105px;background:#15202d;border-color:#37546a;color:#bdcfdb;white-space:nowrap}
+#graphLabels[aria-pressed=true]{background:#194244;color:#a2fff1}
+.graph-canvas{background:radial-gradient(ellipse at 49% 53%,rgba(42,57,85,.22),transparent 48%),radial-gradient(ellipse at 64% 39%,rgba(23,75,92,.14),transparent 40%),#070b12;border-color:#273c50}
+.graph-canvas::after{background:radial-gradient(ellipse at 42% 45%,rgba(96,60,120,.08),transparent 38%),radial-gradient(ellipse at 65% 48%,rgba(22,132,153,.07),transparent 38%)}
+.graph-floating{border-color:rgba(105,139,161,.24);background:rgba(5,10,18,.83);color:#a9bdd0}
+#graphHover{font-size:10px;color:#9addd3;max-width:32%;text-align:center}
+.neural-inspector{background:rgba(8,13,23,.92);border:1px solid rgba(94,132,163,.36);box-shadow:0 8px 30px rgba(0,0,0,.25)}
+.neural-inspector.web-inspector{border-color:rgba(48,148,160,.34)}
+.neural-inspector.kernel-inspector{border-color:rgba(178,141,99,.34)}
+.node-connections{margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:5px;max-height:205px;overflow:auto}
+.connection-link{border:1px solid rgba(101,128,152,.27);border-radius:7px;padding:6px 7px;color:#a5b8cc;background:rgba(11,23,35,.72);font-size:10px;line-height:1.35;cursor:pointer;text-align:left}
+.connection-link:hover{color:#e4f5ff;border-color:#73bdcb}
+.connection-link.observed{border-color:rgba(73,202,173,.52);color:#88edd2}
+.affect-status{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 12px 0;padding:10px 11px;border:1px solid rgba(73,174,167,.26);background:rgba(11,39,39,.42);border-radius:8px;font-size:11px;color:#9fbabb}
+.affect-status strong{font-size:13px;color:#9cebdc}
+.affect-bridge{margin:4px 12px 12px;padding:10px;border-left:2px solid #58bbaa;background:rgba(15,32,42,.56);border-radius:4px;color:#a9c2c9;font-size:11px;line-height:1.55}
+@media(max-width:1450px){#graphLens{min-width:114px;max-width:160px}.graph-controls{gap:3px}.graph-controls button{padding:7px}}
+@media(max-width:850px){.graph-controls{flex-wrap:wrap}.graph-hud{flex-wrap:wrap}#graphHover{max-width:54%}.module-description small{font-size:8px}}
+@media(max-width:600px){.graph-controls{justify-content:flex-end}#graphLens{width:115px}.graph-hud .graph-floating:nth-child(3){display:none}#graphHover{max-width:48%}.node-connections{grid-template-columns:1fr}}
 `;
