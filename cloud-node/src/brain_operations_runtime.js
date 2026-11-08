@@ -12,7 +12,7 @@ const POS={
  trading:[1040,570],audit:[1005,664],voice:[1084,488],peer:[190,566]
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
-const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
+const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false,pendingMission:null};
 const canvas=$('graphCanvas'),ctx=canvas.getContext('2d'),view=$('graphViewport');
 const reduced=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -247,8 +247,8 @@ function renderKPIs(){
  $('onlineState').lastChild.textContent=d.runtime_ready?'Noyau joignable':'Noyau indisponible';
  $('graphCaption').textContent=d.authorized?
    'Cyan : transitions observées récemment. Ambre : replay du trajet sélectionné. Gris : dépendances déclarées dans le code. Aucun flux n’est inventé.'
-  :'Connecte la session propriétaire pour afficher les trajets et outils réels. La carte reste muette lorsqu’aucune preuve n’est disponible.';
- $('authState').textContent=d.authorized?'Session propriétaire active · trajets détaillés autorisés':'Session propriétaire requise pour les flux détaillés';
+  :'Vue architecturale uniquement : les trajets privés restent masqués jusqu’à authentification. Aucun passage d’outil n’est simulé.';
+ $('authState').textContent=d.authorized?'Session propriétaire active · trajets détaillés autorisés':'Traces détaillées protégées · connexion privée';
  $('ownerFields').hidden=d.authorized;$('ownerArea').hidden=d.authorized;
 }
 
@@ -335,11 +335,13 @@ function drawNetworkStructure(edges){
 
 function draw(){
  if(!state.data)return;sizeCanvas();ctx.clearRect(0,0,canvasW,canvasH);
+ // Ambient breathing is decorative, never represented as observed neural activity.
+ const ambient=reduced?0:Math.sin(performance.now()/1250);
  ctx.save();
  for(const [group,pos,size,color] of GROUP_CLOUDS){
    const c={x:canvasW*.5+(pos[0]-590)*scale+state.panX,y:canvasH*.5+(pos[1]-395)*scale+state.panY};
    const grad=ctx.createRadialGradient(c.x,c.y,2,c.x,c.y,size*scale);
-   grad.addColorStop(0,'rgba('+color+',.18)');grad.addColorStop(.45,'rgba('+color+',.08)');grad.addColorStop(1,'rgba('+color+',0)');
+   grad.addColorStop(0,'rgba('+color+','+(.15+.035*ambient)+')');grad.addColorStop(.45,'rgba('+color+',.08)');grad.addColorStop(1,'rgba('+color+',0)');
    ctx.fillStyle=grad;ctx.fillRect(c.x-size*scale,c.y-size*scale,size*2*scale,size*2*scale);
  }
  const d=state.data;const now=Date.now();
@@ -376,7 +378,7 @@ function draw(){
  }
  state.screen=[];
  for(const node of d.nodes||[]){
-   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:11;const r=base*scale;
+   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:11;const r=base*scale*(1+(reduced?0:.035*Math.sin(performance.now()/950+node.id.length)));
    state.screen.push({id:node.id,x:p.x,y:p.y,r:Math.max(r,14)});
    const glow=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,r*3.2);
    const rgb=selected?'243,180,132':active?'135,244,234':tone(node).replace('#','');
@@ -445,6 +447,7 @@ $('ownerSignIn').onclick=async()=>{
  try{
    const res=await fetch('/api/auth/session',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:secret})});
    const out=await res.json();if(!res.ok||out.authenticated!==true)throw new Error('Accès refusé');field.value='';await poll();
+   if(state.pendingMission){$('chatMode').value='mission';$('chatInput').value=state.pendingMission;state.pendingMission=null;$('chatSend').click();}
  }catch(_){$('authState').textContent='Clé non validée. Vérifier la session propriétaire AURA.';}
  finally{field.value='';$('ownerSignIn').disabled=false;}
 };
@@ -464,11 +467,6 @@ $('chatSend').onclick=async()=>{
  const field=$('chatInput'),msg=field.value.trim();
  if(!msg||state.busy)return;
  const mission=$('chatMode').value==='mission';
- if(mission&&!state.data?.authorized){
-   chatLine('ACCÈS PROPRIÉTAIRE','Connecte la session propriétaire pour déclencher une mission. Aucun outil n’a été appelé.');
-   $('ownerKey').focus();
-   return;
- }
  state.busy=true;
  state.flow=null;state.replayStarted=0;
  $('chatSend').disabled=true;field.value='';
@@ -491,7 +489,12 @@ $('chatSend').onclick=async()=>{
    });
    let out;
    try{out=await res.json();}catch{throw Error('Réponse serveur non lisible');}
-   if(!res.ok||out?.ok!==true){
+   if((res.status===401||res.status===403)&&mission){
+     state.pendingMission=msg;
+     chatLine('AURA · ACCÈS PRIVÉ','Cette action nécessite une authentification. La mission est conservée et reprendra après connexion.');
+     $('authState').textContent='Authentification nécessaire pour cette action privée.';
+     $('ownerArea').hidden=false;$('ownerFields').hidden=false;
+   }else if(!res.ok||out?.ok!==true){
      const failure=typeof out?.error==='string'?out.error:'Le noyau n’a pas confirmé le traitement.';
      chatLine('SERVICE · NON EXÉCUTÉ',failure.slice(0,750));
    }else if(mission){
@@ -538,5 +541,8 @@ $('chatSend').onclick=async()=>{
 };
 $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('chatSend').click();}});
 
+// Low-rate ambient redraw makes the diagram feel alive without manufacturing tool calls.
+// Persisted events alone create travelling pulses; honor reduced-motion and hidden tabs.
+if(!reduced)setInterval(()=>{if(!document.hidden&&state.data&&!state.drawScheduled)scheduleDraw();},125);
 poll();
 })();`;
