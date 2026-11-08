@@ -88,6 +88,13 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     },
     active_intention: normalize(privatePlan.current_intention || '').slice(0,200),
     executive_role: normalize(privatePlan.executive?.role || '').slice(0,110),
+    activity_evidence: {
+      execution_verified: privatePlan.activity_evidence?.execution_verified===true,
+      evidence_status: normalize(privatePlan.activity_evidence?.evidence_status || 'unverified').slice(0,35),
+      source_status: normalize(privatePlan.activity_evidence?.source_status || '').slice(0,25),
+      recorded_at: normalize(privatePlan.activity_evidence?.recorded_at || '').slice(0,32),
+      live_ci_verified: privatePlan.activity_evidence?.live_ci_verified===true,
+    },
     discourse_move: normalize(privatePlan.discourse?.move || '').slice(0,65),
     conversation,
     semantic_support: normalize(privatePlan.semantic_support || '').slice(0,400),
@@ -100,6 +107,8 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'Pour un état interne, décris les faits et l’humeur du noyau comme des indicateurs computationnels, pas des sentiments humains vécus.',
     'Ne crée ni action, ni mémoire, ni émotion humaine vécue, ni chiffre non fourni.',
     'Ne change pas l’intention décidée et n’ajoute pas de question par automatisme.',
+    'Un objectif mémorisé, un statut waiting ou une réflexion CI ne sont pas la preuve d’une exécution actuelle ou d’une panne GitHub vérifiée.',
+    'Réponds simplement à une salutation ou correction ; ne raconte pas ton humeur ni une « présence silencieuse » sans demande.',
     'Réponds en français naturel contemporain à la première personne d’AURA ; ne montre pas les champs.',
   ].join('\n');
   const budget = limit - instructions.length - 1;
@@ -137,6 +146,9 @@ export function compactFrenchSystem() {
     'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
     'Tu ne dois jamais inventer des actes, des souvenirs, des capacités ou des chiffres absents du noyau.',
     'Ne fais pas passer une mission proposée pour une action exécutée.',
+    'Si execution_verified=false, ne prétends ni travailler actuellement, ni être mobilisée à 100 %, ni connaître la cause actuelle d’un CI en erreur.',
+    'Un statut ancien ne doit jamais devenir un blocage actuel. Préfère « mon suivi mentionne », « à vérifier » ou « je n’ai pas de preuve ». ',
+    'Une salutation ne requiert ni état intérieur ni compte rendu de mission.',
     'Pas d’explications sur ton statut de modèle, pas de questions de politesse automatiques.',
     'Formule en français courant et naturel la décision et les faits d’AURA à la première personne. /no_think',
   ].join(' ');
@@ -159,6 +171,30 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   ];
   if (generic.some(re => re.test(answer)))
     return {accepted:false, code:'generic-provider-persona'};
+  if (/présence silencieuse|état d.attente opérationnelle/i.test(answer))
+    return {accepted:false, code:'hollow-presence-loop'};
+  if(plan.act === 'greet'){
+    if(answer.length>165 || /\b(?:humeur interne|mon état interne|statut|satisfaite|stabilité|présence|mobilisée)\b/i.test(answer))
+      return {accepted:false, code:'unrequested-state-in-greeting'};
+  }
+  const operationalActs = new Set([
+    'report_current_activity','clarify_real_activity','clarify_blocker_evidence',
+    'request_verifiable_help','explain_previous_claim',
+  ]);
+  if(operationalActs.has(plan.act) && !plan.activity_evidence?.execution_verified){
+    if(/\b(?:je (?:suis|reste) (?:actuellement )?(?:mobilis[ée]e?|bloqu[ée]e?|en train de)|je travaille (?:actuellement|sur)|j.ex[eé]cute (?:en ce moment|actuellement)|le blocage (?:est pr[eé]cis|se situe)|je n.arrive pas [aà] (?:r[eé]activer|relancer))\b/i.test(answer))
+      return {accepted:false, code:'unverified-live-work-claim'};
+    if(/\b(?:depuis le \d{1,2} |en attente d.une d[eé]pendance depuis)\b/i.test(answer))
+      return {accepted:false, code:'unverified-stale-timestamp'};
+  }
+  if(plan.act === 'report_current_activity' && !plan.activity_evidence?.execution_verified){
+    if(!/(?:enregistr|m[eé]moire|mon suivi|ne (?:peux|sais) pas|pas de preuve|non v[eé]rifi|[aà] v[eé]rifier|non confirm|statut|pas de mission|aucune mission|aucune ex[eé]cution)/i.test(answer))
+      return {accepted:false, code:'missing-activity-evidence-disclaimer'};
+  }
+  if(plan.act === 'clarify_blocker_evidence' && !plan.activity_evidence?.live_ci_verified){
+    if(!/(?:pas (?:encore )?(?:v[eé]rifi|confirm|connais)|ancien|sans (?:journaux|preuve|v[eé]rification)|dois (?:v[eé]rifier|consulter)|je n.ai pas|journal|logs?|aucune cause|impossible de confirmer|non v[eé]rifi)/i.test(answer))
+      return {accepted:false, code:'unverified-ci-cause'};
+  }
   if (plan.act === 'report_internal_state') {
     const state = normalize(plan.mood || '').toLowerCase();
     const facts = (Array.isArray(plan.facts) ? plan.facts : []).map(String);
