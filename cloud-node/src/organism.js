@@ -1,11 +1,19 @@
 import { createHash } from 'node:crypto';
+import { evolveHomeostasis, newSomaticSeed, ProcessSomaticSensor, publicSomaticState } from './somatic_dynamics.js';
 
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(v || 0)));
 const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
 const now = () => new Date().toISOString();
 
 export class AuraOrganism {
-  static VERSION = 'homeostasie_v9_unified';
+  static VERSION = 'homeostasie_v10_somatic_feedback';
+
+  constructor({ sensor = new ProcessSomaticSensor() } = {}) { this.sensor = sensor; }
+
+  regulate(state, signal = 'ambient', seconds = 30) {
+    Object.assign(state, evolveHomeostasis(state, { signal, seconds, sensor: this.sensor.sample() }));
+    return state.homeostasis;
+  }
 
   defaultState() {
     const stamp = now();
@@ -30,8 +38,13 @@ export class AuraOrganism {
       mood: 'calme',
       intention_active: 'observer',
       last_reason: 'organisme AURA actif',
-      schema_revision: 9,
+      schema_revision: 10,
       authority: 'cloud-canonical',
+      homeostasis: {
+        revision: 1, seed: newSomaticSeed(), steps: 0, last_at: stamp,
+        last_signal: 'genesis', success_ema: 0.15, failure_ema: 0.05,
+        resource_pressure: 0, sensor: null,
+      },
       updated_at: stamp,
       last_interaction_at: stamp,
       last_idle_at: stamp,
@@ -143,7 +156,9 @@ export class AuraOrganism {
       .update(`${state.turns || 0}|${state.updated_at || ''}|${label}`)
       .digest('hex')
       .slice(0,8);
-    return ((parseInt(hex,16) / 0xffffffff) - 0.5) * 0.018;
+    // Non-security intention tie-breaks only.
+    return ((parseInt(hex,16) / 0xffffffff) - 0.5)
+      * (0.018 + 0.008 * clamp(state.homeostasis?.resource_pressure ?? 0));
   }
 
   needs(state) {
@@ -197,6 +212,12 @@ export class AuraOrganism {
     if (['je veux','j’aimerais',"j'aimerais",'on va','ensemble','notre','nos échanges','nos echanges'].some((x)=>q.includes(x))) p.approfondir_relation += .16;
     if (['pourquoi','comment','cherche','analyse','comprends'].some((x)=>q.includes(x))) { p.explorer += .10; p.apprendre += .08; }
 
+    // Resource pressure favors recovery over speculative action.
+    const computeStress = clamp(state.homeostasis?.resource_pressure ?? 0);
+    p.se_recentrer += computeStress * 0.25;
+    p.reparer_confusion += computeStress * 0.16;
+    p.agir -= computeStress * 0.17;
+    p.prendre_initiative -= computeStress * 0.12;
     for (const key of Object.keys(p)) p[key] = clamp(p[key] + this.noise(state,key),0,1.5);
     const ranked = Object.entries(p).sort((a,b)=>b[1]-a[1]);
     const gap = ranked.length > 1 ? ranked[0][1]-ranked[1][1] : 1;
@@ -228,10 +249,11 @@ export class AuraOrganism {
     delete state.tension;
     delete state.fatigue_cognitive;
     for (const key of ['identite','stabilite','clarte','attachement','curiosite','engagement','confiance','satisfaction','frustration','agency','curiosite_sociale','pression_de_reve','besoin_de_silence','risque_assistante']) {
-      state[key] = Number(clamp(state[key]).toFixed(4));
+      const regulated = ['stabilite','clarte','engagement','confiance','satisfaction','frustration','agency','besoin_de_silence'].includes(key);
+      state[key] = Number(clamp(state[key], regulated ? 0.03 : 0, regulated ? 0.97 : 1).toFixed(4));
     }
     state.version = AuraOrganism.VERSION;
-    state.schema_revision = 9;
+    state.schema_revision = 10;
     state.authority = 'cloud-canonical';
     state.needs = this.needs(state);
     state.intention_field = this.intentionField(state, state.last_event || '');
@@ -319,6 +341,7 @@ export class AuraOrganism {
     this.apply(state,delta);
     let dream = null;
     if ((tags.includes('reve') && state.pression_de_reve>=.42) || state.pression_de_reve>=.86) dream=this.createDream(state,text);
+    this.regulate(state, valence === 'negative' ? 'interaction_negative' : 'interaction', 30);
     return {
       state:this.recompute(state,reason),
       impact_delta:delta,
@@ -336,6 +359,7 @@ export class AuraOrganism {
       ? {clarte:.010,stabilite:.008,risque_assistante:-.008,satisfaction:.006,engagement:.003,agency:.002,frustration:-.004}
       : {clarte:-.020,stabilite:-.018,risque_assistante:.015,besoin_de_silence:.010,satisfaction:-.012,frustration:.016,confiance:-.006};
     this.apply(state,delta);
+    this.regulate(state, success ? 'reply_success' : 'reply_failure', 30);
     state.last_reply=clean(answer).slice(0,1000);
     return {
       state:this.recompute(state,success?'expression cohérente':'expression dégradée'),
@@ -354,6 +378,7 @@ export class AuraOrganism {
     else if(event.includes('error')||event.includes('failure')) delta={stabilite:-.012,clarte:-.008,besoin_de_silence:.006,frustration:.014,satisfaction:-.010,agency:.004};
     else if(event.includes('success')||event.includes('completed')) delta={stabilite:.006,clarte:.004,satisfaction:.010,confiance:.006,frustration:-.008};
     this.apply(state,delta);
+    this.regulate(state, 'event', 30);
     return {state:this.recompute(state,`événement ${type}`),delta};
   }
 
@@ -363,6 +388,7 @@ export class AuraOrganism {
       ? {stabilite:.010,clarte:.006,risque_assistante:-.002,satisfaction:.012,confiance:.008,frustration:-.010,agency:.004}
       : {stabilite:-.025,clarte:-.012,besoin_de_silence:.010,satisfaction:-.016,frustration:.022,confiance:-.008};
     this.apply(state,delta);
+    this.regulate(state, ok ? 'action_success' : 'action_failure', 30);
     return {state:this.recompute(state,ok?'action réussie':'action échouée'),delta};
   }
 
@@ -419,6 +445,7 @@ export class AuraOrganism {
     habitat.last_updated_at=now();
     state.habitat=habitat;
     state.last_idle_at=habitat.last_updated_at;
+    this.regulate(state, 'ambient', seconds);
     return {state:this.recompute(state,label),activity,activity_label:label,effect,dream};
   }
 
@@ -448,7 +475,7 @@ export class AuraOrganism {
       valence:state.derniere_valence,
       active_intention:state.intention_active,
       last_reason:String(state.last_reason || ''),
-      schema_revision:9,
+      schema_revision:10,
       authority:'cloud-canonical',
       identite:state.identite,
       stabilite:state.stabilite,
@@ -470,6 +497,7 @@ export class AuraOrganism {
         recovery:Number(clamp(state.stabilite*.45+state.clarte*.35+(1-state.besoin_de_silence)*.20).toFixed(4)),
       },
       top_needs:needs,
+      homeostasis:publicSomaticState(state.homeostasis),
       intention_field:state.intention_field,
       relationship:{
         familiarity:Number(state.relationship?.familiarity || 0),
