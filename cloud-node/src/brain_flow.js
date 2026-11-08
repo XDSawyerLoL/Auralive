@@ -117,10 +117,38 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
  }
  events.sort((a,b)=>Date.parse(b.at)-Date.parse(a.at));
  const lastByNode=new Map();
- for(const hop of hops)for(const id of [hop.from,hop.to]){
+ const sourceByNode=new Map();
+ function remember(id,at,origin){
+  const when=iso(at);if(!ids.has(id)||!when)return;
+  const ageMs=Math.max(0,nowMs-Date.parse(when));
   const prev=lastByNode.get(id);
-  if(!prev||Date.parse(hop.at)>Date.parse(prev.at))lastByNode.set(id,hop);
+  if(!prev||Date.parse(when)>Date.parse(prev.at)){
+    lastByNode.set(id,{at:when,age_ms:ageMs});
+    sourceByNode.set(id,origin);
+  }
  }
+ for(const hop of hops)for(const id of [hop.from,hop.to])
+   remember(id,hop.at,'aura_cognitive_traces.brain-hop');
+ for(const ev of events){
+  const id=ev.type==='web-research'||ev.type==='web-research-error'?'web':
+    ev.type==='agent'||ev.type==='swarm'?'agent':
+    ev.type==='operator'||ev.type==='command-event'?'command':
+    ev.type==='organism-event'?'homeostasis':
+    ev.type==='expression'?'language':
+    ev.type==='reflection'?'cognition':ev.type==='event'?'kernel':'';
+  if(id)remember(id,ev.at,ev.source);
+  if(ev.type==='command-event'&&/github|fleet/i.test(ev.label))remember('github',ev.at,ev.source);
+ }
+ const TOOL_IDS=new Set(['groq','openrouter','local','web','toolbox','fabric',
+  'command','dag','agent','bridge','github','scout','curiosity','evolution',
+  'trading','audit','voice','peer']);
+ const tools=[...lastByNode].filter(([id])=>TOOL_IDS.has(id))
+   .map(([id,hit])=>({
+    id,label:BRAIN_NODES.find(n=>n[0]===id)?.[1]||id,
+    observed_at:hit.at,source:sourceByNode.get(id),
+    status:hit.age_ms<=60000?'observed-recently':'historical-record',
+    execution_verified:false,
+   })).sort((a,b)=>Date.parse(b.observed_at)-Date.parse(a.observed_at));
  const live=telemetry.runtime_ready===true;
  const sourceState=telemetry.source?.status||'unknown';
  const nodes=BRAIN_NODES.map(([id,label,group,code])=>{
@@ -136,7 +164,7 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
     'installed-not-observed',
    last_observed_at:hit?.at||null,
    // Never turn the presence of a source file into a running status.
-   activity_verified:!!observed,evidence:observed?'brain-hop':'source-code-only'};
+   activity_verified:!!observed,evidence:observed?sourceByNode.get(id):'source-code-only'};
  });
  const topology=CORE_EDGES.map(([from,to])=>{
   const matching=hops.filter(h=>h.from===from&&h.to===to);
@@ -156,6 +184,7 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
   runtime_ready:live,authorized:true,
   nodes,edges:[...topology,...observedUnmodeled],flows:recentFlows,
   events:events.slice(0,60),
+  observed_tools:tools.slice(0,30),
   observed_hop_count:hops.length,
   recent_signal_count:hops.filter(h=>h.age_ms<=20000).length,
   evidence_sources:['aura_cognitive_traces','aura_command_events','aura_organism_events'],
