@@ -68,7 +68,7 @@ test('server trading routes are private, cannot send real orders or broker crede
   const end=server.indexOf("// Founder-only knowledge endpoints.",begin);
   const block=server.slice(begin,end);
   assert.ok(begin>=0 && end>begin);
-  assert.equal((block.match(/requirePrivate\(request, reply\)/g)||[]).length,2);
+  assert.equal((block.match(/requirePrivate\(request, reply\)/g)||[]).length,3);
   assert.match(block,/runPaperBacktest/);
   assert.doesNotMatch(block,/orders\/create|api\/trading\/live|private\/AddOrder|broker_token/);
 });
