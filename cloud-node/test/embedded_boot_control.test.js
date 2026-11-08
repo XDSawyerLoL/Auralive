@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {embeddedStartupBudget,EmbeddedLanguageRuntime,classifyEmbeddedFailure} from '../src/embedded_language.js';
+import os from 'node:os';
+import path from 'node:path';
+import {embeddedStartupBudget,EmbeddedLanguageRuntime,classifyEmbeddedFailure,locateEmbeddedRuntime} from '../src/embedded_language.js';
 
 test('cgroup preflight blocks 639 MB Q8 launch when remaining memory is unsafe',()=>{
   const snapshot=embeddedStartupBudget({limit_mb:1024,current_mb:480},{
@@ -77,4 +79,38 @@ test('dashboard distinguishes detected installation from successful inference',(
   assert.match(panel,/id=\"engineStart\"|\$\('engineStart'\)/);
   const html=fs.readFileSync(new URL('../src/dashboard.js',import.meta.url),'utf8');
   assert.match(html,/id="engineStart"/);
+});
+
+test('persistent provisioner cache remains discoverable after Node restarts',()=>{
+  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'aura-runtime-cache-'));
+  try{
+    const cache=path.join(tmp,'.cache','aura-language-runtime');
+    const native=path.join(cache,'llama-b11425');
+    fs.mkdirSync(native,{recursive:true});
+    fs.writeFileSync(path.join(native,'llama-server'),'test binary',{mode:0o755});
+    fs.writeFileSync(path.join(cache,'Qwen3-0.6B-Q8_0.gguf'),'test gguf');
+    const item=locateEmbeddedRuntime({root:path.join(tmp,'deployed-site'),home:tmp});
+    assert.equal(item.binFound,true);
+    assert.equal(item.modelFound,true);
+    assert.equal(item.installed,true);
+    assert.ok(item.gguf.endsWith('Qwen3-0.6B-Q8_0.gguf'));
+  }finally{fs.rmSync(tmp,{recursive:true,force:true});}
+});
+
+test('explicit persistent model cache folder is discovered without a new download',()=>{
+  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'aura-runtime-override-'));
+  const previous=process.env.AURA_EMBEDDED_CACHE_DIR;
+  try{
+    const cache=path.join(tmp,'managed-cache');
+    fs.mkdirSync(cache,{recursive:true});
+    fs.writeFileSync(path.join(cache,'llama-server'),'test binary',{mode:0o755});
+    fs.writeFileSync(path.join(cache,'model.gguf'),'test gguf');
+    process.env.AURA_EMBEDDED_CACHE_DIR=cache;
+    const result=locateEmbeddedRuntime({root:path.join(tmp,'site'),home:''});
+    assert.equal(result.installed,true);
+  }finally{
+    if(previous===undefined)delete process.env.AURA_EMBEDDED_CACHE_DIR;
+    else process.env.AURA_EMBEDDED_CACHE_DIR=previous;
+    fs.rmSync(tmp,{recursive:true,force:true});
+  }
 });
