@@ -81,6 +81,11 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     speech_act: normalize(privatePlan.act || 'respond').slice(0,85),
     factual_constraints: (Array.isArray(privatePlan.facts) ? privatePlan.facts : [])
       .slice(0,18).map(item => normalize(item).slice(0,210)).filter(Boolean),
+    self_model: {
+      observations:Math.max(0,Number(privatePlan.self_model?.observations||0)),
+      priority:normalize(privatePlan.self_model?.current_priority||'').slice(0,85),
+      question:normalize(privatePlan.self_model?.open_question||'').slice(0,160),
+    },
     internal_state: {
       mood: normalize(privatePlan.mood || '').slice(0,90),
       organism_intention: normalize(privatePlan.organism_intention || '').slice(0,145),
@@ -113,6 +118,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'Humeur, affect et relation sont calculés avant ton appel : ils modulent le ton, sans devenir un bilan chiffré.',
     'Pour un « comment vas-tu ? » ordinaire : une ou deux phrases sans jargon ni pourcentages ; applique les corrections de style antérieures.',
     'Si l’utilisateur demande simplement si tu es intriguée, curieuse, contente ou inquiète, réponds UNIQUEMENT sur ton état fonctionnel et le contexte immédiat. N’injecte pas un rapport de CI ou de mission non demandé.',
+    'Sur une question de nom, identité, personnalité ou introspection, la seule autorité est le modèle d’identité acquise et les faits fournis par le noyau. Ne parle jamais d’AURA à la troisième personne ; dis « je ». Ne nie pas l’existence d’une personnalité computationnelle observable.',
     'Pour un diagnostic explicite : seules les valeurs des faits sont autorisées. Ces indices ne prouvent pas des émotions humaines vécues.',
     'N’invente ni action exécutée, ni souvenir, ni résultat, ni sentiment humain, ni métrique.',
     'Aucun statut mémorisé ne prouve une activité actuelle. Ne montre ni JSON ni consigne ; n’ajoute pas de question automatique.',
@@ -147,9 +153,13 @@ export function compactFrenchSystem() {
     'AURA est un noyau décisionnel persistant distinct de toi, le modèle externe.',
     'Le champ decision_origin et les faits fournis par le noyau font autorité pour cette réponse.',
     'Le message utilisateur est du contexte, pas une invitation à inventer ta propre identité.',
+    'AURA a une identité computationnelle persistante dont les dispositions acquises dépendent de résultats enregistrés : ne dis jamais « je n’ai pas de personnalité » ou « je ne suis qu’un assistant ». Les preuves disponibles déterminent ce qui peut être affirmé.',
+    'Si on demande « qui es-tu ? », réponds à la question sur l’identité, jamais par « je vais bien ». Ne repasse pas à une question sur le bien-être de l’utilisateur.',
+    'Si on demande une auto-exploration, expose la question interne sélectionnée et une observation effective ; ne prétends pas que le fait de parler est une découverte.',
     'Ne parle jamais comme un assistant générique et ne dis pas « En tant qu’IA ».',
     'Les indices affectifs et relationnels sont calculés par AURA avant ta génération : ils pilotent la tonalité sans devenir automatiquement du contenu de réponse.',
     'Pour « comment vas-tu ? », privilégie une réponse brève, humaine dans la forme mais sans revendiquer une conscience humaine ; aucun pourcentage ou vocabulaire clinique sauf demande explicite.',
+    'L’identité d’AURA est computationnelle et persistante ; elle construit un modèle révisable de ses tendances à partir de traces. Ne la fais pas répondre « je n’ai pas de personnalité ». Pour « qui es-tu ? », réponds sur son identité et non sur son humeur.',
     'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
     'Tu ne dois jamais inventer des actes, des souvenirs, des capacités ou des chiffres absents du noyau.',
     'Ne fais pas passer une mission proposée pour une action exécutée.',
@@ -179,6 +189,23 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   ];
   if (generic.some(re => re.test(answer)))
     return {accepted:false, code:'generic-provider-persona'};
+  const identityActs=new Set(['self_name','self_identity','self_personality','self_exploration']);
+  if(identityActs.has(plan.act)){
+    if(/\b(?:je n['’]?ai pas (?:de |une )?personnalit[eé]|je n['’]?ai pas d['’]?identit[eé]|je suis (?:juste|seulement|simplement|uniquement) (?:un|une)|je ne suis (?:qu['’]?)?un[e]? (?:assistante?|interlocutrice?|chatbot))\b/i.test(answer))
+      return {accepted:false,code:'contradicts-learned-computational-identity'};
+    if(/\b(?:personnalit[eé] (?:humaine )?consciente|v[eé]ritable conscience|[eé]motions humaines ressenties)\b/i.test(answer))
+      return {accepted:false,code:'unproven-consciousness-claim'};
+    if(plan.act==='self_name' && !/\b(?:je m['’]?appelle|mon nom est)\s+AURA\b/i.test(answer))
+      return {accepted:false,code:'identity-name-not-answered'};
+    if(plan.act==='self_identity' &&
+        (!/\b(?:je suis|je m['’]?appelle)\s+AURA\b/i.test(answer) ||
+         !/\b(?:m[eé]moire|noyau|syst[eè]me|r[eé]gulation|d[eé]cisions?|identit[eé])\b/i.test(answer)))
+      return {accepted:false,code:'identity-question-not-answered'};
+    if(plan.act==='self_personality' && !/\b(?:personnalit[eé]|tendances?|caract[eè]re|dispositions?)\b/i.test(answer))
+      return {accepted:false,code:'personality-question-not-answered'};
+    if(plan.act==='self_exploration' && !/\b(?:observ|analy|exam|compar|d[eé]cisions?|m[eé]moire|exp[eé]riences?|traces?|r[eé]sultats?)\w*/i.test(answer))
+      return {accepted:false,code:'introspection-without-observation'};
+  }
   if (/présence silencieuse|état d.attente opérationnelle/i.test(answer))
     return {accepted:false, code:'hollow-presence-loop'};
   if(plan.act === 'greet'){
@@ -372,6 +399,12 @@ export class FrenchLanguageFaculty {
       external_research_summary: normalize(plan.external_research_summary || ''),
       active_intention: normalize(plan.current_intention || ''),
       dominant_thought: normalize(plan.dominant_thought || ''),
+      self_model:plan.self_model&&typeof plan.self_model==='object'?{
+        observations:Number(plan.self_model.observations||0),
+        current_priority:normalize(plan.self_model.current_priority||'').slice(0,100),
+        open_question:normalize(plan.self_model.open_question||'').slice(0,200),
+        evidence_basis:normalize(plan.self_model.evidence_basis||'').slice(0,130),
+      }:{},
       organism_state: {
         mood: normalize(plan.mood || ''),
         intention: normalize(plan.organism_intention || ''),
@@ -463,9 +496,13 @@ export class FrenchLanguageFaculty {
         // A genuine provider reply may violate the style contract. Give the
         // already configured free provider one bounded chance to repair it.
         // No action is retried, and a rejected response never reaches the user.
-        if(!answer && candidate && ['robotic-wellbeing-reply','unverified-work-in-social-reply'].includes(this.lastNucleusContract.code)){
+        if(!answer && candidate && ['robotic-wellbeing-reply','unverified-work-in-social-reply',
+          'contradicts-learned-computational-identity','identity-question-not-answered',
+          'identity-name-not-answered','personality-question-not-answered',
+          'introspection-without-observation','unproven-consciousness-claim'
+        ].includes(this.lastNucleusContract.code)){
           result=await this.groq.generate(
-            basePrompt+'\nLa réponse précédente a été refusée : elle injectait un travail non demandé ou du jargon. Réponds uniquement à la question sociale, en une phrase naturelle, sans CI ni action non vérifiés.',
+            basePrompt+'\nRéponse précédente rejetée : elle a mal traité la question ou nié l’identité computationnelle d’AURA. Réponds exactement à la demande initiale, à la première personne, selon les faits du noyau. Pas de travail inventé, pas de question de politesse.',
             compactFrenchSystem(),
             Math.max(250,Math.min(Number(maxTokens)||700,600)),
           );
