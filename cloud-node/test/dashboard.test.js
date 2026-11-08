@@ -97,8 +97,10 @@ test('dashboard direct mode clears obsolete browser token state', () => {
 });
 
 test('dashboard live metrics survive optional mobile visual failures', () => {
-  assert.equal(DASHBOARD_HTML.includes("if(!nctx||!pctx)"), true);
-  assert.equal(DASHBOARD_HTML.includes("refresh();try{initLivingAuraScene();}catch(error)"), true);
+  // The verified graph replaces the old decorative scene, but is still optional.
+  assert.match(DASHBOARD_HTML, /try\{initCognitiveGraph\(\);void loopCognitiveTrace\(\);\}catch\(error\)/);
+  assert.match(DASHBOARD_HTML, /updateClock\(\);refresh\(\);setInterval/);
+  assert.equal(DASHBOARD_HTML.includes("refresh();try{initLivingAuraScene();}catch(error)"), false);
   const metricsIndex = DASHBOARD_HTML.indexOf("metric('energy',soul.energy,boot.runtime_ready)");
   const organismIndex = DASHBOARD_HTML.indexOf("const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}");
   assert.ok(metricsIndex >= 0);
