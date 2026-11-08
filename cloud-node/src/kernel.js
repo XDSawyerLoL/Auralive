@@ -1048,6 +1048,7 @@ export class CognitiveKernel {
     );
 
     observe('input');
+    observe('homeostasis', 'running');
 
     // L'organisme reçoit l'interaction avant toute formulation.
     const pre = this.organism.beforeInteraction(
@@ -1079,6 +1080,7 @@ export class CognitiveKernel {
     });
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
+    observe('stimulus', 'running');
     await this.observeEvent(
       'aura.cloud.chat',
       privateView
@@ -1106,6 +1108,7 @@ export class CognitiveKernel {
           ),
         };
 
+    observe('context', 'running');
     const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
       privateView ? this.intentions(6) : Promise.resolve([]),
       privateView ? this.lessons(6) : Promise.resolve([]),
@@ -1131,6 +1134,7 @@ export class CognitiveKernel {
       reflections: reflections.length, work_items: work.length,
     });
 
+    observe('decision', 'running');
     let plan = this.cognition.planReply({
       text: content,
       soul: privateView ? privateSoul : publicSoul,
@@ -1169,6 +1173,7 @@ export class CognitiveKernel {
       && this.webSubstrate?.enabled
       && requiresExternalKnowledge(content)
     ) {
+      observe('research', 'running');
       try {
         if (this.fabric?.enabled !== false && this.fabric?.registry?.has('web.research')) {
           const routed = await this.fabric.execute(
@@ -1231,6 +1236,7 @@ export class CognitiveKernel {
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
+      observe('semantic', 'running');
       const support = await this.expression.semanticSupport(
         plan,
         await this.contextForAi(privateView),
@@ -1245,11 +1251,13 @@ export class CognitiveKernel {
       observe('semantic', 'skipped');
     }
 
+    observe('expression', 'running');
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
     observe('expression', 'done', { answer_chars: String(answer || '').length });
+    observe('homeostasis_post', 'running');
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
@@ -1264,6 +1272,7 @@ export class CognitiveKernel {
     });
     await this.saveSoul();
     observe('homeostasis_post');
+    observe('persistence', 'running');
 
     await query(
       "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
