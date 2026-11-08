@@ -50,7 +50,11 @@ test('interaction and reply modify AURA organism without fake fatigue or tension
   assert.ok(pre.state.relationship.interaction_count > initial.relationship.interaction_count);
   assert.equal(pre.state.relationship.last_author, 'Créateur');
   const post = organism.afterReply(pre.state, 'Je suis présente.', true);
-  assert.ok(post.state.stabilite >= pre.state.stabilite);
+  // A successful sentence is not a verified task success: no automatic
+  // increase is guaranteed; stability converges toward its homeostatic target.
+  assert.ok(post.state.stabilite >= 0.03 && post.state.stabilite <= 0.97);
+  assert.equal(post.state.homeostasis.last_signal, 'reply_success');
+  assert.equal(post.state.homeostasis.success_ema, pre.state.homeostasis.success_ema);
   assert.equal('tension' in post.state, false);
   assert.equal('fatigue_cognitive' in post.state, false);
 });
