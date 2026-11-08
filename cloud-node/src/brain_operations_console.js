@@ -194,6 +194,13 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <p class="small-text" id="metricTime">Aucune mesure actuellement reçue.</p>
     </div>
 
+        <section class="detail-card identity-card" id="identity-panel" aria-label="Identité acquise d’AURA">
+          <div class="inline-head"><h3>Identité acquise</h3><span id="identityStatus" class="truth-chip">Sans observations</span></div>
+          <p id="identityPriority" class="identity-priority">AURA n’a pas encore de tendance apprise suffisamment étayée.</p>
+          <div id="identityDimensions" class="identity-dimensions"></div>
+          <p id="identityQuestion" class="identity-question">Question à examiner : —</p>
+          <p id="identityEvidence" class="causal-footnote">Aucune personnalité humaine ou conscience n’est déduite des indices logiciels.</p>
+        </section>
         <details class="side-details" id="module-proof-details">
           <summary>Module inspecté, trajet et outils</summary>
         <section class="owner" aria-label="Accès aux observations">
