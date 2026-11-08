@@ -122,3 +122,14 @@ test('offered help and "où ça bloque" ask for logs rather than assert an old f
  assert.equal(validateNucleusSpeech(why,"Le blocage est précis : la relance du CI est défaillante depuis le 13 octobre.").accepted,false);
  assert.equal(validateNucleusSpeech(why,"Je n’ai pas vérifié les derniers logs CI ; je ne peux pas localiser la panne.").accepted,true);
 });
+
+
+test('chat label does not mistake nucleus expression for actual CI execution proof',async()=>{
+ const fs=await import('node:fs');
+ const js=fs.readFileSync(new URL('../src/dashboard-runtime.js',import.meta.url),'utf8');
+ const kernel=fs.readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
+ assert.match(kernel,/activity_evidence: \{/);
+ assert.match(kernel,/execution_verified: Boolean\(plan\.activity_evidence\?\.execution_verified\)/);
+ assert.match(js,/AURA · formulation contrôlée · statut non vérifié/);
+ assert.match(js,/out\?\.activity_evidence\?\.execution_verified!==true/);
+});
