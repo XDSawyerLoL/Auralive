@@ -711,6 +711,13 @@ async function refresh(){
             : String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
         $('voiceText').title=reasonLabel;
       }
+      // The founder explicitly chose a separate zero-euro voice; never label it Aoede.
+      if(localVoiceOptIn){
+        const localReady=Boolean(localFrenchVoice());
+        $('voiceDot').className='live-dot '+(localReady?'good':'warn');
+        $('voiceText').textContent=localReady?'AURA · voix locale 0 €':'AURA · voix locale absente';
+        $('voiceText').title='Voix française installée dans le navigateur; aucune requête TTS externe.';
+      }
     }catch(_){
       $('voiceDot').className='live-dot';
       $('voiceText').textContent='Mairaiy · diagnostic';
