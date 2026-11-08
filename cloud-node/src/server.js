@@ -27,7 +27,7 @@ import { DASHBOARD_HTML } from './dashboard.js';
 import { BRAIN_HTML } from './brain_console.js';
 import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
-import { buildBrainFlowGraph } from './brain_flow.js';
+import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { query as readBrainTraceRows } from './db.js';
 import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
@@ -1326,12 +1326,11 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
   });
 });
 
-// Read-only operational cartography. Real routes are read from durable DB rows,
-// never from generated particle effects or the contents of private conversations.
-// Anonymous visitors see topology but NO private event/flow history.
+// Public read-only neural observations. Load persisted metadata for every viewer;
+// strictly whitelist response fields so prompts, command parameters, DB IDs,
+// credentials, and private context never leave the server.
 app.get('/api/brain/graph', async (request, reply) => {
-  reply.header('Cache-Control','private, no-store');
-  const authorized=isPrivate(request);
+  reply.header('Cache-Control','no-store');
   const current=await publicOperationalSnapshot();
   const groq=ai.groq?.snapshot?.()||{};
   const telemetry=buildBrainTelemetry(current,{language:{
@@ -1339,7 +1338,7 @@ app.get('/api/brain/graph', async (request, reply) => {
     model:String(groq.model||''),last_model:String(groq.last_model||''),
   }});
   let traceRows=[],commandRows=[],organismRows=[],dataAvailable=false;
-  if(authorized && bootstrap.dbReady){
+  if(bootstrap.dbReady){
     const results=await Promise.allSettled([
       readBrainTraceRows(
         "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
@@ -1354,11 +1353,12 @@ app.get('/api/brain/graph', async (request, reply) => {
     organismRows=results[2].status==='fulfilled'?results[2].value:[];
   }
   return {
-    ...buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows}),
+    ...toPublicBrainFlowGraph(buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows})),
     telemetry,
-    authorized,
+    authorized:true, // Public observation access, NOT privileged operator authorization.
+    observations_public:true,
     database_observations_available:dataAvailable,
-    observation_access:authorized?'authenticated-founder':'owner-login-required',
+    observation_access:'public-redacted',
     no_private_contents_exposed:true,
   };
 });
