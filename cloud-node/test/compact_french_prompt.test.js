@@ -12,8 +12,12 @@ test('Qwen3 compact French prompt disables thinking to preserve response tokens'
   assert.ok(prompt.startsWith('/no_think'));
   assert.match(prompt,/lecteur SWAPP/);
   assert.match(prompt,/capture Edge est noire/);
-  assert.match(prompt,/Utilisateur : J’utilise Edge/);
-  assert.match(prompt,/AURA : Je vais distinguer les étapes/);
+  const plan=JSON.parse(prompt.split('\n').at(-1));
+  assert.equal(plan.decision_origin,'AURA.nucleus.CognitionEngine.planReply');
+  assert.equal(plan.conversation[0].role,'user');
+  assert.equal(plan.conversation[0].content,'J’utilise Edge.');
+  assert.equal(plan.conversation[1].role,'assistant');
+  assert.equal(plan.conversation[1].content,'Je vais distinguer les étapes.');
   assert.ok(prompt.length<=2400);
   assert.match(compactFrenchSystem(),/français courant/);
 });
