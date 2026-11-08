@@ -1161,6 +1161,48 @@ $('tradeBacktest').onclick=async function(){
       :'Simulation indisponible : '+String(error.message||error).slice(0,170);
   }finally{button.disabled=false;button.textContent='Tester la stratégie';}
 };
+// Private actions use the existing HttpOnly AURA session; no token storage.
+let ownerSessionAuthenticated=false;
+async function refreshOwnerSession(){
+  try{
+    const state=await api('/api/auth/session');
+    ownerSessionAuthenticated=state?.authenticated===true;
+  }catch(_){ownerSessionAuthenticated=false;}
+  $('ownerSessionStatus').textContent=ownerSessionAuthenticated
+    ?'Session propriétaire active · actions privées disponibles.'
+    :'Accès propriétaire requis pour les missions et les audits.';
+  $('ownerConnectRow').hidden=ownerSessionAuthenticated;
+  $('ownerDisconnect').hidden=!ownerSessionAuthenticated;
+  $('autonomyRun').disabled=!ownerSessionAuthenticated;
+  $('auditRun').disabled=!ownerSessionAuthenticated;
+  return ownerSessionAuthenticated;
+}
+$('ownerConnect').onclick=async function(){
+  const input=$('ownerSessionToken');
+  const secret=String(input.value||'').trim();
+  if(!secret){$('ownerSessionStatus').textContent='Saisir la clé privée AURA.';return;}
+  $('ownerConnect').disabled=true;
+  try{
+    const result=await api('/api/auth/session',{
+      method:'POST',body:JSON.stringify({token:secret}),
+    });
+    if(!result?.authenticated)throw new Error('Connexion propriétaire non validée');
+    input.value='';
+    await refreshOwnerSession();
+    void refreshRevenueReadiness();
+  }catch(error){
+    $('ownerSessionStatus').textContent='Connexion refusée : '+String(error?.message||error).slice(0,135);
+  }finally{
+    input.value='';
+    $('ownerConnect').disabled=false;
+  }
+};
+$('ownerDisconnect').onclick=async function(){
+  try{await api('/api/auth/session',{method:'DELETE'});}catch(_){}
+  ownerSessionAuthenticated=false;
+  await refreshOwnerSession();
+  $('revenueMode').textContent='ACCÈS PRIVÉ REQUIS';
+};
 // Founder's operator. Real execution is reported distinctly from a plan-only result.
 $('autonomyRun').onclick=async function(){
   const task=String($('autonomyTask').value||'').trim();
@@ -1314,5 +1356,5 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();refresh();void refreshRevenueReadiness();void refreshAutoPaperStatus();setInterval(refreshAutoPaperStatus,120000);try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();void refreshOwnerSession();void refreshRevenueReadiness();void refreshAutoPaperStatus();setInterval(refreshAutoPaperStatus,120000);try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
