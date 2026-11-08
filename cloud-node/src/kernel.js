@@ -1256,7 +1256,10 @@ export class CognitiveKernel {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
-    observe('expression', 'done', { answer_chars: String(answer || '').length });
+    const languageMode = String(this.expression.lastMode || 'unknown');
+    observe('expression', languageMode === 'natural-language-unavailable' ? 'error' : 'done', {
+      answer_chars: String(answer || '').length, language_mode: languageMode,
+    });
     observe('homeostasis_post', 'running');
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
