@@ -68,6 +68,7 @@ const CORE_EDGES=Object.freeze([
 const ids=new Set(BRAIN_NODES.map(n=>n[0]));
 const CATEGORIES=Object.freeze({
  'brain-hop':'Parcours horodaté du noyau',
+ 'brain-causal':'Bilan causal corrélé à une requête',
  'expression':'Formulation enregistrée',
  'web-research':'Recherche web enregistrée',
  'web-research-error':'Échec recherche web',
@@ -95,7 +96,64 @@ const validHop=(raw,at,nowMs)=>{
   provider:safe(context.provider||'',70),stage:safe(context.stage||'',70),
   evidence:'aura_cognitive_traces.brain-hop'};
 };
+// Strongly typed public projection: never copy free-form trace context to the browser.
+const CAUSAL_METRICS = Object.freeze([
+ 'stabilite','clarte','confiance','satisfaction','frustration',
+ 'engagement','agency','besoin_de_silence',
+]);
+const validFlowId = id=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(id||''));
+function publicCausalSnapshot(raw={}){
+ const metrics={};
+ for(const key of CAUSAL_METRICS){
+  if(raw?.metrics?.[key]===null||raw?.metrics?.[key]===undefined)continue;
+  const n=Number(raw.metrics[key]);
+  if(Number.isFinite(n)&&n>=0&&n<=1)metrics[key]=Number(n.toFixed(4));
+ }
+ const pressure=raw?.process_pressure;
+ return {
+  metrics,
+  process_pressure:pressure!==null&&pressure!==undefined&&Number.isFinite(Number(pressure))
+    &&Number(pressure)>=0&&Number(pressure)<=1?Number(Number(pressure).toFixed(4)):null,
+  sensor_source:raw?.sensor_source==='node-process'?'node-process':'unavailable',
+ };
+}
+function validCausal(row,nowMs){
+ if(row?.kind!=='brain-causal')return null;
+ const context=parse(row.context);
+ if(!validFlowId(context.flow_id))return null;
+ const at=iso(context.at||row.created_at);
+ if(!at)return null;
+ const age=nowMs-Date.parse(at);
+ if(age>86400000||age< -300000)return null;
+ const before=publicCausalSnapshot(context.before);
+ const after=publicCausalSnapshot(context.after);
+ if(!Object.keys(before.metrics).length||!Object.keys(after.metrics).length)return null;
+ const delta={};
+ for(const key of CAUSAL_METRICS){
+  if(before.metrics[key]===undefined||after.metrics[key]===undefined)continue;
+  delta[key]=Number((after.metrics[key]-before.metrics[key]).toFixed(4));
+ }
+ const act=String(context.act||'');
+ return {
+  flow_id:context.flow_id,at,
+  phase:'completed',
+  decision:/^[a-z][a-z_]{0,54}$/.test(act)?act:'not-available',
+  semantic_support_required:context.semantic_support_required===true,
+  language_outcome:['response-produced','response-unavailable'].includes(context.language_outcome)
+   ?context.language_outcome:'not-verified',
+  action_executed:false,
+  before,after,delta,
+  evidence:'aura_cognitive_traces.brain-causal',
+ };
+}
 export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],organismRows=[]}={},nowMs=Date.now()){
+ const causalRows=traceRows.map(row=>validCausal(row,nowMs)).filter(Boolean);
+ const lastCausalByFlow=new Map();
+ for(const receipt of causalRows){
+  const older=lastCausalByFlow.get(receipt.flow_id);
+  if(!older||Date.parse(receipt.at)>Date.parse(older.at))
+   lastCausalByFlow.set(receipt.flow_id,receipt);
+ }
  const hops=traceRows.filter(row=>row?.kind==='brain-hop').map(row=>validHop(row,row.created_at,nowMs))
    .filter(Boolean).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).slice(-160);
  const flows=new Map();
@@ -111,7 +169,8 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
    state:steps.some(s=>s.status==='failed'||s.status==='unavailable')?'error':
       last.to==='output'?'completed':'observed-partial',
    // A partial observed route is not evidence of a still-running task.
-   running_verified:false};
+   running_verified:false,
+   causal:lastCausalByFlow.get(id)||null};
  }).sort((a,b)=>Date.parse(b.updated_at)-Date.parse(a.updated_at)).slice(0,12);
  const events=[];
  for(const row of traceRows){
@@ -227,6 +286,18 @@ export function toPublicBrainFlowGraph(graph){
    step_count:flow.step_count,
    state:flow.state,
    running_verified:false,
+   causal:flow.causal ? {
+      phase:'completed',
+      at:flow.causal.at,
+      decision:flow.causal.decision,
+      semantic_support_required:flow.causal.semantic_support_required,
+      language_outcome:flow.causal.language_outcome,
+      action_executed:false,
+      before:flow.causal.before,
+      after:flow.causal.after,
+      delta:flow.causal.delta,
+      evidence:'aura_cognitive_traces.brain-causal',
+   } : null,
    steps:(flow.steps||[]).map(step=>({
     from:step.from,to:step.to,at:step.at,status:step.status,
     provider:PUBLIC_PROVIDERS.has(step.provider)?step.provider:'',
