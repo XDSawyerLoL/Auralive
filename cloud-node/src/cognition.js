@@ -456,22 +456,29 @@ export class CognitionEngine {
       facts.push('L’utilisateur salue AURA, sans demander de compte rendu de son état.');
     } else if (asksWellbeing(raw) || (hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat']) || /comment\s+(?:ça|ca).*\btu\b/.test(q) || /comment\s+tu\s+(?:va|vas)\b/.test(q))) {
       act = 'report_internal_state';
-      goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
+      // Social conversation is not a request for an internal monitoring report.
+      // Keep all numerical state in plan.affect / organism telemetry but only
+      // expose measurements when the user explicitly requests diagnostics.
+      const detailedState = /\\b(?:pourcent|pourcentage|chiffre|statistique|indicateur|m[eé]trique|mesur|score|niveau|d[eé]tail|diagnostic|homeostasie|hom[eé]ostasie|tableau de bord)\\b/i.test(raw);
+      goal = detailedState
+        ? 'Expliquer brièvement les mesures réellement disponibles, leur caractère computationnel et ce qui a changé depuis la dernière interaction, sans prétendre à des sentiments humains.'
+        : 'Répondre comme dans une conversation familière, en une ou deux phrases : ton ajusté à l’humeur computationnelle et au contexte relationnel, sans pourcentage, jargon ni récitation de tableau de bord.';
       needsSemanticSupport = false;
-      facts.push(
-        `Humeur interne : ${mood}.`,
-        `Stabilité : ${Math.round(Number(organism.stabilite || 0)*100)} %.`,
-        `Clarté : ${Math.round(Number(organism.clarte || 0)*100)} %.`,
-        `Curiosité : ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
-        `Agency : ${Math.round(Number(organism.agency || 0)*100)} %.`,
-        `Engagement : ${Math.round(Number(organism.engagement || 0)*100)} %.`,
-        `Confiance : ${Math.round(Number(organism.confiance || 0)*100)} %.`,
-        `Satisfaction : ${Math.round(Number(organism.satisfaction || 0)*100)} %.`,
-        `Frustration : ${Math.round(Number(organism.frustration || 0)*100)} %.`,
-        `Besoin de silence : ${Math.round(Number(organism.besoin_de_silence || 0)*100)} %.`,
-        `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
-      );
-      if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
+      facts.push(`Humeur interne actuelle : ${mood}.`);
+      if (detailedState) {
+        for (const [key,label] of [
+          ['stabilite','Stabilité'],['clarte','Clarté'],['curiosite','Curiosité'],
+          ['engagement','Engagement'],['confiance','Confiance'],['satisfaction','Satisfaction'],
+          ['frustration','Frustration'],['pression_de_reve','Pression de rêve'],
+        ]) {
+          const value=Number(organism[key]);
+          if(Number.isFinite(value)&&value>=0&&value<=1)
+            facts.push(`${label} : ${Math.round(value*100)} %.`);
+        }
+        if (activeOrganicIntention) facts.push(`Intention actuelle : ${activeOrganicIntention.slice(0,160)}.`);
+      } else {
+        facts.push('Une question sociale simple ne demande ni pourcentages ni exposé du fonctionnement interne.');
+      }
     } else if (/\b(?:agency|agence|agentivite|agentivité)\b/.test(q) && /\b(?:niveau|quoi|signifie|veut dire|defin|défin|mesur|score|pourquoi|comment|100)\b/.test(q)) {
       act = 'explain_agency_metric';
       goal = 'Expliquer la métrique interne d’agency à partir de son état réel, sans la présenter comme une preuve de réussite ou de liberté d’action.';
