@@ -560,19 +560,25 @@ function renderLanguageEngine(state){
   const stage=String(install.stage||'not-started');
   const backend=String(state?.status||'');
   const fail=String(install.error_code||state?.failure_code||'');
-  const installed=stage==='installed-verified'&&!!state?.installed;
+  const filesPresent=Boolean(state?.binary_found&&state?.model_found);
+  const installed=Boolean(state?.installed);
+  const budget=state?.memory_preflight||{};
+  const memoryBlocked=budget.safe_to_start===false;
   const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at);
   const booting=backend==='starting'||backend==='verifying-inference';
-  const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
-  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
+  const blocked=memoryBlocked||stage==='blocked'||backend==='startup-failed'||!!fail;
+  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'loading';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('engineChip').textContent=healthy?'Réponse vérifiée'
+    :memoryBlocked?'Mémoire insuffisante'
+    :blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
   $('railLanguage').textContent=healthy?'Conversation disponible'
     :booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
     'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
     'embedded-sha256-mismatch':'Le modèle ou moteur téléchargé a échoué au contrôle d’intégrité',
     'embedded-insufficient-cgroup-memory':'Mémoire serveur insuffisante pour installer le modèle',
+    'embedded-insufficient-cgroup-headroom':'Pas assez de mémoire libre pour charger le modèle Q8',
     'embedded-cache-unavailable-or-noexec':'Cache inexécutable ou espace disque insuffisant',
     'embedded-download-http-403':'Téléchargement refusé à la source',
     'embedded-download-http-429':'Téléchargement temporairement limité',
@@ -595,9 +601,11 @@ function renderLanguageEngine(state){
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
   $('engineTitle').textContent=healthy?'Génération locale vérifiée'
+    :memoryBlocked?'Mémoire insuffisante pour charger Qwen3 Q8'
     :blocked?(titles[fail]||'Moteur français indisponible')
       :booting?'Chargement du moteur linguistique'
-        :'Fichiers installés · français non vérifié';
+        :filesPresent?'Fichiers détectés · inférence non vérifiée'
+          :'Fichiers du modèle à installer';
   const attempts=Array.isArray(state?.boot_attempts)?state.boot_attempts:[];
   const history=attempts.map(a=>a.profile+': '+a.outcome+
     (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:'')+
@@ -605,6 +613,8 @@ function renderLanguageEngine(state){
     .join(' · ');
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
+    :memoryBlocked
+      ?'Mémoire disponible estimée : '+String(budget.headroom_mb??'inconnue')+' Mo, minimum prudent : '+String(budget.minimum_headroom_mb||740)+' Mo. Le démarrage est interdit pour protéger le site. Il faut un modèle plus petit ou davantage de mémoire existante.'
     :booting
       ?backend==='verifying-inference'?'Le modèle a répondu au contrôle de santé. AURA vérifie maintenant la production réelle de tokens.'
          :'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée.'
@@ -626,17 +636,27 @@ function renderLanguageEngine(state){
     'installed-verified':'Fichiers GGUF et exécutable vérifiés',
     'blocked':'Installation bloquée'
   };
-  $('engineStage').textContent=stages[stage]||backend||'En attente';
+  $('engineStage').textContent=stage==='not-started'&&filesPresent
+    ?'Fichiers déjà présents · installateur non sollicité'
+    :stages[stage]||backend||'En attente';
   // This bar measures file installation only, never linguistic learning.
   const fileProgress={
     'not-started':0,'locating-existing-install':10,'downloading-cpu-runtime':25,
     'extracting-cpu-runtime':50,'downloading-open-model':70,
     'installed-verified':100,'blocked':0
   };
-  $('engineProgress').style.width=(fileProgress[stage]??0)+'%';
+  $('engineProgress').style.width=(filesPresent?100:(fileProgress[stage]??0))+'%';
+  const variant=install.engine_variant==='unselected'&&filesPresent
+    ?'fichiers détectés' :String(install.engine_variant||'variante inconnue');
   $('engineRevision').textContent='llama.cpp '+String(install.engine_revision||'local')+
-    ' · '+String(install.model||'GGUF')+
-    ' · '+String(install.engine_variant||'variante inconnue');
+    ' · '+String(install.model||'GGUF')+' · '+variant;
+  const startButton=$('engineStart');
+  if(startButton){
+    startButton.disabled=healthy||booting||!installed||memoryBlocked||state?.enabled===false;
+    startButton.title=memoryBlocked?'Mémoire insuffisante : démarrage désactivé pour protéger Hostinger.'
+      :!installed?'Modèle ou exécutable absent.'
+      :'Action privée. Démarrage local et test d’inférence; aucune API payante.';
+  }
 }
 async function refreshEnginePanel(){
   try{renderLanguageEngine(await api('/api/language/embedded/status'));}
@@ -1023,6 +1043,24 @@ document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=fun
 $('refreshMap').onclick=refresh;
 $('modeBtn').onclick=refresh;
 $('engineRefresh').onclick=refreshEnginePanel;
+$('engineStart').onclick=async function(){
+  const button=$('engineStart');
+  button.disabled=true;
+  $('engineDescription').textContent='Demande de démarrage local en cours. Cette action ne télécharge rien et ne contacte aucune API payante.';
+  try{
+    const response=await api('/api/language/embedded/start',{
+      method:'POST',body:JSON.stringify({}),
+    });
+    $('engineDescription').textContent=response.already_ready
+      ?'Modèle déjà vérifié.' : 'Démarrage demandé. AURA contrôle la génération réelle de texte.';
+  }catch(error){
+    $('engineDescription').textContent=error.status===401||error.status===403
+      ?'Se connecter en administrateur AURA pour démarrer le moteur. Le public ne peut pas lancer de processus.'
+      :String(error.message||'Échec du démarrage').slice(0,260);
+  }finally{
+    await refreshEnginePanel();
+  }
+};
 $('localVoiceBtn').onclick=function(){
   if(localVoiceOptIn){
     localVoiceOptIn=false;
