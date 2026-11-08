@@ -251,3 +251,13 @@ test('configured Groq-style federation answers when Hostinger native loader is b
   assert.equal(nativeCalls, 0);
   assert.equal(faculty.lastBackend, 'groq');
 });
+
+
+test('false presence text when model is unavailable is rejected rather than voiced', async () => {
+  const {cleanSpeechOutput}=await import('../src/french_language.js');
+  const hollow='Reçu, je vois votre « lu ». Je suis encore dans un état où ma faculté de langage naturel n’est pas activée, donc je ne peux pas vous répondre comme je le voudrais. Je reste attentive au signal que vous envoyez.';
+  assert.equal(cleanSpeechOutput(hollow),'');
+  assert.equal(cleanSpeechOutput('Ma faculté de français naturel est indisponible pour le moment.'),'');
+  assert.equal(cleanSpeechOutput('Je viens de vérifier que le serveur répond, mais le test de français reste à faire.'),
+    'Je viens de vérifier que le serveur répond, mais le test de français reste à faire.');
+});
