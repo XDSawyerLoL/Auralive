@@ -161,11 +161,13 @@ test('mobile dashboard keeps chat readable and primary', () => {
   assert.equal(DASHBOARD_HTML.includes('.map-wrap{height:165px}'), true);
 });
 
-test('mobile voice primes audio but never substitutes a device TTS for Mairaiy', () => {
+test('mobile keeps historical Aoede voice by default and labels user-enabled local voice separately', () => {
   assert.equal(DASHBOARD_SCRIPT.includes('primeVoice();'), true);
   assert.equal(DASHBOARD_SCRIPT.includes('speakBrowserFallback(text)'), false);
-  assert.equal(DASHBOARD_SCRIPT.includes('SpeechSynthesisUtterance'), false);
-  assert.equal(DASHBOARD_SCRIPT.includes('aucun autre timbre utilisé'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes("if(localVoiceOptIn){"), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('SpeechSynthesisUtterance'), true);
+  assert.equal(DASHBOARD_SCRIPT.includes('différente d’Aoede'), true);
+  assert.equal(DASHBOARD_HTML.includes('id="localVoiceBtn"'),true);
 });
 
 test('chat send path cannot be blocked by voice priming', () => {
