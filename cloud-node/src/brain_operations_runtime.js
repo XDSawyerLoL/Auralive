@@ -452,19 +452,89 @@ $('ownerSignIn').onclick=async()=>{
 const history=$('chatHistory');
 $('chatExpand').onclick=()=>{const open=!history.classList.contains('open');history.classList.toggle('open',open);$('chatExpand').setAttribute('aria-expanded',String(open));};
 function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;$('chatExpand').setAttribute('aria-expanded','true');}
+$('chatMode').addEventListener('change',()=>{
+ const mission=$('chatMode').value==='mission';
+ $('chatInput').placeholder=mission
+  ?'Décris une mission ; AURA affichera l’exécution réelle ou le plan seul…'
+  :'Interroge AURA puis suis les véritables modules traversés…';
+ $('chatSend').textContent=mission?'Lancer':'Envoyer';
+});
+
 $('chatSend').onclick=async()=>{
- const field=$('chatInput');const msg=field.value.trim();if(!msg||state.busy)return;state.busy=true;state.flow=null;state.replayStarted=0;$('chatSend').disabled=true;field.value='';state.lastPrompt=msg;setText('requestPreview',msg);chatLine('VOUS',msg,'user');renderRoute();setText('currentFlowSummary','Requête envoyée. En attente des traces réelles du noyau…');scheduleDraw();
- const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),60000);
+ const field=$('chatInput'),msg=field.value.trim();
+ if(!msg||state.busy)return;
+ const mission=$('chatMode').value==='mission';
+ if(mission&&!state.data?.authorized){
+   chatLine('ACCÈS PROPRIÉTAIRE','Connecte la session propriétaire pour déclencher une mission. Aucun outil n’a été appelé.');
+   $('ownerKey').focus();
+   return;
+ }
+ state.busy=true;
+ state.flow=null;state.replayStarted=0;
+ $('chatSend').disabled=true;field.value='';
+ state.lastPrompt=msg;setText('requestPreview',msg);
+ chatLine('VOUS · '+(mission?'MISSION':'DIALOGUE'),msg,'user');
+ renderRoute();
+ setText('currentFlowSummary',mission
+   ?'Mission explicitement demandée. Vérification des étapes d’exécution en cours…'
+   :'Message envoyé. Lecture des transitions réellement enregistrées…');
+ scheduleDraw();
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),65000);
  try{
    void poll();
-   const res=await fetch('/api/chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify({text:msg,author:'Utilisateur'}),signal:ctrl.signal});
-   const out=await res.json();const answer=String(out.answer||'').trim();
-   if(!res.ok||!out.ok||!answer){chatLine('SERVICE','Le moteur de langage n’a pas fourni de réponse vérifiable.');}
-   else{chatLine(out.nucleus_verbalization_validated?'AURA · NOYAU CONTRÔLÉ':'AURA · TEXTE NON ATTESTÉ',answer);}
+   const endpoint=mission?'/api/kernel/operator':'/api/chat';
+   const body=mission?{task:msg,allowed_risks:[]}:{text:msg,author:'Utilisateur'};
+   const res=await fetch(endpoint,{
+     method:'POST',credentials:'same-origin',
+     headers:{'Content-Type':'application/json',Accept:'application/json'},
+     body:JSON.stringify(body),signal:ctrl.signal,
+   });
+   let out;
+   try{out=await res.json();}catch{throw Error('Réponse serveur non lisible');}
+   if(!res.ok||out?.ok!==true){
+     const failure=typeof out?.error==='string'?out.error:'Le noyau n’a pas confirmé le traitement.';
+     chatLine('SERVICE · NON EXÉCUTÉ',failure.slice(0,750));
+   }else if(mission){
+     const executed=out.executed===true;
+     const details=typeof out.plan==='string'?out.plan
+       :typeof out.answer==='string'?out.answer
+       :out.result?.summary||out.result?.message||'Aucun compte rendu textuel détaillé disponible.';
+     chatLine(executed?'AURA · EXÉCUTION CONFIRMÉE':'AURA · PLAN SEUL, NON EXÉCUTÉ',
+       'Mode : '+String(out.execution_mode||'non précisé')+'\n'+
+       (executed?'Exécution attestée par le moteur.':'Aucune exécution attestée.')+
+       '\n'+String(details).slice(0,3200));
+   }else{
+     const answer=String(out?.answer||'').trim();
+     if(!answer||out.language_unavailable){
+       chatLine('MOTEUR INDISPONIBLE','Aucun texte vérifiable généré ; consulter le diagnostic.');
+     }else{
+       chatLine(out.nucleus_verbalization_validated
+         ?'AURA · FORMULATION CONTRÔLÉE':'AURA · TEXTE NON ATTESTÉ',answer);
+     }
+   }
    await poll();
-   if(out.brain_flow_id){const flow=state.data?.flows?.find(f=>f.id===out.brain_flow_id);if(flow)chooseFlow(flow.id);else setText('currentFlowSummary','Réponse reçue, mais aucun trajet corrélé n’est encore disponible en base.');} 
- }catch(_){chatLine('SERVICE','Connexion impossible. Aucun dialogue de remplacement n’a été généré.');}
- finally{clearTimeout(timer);state.busy=false;$('chatSend').disabled=false;field.focus();}
+   if(out?.brain_flow_id){
+     let flow=state.data?.flows?.find(f=>f.id===out.brain_flow_id);
+     if(!flow&&state.data?.authorized){
+       await new Promise(resolve=>setTimeout(resolve,400));
+       await poll();
+       flow=state.data?.flows?.find(f=>f.id===out.brain_flow_id);
+     }
+     if(flow)chooseFlow(flow.id);
+     else setText('currentFlowSummary',!state.data?.authorized
+       ?'Réponse reçue. Connecte la session propriétaire pour consulter le trajet.'
+       :state.data?.database_observations_available===false
+         ?'La base des événements est indisponible : trajet non attesté.'
+         :'Réponse reçue, mais aucun trajet corrélé n’est présent dans les traces consultées.');
+   }
+ }catch(error){
+   chatLine('SERVICE · ÉCHEC',
+     error?.name==='AbortError'?'Temps de réponse dépassé. Aucune réponse inventée.':
+     'Connexion impossible : '+String(error?.message||error).slice(0,220));
+ }finally{
+   clearTimeout(timer);state.busy=false;
+   $('chatSend').disabled=false;field.focus();
+ }
 };
 $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('chatSend').click();}});
 
