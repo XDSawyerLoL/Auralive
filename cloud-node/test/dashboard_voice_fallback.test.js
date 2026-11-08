@@ -66,5 +66,6 @@ test('long responses are split into short speech utterances',()=>{
 test('voice fallback requires no paid package or new dependencies',()=>{
   const pkg=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8'));
   assert.deepEqual(Object.keys(pkg.dependencies).sort(),['dotenv','fastify','mysql2']);
-  assert.doesNotMatch(DASHBOARD_SCRIPT,/elevenlabs\\.io|api\\.openai\\.com\\/v1\\/audio/i);
+  assert.equal(DASHBOARD_SCRIPT.includes('elevenlabs.io'),false);
+  assert.equal(DASHBOARD_SCRIPT.includes('api.openai.com/v1/audio'),false);
 });
