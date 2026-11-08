@@ -1,5 +1,6 @@
 import {BRAIN_OPERATIONS_CSS} from './brain_operations_style.js';
 import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
+import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
 import {BRAIN_OPERATIONS_SCRIPT} from './brain_operations_runtime.js';
 
 export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
@@ -11,6 +12,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <title>AURA — Interface neuronale réelle</title>
 <style>__OPS_CSS__</style>
 <style>__REFERENCE_CSS__</style>
+<style>__READABLE_CSS__</style>
 </head>
 <body>
 <div class="shell">
@@ -26,15 +28,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     </div>
   </header>
 
-  <nav class="scene-nav" aria-label="Navigation dans l’interface unique">
-    <button class="scene-active" data-focus="brain" type="button">◈ Cerveau</button>
-    <button data-focus="module-list" type="button">⠿ Modules</button>
-    <button data-focus="tool-panel" type="button">◇ Outils</button>
-    <button data-focus="memory-panel" type="button">▣ Mémoire</button>
-    <button data-focus="flow-panel" type="button">⇢ Flux</button>
-    <button data-focus="homeostasis-panel" type="button">♡ Homéostasie</button>
-    <button data-focus="journal-panel" type="button">≡ Journal</button>
-    <button data-focus="chatInput" type="button">✦ Requête AURA</button>
+  <nav class="scene-nav" aria-label="Accès aux espaces d’AURA">
+    <button class="scene-active" data-focus="conversation-panel" type="button">Dialogue</button>
+    <button data-focus="brain" type="button">Réseau</button>
+    <button data-focus="homeostasis-panel" type="button">État interne</button>
+    <button data-focus="diagnostics-details" type="button">Historique et outils</button>
   </nav>
   <section id="runtimeIncident" class="runtime-incident" aria-live="polite" aria-label="Diagnostic du noyau" hidden>
     <div class="incident-icon" aria-hidden="true">!</div>
@@ -49,10 +47,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <button type="button" id="runtimeRetry" hidden>Relancer (administrateur)</button>
     </div>
   </section>
+  <details class="intro-details" id="context-details"><summary>Comprendre les mesures et les preuves de fonctionnement</summary>
   <section class="hero">
     <div class="hero-card">
       <h1>Cartographie cognitive d’AURA</h1>
-      <p>Une seule interface pour interroger AURA et inspecter la circulation réelle entre ses modules, les outils sollicités et les événements persistés.</p>
+      <p>Interface unique pour dialoguer avec AURA et vérifier les modules utilisés, les décisions et les événements enregistrés.</p>
       <div class="hero-note">
         <span class="pill">Gris = Connexions déclarées</span>
         <span class="pill">Cyan = Transition enregistrée récemment</span>
@@ -75,6 +74,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       </div>
     </div>
   </section>
+  </details>
 
   <section class="kpis" aria-label="Mesures provenant exclusivement du serveur">
     <div class="kpi"><label>Modules présents dans le code</label><strong id="kModules">—</strong></div>
@@ -86,7 +86,25 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   </section>
 
   <section class="workspace">
-    <aside class="rail">
+    <aside class="rail dialogue-rail">
+      <section class="panel conversation-workspace" id="conversation-panel" aria-label="Dialogue avec AURA">
+        <div class="panel-header"><h2>Dialogue avec AURA</h2><small>Conversation de cette session</small></div>
+        <div id="chatHistory" role="log" aria-live="polite" aria-label="Échanges de la session"></div>
+  <div id="chatDock" class="chat" aria-label="Console de requête AURA">
+    <div class="chat-main">
+      <strong>✦ AURA</strong>
+      <select id="chatMode" aria-label="Type de requête" title="Dialogue ou mission réelle via opérateur">
+        <option value="chat">Dialogue</option>
+        <option value="mission">Mission / outils</option>
+      </select>
+      <input id="chatInput" placeholder="Pose une requête à AURA et observe en direct les modules traversés…" aria-label="Message à AURA">
+      <button type="button" id="chatSend">Envoyer</button>
+      <button id="chatExpand" type="button" class="secondary" aria-controls="conversation-panel">Voir dialogue</button>
+    </div>
+  </div>
+      </section>
+      <details class="module-drawer" id="module-drawer">
+        <summary>Explorer les modules <span>Architecture · 42 modules</span></summary>
       <section class="panel modules-panel" id="module-list">
         <div class="panel-header"><h2>Modules réels</h2><small id="moduleCount">—</small></div>
         <div class="panel-body module-toolbar">
@@ -96,6 +114,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
         </div>
         <div id="moduleList" class="modules-list" aria-label="Modules disponibles et états observés"><p class="empty">Chargement de la cartographie…</p></div>
       </section>
+      </details>
     </aside>
 
     <section class="panel graph-panel" id="brain" aria-label="Réseau neuronal opérationnel d’AURA">
@@ -149,10 +168,6 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 
     <aside class="rail inspector">
       <div class="inspector-scroll">
-        <section class="detail-card live-conversation" id="conversation-panel" aria-label="Conversation avec AURA">
-          <div class="inline-head"><h3>Dialogue avec AURA</h3><span class="truth-chip">Cette session</span></div>
-          <div id="chatHistory" role="log" aria-live="polite" aria-label="Échanges de la session"></div>
-        </section>
         <section class="detail-card causal-card" id="causal-panel">
           <div class="inline-head"><h3>Signal → décision → état</h3><span id="causalStatus" class="truth-chip">Non observé</span></div>
           <p id="causalEvidence" class="causal-evidence">Envoie une requête pour relier son trajet à un bilan homéostatique enregistré par le noyau.</p>
@@ -164,6 +179,23 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <div class="causal-values" id="causalValues"></div>
           <p class="causal-footnote" id="causalProvenance">Les états sont des indices calculés ; la charge est mesurée uniquement dans le processus Node.</p>
         </section>
+    <div class="panel" id="homeostasis-panel">
+      <div class="panel-header"><h2>Homéostasie</h2><small>Indices internes, calculés par AuraOrganism</small></div>
+      <div class="affect-status"><span>Humeur du noyau</span><strong id="organismMood">—</strong></div>
+      <div class="somatic-sensors">
+        <div class="inline-head"><h3>Capteurs du processus</h3><span id="somaticFreshness" class="truth-chip">Non mesuré</span></div>
+        <div><span>CPU Node</span><strong id="somaticCpu">—</strong></div>
+        <div><span>Mémoire heap</span><strong id="somaticHeap">—</strong></div>
+        <div><span>Pression calculée</span><strong id="somaticPressure">—</strong></div>
+        <small id="somaticScope">Processus Node uniquement, pas l’ensemble de la machine.</small>
+      </div>
+      <div id="metricList" class="metric-list"></div>
+      <p class="affect-bridge" id="affectBridge">Transmission homéostasie → langage : aucune observation chargée.</p>
+      <p class="small-text" id="metricTime">Aucune mesure actuellement reçue.</p>
+    </div>
+
+        <details class="side-details" id="module-proof-details">
+          <summary>Module inspecté, trajet et outils</summary>
         <section class="owner" aria-label="Accès aux observations">
           <label>OBSERVATIONS PUBLIQUES · LECTURE SEULE</label>
           <p>Trajets, outils et journal consultables sans connexion. Seules les métadonnées d’exécution sont affichées ; aucun texte de conversation ni secret n’est publié.</p>
@@ -188,10 +220,13 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <div class="field-label">Outils réellement observés (24 h)</div>
           <div id="toolList" class="tool-list"><p class="empty">En attente de preuves d’appel.</p></div>
         </section>
+        </details>
       </div>
     </aside>
   </section>
 
+  <details class="diagnostics-details" id="diagnostics-details">
+    <summary>Historique complet · flux, outils, mémoire et journal</summary>
   <section class="lower">
     <div class="panel" id="tool-panel">
       <div class="panel-header"><h2>Outils mobilisés</h2><small>Observations réelles, jamais « actifs » par défaut</small></div>
@@ -205,20 +240,6 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <div class="panel-header"><h2>Journal d’événements</h2><small>CommandCenter · Noyau · Organisme</small></div>
       <div id="eventList" class="scroll-list"><p class="empty">Aucun événement chargé.</p></div>
     </div>
-    <div class="panel" id="homeostasis-panel">
-      <div class="panel-header"><h2>Homéostasie</h2><small>Indices internes, calculés par AuraOrganism</small></div>
-      <div class="affect-status"><span>Humeur du noyau</span><strong id="organismMood">—</strong></div>
-      <div class="somatic-sensors">
-        <div class="inline-head"><h3>Capteurs du processus</h3><span id="somaticFreshness" class="truth-chip">Non mesuré</span></div>
-        <div><span>CPU Node</span><strong id="somaticCpu">—</strong></div>
-        <div><span>Mémoire heap</span><strong id="somaticHeap">—</strong></div>
-        <div><span>Pression calculée</span><strong id="somaticPressure">—</strong></div>
-        <small id="somaticScope">Processus Node uniquement, pas l’ensemble de la machine.</small>
-      </div>
-      <div id="metricList" class="metric-list"></div>
-      <p class="affect-bridge" id="affectBridge">Transmission homéostasie → langage : aucune observation chargée.</p>
-      <p class="small-text" id="metricTime">Aucune mesure actuellement reçue.</p>
-    </div>
     <div class="panel" id="memory-panel">
       <div class="panel-header"><h2>Mémoire du noyau</h2><small>Compteurs issus du serveur</small></div>
       <div id="memoryStats" class="memory-stats"><p class="empty">Aucun compteur transmis.</p></div>
@@ -228,23 +249,14 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <div id="activityStats" class="scroll-list"><p class="empty">Aucune activité attestée.</p></div>
     </div>
   </section>
+  </details>
 
-  <div id="chatDock" class="chat" aria-label="Console de requête AURA">
-    <div class="chat-main">
-      <strong>✦ AURA</strong>
-      <select id="chatMode" aria-label="Type de requête" title="Dialogue ou mission réelle via opérateur">
-        <option value="chat">Dialogue</option>
-        <option value="mission">Mission / outils</option>
-      </select>
-      <input id="chatInput" placeholder="Pose une requête à AURA et observe en direct les modules traversés…" aria-label="Message à AURA">
-      <button type="button" id="chatSend">Envoyer</button>
-      <button id="chatExpand" type="button" class="secondary" aria-controls="conversation-panel">Voir dialogue</button>
-    </div>
-  </div>
+
 </div>
 <script>__OPS_SCRIPT__</script>
 </body>
 </html>`
 .replace('__OPS_CSS__', BRAIN_OPERATIONS_CSS)
 .replace('__REFERENCE_CSS__', BRAIN_REFERENCE_THEME)
+.replace('__READABLE_CSS__', BRAIN_READABLE_CSS)
 .replace('__OPS_SCRIPT__', BRAIN_OPERATIONS_SCRIPT);

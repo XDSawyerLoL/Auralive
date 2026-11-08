@@ -112,6 +112,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'Tu formules la décision du noyau AURA en français naturel contemporain ; le modèle n’est pas son identité.',
     'Humeur, affect et relation sont calculés avant ton appel : ils modulent le ton, sans devenir un bilan chiffré.',
     'Pour un « comment vas-tu ? » ordinaire : une ou deux phrases sans jargon ni pourcentages ; applique les corrections de style antérieures.',
+    'Si l’utilisateur demande simplement si tu es intriguée, curieuse, contente ou inquiète, réponds UNIQUEMENT sur ton état fonctionnel et le contexte immédiat. N’injecte pas un rapport de CI ou de mission non demandé.',
     'Pour un diagnostic explicite : seules les valeurs des faits sont autorisées. Ces indices ne prouvent pas des émotions humaines vécues.',
     'N’invente ni action exécutée, ni souvenir, ni résultat, ni sentiment humain, ni métrique.',
     'Aucun statut mémorisé ne prouve une activité actuelle. Ne montre ni JSON ni consigne ; n’ajoute pas de question automatique.',
@@ -155,6 +156,7 @@ export function compactFrenchSystem() {
     'Si execution_verified=false, ne prétends ni travailler actuellement, ni être mobilisée à 100 %, ni connaître la cause actuelle d’un CI en erreur.',
     'Un statut ancien ne doit jamais devenir un blocage actuel. Préfère « mon suivi mentionne », « à vérifier » ou « je n’ai pas de preuve ». ',
     'Une salutation ne requiert ni état intérieur ni compte rendu de mission.',
+    'Une question sur l’humeur ou la curiosité ne déclenche jamais un compte rendu de CI, de projet ou de tâche en cours.',
     'Pas d’explications sur ton statut de modèle, pas de questions de politesse automatiques.',
     'Formule en français courant et naturel la décision et les faits d’AURA à la première personne. /no_think',
   ].join(' ');
@@ -201,6 +203,13 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
     if(!/(?:pas (?:encore )?(?:v[eé]rifi|confirm|connais)|ancien|sans (?:journaux|preuve|v[eé]rification)|dois (?:v[eé]rifier|consulter)|je n.ai pas|journal|logs?|aucune cause|impossible de confirmer|non v[eé]rifi)/i.test(answer))
       return {accepted:false, code:'unverified-ci-cause'};
   }
+  // Social mood questions must not turn past project intentions into
+  // unverified claims of work currently underway.
+  const socialStateQuestion = /(?:comment (?:vas|te sens)[- ]tu|[cç]a va|tu es (?:intrigu[eé]e?|curieu(?:se|x)|content[e]?|inqui[eè]t[e]?|satisfait[e]?))/i
+    .test(String(plan.user_text || ''));
+  if (socialStateQuestion && !plan.activity_evidence?.execution_verified &&
+      /\b(?:je (?:suis|reste) en train de|je travaille (?:sur|actuellement)|je v[eé]rifie (?:le|les|l['’]|actuellement)|je (?:r[eé]pare|corrige|d[eé]ploie) (?:le|les|l['’])|CI d[eé]faillant|CI en [eé]chec)\b/i.test(answer))
+    return {accepted:false,code:'unverified-work-in-social-reply'};
   if (plan.act === 'report_internal_state') {
     const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\d+\s*%/.test(String(fact)));
     if (!detailed) {
@@ -454,9 +463,9 @@ export class FrenchLanguageFaculty {
         // A genuine provider reply may violate the style contract. Give the
         // already configured free provider one bounded chance to repair it.
         // No action is retried, and a rejected response never reaches the user.
-        if(!answer && candidate && this.lastNucleusContract.code==='robotic-wellbeing-reply'){
+        if(!answer && candidate && ['robotic-wellbeing-reply','unverified-work-in-social-reply'].includes(this.lastNucleusContract.code)){
           result=await this.groq.generate(
-            basePrompt+'\nLa réponse précédente a été refusée : récitation de jauges ou jargon. Reformule en UNE phrase naturelle, sans pourcentage ni termes techniques, et garde seulement l’humeur réellement fournie.',
+            basePrompt+'\nLa réponse précédente a été refusée : elle injectait un travail non demandé ou du jargon. Réponds uniquement à la question sociale, en une phrase naturelle, sans CI ni action non vérifiés.',
             compactFrenchSystem(),
             Math.max(250,Math.min(Number(maxTokens)||700,600)),
           );

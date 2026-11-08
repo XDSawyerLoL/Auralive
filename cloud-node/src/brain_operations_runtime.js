@@ -16,7 +16,7 @@ const POS={
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
 const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
-const ANCHORS=new Set(['input','kernel','homeostasis','memory','cognition','language','coherence','output','web','groq','command','fabric','dag','agent','knowledge','inference','toolbox','journal']);
+const ANCHORS=new Set(['kernel','homeostasis','memory','cognition','language','output','web','command']);
 const LENSES=Object.entries(GROUPS);
 for(const [group,label] of LENSES){
  for(const id of ['moduleGroup','graphLens']){
@@ -367,7 +367,11 @@ function renderKPIs(){
 }
 
 function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
-function selectNode(id){state.selected=id;renderModules();renderInspect();scheduleDraw();}
+function selectNode(id){
+ state.selected=id;
+ const detail=$('module-proof-details');if(detail)detail.open=true;
+ renderModules();renderInspect();scheduleDraw();
+}
 
 let canvasW=1000,canvasH=700,scale=1;
 function sizeCanvas(){
@@ -521,8 +525,8 @@ function draw(){
    const {node,p,r,selected,active}=item;
    if(!inLens(node.id)&&!selected)continue;
    const label=node.label.length>24?node.label.slice(0,23)+'…':node.label;
-   const font=11;ctx.font='600 '+font+'px system-ui';
-   const tagW=ctx.measureText(label).width+18,tagH=21;
+   const font=13;ctx.font='650 '+font+'px system-ui';
+   const tagW=ctx.measureText(label).width+20,tagH=26;
    const offsets=[[r+8,-tagH/2],[-r-8-tagW,-tagH/2],[r+8,15],[-r-8-tagW,-tagH-12]];
    let rect=null;
    for(const [dx,dy] of offsets){
@@ -538,7 +542,7 @@ function draw(){
    ctx.lineWidth=selected?1.4:.8;
    roundedLabel(rect.x,rect.y,rect.w,rect.h,7);ctx.fill();ctx.stroke();
    ctx.fillStyle=selected?'#ffdfbd':active?'#bdfdf2':'#cfdeeb';
-   ctx.fillText(label,rect.x+9,rect.y+14.5);
+   ctx.fillText(label,rect.x+10,rect.y+18);
  }
  ctx.restore();
  if((d.edges||[]).some(e=>e.signal_recent&&Date.now()-Date.parse(e.last_observed_at||'')<1800)||replaying)scheduleDraw();
@@ -576,6 +580,9 @@ document.querySelectorAll('[data-focus]').forEach(button=>{
    const target=button.getAttribute('data-focus');
    const node=$(target);
    if(!node)return;
+   if(node.tagName==='DETAILS')node.open=true;
+   const parent=node.closest('details');
+   if(parent)parent.open=true;
    if(target==='chatInput')node.focus();
    else node.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
    document.querySelectorAll('[data-focus]').forEach(x=>
@@ -600,7 +607,17 @@ async function poll(){
    if(!res.ok)throw new Error('HTTP '+res.status);
    const data=await res.json();
    if(data.version!=='brain-flow-v1'||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Schéma réseau invalide');
-   state.data=data;if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;if(!findNode(state.selected))state.selected='kernel';state.lastError='';renderAll();
+   state.data=data;
+   if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
+   // Select once the latest persisted route, but do NOT replay it and never
+   // present a historical route as an event happening right now.
+   if(!state.initialRouteSelected&&!state.busy){
+     state.initialRouteSelected=true;
+     state.flow=data.flows.find(f=>f.causal?.phase==='completed')||data.flows[0]||null;
+     state.replayStarted=0;
+   }
+   if(!findNode(state.selected))state.selected='kernel';
+   state.lastError='';renderAll();
  }catch(err){
    state.lastError=String(err&&err.message||err).slice(0,120);
    $('onlineState').dataset.state='error';
