@@ -51,3 +51,13 @@ test('atlas degrades accessibly on mobile and never loses the conversation', () 
   assert.match(DASHBOARD_HTML, /id="send"/);
   assert.match(COGNITIVE_ATLAS_HTML, /aria-label="Inspection détaillée/);
 });
+
+test('measured context micro-processes are visible and inspectable', () => {
+  for(const stage of ['context_intentions','context_lessons','context_reflections',
+    'context_work','context_agenda','context_continuity','context_messages']) {
+    assert.ok(COGNITIVE_ATLAS_SCRIPT.includes("id:'"+stage+"'"),stage);
+    assert.ok(COGNITIVE_ATLAS_SCRIPT.includes("['context','"+stage+"']"),stage);
+  }
+  assert.match(COGNITIVE_ATLAS_SCRIPT,/stage\.micro\?24:48/);
+  assert.match(COGNITIVE_ATLAS_CSS,/\.cog-node\.micro/);
+});
