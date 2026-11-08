@@ -35,7 +35,8 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     measured:false, // deterministic software-state index, not a biological reading
   }));
   const counts=publicState.kernel_status?.counts||{};
-  const number=(v)=>Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
+  const number=(v)=>v===null||v===undefined||v===''?null:
+    Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
   const memory=[
     {label:'Réflexions',value:live?number(counts.reflections):null},
     {label:'Intentions',value:live?number(counts.intentions):null},
