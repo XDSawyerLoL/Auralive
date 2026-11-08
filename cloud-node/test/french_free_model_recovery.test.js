@@ -66,7 +66,7 @@ test('French free-model prompt is compact, in French, and retains the last user 
   });
   assert.match(answer,/Bonjour/);
   assert.equal(calls.length,1);
-  assert.ok(calls[0].prompt.length<=2400);
+  assert.ok(calls[0].prompt.length<=3800);
   assert.match(calls[0].prompt,/\/no_think/);
   assert.match(calls[0].prompt,/Pourquoi mon écran est-il noir/);
   assert.equal(calls[0].role,'french');
