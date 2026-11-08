@@ -123,7 +123,8 @@ function parseChatSession(value) {
 }
 
 function ensureChatSession(request, reply) {
-  if (isPrivate(request)) return 'private-founder';
+  // The founder still has the shared *conversation* context in CognitiveKernel,
+  // but cognitive traces must be isolated per browser, including private sessions.
   const existing = parseChatSession(cookies(request).aura_chat_session);
   if (existing) return existing;
   const created = createChatSession();
