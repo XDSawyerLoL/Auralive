@@ -24,6 +24,14 @@ Hypothèses de simulation : 0,4 % de frais par opération, 0,1 % de glissement p
 
 La simulation affiche : capital final virtuel, P&L fictif, drawdown calculé, nombre de ventes clôturées, pourcentage de transactions gagnantes et opérations fictives. Le tableau de bord n'affiche jamais un bénéfice encaissé sans preuve financière indépendante.
 
+### Surveillance automatique sans intervention
+
+Au démarrage du processus Node.js, sous réserve que le mode test/CI ne soit pas actif, AURA programme une simulation du BTC/EUR environ 20 secondes plus tard, puis toutes les **six heures**. Elle réutilise l'API publique Kraken. Aucun compte de trading n'est connecté, aucune stratégie n'envoie d'ordre et aucun montant réel n'est exposé.
+
+La dernière simulation reste en **mémoire du processus** ; elle est consultable par l'administrateur via `GET /api/trading/paper/status`. Une interruption/redémarrage du serveur efface ce cache ; les résultats ne forment pas encore un journal d'opérations forward fiable. La fréquence peut être désactivée avec `AURA_PAPER_MONITOR_ENABLED=false`.
+
+Il s'agit d'une **réanalyse historique automatique**, et non d'un robot autonome en conditions de marché réel. Un suivi de positions fictives persistant avec historique horodaté reste une étape distincte avant toute évaluation de rentabilité.
+
 ### APIs privées
 
 ```http
