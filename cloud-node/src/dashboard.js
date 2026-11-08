@@ -141,7 +141,8 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .cog-heading h2{font-size:17px;line-height:1.3;letter-spacing:.015em;margin:0;color:#f2f8ff}
 .cog-kicker{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#78bed1;margin-bottom:3px}
 .cog-state{font-size:12px;color:#a3beca;text-align:right;max-width:40%}
-.cog-svg{width:100%;height:auto;max-height:345px;display:block;background-image:radial-gradient(rgba(122,192,220,.13) 1px,transparent 1px);background-size:24px 24px}
+.cog-viewport{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:rgba(130,204,219,.5) transparent}
+.cog-svg{min-width:810px;width:100%;height:auto;max-height:405px;display:block;background-image:radial-gradient(rgba(122,192,220,.13) 1px,transparent 1px);background-size:24px 24px}
 .cog-edge{fill:none;stroke:rgba(103,155,183,.27);stroke-width:1.5;transition:stroke .25s}
 .cog-edge.active{stroke:#71d8e9;stroke-width:2.3;stroke-dasharray:6 8;animation:cog-flow 1.2s linear infinite}
 .cog-edge.error{stroke:#fd748f}
@@ -152,7 +153,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .cog-node[data-state="error"] circle{fill:#421b32;stroke:#fc7696}
 .cog-node[data-state="skipped"] circle{fill:#1b2532;stroke:#526575;stroke-dasharray:3 4}
 .cog-node:focus circle,.cog-node:hover circle,.cog-node.selected circle{stroke-width:3.2}
-.cog-node text{fill:#eaf3f9;font-size:14px;font-family:inherit;font-weight:600;pointer-events:none}
+.cog-node text{fill:#eaf3f9;font-size:16px;font-family:inherit;font-weight:600;pointer-events:none}
 .cog-node .cog-sub{fill:#9eb9c8;font-size:11px;font-weight:400}
 .cog-node[data-state="running"] circle{animation:cog-node-pulse 1.25s ease-in-out infinite}
 .cog-lower{padding:2px 20px 16px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}
@@ -165,7 +166,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .cog-foot{padding:0 20px 15px;font-size:11px;color:#849ba9}
 @keyframes cog-flow{to{stroke-dashoffset:-28}}
 @keyframes cog-node-pulse{50%{filter:drop-shadow(0 0 8px #ffbd69)}}
-@media(max-width:640px){.cog-heading{padding:12px 12px 0}.cog-heading h2{font-size:15px}.cog-kicker{font-size:9px}.cog-state{font-size:10px}.cog-svg{min-height:210px}.cog-node text{font-size:13px}.cog-lower{padding:3px 12px 13px}.cog-events{padding:0 12px 12px}.cog-foot{padding:0 12px 12px}}
+@media(max-width:640px){.cog-svg{min-width:1020px}.cog-heading{padding:12px 12px 0}.cog-heading h2{font-size:15px}.cog-kicker{font-size:9px}.cog-state{font-size:10px}.cog-svg{min-height:210px}.cog-node text{font-size:16px}.cog-lower{padding:3px 12px 13px}.cog-events{padding:0 12px 12px}.cog-foot{padding:0 12px 12px}}
 @media(prefers-reduced-motion:reduce){.cog-edge.active,.cog-node[data-state="running"] circle{animation:none}}
 
 </style>
@@ -209,7 +210,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
           <div><div class="cog-kicker">OBSERVABILITÉ COGNITIVE · DONNÉES RÉELLES</div><h2>Le chemin d'une décision</h2></div>
           <div id="cogState" class="cog-state" aria-live="polite">Aucune requête instrumentée</div>
         </div>
-        <svg id="cogGraph" class="cog-svg" viewBox="0 0 1050 405" role="group" aria-label="Étapes mesurées du traitement; sélectionner un nœud pour les détails"></svg>
+        <div class="cog-viewport" tabindex="0" aria-label="Carte cognitive, faire défiler horizontalement sur les petits écrans"><svg id="cogGraph" class="cog-svg" viewBox="0 0 1050 405" role="group" aria-label="Étapes mesurées du traitement; sélectionner un nœud pour les détails"></svg></div>
         <div class="cog-lower"><div id="cogDetail" class="cog-description" aria-live="polite">En attente d'une requête. Aucun événement simulé.</div><div id="cogDuration" class="cog-duration">—</div></div>
         <div id="cogEvents" class="cog-events" aria-label="Historique de la requête"></div>
         <div class="cog-foot">Étapes réellement exécutées, avec preuves horodatées. Ce graphe ne représente pas les activations internes d'un LLM.</div>
