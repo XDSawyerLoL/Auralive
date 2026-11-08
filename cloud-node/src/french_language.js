@@ -239,7 +239,8 @@ export class FrenchLanguageFaculty {
     // A broken optional native runtime must never block a configured cloud speech provider.
     // Run local inference only when health and inference have already been verified.
     const tryEmbedded = async () => {
-      if (!this.embedded.status?.().ready) return '';
+      const localStatus = this.embedded.status?.() || {};
+      if (!localStatus.ready || localStatus.probe_verified === false) return '';
       try {
         const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
         if (answer) {
@@ -255,11 +256,10 @@ export class FrenchLanguageFaculty {
         return '';
       }
     };
-    // Without federation, use the local runtime if it is healthy.
-    if (!this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
-    }
+    // Prefer verified self-hosted inference; fall back to explicitly free federation
+    // on failure. Never block on a model that is merely installed or booting.
+    const localAnswer = await tryEmbedded();
+    if (localAnswer) return localAnswer;
 
     if (this.federation?.enabled) {
       try {
@@ -290,12 +290,6 @@ export class FrenchLanguageFaculty {
       } catch (error) {
         this.lastError = safeError(error);
       }
-    }
-
-    // Federation was preferred; if unavailable, a healthy local engine can still answer.
-    if (this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
     }
 
     if (await this.localAvailable()) {
