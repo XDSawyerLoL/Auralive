@@ -166,9 +166,9 @@ function renderSourceCallouts(){
  const d=state.data;
  if(!d)return;
  const memory=d.telemetry?.memory||[];
- const memValue=memory.reduce((sum,m)=>Number.isFinite(m.value)?sum+m.value:sum,0);
- const any=memory.some(m=>Number.isFinite(m.value));
- setText('niMemoryCount',any?memValue.toLocaleString('fr-FR'):'—');
+ const reflections=memory.find(m=>m.label==='Réflexions');
+ setText('niMemoryCount',Number.isFinite(reflections?.value)?
+  reflections.value.toLocaleString('fr-FR'):'—');
  const setNode=(id,timeId,stateId,detailId)=>{
    const n=findNode(id);
    const last=n?.last_observed_at;
