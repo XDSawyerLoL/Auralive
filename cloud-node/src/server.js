@@ -28,6 +28,7 @@ import { BRAIN_HTML } from './brain_console.js';
 import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
+import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
 import { query as readBrainTraceRows } from './db.js';
 import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
@@ -382,6 +383,8 @@ const bootstrap = {
   issues: productionConfigIssues(),
   lastAttemptAt: '',
   lastReadyAt: '',
+  phase: 'not-started',
+  failureCode: '',
 };
 
 function safeError(error) {
@@ -393,6 +396,8 @@ async function startRuntime() {
   if (bootstrap.starting || bootstrap.runtimeReady) return;
   bootstrap.starting = true;
   bootstrap.lastAttemptAt = new Date().toISOString();
+  bootstrap.phase = 'configuration';
+  bootstrap.failureCode = '';
   bootstrap.dbConfigured = databaseConfigured();
   bootstrap.issues = productionConfigIssues();
   bootstrap.startupError = '';
@@ -400,20 +405,34 @@ async function startRuntime() {
   if (!bootstrap.dbConfigured) {
     bootstrap.dbReady = false;
     bootstrap.runtimeReady = false;
+    bootstrap.phase = 'configuration';
+    bootstrap.failureCode = 'database-unconfigured';
     bootstrap.starting = false;
     app.log.warn('AURA Cloud démarre en mode diagnostic: MySQL non configuré.');
     return;
   }
 
   try {
+    bootstrap.phase = 'database';
     await initSchema();
     bootstrap.dbReady = true;
-    await fabric.start();
+    // The fabric is an optional capability service. A failure here must not
+    // leave the memory-backed organism, chat and core offline.
+    bootstrap.phase = 'fabric';
+    try {
+      await fabric.start();
+    } catch (error) {
+      app.log.warn({ code: String(error?.code || 'fabric-start-failed') },
+        'AURA: CapabilityFabric indisponible ; noyau persistant non bloqué.');
+    }
+    bootstrap.phase = 'kernel';
 
     // Le noyau AURA est le cœur critique. Les services optionnels ne doivent
     // jamais empêcher l'organisme, la mémoire et le chat de démarrer.
     await kernel.start();
     bootstrap.runtimeReady = true;
+    bootstrap.phase = 'ready';
+    bootstrap.failureCode = '';
     bootstrap.lastReadyAt = new Date().toISOString();
     // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
     // The founder can explicitly invoke the authenticated evaluation endpoint.
@@ -465,7 +484,12 @@ async function startRuntime() {
   } catch (error) {
     bootstrap.runtimeReady = false;
     bootstrap.dbReady = false;
+    bootstrap.failureCode = bootstrap.phase === 'database'
+      ? classifyRuntimeFailure(error) : classifyRuntimeFailure(error) === 'memory-exhausted'
+        ? 'memory-exhausted' : 'kernel-failed';
+    bootstrap.phase = bootstrap.phase === 'database' ? 'database-failed' : 'kernel-failed';
     bootstrap.startupError = safeError(error);
+    kernel.stop(); // prevent duplicate timers when the 15-second retry succeeds
     try {
       await closeDb();
     } catch {}
@@ -661,7 +685,7 @@ app.get('/api/bootstrap/status', async () => ({
 
 app.get('/api/build', async () => ({
   ...buildInfo(),
-  homeostasis: 'homeostasie_v9_unified',
+  homeostasis: 'homeostasie_v10_somatic_feedback',
   cognition: CognitionEngine.VERSION,
   kernel: CognitiveKernel.VERSION,
   production_truth: true,
@@ -1018,7 +1042,7 @@ app.post('/api/skills/plan', async (request, reply) => {
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
-  organism: 'homeostasie_v9_unified',
+  organism: 'homeostasie_v10_somatic_feedback',
   cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
   dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
   skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
@@ -1048,6 +1072,8 @@ app.get('/healthz', async () => {
       bootstrap.dbReady = false;
       bootstrap.runtimeReady = false;
       bootstrap.startupError = safeError(error);
+      bootstrap.failureCode = classifyRuntimeFailure(error);
+      bootstrap.phase = 'database-failed';
     }
   }
   return {
@@ -1074,7 +1100,8 @@ app.get('/healthz', async () => {
 });
 
 app.post('/api/bootstrap/retry', async (request, reply) => {
-  if (config.cloudToken && !requirePrivate(request, reply)) return;
+  // Never allow unauthenticated restart even if the owner token is absent.
+  if (!requirePrivate(request, reply)) return;
   await startRuntime();
   return {
     ok: true,
@@ -1341,7 +1368,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   if(bootstrap.dbReady){
     const results=await Promise.allSettled([
       readBrainTraceRows(
-        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
       readBrainTraceRows(
         'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
       readBrainTraceRows(
@@ -1354,6 +1381,9 @@ app.get('/api/brain/graph', async (request, reply) => {
   }
   return {
     ...toPublicBrainFlowGraph(buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows})),
+    runtime_diagnostic: publicRuntimeDiagnostic(bootstrap, {
+      gatewayOnly: process.env.AURA_GATEWAY_ONLY === 'true',
+    }),
     telemetry,
     authorized:true, // Public observation access, NOT privileged operator authorization.
     observations_public:true,

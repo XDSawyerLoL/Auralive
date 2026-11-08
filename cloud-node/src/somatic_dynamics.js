@@ -109,6 +109,15 @@ export function evolveHomeostasis(input, {
     besoin_de_silence: 0.20 + 0.23 * resourcePressure + 0.16 * failure,
   };
 
+  // A relevant user intention temporarily shifts operational setpoints.
+  // This is not a reward for merely being addressed: the event must have
+  // been classified by the nucleus as a project/direction interaction.
+  if (signal === 'interaction_direction') {
+    target.agency += 0.16;
+    target.engagement += 0.13;
+    target.confiance += 0.03;
+  }
+
   // Homeostasis is continuous (elapsed time) and also responds to situations.
   // A 60-second equivalent is used for discrete events, never on mere reads.
   const event = signal !== 'ambient';

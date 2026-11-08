@@ -175,12 +175,77 @@ function renderMetrics(){
  const telemetry=state.data?.telemetry||{};
  const affectHop=(state.data?.edges||[]).find(edge=>edge.from==='homeostasis'&&edge.to==='language');
  setText('organismMood',telemetry.mood||'Non disponible');
+ const somatic=telemetry.somatic||{};
+ const readingsFresh=somatic.source==='node-process'&&somatic.freshness?.status==='recent';
+ const percent=v=>readingsFresh&&Number.isFinite(v)?v+' %':'—';
+ setText('somaticFreshness',readingsFresh?'Mesures récentes':'Non mesuré / ancien');
+ setText('somaticCpu',percent(somatic.cpu_utilization));
+ setText('somaticHeap',percent(somatic.heap_utilization));
+ setText('somaticPressure',percent(somatic.compute_pressure));
+ setText('somaticScope',readingsFresh?'Capteurs : processus Node · '+stamp(somatic.freshness?.updated_at)
+   :'Capteurs absents ou anciens. Aucun chiffre physique inventé.');
  setText('affectBridge',affectHop?.observed_count>0
    ?'Transmission homéostasie → langage observée : '+affectHop.observed_count+' passage(s) sur 24 h, dernier à '+shortTime(affectHop.last_observed_at)+'. Le modèle reçoit les signaux avant de formuler.'
    :'Aucun passage homéostasie → langage enregistré sur 24 h. Une réponse ne prouve pas que cette liaison a été utilisée.');
  setText('metricTime','Dernière mutation : '+stamp(telemetry.source?.updated_at)+' · état '+(telemetry.source?.status||'non vérifié')+'. Ces indices décrivent un logiciel, pas une émotion biologique.');
 }
 
+// Each reported change belongs to the selected persisted flow only.
+const CAUSAL_LABELS={
+ stabilite:'Stabilité',clarte:'Clarté',confiance:'Confiance',
+ satisfaction:'Satisfaction',frustration:'Frustration',
+ engagement:'Engagement',agency:'Initiative',
+ besoin_de_silence:'Besoin de silence',
+};
+const DECISION_LABELS={
+ respond:'Répondre',greet:'Saluer',report_internal_state:'État interne',
+ solve_symbolic_rule:'Résolution symbolique',acknowledge_unrequested:'Correction de dialogue',
+ explain_previous_claim:'Vérifier une affirmation',
+ clarify_real_activity:'Clarifier une activité',
+ clarify_blocker_evidence:'Vérifier un blocage',
+ request_verifiable_help:'Demander des preuves',
+};
+function renderCausal(){
+ const flow=state.flow,receipt=flow?.causal||null;
+ const values=$('causalValues');values.replaceChildren();
+ if(!receipt){
+  setText('causalStatus',state.busy?'Traitement en cours':'Non corrélé');
+  setText('causalDecision','—');
+  setText('causalLanguage','—');
+  setText('causalExecution','Non attestée');
+  setText('causalEvidence',state.busy
+   ?'La requête est transmise. Les traces numérotées et son bilan final ne seront présentés qu’après enregistrement.'
+   :flow?'Trajet observé sans bilan causal corrélé. Les états précédents et les décisions ne sont pas disponibles pour ce trajet.'
+     :'Choisis un trajet ou envoie une requête. Aucun état ni événement n’est reconstitué sans trace corrélée.');
+  setText('causalProvenance',flow
+   ?'Source : transitions horodatées. Bilan homéostatique non enregistré pour ce trajet.'
+   :'Mesures et indices sont distingués ; aucune conscience ni émotion humaine n’est prétendue.');
+  return;
+ }
+ setText('causalStatus','Bilan corrélé');
+ setText('causalDecision',DECISION_LABELS[receipt.decision]||receipt.decision||'Non disponible');
+ setText('causalLanguage',receipt.language_outcome==='response-produced'
+  ?'Réponse produite':receipt.language_outcome==='response-unavailable'?'Indisponible':'Non vérifiée');
+ setText('causalExecution','Non attestée par cette trace');
+ setText('causalEvidence',flow.step_count+' transitions corrélées à ce bilan. Décision et changement d’état enregistrés à '+shortTime(receipt.at)+'.');
+ const before=receipt.before?.metrics||{},after=receipt.after?.metrics||{};
+ for(const [key,label] of Object.entries(CAUSAL_LABELS)){
+  if(!Number.isFinite(before[key])||!Number.isFinite(after[key]))continue;
+  const delta=Number(receipt.delta?.[key]);
+  const row=element('div','causal-value');
+  const title=element('span','',label);
+  const change=element('strong',delta>0?'positive':delta<0?'negative':'neutral',
+   Math.round(before[key]*100)+' → '+Math.round(after[key]*100)+' % · '+
+    (Number.isFinite(delta)?(delta>0?'+':'')+(delta*100).toFixed(1)+' pt':'—'));
+  row.append(title,change);values.append(row);
+ }
+ if(!values.children.length)values.append(element('p','empty','Aucune variation chiffrée attestée.'));
+ const pressure=receipt.after?.process_pressure;
+ const measured=receipt.after?.sensor_source==='node-process';
+ setText('causalProvenance','Source : '+receipt.evidence+
+   ' · pression calcul '+(measured&&Number.isFinite(pressure)?Math.round(pressure*100)+' % (processus Node)':'non mesurée')+
+   ' · états observés pendant le trajet : une variation peut aussi venir d’événements simultanés ; ce ne sont pas des émotions biologiques.');
+}
 function renderTools(){
  const root=$('toolList');root.replaceChildren();
  const tools=state.data?.observed_tools||[];
@@ -209,8 +274,14 @@ function renderSourceCallouts(){
    const last=n?.last_observed_at;
    setText(timeId,shortTime(last));
    const mark=$(stateId);
-   if(mark){mark.textContent=n?.activity_verified?'OBSERVÉ':'NON VÉRIFIÉ';mark.classList.toggle('recent',n?.activity_verified===true);}
-   if(detailId)setText(detailId,n?.activity_verified?'Transition effectivement persistée':'Aucune exécution récente constatée');
+   if(mark){
+     mark.textContent=n?.activity_verified?'OBSERVÉ'
+       :id==='kernel'&&d.runtime_ready?'JOIGNABLE · PAS DE TRACE RÉCENTE':'NON OBSERVÉ';
+     mark.classList.toggle('recent',n?.activity_verified===true);
+   }
+   if(detailId)setText(detailId,n?.activity_verified?'Transition effectivement persistée'
+     :id==='kernel'&&d.runtime_ready?'Service du noyau accessible, aucun passage récent attesté'
+       :'Aucune transition récente enregistrée');
  };
  setNode('memory','niMemoryTime','niMemoryState');
  setNode('web','niWebTime','niWebState');
@@ -261,15 +332,33 @@ function renderToolMirror(){
  }
 }
 
+function renderRuntimeIncident(){
+ const incident=$('runtimeIncident'),diag=state.data?.runtime_diagnostic||{};
+ const offline=state.data?.runtime_ready!==true;
+ incident.hidden=!offline;
+ if(!offline){setText('runtimeFeedback','');return;}
+ setText('runtimeTitle',diag.title||'Noyau indisponible · diagnostic incomplet');
+ setText('runtimeMessage',diag.action||
+   'Le navigateur reçoit la page, mais le serveur n’a pas confirmé le démarrage du noyau.');
+ setText('runtimeMeta','État : '+(diag.code||'inconnu')+
+   ' · MySQL : '+(diag.db_ready?'connecté':diag.db_configured?'configuré, non confirmé':'non configuré')+
+   ' · dernière tentative : '+shortTime(diag.last_attempt_at));
+ $('runtimeRetry').disabled=diag.code==='database-unconfigured' || diag.code==='gateway-only' || !!diag.ready;
+ $('runtimeRetry').title=$('runtimeRetry').disabled
+   ?'Une modification Hostinger est requise avant de relancer.'
+   :'Relance protégée par une session propriétaire AURA.';
+}
 function renderKPIs(){
  const d=state.data;if(!d)return;
+ renderRuntimeIncident();
  setText('kModules',d.nodes?.length||0);
- setText('kHops',d.observed_hop_count||0);
- setText('kFlows',d.flows?.length||0);
- setText('kSignals',d.recent_signal_count||0);
- setText('kTools',d.observed_tools?.length||0);
+ setText('kHops',d.database_observations_available===false?'—':(d.observed_hop_count||0));
+ setText('kFlows',d.database_observations_available===false?'—':(d.flows?.length||0));
+ setText('kSignals',d.database_observations_available===false?'—':(d.recent_signal_count||0));
+ setText('kTools',d.database_observations_available===false?'—':(d.observed_tools?.length||0));
  setText('kOrganism',shortTime(d.telemetry?.source?.updated_at));
- $('graphClock').textContent='Relevé : '+stamp(d.sampled_at)+' · '+(d.database_observations_available?'observations publiques':'journal indisponible');
+ $('graphClock').textContent='Relevé : '+stamp(d.sampled_at)+' · '+
+  (d.database_observations_available?'observations publiques confirmées':'journal indisponible — aucune activité vérifiable');
  $('onlineState').dataset.state=d.runtime_ready?'active':'error';
  $('onlineState').lastChild.textContent=d.runtime_ready?'Noyau joignable':'Noyau indisponible';
  $('graphCaption').textContent=d.database_observations_available===false
@@ -277,7 +366,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
 function selectNode(id){state.selected=id;renderModules();renderInspect();scheduleDraw();}
 
 let canvasW=1000,canvasH=700,scale=1;
@@ -339,6 +428,8 @@ function drawNetworkStructure(edges){
    ?'89,235,244':src?.group==='core'||src?.group==='execution'
    ?'255,136,119':'219,106,246';
   const observed=edge.observed_count>0;
+  // Architecture only: do not draw faux synapses on unobserved links.
+  if(!observed)continue;
   for(let k=1;k<=12;k++){
     const t=k/13,p=edgePoint(a,b,t),wiggle=Math.sin((k+i*7)*1.7)*Math.sin(Math.PI*t);
     const dx=b.x-a.x,dy=b.y-a.y,mag=Math.max(1,Math.hypot(dx,dy));
@@ -361,7 +452,7 @@ function drawNetworkStructure(edges){
 function draw(){
  if(!state.data)return;sizeCanvas();ctx.clearRect(0,0,canvasW,canvasH);
  // Ambient breathing is decorative, never represented as observed neural activity.
- const ambient=reduced?0:Math.sin(performance.now()/1250);
+ const ambient=0; // no decorative animation misread as neural firing
  ctx.save();
  for(const [group,pos,size,color] of GROUP_CLOUDS){
    const c={x:canvasW*.5+(pos[0]-590)*scale+state.panX,y:canvasH*.5+(pos[1]-395)*scale+state.panY};
@@ -407,14 +498,14 @@ function draw(){
  state.screen=[];
  const labelCandidates=[];
  for(const node of d.nodes||[]){
-   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:11;const r=base*scale*(1+(reduced?0:.035*Math.sin(performance.now()/950+node.id.length)));
+   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:6;const r=base*scale;
    state.screen.push({id:node.id,x:p.x,y:p.y,r:Math.max(r,14)});
-   ctx.save();ctx.globalAlpha=inLens(node.id)?1:.22;
+   ctx.save();ctx.globalAlpha=(inLens(node.id)?1:.22)*(selected||active?1:.35);
    const glow=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,r*3.2);
    const rgb=selected?'243,180,132':active?'135,244,234':tone(node).replace('#','');
    glow.addColorStop(0,selected?'rgba(255,191,105,.86)':active?'rgba(94,255,225,.85)':'rgba(221,110,245,.38)');
    glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(p.x,p.y,r*3.2,0,Math.PI*2);ctx.fill();
-   ctx.beginPath();ctx.shadowBlur=selected?17:active?13:5;ctx.shadowColor=selected?'#ffb768':active?'#71ffe0':tone(node);ctx.fillStyle=selected?'#ffbf78':active?'#78ffe1':tone(node);ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+   ctx.beginPath();ctx.shadowBlur=selected?17:active?13:0;ctx.shadowColor=selected?'#ffb768':active?'#71ffe0':tone(node);ctx.fillStyle=selected?'#ffbf78':active?'#78ffe1':tone(node);ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
    ctx.lineWidth=selected?2.4:1.5;ctx.strokeStyle=selected?'#fff2de':active?'#d7fff8':'rgba(255,222,248,.6)';ctx.stroke();
    ctx.beginPath();ctx.fillStyle='rgba(255,255,255,.95)';ctx.arc(p.x,p.y,Math.max(1.5,r*.22),0,Math.PI*2);ctx.fill();
 
@@ -511,17 +602,54 @@ async function poll(){
    if(data.version!=='brain-flow-v1'||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Schéma réseau invalide');
    state.data=data;if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;if(!findNode(state.selected))state.selected='kernel';state.lastError='';renderAll();
  }catch(err){
-   state.lastError=String(err&&err.message||err).slice(0,120);$('onlineState').dataset.state='error';$('onlineState').lastChild.textContent='API indisponible · '+state.lastError;$('graphClock').textContent='Requête échouée · aucune donnée fraîche';
+   state.lastError=String(err&&err.message||err).slice(0,120);
+   $('onlineState').dataset.state='error';
+   $('onlineState').lastChild.textContent='API indisponible · '+state.lastError;
+   $('graphClock').textContent='Requête échouée · aucune donnée fraîche';
+   $('runtimeIncident').hidden=false;
+   setText('runtimeTitle','Connexion au serveur interrompue');
+   setText('runtimeMessage','Le relevé du noyau est impossible : '+state.lastError);
+   setText('runtimeMeta','Aucune activité, mémoire ni exécution ne peut être confirmée.');
+   $('runtimeRetry').hidden=true;
  }finally{state.pollInFlight=false;}
 }
-$('refreshMap').onclick=poll;setInterval(()=>{if(!document.hidden)poll();},state.busy?900:5000);
+$('refreshMap').onclick=poll;
+$('runtimeCheck').onclick=()=>void poll();
+$('runtimeRetry').onclick=async()=>{
+ const button=$('runtimeRetry');if(button.disabled)return;
+ button.disabled=true;setText('runtimeFeedback','Demande de redémarrage envoyée à l’API privée…');
+ try{
+  const res=await fetch('/api/bootstrap/retry',{
+   method:'POST',credentials:'same-origin',
+   headers:{Accept:'application/json','Content-Type':'application/json'},
+   body:'{}',
+  });
+  if(res.status===401||res.status===403)
+   setText('runtimeFeedback','Accès administrateur nécessaire : aucune relance effectuée.');
+  else if(!res.ok)
+   setText('runtimeFeedback','Relance refusée (HTTP '+res.status+'). Vérifier le journal Hostinger.');
+  else {
+   const data=await res.json();
+   setText('runtimeFeedback',data.runtime_ready
+     ?'Noyau démarré et confirmé.' : 'Relance terminée, mais le noyau reste indisponible. Vérifier la configuration Hostinger.');
+   await poll();
+  }
+ }catch{
+   setText('runtimeFeedback','Relance impossible : API indisponible.');
+ }finally{button.disabled=false;}
+};
+fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'})
+ .then(r=>r.ok?r.json():null)
+ .then(result=>{$('runtimeRetry').hidden=result?.authenticated!==true;})
+ .catch(()=>{$('runtimeRetry').hidden=true;});
+setInterval(()=>{if(!document.hidden)poll();},state.busy?900:5000);
 // Extra poll while an AURA response is in flight: the graph can show database-
 // committed module hops BEFORE the model produces its final answer.
 setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
 
 const history=$('chatHistory');
-$('chatExpand').onclick=()=>{const open=!history.classList.contains('open');history.classList.toggle('open',open);$('chatExpand').setAttribute('aria-expanded',String(open));};
-function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;$('chatExpand').setAttribute('aria-expanded','true');}
+$('chatExpand').onclick=()=>{$('conversation-panel').scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'});};
+function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;}
 $('chatMode').addEventListener('change',()=>{
  const mission=$('chatMode').value==='mission';
  $('chatInput').placeholder=mission
@@ -540,6 +668,7 @@ $('chatSend').onclick=async()=>{
  state.lastPrompt=msg;setText('requestPreview',msg);
  chatLine('VOUS · '+(mission?'MISSION':'DIALOGUE'),msg,'user');
  renderRoute();
+ renderCausal();
  setText('currentFlowSummary',mission
    ?'Mission explicitement demandée. Vérification des étapes d’exécution en cours…'
    :'Message envoyé. Lecture des transitions réellement enregistrées…');

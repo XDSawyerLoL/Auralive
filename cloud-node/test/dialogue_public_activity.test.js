@@ -13,6 +13,6 @@ test('public chat receives safe operational activity instead of an empty agenda'
 
 test('architecture endpoint reports current unified homeostasis version', () => {
   const server = fs.readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
-  assert.match(server, /organism: 'homeostasie_v9_unified'/);
+  assert.match(server, /organism: 'homeostasie_v10_somatic_feedback'/);
   assert.doesNotMatch(server, /organism: 'homeostasie_v7_streamlined'/);
 });

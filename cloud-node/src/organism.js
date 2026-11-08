@@ -345,7 +345,7 @@ export class AuraOrganism {
     this.apply(state,delta);
     let dream = null;
     if ((tags.includes('reve') && state.pression_de_reve>=.42) || state.pression_de_reve>=.86) dream=this.createDream(state,text);
-    this.regulate(state, valence === 'negative' ? 'interaction_negative' : 'interaction', 30);
+    this.regulate(state, valence === 'negative' ? 'interaction_negative' : tags.includes('direction') ? 'interaction_direction' : 'interaction', 30);
     return {
       state:this.recompute(state,reason),
       impact_delta:delta,
