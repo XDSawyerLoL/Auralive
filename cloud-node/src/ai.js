@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { ZeroCostFederation } from './free_federation.js';
+import { GroqFreeProvider } from './groq_free.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
 import { freeTierModelAllowed, markConfirmedFreeTier, reserveConfirmedFreeTier } from './gemini_free_tier.js';
 
@@ -79,9 +80,11 @@ export class AiClient {
     this.lastLatencyMs = 0;
     this.lastBackend = '';
     this.federation = new ZeroCostFederation();
+    this.groq = new GroqFreeProvider();
   }
 
   get provider() {
+    if (this.groq.enabled) return 'groq-free';
     if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
       return this.federation.enabled
@@ -95,6 +98,7 @@ export class AiClient {
   }
 
   get enabled() {
+    if (this.groq.enabled) return true;
     if (embeddedLanguageRuntime.installed()) return true;
     if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
@@ -122,6 +126,7 @@ export class AiClient {
       gemini_free_tier_model_allowed: freeTierModelAllowed(geminiModel(), 'text'),
       gemini_free_tier_daily_cap: Number(config.geminiFreeTierTextMaxPerDay),
       free_federation: this.federation.snapshot(),
+      groq_free: this.groq.snapshot(),
       embedded_language: embeddedLanguageRuntime.status(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
@@ -222,6 +227,18 @@ export class AiClient {
     const started = Date.now();
     let localError = null;
     try {
+      let groqError = null;
+      if (this.groq.enabled) {
+        try {
+          const result = await this.groq.generate(prompt, system, maxTokens);
+          if (result?.answer) {
+            this.lastBackend = 'zero-cost:groq-free:' + result.model;
+            this.lastError = '';
+            this.lastLatencyMs = Date.now() - started;
+            return result.answer;
+          }
+        } catch (error) { groqError = error; }
+      }
       if (embeddedLanguageRuntime.installed()) {
         const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
         if (answer) {
@@ -270,6 +287,7 @@ export class AiClient {
         this.lastError = [
           localError ? `local unavailable: ${safeError(localError)}` : '',
           federationError ? `free federation unavailable: ${safeError(federationError)}` : '',
+          groqError ? `Groq Free unavailable: ${safeError(groqError)}` : '',
         ].filter(Boolean).join(' | ');
         this.lastLatencyMs = Date.now() - started;
         return '';
