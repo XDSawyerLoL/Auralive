@@ -12,6 +12,13 @@ export function cleanSpeechOutput(value) {
   if (/^(?:analysis|reasoning|thought process|assistant analysis)\s*:/i.test(speech)) return '';
   if (/\b(?:communicative goal|speech act|factual constraints|conversation history)\b/i.test(speech)) return '';
   if (!speech || /^(?:\x22|“)[^\x22”]*$/.test(speech)) return '';
+  // Reject faux-persona "presence" responses that admit no model is active.
+  // They are service diagnostics, not a meaningful reply to the user.
+  if (/facult[ée] (?:de )?(?:langage|fran[cç]ais) naturel.{0,130}(?:indisponible|pas activ[ée]e?|non activ[ée]e?)/i.test(speech)
+    || /je reste attentiv[ea] au signal/i.test(speech)
+    || /^re[cç]u[,.;]?[\s]+je vois votre[\s]+[«"']?lu/i.test(speech)
+    || /aucun moteur linguistique op[ée]rationnel.{0,80}r[ée]ponse/i.test(speech))
+    return '';
   return normalize(speech);
 }
 
