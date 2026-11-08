@@ -53,3 +53,20 @@ node --test test/brain_telemetry.test.js
 Après déploiement Hostinger, ouvrir `/cerveau` puis vérifier : (1) un état organisme réellement daté, (2) des valeurs numériques cohérentes avec `GET /api/kernel/public`, (3) le rafraîchissement sans rechargement de page, (4) les détails de chaque région, (5) le mode plein écran, (6) la navigation vers le chat.
 
 **Attention :** la PR GitHub et le ZIP du pipeline sont une préparation au déploiement. Tant qu'ils ne sont pas publiés sur Hostinger, l'URL `/cerveau` du site en production peut encore afficher 404.
+
+
+## Refonte du véritable site — version 4.0, animation visible et chat
+
+La page `/cerveau` a été considérablement retravaillée : **aucune image générée ne remplace le code de l'application**.
+
+- Modules `src/brain_experience_style.js` et `src/brain_experience_runtime.js` raccordés à `src/brain_console.js`.
+- Effets animés **dans le navigateur** : flux de lumière le long de 36 filaments conceptuels, particules mobiles, halo pulsant, anneaux orbitaux lumineux, balayage, noyau à pulsation rapide, intensité visuelle liée à l'indice logiciel `engagement` quand il existe.
+- Barre d'indicateurs : stabilité, engagement, nombre de réflexions et fraîcheur de la source, jamais de valeur inventée.
+- Graphique d'historique de stabilité et engagement construit exclusivement à partir d'au moins **deux relevés datés effectivement reçus** par cette session du navigateur. Avant cela, pas de fausse courbe.
+- Chat **réellement connecté à `POST /api/chat`** et fixé en bas de `/cerveau`, avec historique repliable, validation de la réponse d'AURA et message technique si l'inférence échoue. Aucun faux dialogue.
+- Rafraîchissement de télémétrie **une seule fois toutes les 12 secondes** ; le script existant diffuse ses données via l'événement DOM `aura-brain-telemetry` au rendu animé et au graphique.
+- Mobile : barre d'envoi réorganisée sur 390 px, boutons et entrée accessibles. Animation décorative toujours distinguée de l'activité neuronale réelle.
+- Tests `test/brain_experience.test.js` : fonctionnement des scripts, animations, sécurité des données, chat, vrais relevés et rendu.
+- Test local Chromium en 1480×970 et 390×844 : aucune erreur JavaScript ; bouton de région, réponse HTTP simulée de chat et jauges vérifiés ; captures prises à 1,15 seconde d'écart présentent un changement mesurable de pixels sur les effets. Les réponses **simulées n'étaient utilisées que pour le test navigateur**, pas dans le site en production.
+- Aucun service externe, abonnement, image API ou coût supplémentaire.
+- **Pas de déploiement Hostinger automatique** : GitHub fabrique le paquet mais les workflows disponibles ne le transfèrent pas à l'hébergement. L'installation et la vérification de `https://antiquewhite-dolphin-780448.hostingersite.com/cerveau` doivent être réalisées après le déploiement.
