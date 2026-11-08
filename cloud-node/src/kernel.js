@@ -1260,10 +1260,12 @@ export class CognitiveKernel {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
+    const languageUnavailable = !answer
+      && this.expression.lastMode === 'natural-language-unavailable';
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
-      true,
+      Boolean(answer),
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
@@ -1274,10 +1276,12 @@ export class CognitiveKernel {
     });
     await this.saveSoul();
 
-    await query(
-      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
-      [conversationSession, String(answer).slice(0, 12000), now()],
-    );
+    if (answer) {
+      await query(
+        "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
+        [conversationSession, String(answer).slice(0, 12000), now()],
+      );
+    }
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,
@@ -1287,8 +1291,11 @@ export class CognitiveKernel {
     });
 
     return {
-      ok: true,
+      ok: Boolean(answer),
       answer,
+      language_unavailable: languageUnavailable,
+      response_kind: languageUnavailable ? 'model-unavailable' : 'model-generated',
+      retryable: languageUnavailable,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,
