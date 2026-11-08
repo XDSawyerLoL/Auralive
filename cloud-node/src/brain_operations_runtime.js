@@ -175,6 +175,15 @@ function renderMetrics(){
  const telemetry=state.data?.telemetry||{};
  const affectHop=(state.data?.edges||[]).find(edge=>edge.from==='homeostasis'&&edge.to==='language');
  setText('organismMood',telemetry.mood||'Non disponible');
+ const somatic=telemetry.somatic||{};
+ const readingsFresh=somatic.source==='node-process'&&somatic.freshness?.status==='recent';
+ const percent=v=>readingsFresh&&Number.isFinite(v)?v+' %':'—';
+ setText('somaticFreshness',readingsFresh?'Mesures récentes':'Non mesuré / ancien');
+ setText('somaticCpu',percent(somatic.cpu_utilization));
+ setText('somaticHeap',percent(somatic.heap_utilization));
+ setText('somaticPressure',percent(somatic.compute_pressure));
+ setText('somaticScope',readingsFresh?'Capteurs : processus Node · '+stamp(somatic.freshness?.updated_at)
+   :'Capteurs absents ou anciens. Aucun chiffre physique inventé.');
  setText('affectBridge',affectHop?.observed_count>0
    ?'Transmission homéostasie → langage observée : '+affectHop.observed_count+' passage(s) sur 24 h, dernier à '+shortTime(affectHop.last_observed_at)+'. Le modèle reçoit les signaux avant de formuler.'
    :'Aucun passage homéostasie → langage enregistré sur 24 h. Une réponse ne prouve pas que cette liaison a été utilisée.');
@@ -235,7 +244,7 @@ function renderCausal(){
  const measured=receipt.after?.sensor_source==='node-process';
  setText('causalProvenance','Source : '+receipt.evidence+
    ' · pression calcul '+(measured&&Number.isFinite(pressure)?Math.round(pressure*100)+' % (processus Node)':'non mesurée')+
-   ' · valeurs affectives = indices logiciels, pas émotions biologiques.');
+   ' · états observés pendant le trajet : une variation peut aussi venir d’événements simultanés ; ce ne sont pas des émotions biologiques.');
 }
 function renderTools(){
  const root=$('toolList');root.replaceChildren();
@@ -401,6 +410,8 @@ function drawNetworkStructure(edges){
    ?'89,235,244':src?.group==='core'||src?.group==='execution'
    ?'255,136,119':'219,106,246';
   const observed=edge.observed_count>0;
+  // Architecture only: do not draw faux synapses on unobserved links.
+  if(!observed)continue;
   for(let k=1;k<=12;k++){
     const t=k/13,p=edgePoint(a,b,t),wiggle=Math.sin((k+i*7)*1.7)*Math.sin(Math.PI*t);
     const dx=b.x-a.x,dy=b.y-a.y,mag=Math.max(1,Math.hypot(dx,dy));
@@ -423,7 +434,7 @@ function drawNetworkStructure(edges){
 function draw(){
  if(!state.data)return;sizeCanvas();ctx.clearRect(0,0,canvasW,canvasH);
  // Ambient breathing is decorative, never represented as observed neural activity.
- const ambient=reduced?0:Math.sin(performance.now()/1250);
+ const ambient=0; // no decorative animation misread as neural firing
  ctx.save();
  for(const [group,pos,size,color] of GROUP_CLOUDS){
    const c={x:canvasW*.5+(pos[0]-590)*scale+state.panX,y:canvasH*.5+(pos[1]-395)*scale+state.panY};
@@ -469,14 +480,14 @@ function draw(){
  state.screen=[];
  const labelCandidates=[];
  for(const node of d.nodes||[]){
-   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:11;const r=base*scale*(1+(reduced?0:.035*Math.sin(performance.now()/950+node.id.length)));
+   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:6;const r=base*scale;
    state.screen.push({id:node.id,x:p.x,y:p.y,r:Math.max(r,14)});
-   ctx.save();ctx.globalAlpha=inLens(node.id)?1:.22;
+   ctx.save();ctx.globalAlpha=(inLens(node.id)?1:.22)*(selected||active?1:.35);
    const glow=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,r*3.2);
    const rgb=selected?'243,180,132':active?'135,244,234':tone(node).replace('#','');
    glow.addColorStop(0,selected?'rgba(255,191,105,.86)':active?'rgba(94,255,225,.85)':'rgba(221,110,245,.38)');
    glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(p.x,p.y,r*3.2,0,Math.PI*2);ctx.fill();
-   ctx.beginPath();ctx.shadowBlur=selected?17:active?13:5;ctx.shadowColor=selected?'#ffb768':active?'#71ffe0':tone(node);ctx.fillStyle=selected?'#ffbf78':active?'#78ffe1':tone(node);ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+   ctx.beginPath();ctx.shadowBlur=selected?17:active?13:0;ctx.shadowColor=selected?'#ffb768':active?'#71ffe0':tone(node);ctx.fillStyle=selected?'#ffbf78':active?'#78ffe1':tone(node);ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
    ctx.lineWidth=selected?2.4:1.5;ctx.strokeStyle=selected?'#fff2de':active?'#d7fff8':'rgba(255,222,248,.6)';ctx.stroke();
    ctx.beginPath();ctx.fillStyle='rgba(255,255,255,.95)';ctx.arc(p.x,p.y,Math.max(1.5,r*.22),0,Math.PI*2);ctx.fill();
 
