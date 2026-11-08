@@ -65,9 +65,14 @@ test('public relational chat is isolated by a signed browser conversation sessio
 });
 
 test('public chat cannot read private cognitive collections or inject raw text into global stimuli', () => {
-  assert.match(kernelSource, /privateView \? this\.intentions\(6\) : Promise\.resolve\(\[\]\)/);
-  assert.match(kernelSource, /privateView \? this\.lessons\(6\) : Promise\.resolve\(\[\]\)/);
-  assert.match(kernelSource, /privateView \? this\.reflections\(4\) : Promise\.resolve\(\[\]\)/);
+  // Privacy-gated lookups are independently timed without making private
+  // memory accessible to unauthenticated conversations.
+  assert.match(kernelSource, /privateView \? measuredLookup\('context_intentions', \(\) => this\.intentions\(6\)/);
+  assert.match(kernelSource, /: skippedLookup\('context_intentions', \[\]\)/);
+  assert.match(kernelSource, /privateView \? measuredLookup\('context_lessons', \(\) => this\.lessons\(6\)/);
+  assert.match(kernelSource, /: skippedLookup\('context_lessons', \[\]\)/);
+  assert.match(kernelSource, /privateView \? measuredLookup\('context_reflections', \(\) => this\.reflections\(4\)/);
+  assert.match(kernelSource, /: skippedLookup\('context_reflections', \[\]\)/);
   assert.match(kernelSource, /privateView \? this\.workItems\(5\) : this\.publicWorkItems\(5\)/);
   assert.match(kernelSource, /privateView \? this\.agendaSnapshot\(\) : this\.publicAgendaSnapshot\(\)/);
   assert.match(kernelSource, /async publicWorkItems\(limit = 5\)/);
