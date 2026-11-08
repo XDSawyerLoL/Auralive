@@ -530,17 +530,16 @@ app.get('/cerveau', async (_request, reply) => {
   reply.header('Cache-Control','no-cache');
   return reply.type('text/html; charset=utf-8').send(BRAIN_OPERATIONS_HTML);
 });
-app.get('/cerveau/anatomie', async (_request, reply) => {
-  reply.header('Cache-Control','no-cache');
-  return reply.type('text/html; charset=utf-8').send(BRAIN_HTML);
-});
+app.get('/cerveau/anatomie', async (_request, reply) =>
+  reply.redirect('/cerveau', 302)
+);
 app.get('/brain', async (_request, reply) =>
   reply.redirect('/cerveau', 302)
 );
 
 app.get('/', async (_request, reply) => {
-  reply.type('text/html; charset=utf-8');
-  return DASHBOARD_HTML;
+  reply.header('Cache-Control','no-cache');
+  return reply.type('text/html; charset=utf-8').send(BRAIN_OPERATIONS_HTML);
 });
 
 const GLIDE_WINDOWS_DOWNLOAD = String(
