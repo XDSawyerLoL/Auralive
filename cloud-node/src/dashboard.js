@@ -238,6 +238,13 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
 }
 
 .groq-provider-status{border:1px solid rgba(122,221,190,.16);background:rgba(66,163,143,.06);color:#b5e2d2;padding:10px 12px;border-radius:10px;font-size:11px;line-height:1.55}
+
+.brain-open-link{display:inline-flex;gap:6px;align-items:center;justify-content:center;color:#e2d8ff;border:1px solid rgba(177,148,255,.4);border-radius:12px;padding:10px 13px;font-size:12px;font-weight:700;white-space:nowrap;background:linear-gradient(125deg,rgba(110,62,186,.33),rgba(61,131,154,.18));box-shadow:0 0 24px rgba(88,96,220,.12)}
+.brain-open-link:hover{background:rgba(111,74,202,.38);border-color:#bb95ff}
+.brain-card-open{font-size:10px;padding:8px;border-radius:8px;color:#9ce6f3;border:1px solid rgba(102,208,239,.27);background:rgba(35,94,119,.14);white-space:nowrap}
+.brain-card-open:hover{color:#fff;border-color:#89e8ff}
+@media(max-width:750px){.brain-open-link{font-size:10px;padding:9px 7px}.topbar .clock{display:none}.brain-card-open{font-size:9px}}
+@media(max-width:430px){.brain-open-link{font-size:0;min-width:37px}.brain-open-link::before{content:"◈";font-size:18px}}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -253,6 +260,7 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
       <div class="pill"><span id="voiceDot" class="live-dot"></span><span id="voiceText">Mairaiy…</span></div>
       <div class="pill"><span id="evolutionDot" class="live-dot"></span><span id="evolutionText">Évolution…</span></div>
     </div>
+    <a href="/cerveau" class="brain-open-link" title="Ouvrir le cerveau AURA avec les véritables données du noyau">◈ Explorer mon cerveau</a>
     <div class="clock"><span id="clockDate">—</span><span id="clockTime">—</span></div>
     <button class="icon-btn" id="modeBtn">↻</button>
   </header>
@@ -319,7 +327,7 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
         <button id="auditExport" class="revenue-export" type="button" disabled>Exporter le rapport</button>
       </section>
       <section class="panel aura-card">
-        <div class="side-head"><strong>AURA vivante</strong><span id="organismMood">réveil</span><div class="top-spacer"></div><button id="refreshMap" class="icon-btn">↺</button></div>
+        <div class="side-head"><strong>AURA vivante</strong><span id="organismMood">réveil</span><div class="top-spacer"></div><a href="/cerveau" class="brain-card-open">Cerveau interactif ↗</a><button id="refreshMap" class="icon-btn">↺</button></div>
         <div class="map-wrap" id="livingMap">
           <canvas id="nebulaFx"></canvas><canvas id="particleFx"></canvas><div class="aurora-vignette" aria-hidden="true"></div>
           <svg id="attentionMap" viewBox="0 0 900 650">
