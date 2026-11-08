@@ -92,3 +92,30 @@ test('audit uses injected request only after public-url validation',async()=>{
   }),/HTTPS publique|Adresse HTTPS/);
   assert.equal(calls,1);
 });
+
+
+test('safe operator missions are private, use empty additional risk permissions and expose real execution state',()=>{
+  assert.match(DASHBOARD_HTML,/id="autonomyTask"/);
+  assert.match(DASHBOARD_HTML,/id="autonomyRun"/);
+  assert.match(DASHBOARD_HTML,/id="autonomyResult"/);
+  assert.match(DASHBOARD_SCRIPT,/api\/kernel\/operator/);
+  assert.match(DASHBOARD_SCRIPT,/allowed_risks:\[\]/);
+  assert.match(DASHBOARD_SCRIPT,/result\?\.executed===true/);
+  assert.match(DASHBOARD_SCRIPT,/Seul un plan ou un refus a été retourné/);
+  const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+  const start=server.indexOf("app.post('/api/kernel/operator'");
+  const end=server.indexOf("app.post('/api/chat'",start);
+  assert.ok(start>=0&&end>start);
+  assert.match(server.slice(start,end),/requirePrivate\(request, reply\)/);
+  assert.doesNotMatch(server.slice(start,end),/default[\s\S]*allowed_risks:\['financial'/);
+});
+
+test('full AURA UI includes autonomy first, revenue second, and no simulated collected-income claim',()=>{
+  const autonomy=DASHBOARD_HTML.indexOf('class="panel autonomy-panel"');
+  const revenue=DASHBOARD_HTML.indexOf('class="panel revenue-panel"');
+  const trading=DASHBOARD_HTML.indexOf('class="panel trading-lab"');
+  assert.ok(autonomy>0&&revenue>autonomy&&trading>revenue);
+  assert.match(DASHBOARD_HTML,/Non connectées/);
+  assert.match(DASHBOARD_HTML,/Non activées/);
+  assert.match(DASHBOARD_HTML,/PAPER ONLY/);
+});
