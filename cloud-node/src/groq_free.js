@@ -82,6 +82,7 @@ export class GroqFreeFaculty {
     // Reserve before awaiting the network: concurrent requests consume the
     // same in-process limit. The Groq service enforces its own account limits.
     this.usedToday += 1;
+    this.lastErrorCode = '';
     const started = this.clock();
     let response;
     try {
