@@ -19,6 +19,31 @@ import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
 
+// Anonymized, numeric-only receipt: never includes prompts, memory, identities,
+// provider payloads or internal reasoning. Measurements and estimates remain distinct.
+const CAUSAL_METRICS = Object.freeze([
+  'stabilite','clarte','confiance','satisfaction','frustration',
+  'engagement','agency','besoin_de_silence',
+]);
+function causalSnapshot(organism = {}) {
+  const metrics = {};
+  for (const key of CAUSAL_METRICS) {
+    const n = Number(organism[key]);
+    if (organism[key] !== undefined && Number.isFinite(n))
+      metrics[key] = Number(Math.max(0,Math.min(1,n)).toFixed(4));
+  }
+  const pressure = organism.homeostasis?.resource_pressure;
+  return {
+    metrics,
+    // Resource pressure is calculated from current-process observations, not
+    // a claim about machine-wide health or human emotional physiology.
+    process_pressure: Number.isFinite(Number(pressure)) && pressure !== undefined
+      ? Number(Math.max(0,Math.min(1,Number(pressure))).toFixed(4)) : null,
+    sensor_source: organism.homeostasis?.sensor?.source === 'node-process'
+      ? 'node-process' : 'unavailable',
+  };
+}
+
 function intentionKey(value) {
   return String(value || '')
     .normalize('NFD')
@@ -1078,6 +1103,7 @@ export class CognitiveKernel {
     // Only actual, completed transitions create brain-flow events.
     // Flow ID is random and contains neither text nor user identity.
     const brainFlowId = randomUUID();
+    const somaticAtIngress = causalSnapshot(this.organism.migrate(this.soulCache || {}));
     const brainHop = async (from,to,stage,status='ok',provider='') =>
       this.trace('brain-hop', from+' -> '+to, '', {
         flow_id:brainFlowId,from,to,stage,status,
@@ -1336,6 +1362,19 @@ export class CognitiveKernel {
       );
     }
     if(answer)await brainHop('coherence','output','reply-committed','ok',languageProvider);
+    // Correlate the conversation's actual input/output states with its recorded
+    // hops; no private content, no synthetic success and no model chain of thought.
+    await this.trace('brain-causal','verified-causal-receipt','',{
+      flow_id:brainFlowId,
+      at:now(),
+      phase:'completed',
+      act:String(plan.act || 'respond').slice(0,55),
+      semantic_support_required:Boolean(plan.needs_semantic_support),
+      language_outcome:answer?'response-produced':'response-unavailable',
+      action_executed:false,
+      before:somaticAtIngress,
+      after:causalSnapshot(this.organism.migrate(this.soulCache || {})),
+    });
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,
