@@ -826,7 +826,7 @@ const COG_AUTO_EDGES=[
 const cogStages=()=>cogMode==='autonomy'?COG_AUTO_STAGES:COG_STAGES;
 const cogPaths=()=>cogMode==='autonomy'?COG_AUTO_EDGES:COG_EDGES;
 const COG_STATUS={running:'en cours',done:'exécuté',skipped:'non sollicité',error:'échec',idle:'non exécuté'};
-const COG_FIELDS={messages:'messages',intentions:'intentions',lessons:'leçons',reflections:'réflexions',work_items:'travaux',memory_items:'souvenirs',research_evidence:'preuves externes',answer_chars:'caractères générés',token_budget:'budget de tokens',semantic_requested:'support sémantique requis',semantic_available:'support obtenu',external_required:'recherche requise',confidence:'confiance',delta_stability:'variation de stabilité',delta_curiosity:'variation de curiosité',delta_frustration:'variation de frustration',decision_act:'action retenue',language_mode:'moteur linguistique',stimuli_count:'stimuli',lessons_count:'leçons consultées',cycle_reflected:'réflexion effectuée',execution_confirmed:'action confirmée',operation_kind:'type d’opération',trigger_kind:'déclencheur'};
+const COG_FIELDS={messages:'messages',intentions:'intentions',lessons:'leçons',reflections:'réflexions',work_items:'travaux',memory_items:'souvenirs',research_evidence:'preuves externes',answer_chars:'caractères générés',token_budget:'budget de tokens',semantic_requested:'support sémantique requis',semantic_available:'support obtenu',external_required:'recherche requise',confidence:'confiance',delta_stability:'variation de stabilité',delta_curiosity:'variation de curiosité',delta_frustration:'variation de frustration',decision_act:'action retenue',language_mode:'moteur linguistique',stimuli_count:'stimuli',lessons_count:'leçons consultées',cycle_reflected:'réflexion effectuée',execution_confirmed:'action confirmée',operation_kind:'type d’opération',trigger_kind:'déclencheur',state_stability:'stabilité',state_clarity:'clarté',state_curiosity:'curiosité',state_confidence:'confiance',state_frustration:'frustration',state_engagement:'engagement',state_mood:'humeur calculée'};
 const COG_LANGUAGE={'french-language-faculty':'modèle français actif','natural-language-unavailable':'moteur français indisponible','deterministic-emergency-fallback':'réponse de secours déterministe',unknown:'non identifié'};
 let cogMode='dialogue';
 let cogTrace=null;
@@ -917,7 +917,11 @@ function renderCognitiveGraph(){
   const detailLine=Object.entries(details).map(function(pair){
     const key=COG_FIELDS[pair[0]]||pair[0].replace(/_/g,' ');
     const value=pair[0]==='language_mode'?(COG_LANGUAGE[pair[1]]||pair[1]):pair[1];
-    return key+' : '+(typeof value==='boolean'?(value?'oui':'non'):String(value));
+    const readable=typeof value==='boolean'?(value?'oui':'non')
+      :pair[0].startsWith('state_')&&typeof value==='number'?Math.round(value*100)+' %'
+      :pair[0].startsWith('delta_')&&typeof value==='number'?(value>=0?'+':'')+(value*100).toFixed(1)+' pt'
+      :String(value);
+    return key+' : '+readable;
   }).join(' · ');
   const title=stage?stage.name:(cogMode==='autonomy'?'Aucun cycle autonome observé':'AURA en attente de message');
   const body=stage?(stage.info+'. '+(evt?'État : '+(COG_STATUS[evt.status]||evt.status)+'.':'Aucune exécution observée.')+(detailLine?' '+detailLine:''))
