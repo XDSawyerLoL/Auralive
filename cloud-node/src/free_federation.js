@@ -406,6 +406,25 @@ export class ZeroCostFederation {
     return ranked[0].id;
   }
 
+  // Recover an empty free-router reply only with a live zero-price,
+  // text-capable model; do not expose hidden reasoning as an answer.
+  async #recoveryModel(role, failedModel) {
+    if (!INTERACTIVE_ROLES.has(roleName(role))) return '';
+    const catalog = await this.#refreshCatalog();
+    const candidates = catalog.filter((row) =>
+      row.id !== failedModel
+      && row.id !== 'openrouter/free'
+      && modelEligible(row)
+      && row?.reasoning?.mandatory !== true
+    );
+    candidates.sort((a, b) =>
+      roleAffinity(b, role) - roleAffinity(a, role)
+      || Number(b.context_length || 0) - Number(a.context_length || 0)
+      || String(a.id).localeCompare(String(b.id))
+    );
+    return String(candidates[0]?.id || '');
+  }
+
   async #assertCatalogFree(model) {
     if (model === 'openrouter/free') return true;
     const catalog = await this.#refreshCatalog();
@@ -538,22 +557,33 @@ export class ZeroCostFederation {
       try {
         result = await this.#openRouter(prompt, system, maxTokens, role, requestedModel);
       } catch (primaryError) {
-        // 429 limits apply at account/provider level; retrying another model wastes quota.
-        if (requestedModel === 'openrouter/free' || this.quarantined.has('openrouter')
-          || /\bhttp\s*429\b|budget.exhausted/i.test(String(primaryError?.message || ''))) {
+        const failure = safeText(primaryError);
+        // Account restrictions, quota and financial guard failures should
+        // never trigger a second call, paid or free.
+        if (this.quarantined.has('openrouter')
+          || /\\bhttp\\s*(?:401|402|403|429)\\b|budget.exhausted|daily.budget.exhausted|cooldown.active/i.test(failure)) {
           throw primaryError;
         }
-        // Direct free variants can disappear or hit a provider-specific quota.
-        // The official zero-priced router is the bounded resilience fallback.
-        result = await this.#openRouter(prompt, system, maxTokens, role, 'openrouter/free');
-        this.lastError = `direct free model fallback: ${safeText(primaryError)}`;
+        const empty = /openrouter free response empty/i.test(failure);
+        // The dynamic router can select a model that spends all completion
+        // tokens on hidden reasoning. One verified alternative is enough.
+        const verifiedAlternative = empty ? await this.#recoveryModel(role, requestedModel) : '';
+        const recoveryModel = verifiedAlternative
+          || (requestedModel !== 'openrouter/free' ? 'openrouter/free' : '');
+        if (!recoveryModel) throw primaryError;
+        try {
+          result = await this.#openRouter(prompt, system, maxTokens, role, recoveryModel);
+        } catch (recoveryError) {
+          throw new Error(`${failure} | free fallback ${recoveryModel}: ${safeText(recoveryError)}`);
+        }
+        this.lastError = `free model fallback: ${failure}`;
       }
       this.lastProvider = result.provider;
       this.lastModel = result.model;
       this.lastRequestedModel = result.requestedModel;
       this.lastRole = role;
       this.lastLatencyMs = Date.now() - started;
-      if (!this.lastError.startsWith('direct free model fallback:')) this.lastError = '';
+      if (!this.lastError.startsWith('free model fallback:')) this.lastError = '';
       return result;
     } catch (error) {
       this.lastRole = role;
