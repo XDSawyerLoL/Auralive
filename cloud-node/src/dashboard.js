@@ -212,6 +212,14 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
 .autonomy-result{display:none;white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow-y:auto;font-size:10px;line-height:1.55;border-radius:10px;padding:11px;color:#d6dbfc;background:rgba(6,14,35,.64);margin:0}
 .autonomy-result:not(:empty){display:block}
 @media(max-width:900px){.autonomy-panel{grid-column:1/-1}}
+
+.owner-login{border:1px solid rgba(188,180,249,.17);background:rgba(13,17,37,.55);border-radius:11px;padding:10px;display:grid;gap:8px}
+.owner-session-status{font-size:11px;color:#c6c9e4;line-height:1.35}
+.owner-connect-row{display:flex;gap:6px}
+.owner-connect-row input{min-width:0;flex:1;width:100%;border-radius:8px;background:rgba(8,13,30,.95);border:1px solid rgba(166,157,243,.21);color:#f8f6ff;padding:9px;font-size:11px}
+.owner-connect-row button,.owner-login>button{border:1px solid rgba(171,165,239,.3);border-radius:8px;color:#e9e4ff;background:rgba(166,161,240,.10);padding:9px 10px;font-size:11px;white-space:nowrap}
+.owner-login>button{width:max-content}
+@media(max-width:490px){.owner-connect-row{flex-wrap:wrap}.owner-connect-row input,.owner-connect-row button{width:100%}}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -263,6 +271,14 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
         <div class="autonomy-topline"><span>00 / CAPACITÉ D'AGIR</span><span class="autonomy-label">COÛT ADDITIONNEL 0 €</span></div>
         <h2 class="autonomy-heading">Passer de la pensée <em>à l'action.</em></h2>
         <p class="autonomy-copy">Lancer une mission dans le périmètre autorisé. AURA devra indiquer si elle l’a réellement exécutée ou si elle a seulement préparé un plan.</p>
+        <div class="owner-login" id="ownerSession">
+          <div id="ownerSessionStatus" class="owner-session-status" role="status">Vérification de l'accès propriétaire…</div>
+          <div id="ownerConnectRow" class="owner-connect-row">
+            <input id="ownerSessionToken" type="password" placeholder="Clé privée AURA" autocomplete="current-password" aria-label="Clé privée AURA"/>
+            <button id="ownerConnect" type="button">Se connecter</button>
+          </div>
+          <button id="ownerDisconnect" type="button" hidden>Fermer la session privée</button>
+        </div>
         <label for="autonomyTask" class="autonomy-field-label">Mission à confier à AURA</label>
         <textarea id="autonomyTask" rows="2" placeholder="Ex. Auditer mon site et proposer des correctifs sans dépenser d'argent."></textarea>
         <button type="button" id="autonomyRun" class="autonomy-run">Lancer la mission contrôlée</button>
