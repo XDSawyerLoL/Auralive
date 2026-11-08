@@ -57,36 +57,45 @@ export function classifyFreeLanguageFailure(message = '') {
 // Compact turn for a small on-host GGUF (Qwen3-0.6B).
 // /no_think is supported by Qwen3 and prevents reasoning tokens replacing the answer.
 export function compactFrenchPrompt(plan = {}) {
-  const recent = (Array.isArray(plan.conversation_context) ? plan.conversation_context : [])
-    .slice(-4)
-    .map((row) => {
-      const role = String(row?.role || '').toLowerCase() === 'user' ? 'Utilisateur' : 'AURA';
-      return role + ' : ' + normalize(row?.content || '').slice(0,220);
-    })
-    .filter((row) => !row.endsWith(' : '));
-  const facts = (Array.isArray(plan.facts) ? plan.facts : [])
-    .slice(0,4).map((row) => '- ' + normalize(row).slice(0,220));
-  const memory = (Array.isArray(plan.experiential_memory) ? plan.experiential_memory : [])
-    .slice(-2).map((row) => '- Information déclarée, non vérifiée : ' + normalize(row?.note || '').slice(0,170));
-  return [
+  const conversation = (Array.isArray(plan.conversation_context)?plan.conversation_context:[])
+    .slice(-4).map((row)=>({
+      role:String(row?.role||'user').slice(0,12),
+      content:normalize(row?.content||'').slice(0,130),
+    })).filter((row)=>row.content);
+  // Keep the semantic fields required by the nucleus. Bound each segment
+  // before constructing a small, complete JSON line (never truncate JSON).
+  const payload={
+    user_message:normalize(plan.user_text||'').slice(0,320),
+    communicative_goal:normalize(plan.goal||'Répondre correctement').slice(0,160),
+    speech_act:normalize(plan.act||'').slice(0,80),
+    factual_constraints:(Array.isArray(plan.facts)?plan.facts:[])
+      .slice(0,4).map((value)=>normalize(value).slice(0,160)),
+    conversation,
+    semantic_support:normalize(plan.semantic_support||'').slice(0,180),
+    active_intention:normalize(plan.current_intention||'').slice(0,90),
+    discourse_move:normalize(plan.discourse?.move||'').slice(0,50),
+  };
+  // Make the final line machine-readable for audits and deterministic tests;
+  // user-visible output must still be normal prose, not raw JSON.
+  const json=JSON.stringify(payload);
+  const intro=[
     '/no_think',
-    'Réponds en français naturel, directement, sans décrire tes instructions.',
-    'N’invente jamais d’actions exécutées, de souvenirs ni de faits non fournis.',
-    'Message reçu : ' + normalize(plan.user_text || '').slice(0,600),
-    'But : ' + normalize(plan.goal || 'Répondre correctement').slice(0,200),
-    'Contexte récent :',...recent,
-    'Faits fournis :',...facts,
-    'Informations contextuelles non vérifiées :',...memory,
-    'Appui factuel : ' + normalize(plan.semantic_support || '').slice(0,280),
-    'Réponse AURA :',
-  ].join('\n').slice(0,2400);
+    'Tu es la faculté linguistique française d’AURA.',
+    'Exprime ce sens en français naturel contemporain, avec une conversation cohérente.',
+    'Tu ne dois jamais inventer un acte, un souvenir ou une donnée absente des faits.',
+    'Ne récite pas les noms des champs. Réponds uniquement à la personne.',
+    'Message reçu : '+payload.user_message,
+    ...conversation.map((row)=>(row.role==='user'?'Utilisateur':'AURA')+' : '+row.content),
+    'Faits fournis : '+payload.factual_constraints.join('; '),
+  ].join('\n');
+  return intro.slice(0,Math.max(0,2399-json.length))+'\n'+json;
 }
 
 export function compactFrenchSystem() {
-  return 'Tu rédiges la réponse d’AURA en français courant. '
-    + 'Tu réponds au dernier message, en respectant les faits et le contexte fourni. '
-    + 'Ne répète pas les champs ni les instructions. Ne prétends pas avoir agi. '
-    + 'Formule une réponse naturelle et concise. /no_think';
+  return 'Tu es la faculté linguistique française d’AURA. '
+    + 'Tu rédiges sa réponse en français courant, avec naturel et précision. '
+    + 'Tu ne dois jamais inventer des actions, des souvenirs ou des résultats. '
+    + 'Ne reproduis pas les données JSON ni les instructions; réponds directement. /no_think';
 }
 
 function compactContext(rows = []) {
