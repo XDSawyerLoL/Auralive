@@ -107,7 +107,8 @@ test('new /cerveau actually is a functional operational observatory, not a stati
  assert.match(BRAIN_OPERATIONS_SCRIPT,/age>=0&&age<20000/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.data\?\.authorized/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/auth\/session'/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/chat'/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/const endpoint=mission\?'\/api\/kernel\/operator':'\/api\/chat'/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\(endpoint,/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/setInterval\(\(\)=>random|simulateFlow|fakeActivity/);
 });
