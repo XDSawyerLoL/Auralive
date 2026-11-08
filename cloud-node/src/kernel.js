@@ -969,10 +969,21 @@ export class CognitiveKernel {
   async operate(task, requestedRisks = []) {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
+    // Instrument ONLY actual transitions, never infer that a service was called
+    // just because it exists. No mission text or private input in brain-hop events.
+    const operationFlowId = randomUUID();
+    const hop = async (from,to,stage,status='ok') => this.trace(
+      'brain-hop',from+' -> '+to,'',{
+        flow_id:operationFlowId,from,to,stage,status,at:now(),
+      },
+    );
+    await hop('input','command','operator-received');
 
     if (this.bridge?.enabled && await this.bridge.workerOnline()) {
+      await hop('command','bridge','quantic-studio-invoked','attempted');
       const result = await this.bridge.operate(mission, requestedRisks);
-      await this.trace('operator', 'Quantic Studio execution', mission, {
+      await hop('bridge','command','quantic-studio-result',result?.executed?'ok':'unavailable');
+      await this.trace('operator', 'Quantic Studio execution', '', {
         delegated: true,
         executed: Boolean(result?.executed),
         job_id: result?.job_id || '',
@@ -999,13 +1010,16 @@ export class CognitiveKernel {
           const sandboxOnly = graph.nodes.length > 0
             && graph.nodes.every((node) => String(node.capability || '').startsWith('cloud.workspace.'));
           if (sandboxOnly) {
+            await hop('command','fabric','sandbox-capabilities-selected','attempted');
+            await hop('fabric','dag','task-graph-built','attempted');
             const executor = new TaskGraphExecutor(this.fabric);
             const result = await executor.execute(graph, {
               trigger: 'cloud-sandbox-operator',
               allowSideEffects: true,
             });
             if (result.ok) {
-              await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
+              await hop('dag','command','sandbox-execution-completed','ok');
+              await this.trace('operator', 'AURA Cloud sandbox execution', '', {
                 delegated: false,
                 executed: true,
                 graph_id: result.graph_id,
@@ -1024,7 +1038,8 @@ export class CognitiveKernel {
           }
         }
       } catch (error) {
-        await this.trace('operator', 'AURA Cloud sandbox refused', mission, {
+        await hop('fabric','command','sandbox-execution-rejected','failed').catch(()=>{});
+        await this.trace('operator', 'AURA Cloud sandbox refused', '', {
           delegated: false,
           executed: false,
           error: String(error?.message || error).slice(0, 1000),
@@ -1032,10 +1047,12 @@ export class CognitiveKernel {
       }
     }
 
+    await hop('command','agent','operator-plan-requested','attempted');
     const plan = await this.runAgent(
       'operator',
       `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
     );
+    await hop('agent','command','plan-only-no-execution','unavailable');
     return {
       ok: true,
       task: mission,
