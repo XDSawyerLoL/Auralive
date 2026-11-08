@@ -109,7 +109,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   };
   const instructions = [
     '/no_think',
-    'Tu formules la décision du noyau AURA en français naturel ; le modèle n’est pas son identité.',
+    'Tu formules la décision du noyau AURA en français naturel contemporain ; le modèle n’est pas son identité.',
     'Humeur, affect et relation sont calculés avant ton appel : ils modulent le ton, sans devenir un bilan chiffré.',
     'Pour un « comment vas-tu ? » ordinaire : une ou deux phrases sans jargon ni pourcentages ; applique les corrections de style antérieures.',
     'Pour un diagnostic explicite : seules les valeurs des faits sont autorisées. Ces indices ne prouvent pas des émotions humaines vécues.',
