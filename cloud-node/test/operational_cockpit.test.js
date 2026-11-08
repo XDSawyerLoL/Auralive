@@ -8,7 +8,7 @@ import {
 } from '../src/revenue_audit.js';
 
 test('chat remains pinned in a viewport dock, with independent messages scrolling',()=>{
-  assert.match(DASHBOARD_HTML,/\.chat\{position:sticky;top:96px;height:calc\(100dvh - 110px\)/);
+  assert.match(DASHBOARD_HTML,/\.chat\{position:sticky;top:96px;height:calc\(100dvh - 260px\)/);
   assert.match(DASHBOARD_HTML,/grid-template-rows:auto minmax\(0,1fr\) auto auto auto/);
   assert.match(DASHBOARD_HTML,/\.messages\{flex:initial;min-height:0;/);
   assert.match(DASHBOARD_HTML,/@media\(max-width:640px\)[\s\S]*?\.chat\{top:72px;height:calc\(100dvh - 79px\)/);
