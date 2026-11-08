@@ -1427,6 +1427,68 @@ app.post('/api/kernel/operator', async (request, reply) => {
   return kernel.operate(task, risks);
 });
 
+// Server-sent cognitive events. Every payload is an already-redacted ledger
+// snapshot; only the authenticated/signed browser session may subscribe.
+// This is best-effort single-process streaming: the final POST /api/chat trace
+// remains authoritative if a reverse proxy or another Node process intervenes.
+function openCognitiveEventStream(request, reply, session, currentSnapshot) {
+  const raw = reply.raw;
+  let closed = false;
+  const send = (payload) => {
+    if (closed || raw.destroyed || raw.writableEnded) return;
+    try {
+      raw.write('event: trace\\ndata: ' + JSON.stringify(payload) + '\\n\\n');
+    } catch (_) { cleanup(); }
+  };
+  const unsubscribe = cognitiveTrace.subscribe(session, send);
+  if (!unsubscribe) {
+    return reply.code(429).send({ error: 'Limite de connexions de télémétrie atteinte' });
+  }
+  let heartbeat;
+  let lifetime;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    unsubscribe();
+    clearInterval(heartbeat);
+    clearTimeout(lifetime);
+  };
+  const inherited = reply.getHeaders();
+  reply.hijack();
+  raw.writeHead(200, {
+    ...inherited,
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'private, no-store, no-transform',
+    'X-Accel-Buffering': 'no',
+    Connection: 'keep-alive',
+  });
+  raw.once('close', cleanup);
+  raw.once('error', cleanup);
+  raw.write('retry: 5000\\n\\n');
+  send(currentSnapshot());
+  heartbeat = setInterval(() => {
+    if (!closed && !raw.destroyed) raw.write(': heartbeat\\n\\n');
+  }, 15000);
+  heartbeat.unref?.();
+  lifetime = setTimeout(() => {
+    cleanup();
+    if (!raw.destroyed && !raw.writableEnded) raw.end();
+  }, 120000);
+  lifetime.unref?.();
+}
+
+app.get('/api/cognition/events', async (request, reply) => {
+  const session = ensureChatSession(request, reply);
+  return openCognitiveEventStream(request, reply, session,
+    () => cognitiveTrace.snapshot(session));
+});
+
+app.get('/api/cognition/autonomy/events', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return openCognitiveEventStream(request, reply, '__internal_autonomy__',
+    () => cognitiveTrace.snapshotAutonomy());
+});
+
 // The autonomous stream is founder-only: it may reveal operational rhythms.
 app.get('/api/cognition/autonomy', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
