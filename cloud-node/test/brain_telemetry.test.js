@@ -111,3 +111,13 @@ test('the public read-only brain route exports no raw memory or bearer secrets',
  assert.doesNotMatch(route,/raw_private_memory|db\.query|privateKey|cloudToken/);
  assert.match(route,/Cache-Control','no-store'/);
 });
+
+
+test('fullscreen brain action is functional without disrupting the chat on the home page',()=>{
+ assert.match(BRAIN_HTML,/id="brainFullscreen"/);
+ assert.match(BRAIN_SCRIPT,/brainFullscreen'\)\.addEventListener\('click'/);
+ assert.match(BRAIN_SCRIPT,/region\.requestFullscreen/);
+ assert.match(BRAIN_SCRIPT,/document\.exitFullscreen/);
+ assert.match(BRAIN_HTML,/\.stage:fullscreen/);
+ assert.match(DASHBOARD_HTML,/id="messages"/);
+});
