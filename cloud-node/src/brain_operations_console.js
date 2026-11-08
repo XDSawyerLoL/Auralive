@@ -178,8 +178,10 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <div id="eventList" class="scroll-list"><p class="empty">Aucun événement chargé.</p></div>
     </div>
     <div class="panel" id="homeostasis-panel">
-      <div class="panel-header"><h2>Homéostasie</h2><small>Mesures numériques réelles</small></div>
+      <div class="panel-header"><h2>Homéostasie</h2><small>Indices internes, calculés par AuraOrganism</small></div>
+      <div class="affect-status"><span>Humeur du noyau</span><strong id="organismMood">—</strong></div>
       <div id="metricList" class="metric-list"></div>
+      <p class="affect-bridge" id="affectBridge">Transmission homéostasie → langage : aucune observation chargée.</p>
       <p class="small-text" id="metricTime">Aucune mesure actuellement reçue.</p>
     </div>
     <div class="panel" id="memory-panel">
