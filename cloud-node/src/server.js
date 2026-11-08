@@ -1656,16 +1656,28 @@ app.post('/api/chat', async (request, reply) => {
     privateView,
     chatSessionId,
   );
-  const curiosityItem = await curiosity.questionForInteraction(text).catch(() => null);
   const baseAnswer = String(response?.answer || '').trim();
+  // Never append a curiosity prompt to an empty/unavailable model reply.
+  // This distinguishes a real AI answer from a server diagnostic.
+  const unavailable = Boolean(response?.language_unavailable) || !baseAnswer;
+  const curiosityItem = unavailable ? null
+    : await curiosity.questionForInteraction(text).catch(() => null);
   const curiosityQuestion = String(curiosityItem?.question || '').trim();
-  const answer = curiosityQuestion
-    ? `${baseAnswer}\n\n${curiosityQuestion}`
-    : baseAnswer;
+  const answer = unavailable ? ''
+    : curiosityQuestion ? `${baseAnswer}\n\n${curiosityQuestion}` : baseAnswer;
   return {
     ...response,
+    ok: !unavailable,
     answer,
-    curiosity_question: curiosityItem || null,
+    response_kind: unavailable ? 'model-unavailable' : 'model-generated',
+    language_unavailable: unavailable,
+    retryable: unavailable,
+    service_status: unavailable ? {
+      code: 'french-inference-unavailable',
+      message: 'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
+      recovery: 'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
+    } : null,
+    curiosity_question: curiosityItem,
     voice_ticket: answer ? createVoiceTicket(answer) : '',
     voice_profile: 'mairaiy',
   };
