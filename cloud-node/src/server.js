@@ -1381,6 +1381,9 @@ app.get('/api/brain/graph', async (request, reply) => {
   }
   return {
     ...toPublicBrainFlowGraph(buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows})),
+    learned_identity: bootstrap.runtimeReady
+      ? kernel.autogenesis.publicState(kernel.soulCache?.emergent_identity)
+      : null,
     runtime_diagnostic: publicRuntimeDiagnostic(bootstrap, {
       gatewayOnly: process.env.AURA_GATEWAY_ONLY === 'true',
     }),
