@@ -365,6 +365,8 @@ function draw(){
  }
  const d=state.data;const now=Date.now();
  drawNetworkStructure(d.edges||[]);
+ const lens=state.focusGroup;
+ const inLens=id=>lens==='all'||findNode(id)?.group===lens;
  const elapsed=performance.now()-state.replayStarted;
  const steps=state.flow?.steps||[];
  const replayWindow=steps.length*520+850;
@@ -375,7 +377,7 @@ function draw(){
  for(const edge of d.edges||[]){
    const a=project(edge.from),b=project(edge.to);const key=edge.from+'>'+edge.to;
    const selected=selectedEdgeSet.has(key);const observed=edge.observed_count>0;const age=edge.last_observed_at?now-Date.parse(edge.last_observed_at):Infinity;const recent=edge.signal_recent===true&&age>=0&&age<20000;
-   ctx.save();ctx.lineCap='round';ctx.setLineDash(selected||recent?[]:[4,7]);
+   ctx.save();ctx.globalAlpha=inLens(edge.from)||inLens(edge.to)?1:.12;ctx.lineCap='round';ctx.setLineDash(selected||recent?[]:[4,7]);
    ctx.lineWidth=selected?2.8:recent?2.1:observed?1.15:.8;
    ctx.strokeStyle=selected?'rgba(255,186,104,.95)':recent?'rgba(101,255,225,.95)':observed?'rgba(224,112,245,.50)':'rgba(194,115,229,.17)';
    ctx.shadowBlur=selected?21:recent?18:0;ctx.shadowColor=selected?'rgba(255,186,104,.96)':'rgba(95,255,229,.98)';
@@ -396,9 +398,11 @@ function draw(){
    }
  }
  state.screen=[];
+ const labelCandidates=[];
  for(const node of d.nodes||[]){
    const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:11;const r=base*scale*(1+(reduced?0:.035*Math.sin(performance.now()/950+node.id.length)));
    state.screen.push({id:node.id,x:p.x,y:p.y,r:Math.max(r,14)});
+   ctx.save();ctx.globalAlpha=inLens(node.id)?1:.22;
    const glow=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,r*3.2);
    const rgb=selected?'243,180,132':active?'135,244,234':tone(node).replace('#','');
    glow.addColorStop(0,selected?'rgba(255,191,105,.86)':active?'rgba(94,255,225,.85)':'rgba(221,110,245,.38)');
@@ -406,9 +410,37 @@ function draw(){
    ctx.beginPath();ctx.shadowBlur=selected?17:active?13:5;ctx.shadowColor=selected?'#ffb768':active?'#71ffe0':tone(node);ctx.fillStyle=selected?'#ffbf78':active?'#78ffe1':tone(node);ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
    ctx.lineWidth=selected?2.4:1.5;ctx.strokeStyle=selected?'#fff2de':active?'#d7fff8':'rgba(255,222,248,.6)';ctx.stroke();
    ctx.beginPath();ctx.fillStyle='rgba(255,255,255,.95)';ctx.arc(p.x,p.y,Math.max(1.5,r*.22),0,Math.PI*2);ctx.fill();
-   const label=node.label.length>17?node.label.slice(0,17)+'…':node.label;const font=Math.max(9,Math.min(12,11.5*scale));ctx.font='700 '+font+'px system-ui';const tw=ctx.measureText(label).width;const tagW=tw+22,tagH=Math.max(19,18*scale);const tx=p.x+r+8+tagW>canvasW-5?p.x-r-8-tagW:p.x+r+8,ty=Math.max(32,Math.min(canvasH-tagH-12,p.y-tagH/2));
-   ctx.fillStyle='rgba(11,5,17,.95)';ctx.strokeStyle=selected?'rgba(255,185,110,.85)':active?'rgba(110,255,239,.85)':'rgba(187,95,212,.55)';ctx.lineWidth=1;roundedLabel(tx,ty,tagW,tagH,8);ctx.fill();ctx.stroke();
-   ctx.fillStyle=selected?'#fff0df':active?'#ebfffb':'#f2d2f6';ctx.fillText(label,tx+10,ty+tagH/2+font*.32-2);
+
+   ctx.restore();
+   if(selected||node.id===state.hovered||active||ANCHORS.has(node.id)||state.showAllLabels||state.zoom>1.55)
+     labelCandidates.push({node,p,r,selected,active,priority:selected?100:node.id===state.hovered?90:active?80:ANCHORS.has(node.id)?50:10});
+ }
+ // Labels are information overlays, not artificial neurons. Avoid overlaps
+ // while keeping every underlying node available through the sidebar.
+ const placed=[];
+ labelCandidates.sort((a,b)=>b.priority-a.priority);
+ for(const item of labelCandidates){
+   const {node,p,r,selected,active}=item;
+   if(!inLens(node.id)&&!selected)continue;
+   const label=node.label.length>24?node.label.slice(0,23)+'…':node.label;
+   const font=11;ctx.font='600 '+font+'px system-ui';
+   const tagW=ctx.measureText(label).width+18,tagH=21;
+   const offsets=[[r+8,-tagH/2],[-r-8-tagW,-tagH/2],[r+8,15],[-r-8-tagW,-tagH-12]];
+   let rect=null;
+   for(const [dx,dy] of offsets){
+     const x=p.x+dx,y=p.y+dy;
+     if(x<8||x+tagW>canvasW-8||y<36||y+tagH>canvasH-10)continue;
+     if(placed.some(b=>x<b.x+b.w+4&&x+tagW+4>b.x&&y<b.y+b.h+4&&y+tagH+4>b.y))continue;
+     rect={x,y,w:tagW,h:tagH};break;
+   }
+   if(!rect)continue;
+   placed.push(rect);
+   ctx.fillStyle='rgba(7,11,19,.88)';
+   ctx.strokeStyle=selected?'rgba(255,185,110,.88)':active?'rgba(110,255,239,.70)':'rgba(131,151,186,.34)';
+   ctx.lineWidth=selected?1.4:.8;
+   roundedLabel(rect.x,rect.y,rect.w,rect.h,7);ctx.fill();ctx.stroke();
+   ctx.fillStyle=selected?'#ffdfbd':active?'#bdfdf2':'#cfdeeb';
+   ctx.fillText(label,rect.x+9,rect.y+14.5);
  }
  ctx.restore();
  if((d.edges||[]).some(e=>e.signal_recent&&Date.now()-Date.parse(e.last_observed_at||'')<1800)||replaying)scheduleDraw();
