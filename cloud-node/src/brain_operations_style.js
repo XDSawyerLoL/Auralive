@@ -350,4 +350,11 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
  .chat-main{grid-template-columns:90px minmax(0,1fr) auto}
  #chatExpand{grid-column:1/-1}
 }
+
+.somatic-sensors{display:grid;gap:6px;margin:10px 12px 6px;padding:10px;border:1px solid rgba(99,230,216,.28);border-radius:9px;background:rgba(12,33,44,.44)}
+.somatic-sensors>.inline-head{margin-bottom:3px}
+.somatic-sensors>div:not(.inline-head){display:flex;justify-content:space-between;gap:12px;font-size:10px}
+.somatic-sensors span{color:#abc3cf}
+.somatic-sensors strong{color:#b9ffed;font-variant-numeric:tabular-nums}
+.somatic-sensors small{color:#88a6b5;font-size:9px;line-height:1.45}
 `;
