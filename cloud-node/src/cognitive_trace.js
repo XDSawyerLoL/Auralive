@@ -57,6 +57,7 @@ export class CognitiveTraceLedger {
     };
     this.runs.set(id, run);
     this.mark(id, 'request', 'running');
+    this.prune();
     return id;
   }
 
