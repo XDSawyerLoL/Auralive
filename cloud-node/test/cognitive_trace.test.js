@@ -62,3 +62,56 @@ test('bounded retention and chronological expiration', () => {
   for (let i = 0; i < 150; i++) ledger.start('bulk');
   assert.ok(ledger.runs.size <= 120);
 });
+
+test('autonomous cycle is founder-only and cannot be fetched through a visitor session', () => {
+  let timestamp = 1_800_000_000_000;
+  const ledger = new CognitiveTraceLedger({ clock: () => timestamp });
+  const id = ledger.startAutonomy('ambient');
+  timestamp += 45;
+  ledger.mark(id, 'regulation', 'done', { delta_stability: -0.003 });
+  ledger.finish(id);
+  assert.equal(ledger.snapshot('public-cookie-session', id).available, false);
+  assert.equal(ledger.snapshotAutonomy(id).available, true);
+  assert.equal(ledger.snapshotAutonomy(id).kind, 'autonomy');
+  assert.equal(ledger.snapshotAutonomy(id).events.at(-1).stage, 'cycle');
+  assert.equal(ledger.snapshotAutonomy(id).events[0].details.trigger_kind, 'ambient');
+});
+
+test('stage duration uses measured start and completion, not animation time', () => {
+  let timestamp = 1_800_000_000_000;
+  const ledger = new CognitiveTraceLedger({ clock: () => timestamp });
+  const id = ledger.start('one');
+  timestamp += 25;
+  ledger.mark(id, 'context', 'running');
+  timestamp += 310;
+  ledger.mark(id, 'context', 'done', { messages: 3 });
+  const completed = ledger.snapshot('one', id).events.at(-1);
+  assert.equal(completed.elapsed_ms, 335);
+  assert.equal(completed.duration_ms, 310);
+  ledger.finish(id);
+  assert.equal(ledger.snapshot('one', id).duration_ms, 335);
+});
+
+test('agent failure, blocked state and confirmed operator execution stay distinct', () => {
+  const ledger = new CognitiveTraceLedger();
+  const failId = ledger.recordOperation('agent', false, 'failed');
+  const blockedId = ledger.recordOperation('agent', false, 'blocked');
+  const actionId = ledger.recordOperation('operator', true);
+  const refusedId = ledger.recordOperation('operator', false);
+  assert.equal(ledger.snapshotAutonomy(failId).state, 'error');
+  assert.equal(ledger.snapshotAutonomy(failId).events.find(e => e.stage === 'reflection_auto').status, 'error');
+  assert.equal(ledger.snapshotAutonomy(blockedId).events.find(e => e.stage === 'reflection_auto').status, 'skipped');
+  assert.equal(ledger.snapshotAutonomy(actionId).events.find(e => e.stage === 'execution_auto').details.execution_confirmed, true);
+  assert.equal(ledger.snapshotAutonomy(refusedId).events.find(e => e.stage === 'execution_auto').status, 'skipped');
+  assert.equal(ledger.recordOperation('unknown', true), '');
+});
+
+test('autonomous trace redacts arbitrary trigger strings and never contains mission text', () => {
+  const ledger = new CognitiveTraceLedger();
+  const id = ledger.startAutonomy('contact private.person@example.com');
+  ledger.mark(id, 'context_auto', 'done', { stimuli_count: 4, raw_prompt: 'PRIVATE SECRET', memory: 'internal' });
+  ledger.finish(id);
+  const data = JSON.stringify(ledger.snapshotAutonomy(id));
+  assert.doesNotMatch(data, /private.person|PRIVATE SECRET|internal/);
+  assert.equal(ledger.snapshotAutonomy(id).events.at(-2).details.stimuli_count, 4);
+});
