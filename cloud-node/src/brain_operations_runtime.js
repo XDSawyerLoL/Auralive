@@ -172,7 +172,13 @@ function renderMetrics(){
    track.append(fill);row.append(track);row.append(element('strong','',m.value===null?'—':m.value+' %'));
    root.append(row);
  }
- setText('metricTime','Dernière mutation : '+stamp(state.data?.telemetry?.source?.updated_at)+' · état '+(state.data?.telemetry?.source?.status||'non vérifié')+'. Ces indices décrivent un logiciel, pas une émotion biologique.');
+ const telemetry=state.data?.telemetry||{};
+ const affectHop=(state.data?.edges||[]).find(edge=>edge.from==='homeostasis'&&edge.to==='language');
+ setText('organismMood',telemetry.mood||'Non disponible');
+ setText('affectBridge',affectHop?.observed_count>0
+   ?'Transmission homéostasie → langage observée : '+affectHop.observed_count+' passage(s) sur 24 h, dernier à '+shortTime(affectHop.last_observed_at)+'. Le modèle reçoit les signaux avant de formuler.'
+   :'Aucun passage homéostasie → langage enregistré sur 24 h. Une réponse ne prouve pas que cette liaison a été utilisée.');
+ setText('metricTime','Dernière mutation : '+stamp(telemetry.source?.updated_at)+' · état '+(telemetry.source?.status||'non vérifié')+'. Ces indices décrivent un logiciel, pas une émotion biologique.');
 }
 
 function renderTools(){
@@ -553,8 +559,18 @@ $('chatSend').onclick=async()=>{
      field.value=msg;
      chatLine('AURA · ACTION PROTÉGÉE','Les observations sont ouvertes. Cette commande peut modifier le serveur : son exécution exige une autorisation distincte. La requête reste dans le champ de saisie.');
    }else if(!res.ok||out?.ok!==true){
-     const failure=typeof out?.error==='string'?out.error:'Le noyau n’a pas confirmé le traitement.';
-     chatLine('SERVICE · NON EXÉCUTÉ',failure.slice(0,750));
+     // Model failure is not a failed/unedited user command. Keep text
+     // available for a deliberate retry; a POST may have been persisted.
+     const speechUnavailable=!mission&&(out?.language_unavailable===true
+       ||out?.service_status?.code==='french-inference-unavailable');
+     field.value=msg;
+     if(speechUnavailable){
+       chatLine('AURA · LANGAGE INDISPONIBLE',
+         'Le noyau a reçu ta question, mais la formulation n’a pas été confirmée. Réessaie lorsque le modèle répond ; ton message reste dans le champ de saisie.');
+     }else{
+       const failure=typeof out?.error==='string'?out.error:'Le service n’a pas confirmé cette demande.';
+       chatLine('SERVICE · ERREUR',failure.slice(0,750));
+     }
    }else if(mission){
      const executed=out.executed===true;
      const details=typeof out.plan==='string'?out.plan
@@ -570,7 +586,7 @@ $('chatSend').onclick=async()=>{
        chatLine('MOTEUR INDISPONIBLE','Aucun texte vérifiable généré ; consulter le diagnostic.');
      }else{
        chatLine(out.nucleus_verbalization_validated
-         ?'AURA · FORMULATION CONTRÔLÉE':'AURA · TEXTE NON ATTESTÉ',answer);
+         ?'AURA':'AURA · FORMULATION À VÉRIFIER',answer);
      }
    }
    await poll();
@@ -587,8 +603,9 @@ $('chatSend').onclick=async()=>{
        :'Réponse reçue, mais aucun trajet corrélé n’est présent dans les traces consultées.');
    }
  }catch(error){
+   field.value=msg;
    chatLine('SERVICE · ÉCHEC',
-     error?.name==='AbortError'?'Temps de réponse dépassé. Aucune réponse inventée.':
+     error?.name==='AbortError'?'Délai dépassé. Le traitement peut déjà être enregistré ; vérifie le trajet avant de renvoyer. Ton message est conservé.':
      'Connexion impossible : '+String(error?.message||error).slice(0,220));
  }finally{
    clearTimeout(timer);state.busy=false;
