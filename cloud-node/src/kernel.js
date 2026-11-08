@@ -667,6 +667,10 @@ export class CognitiveKernel {
         delta_stability: Number(idle.effect?.stabilite || 0),
         delta_curiosity: Number(idle.effect?.curiosite || 0),
         delta_frustration: Number(idle.effect?.frustration || 0),
+        state_stability: idle.state.stabilite, state_clarity: idle.state.clarte,
+        state_curiosity: idle.state.curiosite, state_confidence: idle.state.confiance,
+        state_frustration: idle.state.frustration, state_engagement: idle.state.engagement,
+        state_mood: idle.state.mood
       });
       if (idle.activity !== 'presence' || idle.dream) {
         await this.recordOrganismEvent('idle-life', idle.activity_label || 'vie intérieure', {
@@ -1115,6 +1119,10 @@ export class CognitiveKernel {
       delta_stability: Number(pre.impact_delta?.stabilite || 0),
       delta_curiosity: Number(pre.impact_delta?.curiosite || 0),
       delta_frustration: Number(pre.impact_delta?.frustration || 0),
+      state_stability: pre.state.stabilite, state_clarity: pre.state.clarte,
+        state_curiosity: pre.state.curiosite, state_confidence: pre.state.confiance,
+        state_frustration: pre.state.frustration, state_engagement: pre.state.engagement,
+        state_mood: pre.state.mood
     });
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
@@ -1312,7 +1320,12 @@ export class CognitiveKernel {
       post_delta: post.post_delta || {},
     });
     await this.saveSoul();
-    observe('homeostasis_post');
+    observe('homeostasis_post', 'done', {
+      state_stability: post.state.stabilite, state_clarity: post.state.clarte,
+        state_curiosity: post.state.curiosite, state_confidence: post.state.confiance,
+        state_frustration: post.state.frustration, state_engagement: post.state.engagement,
+        state_mood: post.state.mood
+    });
     observe('persistence', 'running');
 
     await query(
