@@ -83,6 +83,9 @@ let cogAutonomyForbidden=false;
 let cogReplayVersion=0;
 let cogReplaying=false;
 let cogFetchPending=null;
+let cogLiveStream=null;
+let cogStreamReady=false;
+let cogLastFetchMs=0;
 let cogGraphReady=false;
 let cogLatestVisualSignature='';
 let cogZoom=1;
@@ -327,7 +330,7 @@ function renderCognitiveGraph(){
    cogRenderTimeline(events);
  }
  $('cogTraceSource').textContent=available?
-   ('Trace '+String(cogTrace.id||'').slice(0,8)+' · '+(cogTraceOrigin==='reply'?'Réponse HTTP':'Lecture serveur'))
+   ('Trace '+String(cogTrace.id||'').slice(0,8)+' · '+(cogTraceOrigin==='reply'?'Réponse HTTP':cogTraceOrigin==='stream'?'Événements instantanés':'Lecture serveur'))
    :'Aucune trace reçue';
 }
 function cogRenderTimeline(events){
@@ -392,15 +395,61 @@ function exportCognitiveTrace(){
  document.body.append(link);link.click();link.remove();
  setTimeout(function(){URL.revokeObjectURL(url);},1000);
 }
+function closeCognitiveEventStream(){
+  if(cogLiveStream){
+    try{cogLiveStream.close();}catch(_){}
+    cogLiveStream=null;
+  }
+  cogStreamReady=false;
+}
+function connectCognitiveEventStream(){
+  closeCognitiveEventStream();
+  if(typeof EventSource==='undefined')return;
+  const mode=cogMode;
+  const url=apiUrl(mode==='autonomy'
+    ? '/api/cognition/autonomy/events' : '/api/cognition/events');
+  try{
+    const stream=new EventSource(url,{withCredentials:true});
+    cogLiveStream=stream;
+    stream.onopen=function(){
+      if(cogLiveStream===stream&&cogMode===mode)cogStreamReady=true;
+    };
+    stream.addEventListener('trace',function(event){
+      if(cogLiveStream!==stream||cogMode!==mode)return;
+      let snapshot=null;
+      try{snapshot=JSON.parse(event.data);}catch(_){return;}
+      if(!snapshot||typeof snapshot!=='object'
+        ||!Array.isArray(snapshot.events)||typeof snapshot.available!=='boolean')return;
+      if(mode==='dialogue'&&cogTraceId&&snapshot.available
+        &&snapshot.id!==cogTraceId)return;
+      // An embedded, final trace is authoritative if the streaming proxy
+      // routed this connection to another Node instance.
+      if(!snapshot.available&&cogTrace?.available)return;
+      cogStreamReady=true;
+      cogTraceOrigin='stream';
+      cogTrace=snapshot;
+      renderCognitiveGraph();
+    });
+    stream.onerror=function(){
+      if(cogLiveStream!==stream)return;
+      cogStreamReady=false;
+      // EventSource reconnects automatically on transient network failures.
+      // REST polling remains independently available.
+      if(stream.readyState===EventSource.CLOSED)closeCognitiveEventStream();
+    };
+  }catch(_){closeCognitiveEventStream();}
+}
 function switchCognitiveMode(next){
  const mode=next==='autonomy'?'autonomy':'dialogue';
  if(cogMode===mode)return;
+ closeCognitiveEventStream();
  cogMode=mode;cogTrace=null;cogTraceOrigin='poll';
  cogSelected='';cogSelectedIndex=-1;cogAutonomyForbidden=false;
  cogReplayVersion++;cogReplaying=false;cogPanX=0;cogPanY=0;cogZoom=1;
  $('cogModeDialogue').setAttribute('aria-pressed',String(mode==='dialogue'));
  $('cogModeAutonomy').setAttribute('aria-pressed',String(mode==='autonomy'));
  initCognitiveGraph();
+ connectCognitiveEventStream();
  if(cogFetchPending)void cogFetchPending.then(function(){if(cogMode===mode)void refreshCognitiveTrace();});
  else void refreshCognitiveTrace();
 }
@@ -413,14 +462,18 @@ async function refreshCognitiveTrace(){
      const parameter=mode==='dialogue'&&cogTraceId?'?id='+encodeURIComponent(cogTraceId):'';
      const data=await api(mode==='autonomy'?'/api/cognition/autonomy':'/api/cognition/trace'+parameter);
      if(mode!==cogMode)return;
+     if(mode==='dialogue'&&cogTraceId&&data.available
+       &&data.id!==cogTraceId)return;
      if(mode==='dialogue'&&!data.available&&cogTrace?.available&&cogTrace.id===cogTraceId){
        cogTraceOrigin='reply';renderCognitiveGraph();return;
      }
+     cogLastFetchMs=Date.now();
      cogTraceOrigin='poll';cogTrace=data;renderCognitiveGraph();
    }catch(error){
      if(mode!==cogMode)return;
      if(error.status===401&&mode==='autonomy'){
        cogAutonomyForbidden=true;
+       closeCognitiveEventStream();
        $('cogState').textContent='Accès privé : authentification fondatrice requise';
      }else{
        $('cogState').textContent='Télémétrie indisponible';
@@ -432,7 +485,10 @@ async function refreshCognitiveTrace(){
  try{await cogFetchPending;}finally{cogFetchPending=null;}
 }
 async function loopCognitiveTrace(){
- await refreshCognitiveTrace();
- setTimeout(loopCognitiveTrace,cogAwaitingReply?600:cogMode==='autonomy'?1800:2900);
+  // SSE delivers each genuine event at source. Periodic REST is a safety net
+  // for buffering proxies, lost cookies, and multiple Hostinger workers.
+  if(!cogStreamReady||cogAwaitingReply||Date.now()-cogLastFetchMs>30000)
+    await refreshCognitiveTrace();
+  setTimeout(loopCognitiveTrace,cogAwaitingReply?850:cogStreamReady?12500:cogMode==='autonomy'?2200:3200);
 }
 `;
