@@ -197,6 +197,21 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
 @media(max-width:900px){.main{grid-template-columns:1fr}.chat{position:sticky;top:79px;height:calc(100dvh - 91px);min-height:420px;max-height:900px}.side{grid-template-columns:1fr 1fr}.revenue-panel{grid-column:1/-1}}
 @media(max-width:640px){.topbar{top:5px}.shell{padding:8px}.chat{top:72px;height:calc(100dvh - 79px);min-height:370px;border-radius:17px}.chat-head{padding:11px 13px;min-height:66px}.chat-title{font-size:16px}.chat-head-state{font-size:10px}.messages{padding:12px;gap:10px}.msg{max-width:94%;padding:11px 13px;font-size:14px}.composer{padding:8px;gap:6px}.composer textarea{min-height:47px;padding:10px;font-size:16px}.composer button{width:43px;height:43px;border-radius:11px}.chat-hint{font-size:9px;padding:0 10px 7px}.revenue-panel{padding:15px}.revenue-form{flex-direction:column}.revenue-form button{width:100%}.revenue-kpis{grid-template-columns:1fr 1fr}.revenue-heading{font-size:24px}.side{grid-template-columns:1fr}}
 
+
+.autonomy-panel{padding:19px;display:grid;gap:12px;border:1px solid rgba(168,151,252,.27);background:linear-gradient(140deg,rgba(29,28,63,.92),rgba(13,20,40,.97))}
+.autonomy-topline{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:10px;letter-spacing:.11em;color:#c2b1ff}
+.autonomy-label{font-size:9px;letter-spacing:.035em;border:1px solid rgba(163,153,252,.27);padding:6px 8px;border-radius:8px;color:#d5cbff}
+.autonomy-heading{font-size:21px;line-height:1.25;font-weight:700;letter-spacing:-.035em;margin:0}.autonomy-heading em{color:#c6b4ff;font-style:normal}
+.autonomy-copy{margin:0;font-size:12px;line-height:1.6;color:#b7bddb}
+.autonomy-field-label{font-size:11px;color:#d5d4fa;font-weight:650}
+.autonomy-panel textarea{width:100%;resize:vertical;min-height:68px;max-height:170px;border-radius:11px;padding:12px;background:rgba(8,14,35,.67);border:1px solid rgba(176,170,249,.2);outline:none;color:#f0f0ff;font-size:12px;line-height:1.5}
+.autonomy-panel textarea:focus{border-color:#b5a8ef}
+.autonomy-run{background:linear-gradient(130deg,#c1b4fa,#909ce9);border:0;border-radius:10px;color:#121933;font-weight:760;font-size:12px;padding:11px}
+.autonomy-run:disabled{opacity:.5;cursor:wait}
+.autonomy-status{font-size:11px;color:#b8bedd;line-height:1.5}
+.autonomy-result{display:none;white-space:pre-wrap;overflow-wrap:anywhere;max-height:180px;overflow-y:auto;font-size:10px;line-height:1.55;border-radius:10px;padding:11px;color:#d6dbfc;background:rgba(6,14,35,.64);margin:0}
+.autonomy-result:not(:empty){display:block}
+@media(max-width:900px){.autonomy-panel{grid-column:1/-1}}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -244,6 +259,16 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
     </section>
 
     <aside class="side">
+      <section class="panel autonomy-panel" aria-label="Missions autonomes AURA">
+        <div class="autonomy-topline"><span>00 / CAPACITÉ D'AGIR</span><span class="autonomy-label">COÛT ADDITIONNEL 0 €</span></div>
+        <h2 class="autonomy-heading">Passer de la pensée <em>à l'action.</em></h2>
+        <p class="autonomy-copy">Lancer une mission dans le périmètre autorisé. AURA devra indiquer si elle l’a réellement exécutée ou si elle a seulement préparé un plan.</p>
+        <label for="autonomyTask" class="autonomy-field-label">Mission à confier à AURA</label>
+        <textarea id="autonomyTask" rows="2" placeholder="Ex. Auditer mon site et proposer des correctifs sans dépenser d'argent."></textarea>
+        <button type="button" id="autonomyRun" class="autonomy-run">Lancer la mission contrôlée</button>
+        <div class="autonomy-status" id="autonomyStatus" aria-live="polite" role="status">Aucune mission lancée. Exécution réservée au compte administrateur.</div>
+        <pre id="autonomyResult" class="autonomy-result" aria-label="Résultat observé de la mission"></pre>
+      </section>
       <section class="panel revenue-panel" aria-label="Poste de revenus et prestations AURA">
         <div class="revenue-topline"><span>01 / PRIORITÉ ÉCONOMIQUE</span><span id="revenueMode" class="revenue-tag">MESURE RÉELLE</span></div>
         <h2 class="revenue-heading">Revenus <em>vérifiables.</em></h2>
