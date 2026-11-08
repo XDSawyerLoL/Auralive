@@ -815,7 +815,7 @@ async function refresh(){
     }
   }catch(error){
     setLive(false,'Indisponible');
-    $('chatState').textContent=error.message;
+    $('chatState').textContent='Noyau inaccessible · vérifier la connexion';
   }
 }
 // Zero-euro emergency voice: installed French voice on the user's device only.
