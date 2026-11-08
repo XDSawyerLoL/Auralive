@@ -1308,6 +1308,13 @@ export class CognitiveKernel {
         this.expression.language.lastNucleusContract?.code || 'not-checked',
       language_provider: this.expression.language.lastBackend || '',
       semantic_support_used: Boolean(plan.semantic_support),
+      activity_evidence: {
+        evidence_status: plan.activity_evidence?.evidence_status || 'unverified',
+        execution_verified: Boolean(plan.activity_evidence?.execution_verified),
+        live_ci_verified: Boolean(plan.activity_evidence?.live_ci_verified),
+        source_status: plan.activity_evidence?.source_status || '',
+        recorded_at: plan.activity_evidence?.recorded_at || '',
+      },
       external_research: externalResearch ? {
         session_id: externalResearch.session_id,
         epistemic_status: externalResearch.epistemic_status,
