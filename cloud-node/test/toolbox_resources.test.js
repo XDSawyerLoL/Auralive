@@ -10,8 +10,8 @@ import {
 
 test('normalizes French accents and discovers an offline directory', () => {
   assert.equal(foldResourceQuery('SCHÉMAS & DIAGRAMMES'), 'schemas diagrammes');
-  assert.equal(RESOURCE_CATALOG.length, 50);
-  assert.equal(new Set(RESOURCE_CATALOG.map((item)=>item.id)).size, 50);
+  assert.equal(RESOURCE_CATALOG.length, 52);
+  assert.equal(new Set(RESOURCE_CATALOG.map((item)=>item.id)).size, 52);
 });
 
 test('catalog is curated: no duplicate remove.bg and no automated actions', () => {
@@ -25,6 +25,13 @@ test('catalog is curated: no duplicate remove.bg and no automated actions', () =
 test('prioritizes useful local file transfers', () => {
   const names=discoverResources('transfert fichier local ordinateur téléphone', {limit:6}).map(x=>x.id);
   assert.ok(names.includes('localsend'));
+});
+
+test('prefers private on-device PDF tooling for a precise request', () => {
+  const results=discoverResources('compresser un PDF confidentiel', {limit:6});
+  assert.ok(results.some((item)=>item.id==='pdfcpu'));
+  assert.ok(results.some((item)=>item.id==='qpdf'));
+  assert.equal(results.some((item)=>item.id==='handbrake'),false);
 });
 
 test('returns no results without matching words or a sensitive blocked category', () => {
