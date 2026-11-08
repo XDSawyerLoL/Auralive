@@ -51,7 +51,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   <section class="hero">
     <div class="hero-card">
       <h1>Cartographie cognitive d’AURA</h1>
-      <p>Une seule interface pour interroger AURA et inspecter la circulation réelle entre ses modules, les outils sollicités et les événements persistés.</p>
+      <p>Interface unique pour dialoguer avec AURA et vérifier les modules utilisés, les décisions et les événements enregistrés.</p>
       <div class="hero-note">
         <span class="pill">Gris = Connexions déclarées</span>
         <span class="pill">Cyan = Transition enregistrée récemment</span>
