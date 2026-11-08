@@ -24,6 +24,8 @@ import {
   schemaStatus,
 } from './db.js';
 import { DASHBOARD_HTML } from './dashboard.js';
+import { BRAIN_HTML } from './brain_console.js';
+import { buildBrainTelemetry } from './brain_telemetry.js';
 import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
@@ -520,6 +522,14 @@ app.addHook('onSend', async (_request, reply, payload) => {
   reply.header('Cache-Control', 'no-store');
   return payload;
 });
+
+app.get('/cerveau', async (_request, reply) => {
+  reply.header('Cache-Control','no-cache');
+  return reply.type('text/html; charset=utf-8').send(BRAIN_HTML);
+});
+app.get('/brain', async (_request, reply) =>
+  reply.redirect('/cerveau', 302)
+);
 
 app.get('/', async (_request, reply) => {
   reply.type('text/html; charset=utf-8');
@@ -1294,6 +1304,21 @@ async function publicOperationalSnapshot() {
 }
 
 app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
+
+// Public read-only brain diagnostic. No private thoughts, raw memory or credentials.
+app.get('/api/brain/telemetry', async (_request, reply) => {
+  reply.header('Cache-Control','no-store');
+  const projection=await publicOperationalSnapshot();
+  const groq=ai.groq?.snapshot?.()||{};
+  return buildBrainTelemetry(projection,{
+    language:{
+      enabled:groq.enabled===true,
+      model:String(groq.model||'').slice(0,90),
+      last_model:String(groq.last_model||'').slice(0,90),
+      last_status:String(groq.last_status||''),
+    },
+  });
+});
 
 app.get('/api/language/embedded/status', async () => ({
   // Public, path-free diagnostics. Does not disclose server folders or secrets.
