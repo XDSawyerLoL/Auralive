@@ -13,21 +13,31 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <body>
 <div class="shell">
   <header class="top">
-    <a class="logo" href="/" title="Retour au chat AURA">
+    <div class="logo" aria-label="AURA Cerveau opérationnel">
       <span class="logo-mark">△</span>
-      <span><strong>AURA / NEURAL OPS</strong><small>une seule interface · modules réels · traces réelles · requête live</small></span>
-    </a>
+      <span><strong>AURA / Cerveau opérationnel</strong><small>Noyau · Mémoire · Outils · Exécution · Homéostasie</small></span>
+    </div>
     <div class="top-actions">
       <span id="onlineState" class="live" data-state="unknown"><i></i>Connexion au noyau…</span>
       <button id="refreshMap" class="top-btn primary" type="button">Actualiser</button>
-      <a href="/" class="top-btn">Chat principal</a>
+      <span class="build-mark">NEURAL OBSERVATORY · V1</span>
     </div>
   </header>
 
+  <nav class="scene-nav" aria-label="Navigation dans l’interface unique">
+    <button class="scene-active" data-focus="brain" type="button">◈ Cerveau</button>
+    <button data-focus="module-list" type="button">⠿ Modules</button>
+    <button data-focus="tool-panel" type="button">◇ Outils</button>
+    <button data-focus="memory-panel" type="button">▣ Mémoire</button>
+    <button data-focus="flow-panel" type="button">⇢ Flux</button>
+    <button data-focus="homeostasis-panel" type="button">♡ Homéostasie</button>
+    <button data-focus="journal-panel" type="button">≡ Journal</button>
+    <button data-focus="chatInput" type="button">✦ Requête AURA</button>
+  </nav>
   <section class="hero">
     <div class="hero-card">
-      <h1>Observatoire neuronal véridique d’AURA</h1>
-      <p>Cette interface ne montre pas un cerveau décoratif. Elle montre l’architecture du logiciel, les transitions réellement persistées, les trajets de traitement, l’homéostasie, les outils mobilisés et la réponse produite après une requête.</p>
+      <h1>Cartographie cognitive d’AURA</h1>
+      <p>Une seule interface pour interroger AURA et inspecter la circulation réelle entre ses modules, les outils sollicités et les événements persistés.</p>
       <div class="hero-note">
         <span class="pill">Gris = Connexions déclarées</span>
         <span class="pill">Cyan = Transition enregistrée récemment</span>
@@ -36,7 +46,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       </div>
     </div>
     <div class="request-card">
-      <h2>Lecture de la requête en direct</h2>
+      <h2>Requête courante · preuve d’exécution</h2>
       <div class="request-main">
         <div class="request-box">
           <label>Dernière requête envoyée ici</label>
@@ -69,11 +79,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       </section>
     </aside>
 
-    <section class="panel graph-panel" aria-label="Réseau neuronal opérationnel d’AURA">
+    <section class="panel graph-panel" id="brain" aria-label="Réseau neuronal opérationnel d’AURA">
       <div class="graph-top">
         <div>
-          <h2>Réseau neuronal opérationnel</h2>
-          <p>Chaque nœud représente un module réel. Les arêtes cyan correspondent à des transitions de modules enregistrées. La sélection d’un trajet rejoue visuellement le traitement de la requête sans inventer de faux événements. Source : aura_cognitive_traces.</p>
+          <h2>Réseau neuronal · architecture et exécution</h2>
+          <p>Régions = fonctions réelles d’AURA · Traits discrets = architecture · Impulsions = transitions persistées.</p>
         </div>
         <div class="graph-controls">
           <button id="graphLess" type="button" title="Dézoomer">−</button>
@@ -86,7 +96,19 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <canvas id="graphCanvas" role="img" aria-label="Carte neuronale interactive des modules réels et de leurs transitions observées"></canvas>
           <div class="graph-hud">
             <div class="graph-floating" id="graphClock">Aucun relevé disponible pour le moment.</div>
-            <div class="graph-floating">Glisser pour déplacer, molette pour zoomer, cliquer pour inspecter un module, sélectionner un trajet pour voir son replay.</div>
+            <div class="graph-floating">Glisser · Zoomer · Cliquer sur un module · Rejouer un trajet enregistré</div>
+          </div>
+          <div class="neural-inspector memory-inspector" role="button" tabindex="0" data-inspect="memory">
+            <div class="ni-heading"><span class="ni-icon">▤</span> Mémoire <span id="niMemoryState" class="ni-state">NON VÉRIFIÉE</span></div>
+            <div class="ni-meta">Éléments référencés</div><strong id="niMemoryCount">—</strong><small id="niMemoryTime">Dernier événement : —</small>
+          </div>
+          <div class="neural-inspector web-inspector" role="button" tabindex="0" data-inspect="web">
+            <div class="ni-heading"><span class="ni-icon">◎</span> Recherche web <span id="niWebState" class="ni-state">NON VÉRIFIÉE</span></div>
+            <div class="ni-meta">Dernière transition observée</div><strong id="niWebTime">—</strong><small>Source : traces AURA</small>
+          </div>
+          <div class="neural-inspector kernel-inspector" role="button" tabindex="0" data-inspect="kernel">
+            <div class="ni-heading"><span class="ni-icon">△</span> Noyau <span id="niKernelState" class="ni-state">NON VÉRIFIÉ</span></div>
+            <div class="ni-meta">Traitement routé et décision</div><strong id="niKernelTime">—</strong><small id="niKernelInfo">Aucune transition constatée</small>
           </div>
         </div>
         <div class="graph-bottom">
@@ -137,6 +159,10 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   </section>
 
   <section class="lower">
+    <div class="panel" id="tool-panel">
+      <div class="panel-header"><h2>Outils mobilisés</h2><small>Observations réelles, jamais « actifs » par défaut</small></div>
+      <div id="toolMirror" class="scroll-list"><p class="empty">En attente d’une preuve d’utilisation.</p></div>
+    </div>
     <div class="panel" id="flow-panel">
       <div class="panel-header"><h2>Trajets de traitement</h2><small>Identifiants persistés</small></div>
       <div id="flowList" class="scroll-list"><p class="empty">Aucune trace chargée.</p></div>
@@ -150,15 +176,23 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <div id="metricList" class="metric-list"></div>
       <p class="small-text" id="metricTime">Aucune mesure actuellement reçue.</p>
     </div>
+    <div class="panel" id="memory-panel">
+      <div class="panel-header"><h2>Mémoire du noyau</h2><small>Compteurs issus du serveur</small></div>
+      <div id="memoryStats" class="memory-stats"><p class="empty">Aucun compteur transmis.</p></div>
+    </div>
+    <div class="panel" id="activity-panel">
+      <div class="panel-header"><h2>Activité observée</h2><small>Sessions et opérations</small></div>
+      <div id="activityStats" class="scroll-list"><p class="empty">Aucune activité attestée.</p></div>
+    </div>
   </section>
 
   <div id="chatDock" class="chat" aria-label="Console de requête AURA">
     <div id="chatHistory" role="log" aria-live="polite"></div>
     <div class="chat-main">
-      <strong>AURA / REQUÊTE</strong>
+      <strong>✦ AURA</strong>
       <input id="chatInput" placeholder="Pose une requête à AURA et observe en direct les modules traversés…" aria-label="Message à AURA">
       <button type="button" id="chatSend">Envoyer</button>
-      <button id="chatExpand" type="button" class="secondary" aria-expanded="false">Historique</button>
+      <button id="chatExpand" type="button" class="secondary" aria-expanded="false">Conversation</button>
     </div>
   </div>
 </div>
