@@ -30,6 +30,36 @@ function safeText(error) {
     .slice(0, 700);
 }
 
+// OpenRouter chat responses can contain text parts rather than one string.
+// Never turn message.reasoning or reasoning_details into spoken answers.
+export function openRouterVisibleText(payload) {
+  const content=payload?.choices?.[0]?.message?.content;
+  if(typeof content==='string') return content.trim();
+  if(!Array.isArray(content)) return '';
+  return content
+    .filter(part=>part && ['text','output_text'].includes(String(part.type||'text')))
+    .map(part=>typeof part.text==='string'?part.text:'')
+    .filter(Boolean).join('\n').trim();
+}
+
+export function openRouterEmptyDiagnostic(payload, requestedModel='openrouter/free') {
+  const choice=payload?.choices?.[0]||{};
+  const safe=(value)=>String(value||'unknown').replace(/[^a-z0-9_.:!/-]/gi,'').slice(0,110);
+  const usage=payload?.usage||{};
+  const output=Number(usage.completion_tokens ?? usage.output_tokens);
+  const thinking=Number(usage.completion_tokens_details?.reasoning_tokens
+    ?? usage.output_tokens_details?.reasoning_tokens);
+  return {
+    model:safe(payload?.model||requestedModel),
+    finish_reason:safe(choice.finish_reason),
+    completion_tokens:Number.isFinite(output)&&output>=0?output:null,
+    reasoning_tokens:Number.isFinite(thinking)&&thinking>=0?thinking:null,
+    reasoning_only:!openRouterVisibleText(payload)
+      && (Number.isFinite(thinking)&&thinking>0
+        || Boolean(choice?.message?.reasoning||choice?.message?.reasoning_details)),
+  };
+}
+
 function clamp01(value, fallback = 0.5) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -403,21 +433,36 @@ export class ZeroCostFederation {
       };
       if (config.publicBaseUrl) headers['HTTP-Referer'] = config.publicBaseUrl;
 
+      const interactive = INTERACTIVE_ROLES.has(roleName(role));
+      const meta=this.catalog.find(item=>item.id===requestedModel);
+      const reason=meta?.reasoning;
+      const efforts=Array.isArray(reason?.supported_efforts)?reason.supported_efforts:[];
+      // Only request a supported reasoning level. Dynamic openrouter/free has
+      // no published reasoning contract: do not send unsupported parameters.
+      const reducedReasoning=interactive && reason?.mandatory!==true
+        ? (efforts.includes('none') ? {effort:'none'}
+          : efforts.includes('minimal') ? {effort:'minimal'} : null) : null;
+      const requestBody={
+        model:requestedModel,
+        messages:[
+          { role:'system',content:String(system||'') },
+          { role:'user',content:String(prompt||'') },
+        ],
+        temperature:interactive ? 0.45 :
+          (Number.isFinite(config.aiTemperature) ? config.aiTemperature : 0.65),
+        // Reasoning-only completions can use all 200-300 tokens. Preserve
+        // sufficient room for the visible French answer on free models.
+        max_tokens:interactive
+          ? Math.max(900,Math.min(Number(maxTokens)||900,1400))
+          : Math.max(64,Math.min(Number(maxTokens)||700,4000)),
+        stream:false,
+        usage:{include:true},
+      };
+      if(reducedReasoning)requestBody.reasoning=reducedReasoning;
       response = await fetch(`${config.openRouterBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: requestedModel,
-          messages: [
-            { role: 'system', content: String(system || '') },
-            { role: 'user', content: String(prompt || '') },
-          ],
-          temperature: Number.isFinite(config.aiTemperature) ? config.aiTemperature : 0.65,
-          max_tokens: Math.max(64, Math.min(Number(maxTokens) || 700, 4000)),
-          stream: false,
-          usage: { include: true },
-        }),
-        signal: AbortSignal.timeout(config.freeFederationTimeoutMs),
+        method:'POST',headers,
+        body:JSON.stringify(requestBody),
+        signal:AbortSignal.timeout(config.freeFederationTimeoutMs),
       });
 
       const raw = await response.text();
@@ -440,8 +485,15 @@ export class ZeroCostFederation {
         throw new Error(`ZERO_COST_INVARIANT_VIOLATION: OpenRouter reported cost ${cost}`);
       }
 
-      const answer = String(body?.choices?.[0]?.message?.content || '').trim();
-      if (!answer) throw new Error('OpenRouter free response empty');
+      const answer = openRouterVisibleText(body);
+      if(!answer){
+        const info=openRouterEmptyDiagnostic(body,requestedModel);
+        throw new Error('OpenRouter free response empty: model='+info.model
+          +' finish='+info.finish_reason
+          +' reasoning_only='+info.reasoning_only
+          +' output_tokens='+(info.completion_tokens??'unknown')
+          +' reasoning_tokens='+(info.reasoning_tokens??'unknown'));
+      }
       const actualModel = String(body?.model || requestedModel).trim().slice(0, 240);
       const latencyMs = Date.now() - started;
       await this.#markProvider('openrouter', true, String(response.status));
