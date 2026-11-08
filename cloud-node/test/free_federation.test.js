@@ -356,3 +356,67 @@ test('OpenRouter authentication errors do not trigger a chargeable or repeated r
   assert.match(data.error,/HTTP 401/);
   assert.equal(data.status.process_requests_today,1);
 });
+
+
+test('OpenRouter refuses retries on HTTP 401, 402, 403, 429 even if a free fallback exists', () => {
+  for (const status of [401, 402, 403, 429]) {
+    const script = [
+      "process.env.AURA_ZERO_COST_MODE='true';",
+      "process.env.AI_MODE='off';",
+      "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+      "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';",
+      "process.env.AURA_OPENROUTER_API_KEY='mock-key';",
+      "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+      "let calls=0;",
+      "global.fetch=async()=>{calls++;return new Response('quota or access rejected',{status:"+status+"});};",
+      "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+      "const fed=new ZeroCostFederation();",
+      "let error='';try{await fed.generate('Bonjour','Réponds',700,'french');}catch(e){error=e.message;}",
+      "console.log(JSON.stringify({calls,error,usage:fed.snapshot().process_requests_today}));",
+    ].join('\n');
+    const completed=run(script);
+    assert.equal(completed.status,0,completed.stderr||completed.stdout);
+    const actual=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+    assert.equal(actual.calls,1,'HTTP '+status+' must not repeat inference');
+    assert.equal(actual.usage,1);
+    assert.match(actual.error,new RegExp('HTTP '+status));
+  }
+});
+
+test('OpenRouter quota/credit error inside HTTP 200 is terminal, never an empty-response retry', () => {
+  for(const upstream of [
+    {code:402,message:'Insufficient credits'}, {code:429,message:'quota_exceeded'},
+    {code:400,message:'billing account required'},
+  ]) {
+    const script=[
+      "process.env.AURA_ZERO_COST_MODE='true';",
+      "process.env.AI_MODE='off';",
+      "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+      "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';",
+      "process.env.AURA_OPENROUTER_API_KEY='mock-key';",
+      "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+      "let calls=0;",
+      "global.fetch=async()=>{calls++;return new Response(JSON.stringify({error:"+JSON.stringify(upstream)+"}),{status:200});};",
+      "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+      "const fed=new ZeroCostFederation();",
+      "let error='';try{await fed.generate('Bonjour','Réponds',700,'french');}catch(e){error=e.message;}",
+      "console.log(JSON.stringify({calls,error,usage:fed.snapshot().process_requests_today}));",
+    ].join('\n');
+    const completed=run(script);
+    assert.equal(completed.status,0,completed.stderr||completed.stdout);
+    const actual=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+    assert.equal(actual.calls,1,'terminal upstream error must never retry');
+    assert.match(actual.error,/OpenRouter free/);
+    assert.doesNotMatch(actual.error,/free fallback/);
+  }
+});
+
+test('terminal-error classifier blocks quota, billing and authorization but not empty text', async () => {
+  const {isTerminalFreeProviderFailure}=await import('../src/free_federation.js');
+  for(const value of ['HTTP 401','HTTP 402','HTTP 403','HTTP 429',
+    'insufficient_quota','rate_limit_exceeded','budget exhausted',
+    'billing account required','invalid_api_key','negative balance']) {
+    assert.equal(isTerminalFreeProviderFailure(value),true,value);
+  }
+  assert.equal(isTerminalFreeProviderFailure('OpenRouter free response empty: model=openrouter/free'),false);
+});

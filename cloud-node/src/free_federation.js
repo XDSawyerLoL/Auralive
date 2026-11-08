@@ -60,6 +60,18 @@ export function openRouterEmptyDiagnostic(payload, requestedModel='openrouter/fr
   };
 }
 
+// Terminal free-tier failures must never trigger another model call.
+// Some providers report quota or billing errors inside a 200 JSON envelope.
+export function isTerminalFreeProviderFailure(error) {
+  const reason = safeText(error).toLowerCase();
+  return /\bhttp\s*(?:401|402|403|429)\b/.test(reason)
+    || /(?:quota|rate[._ -]?limit|budget)[._ -]?(?:exhausted|exceeded|reached|limit)/.test(reason)
+    || /(?:insufficient|exhausted|negative)[._ -]?(?:credits?|balance|quota)/.test(reason)
+    || /(?:auth(?:entication)?|permission|payment)[._ -]?(?:failed|required|denied)/.test(reason)
+    || /(?:invalid[._ -]?api[._ -]?key|unauthori[sz]ed|forbidden|billing)/.test(reason)
+    || /(?:budget[._ -]?exhausted|daily[._ -]?budget[._ -]?exhausted|cooldown[._ -]?active)/.test(reason);
+}
+
 function clamp01(value, fallback = 0.5) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -504,6 +516,13 @@ export class ZeroCostFederation {
         throw new Error(`OpenRouter free HTTP ${response.status}: ${raw.slice(0, 500)}`);
       }
       body = raw ? JSON.parse(raw) : {};
+      if(body?.error){
+        const code=Number(body.error.code ?? body.error.status ?? 0);
+        const label=Number.isInteger(code)&&code>=400&&code<=599
+          ? 'HTTP '+code : 'upstream error';
+        const info=safeText(body.error.message || body.error.code || 'unknown').slice(0,180);
+        throw new Error('OpenRouter free '+label+': '+info);
+      }
       const cost = Number(body?.usage?.cost ?? body?.usage?.cost_details?.upstream_inference_cost ?? 0);
       if (Number.isFinite(cost) && cost > 0) {
         this.quarantined.add('openrouter');
@@ -560,8 +579,7 @@ export class ZeroCostFederation {
         const failure = safeText(primaryError);
         // Account restrictions, quota and financial guard failures should
         // never trigger a second call, paid or free.
-        if (this.quarantined.has('openrouter')
-          || /\bhttp\s*(?:401|402|403|429)\b|budget.exhausted|daily.budget.exhausted|cooldown.active/i.test(failure)) {
+        if (this.quarantined.has('openrouter') || isTerminalFreeProviderFailure(failure)) {
           throw primaryError;
         }
         const empty = /openrouter free response empty/i.test(failure);
