@@ -1081,6 +1081,8 @@ export class CognitiveKernel {
         provider:String(provider||'').slice(0,70),at:now(),
       });
 
+    await brainHop('input','kernel','chat-received');
+
     await query(
       "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES(?,'user',?,?,?)",
       [
@@ -1114,7 +1116,7 @@ export class CognitiveKernel {
       dream: pre.dream || null,
     });
     await this.saveSoul();
-    await brainHop('input','homeostasis','beforeInteraction');
+    await brainHop('kernel','homeostasis','beforeInteraction');
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent(
