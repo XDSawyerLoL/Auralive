@@ -65,7 +65,7 @@ test('no real money movements and public market endpoint stays fixed',async()=>{
 test('server trading routes are private, cannot send real orders or broker credentials',()=>{
   const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
   const begin=server.indexOf("app.get('/api/trading/mode'");
-  const end=server.indexOf("// Founder-only knowledge endpoints.",begin);
+  const end=server.indexOf("// AURA Revenue: genuine public-web audit",begin);
   const block=server.slice(begin,end);
   assert.ok(begin>=0 && end>begin);
   assert.equal((block.match(/requirePrivate\(request, reply\)/g)||[]).length,3);
