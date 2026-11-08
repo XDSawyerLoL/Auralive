@@ -52,10 +52,22 @@ test('missing or unauthorized observations never become fabricated successful wo
 test('the ONE page distinguishes conversation from explicit owner-only operator missions',()=>{
  assert.match(BRAIN_OPERATIONS_HTML,/id="chatMode"/);
  assert.match(BRAIN_OPERATIONS_HTML,/<option value="mission">Mission \/ outils<\/option>/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(mission&&!state\.data\?\.authorized\)/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/if\(mission&&!state\.data\?\.authorized\)/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Connecte la session propriétaire pour déclencher une mission\. Aucun outil n’a été appelé/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.pendingMission=msg/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/res\.status===401\|\|res\.status===403/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/allowed_risks:\[\]/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/\/api\/kernel\/operator/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/plan seul|PLAN SEUL/i);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/database_observations_available===false/);
+});
+
+test('idle graph breathes without fabricating neural events, and reduced motion is respected',()=>{
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/Ambient breathing is decorative/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(!reduced\)setInterval/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/document\.hidden/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/eventElapsed<1600/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Math\.random\(/);
+ assert.doesNotThrow(()=>new Function(BRAIN_OPERATIONS_SCRIPT));
 });
