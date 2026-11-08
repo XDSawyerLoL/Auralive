@@ -1351,6 +1351,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   }
   return {
     ...buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows}),
+    telemetry,
     authorized,
     database_observations_available:dataAvailable,
     observation_access:authorized?'authenticated-founder':'owner-login-required',
