@@ -448,11 +448,30 @@ function draw(){
 
 function inside(hit,x,y){const dx=x-hit.x,dy=y-hit.y;return Math.sqrt(dx*dx+dy*dy)<=Math.max(18,hit.r+6);}
 canvas.addEventListener('pointerdown',e=>{const r=canvas.getBoundingClientRect();state.drag={x:e.clientX-r.left,y:e.clientY-r.top,panX:state.panX,panY:state.panY,moved:false};canvas.setPointerCapture(e.pointerId);});
-canvas.addEventListener('pointermove',e=>{if(!state.drag)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const dx=x-state.drag.x,dy=y-state.drag.y;if(Math.abs(dx)+Math.abs(dy)>5)state.drag.moved=true;if(state.drag.moved){state.panX=state.drag.panX+dx;state.panY=state.drag.panY+dy;scheduleDraw();}});
+canvas.addEventListener('pointermove',e=>{
+ const bounds=canvas.getBoundingClientRect(),x=e.clientX-bounds.left,y=e.clientY-bounds.top;
+ if(state.drag){
+  const dx=x-state.drag.x,dy=y-state.drag.y;
+  if(Math.abs(dx)+Math.abs(dy)>5)state.drag.moved=true;
+  if(state.drag.moved){state.panX=state.drag.panX+dx;state.panY=state.drag.panY+dy;scheduleDraw();}
+  return;
+ }
+ const hit=[...state.screen].reverse().find(item=>inside(item,x,y));
+ const id=hit?.id||null;
+ if(state.hovered!==id){
+   state.hovered=id;
+   const n=id?findNode(id):null;
+   setText('graphHover',n?n.label+' · '+nodeStateLabel(n)+' · '+shortTime(n.last_observed_at):'Survole un point pour identifier son module.');
+   canvas.style.cursor=n?'pointer':'grab';scheduleDraw();
+ }
+});
+canvas.addEventListener('pointerleave',()=>{state.hovered=null;setText('graphHover','Survole un point pour identifier son module.');scheduleDraw();});
 canvas.addEventListener('pointerup',e=>{const drag=state.drag;state.drag=null;if(!drag||drag.moved)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const hit=[...state.screen].reverse().find(item=>inside(item,x,y));if(hit)selectNode(hit.id);});
 canvas.addEventListener('wheel',e=>{e.preventDefault();state.zoom=Math.min(3,Math.max(.6,state.zoom*(e.deltaY>0?.92:1.08)));scheduleDraw();},{passive:false});
 $('graphMore').onclick=()=>{state.zoom=Math.min(3,state.zoom*1.15);scheduleDraw();};$('graphLess').onclick=()=>{state.zoom=Math.max(.6,state.zoom/1.15);scheduleDraw();};$('graphReset').onclick=()=>{state.zoom=1;state.panX=0;state.panY=0;scheduleDraw();};
-window.addEventListener('resize',scheduleDraw,{passive:true});$('moduleSearch').addEventListener('input',renderModules);
+window.addEventListener('resize',scheduleDraw,{passive:true});
+$('moduleSearch').addEventListener('input',renderModules);
+$('moduleGroup').addEventListener('change',renderModules);
 
 document.querySelectorAll('[data-focus]').forEach(button=>{
  button.addEventListener('click',()=>{
