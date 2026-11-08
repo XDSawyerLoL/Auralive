@@ -1295,6 +1295,11 @@ export class CognitiveKernel {
     }
 
     await brainHop(plan.semantic_support?'semantic':'cognition','language','request-formulation','attempted');
+    // This hop means a real organism-derived affect/relationship signal is
+    // included in the French faculty's input. It does NOT imply a response
+    // or a human feeling, and it is not emitted when no state is supplied.
+    if (plan.affect && typeof plan.affect === 'object' && Object.keys(plan.affect).length)
+      await brainHop('homeostasis','language','affect-context-provided','attempted');
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
