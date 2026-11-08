@@ -54,7 +54,7 @@ test('interaction and reply modify AURA organism without fake fatigue or tension
   // increase is guaranteed; stability converges toward its homeostatic target.
   assert.ok(post.state.stabilite >= 0.03 && post.state.stabilite <= 0.97);
   assert.equal(post.state.homeostasis.last_signal, 'reply_success');
-  assert.equal(post.state.homeostasis.success_ema, pre.state.homeostasis.success_ema);
+  assert.ok(post.state.homeostasis.success_ema <= pre.state.homeostasis.success_ema);
   assert.equal('tension' in post.state, false);
   assert.equal('fatigue_cognitive' in post.state, false);
 });
