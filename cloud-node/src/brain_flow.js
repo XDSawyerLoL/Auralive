@@ -39,6 +39,7 @@ const CORE_EDGES=Object.freeze([
  ['cognition','language'],['language','coherence'],['coherence','output'],
  ['cognition','web'],['web','semantic'],['semantic','language'],
  ['language','groq'],['language','openrouter'],['language','local'],
+ ['groq','coherence'],['openrouter','coherence'],['local','coherence'],
  ['memory','knowledge'],['kernel','attention'],['kernel','inference'],
  ['cognition','toolbox'],['cognition','command'],['command','dag'],
  ['command','agent'],['command','bridge'],['command','github'],
