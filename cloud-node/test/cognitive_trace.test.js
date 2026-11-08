@@ -115,3 +115,31 @@ test('autonomous trace redacts arbitrary trigger strings and never contains miss
   assert.doesNotMatch(data, /private.person|PRIVATE SECRET|internal/);
   assert.equal(ledger.snapshotAutonomy(id).events.at(-2).details.stimuli_count, 4);
 });
+
+test('homeostasis values are sourced, bounded, and never accept arbitrary identity strings', () => {
+  const ledger = new CognitiveTraceLedger();
+  const id = ledger.start('safe');
+  ledger.mark(id, 'homeostasis', 'done', {
+    state_stability: 0.72345, state_curiosity: 2.5,
+    state_frustration: -0.4, state_mood: 'curieuse',
+    thought: 'private chain of thought', state_personal_name: 'secret',
+  });
+  const details = ledger.snapshot('safe', id).events.at(-1).details;
+  assert.equal(details.state_stability, 0.723);
+  assert.equal(details.state_curiosity, 1);
+  assert.equal(details.state_frustration, 0);
+  assert.equal(details.state_mood, 'curieuse');
+  assert.equal(Object.hasOwn(details, 'thought'), false);
+  assert.equal(Object.hasOwn(details, 'state_personal_name'), false);
+});
+
+test('unverified agent executions never appear as confirmed external actions', () => {
+  const ledger = new CognitiveTraceLedger();
+  const success = ledger.recordOperation('agent', false, 'completed');
+  const swarm = ledger.recordOperation('swarm', false);
+  const successEvents = ledger.snapshotAutonomy(success).events;
+  assert.equal(successEvents.find(e => e.stage === 'reflection_auto').status, 'done');
+  assert.equal(successEvents.find(e => e.stage === 'execution_auto').status, 'skipped');
+  assert.equal(successEvents.find(e => e.stage === 'execution_auto').details.execution_confirmed, false);
+  assert.equal(ledger.snapshotAutonomy(swarm).events.find(e => e.stage === 'execution_auto').status, 'skipped');
+});
