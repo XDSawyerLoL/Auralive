@@ -220,6 +220,12 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
 .owner-connect-row button,.owner-login>button{border:1px solid rgba(171,165,239,.3);border-radius:8px;color:#e9e4ff;background:rgba(166,161,240,.10);padding:9px 10px;font-size:11px;white-space:nowrap}
 .owner-login>button{width:max-content}.owner-connect-row[hidden],#ownerDisconnect[hidden]{display:none!important}
 @media(max-width:490px){.owner-connect-row{flex-wrap:wrap}.owner-connect-row input,.owner-connect-row button{width:100%}}
+@media(max-width:640px){
+ .aura-intro,.status-rail{display:none}
+ .main{margin-top:8px}
+ .chat{top:73px;height:calc(100dvh - 87px);min-height:340px}
+}
+
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
