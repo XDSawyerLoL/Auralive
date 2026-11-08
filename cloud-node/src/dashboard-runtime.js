@@ -1197,6 +1197,12 @@ $('voiceBtn').onclick=function(){
 $('cogModeDialogue').onclick=function(){switchCognitiveMode('dialogue');};
 $('cogModeAutonomy').onclick=function(){switchCognitiveMode('autonomy');};
 $('cogReplay').onclick=replayCognitiveTrace;
+$('cogDiagnostics').onclick=function(){
+  const panel=$('auraDiagnostics');
+  const visible=panel.classList.toggle('diagnostics-open');
+  this.setAttribute('aria-expanded',String(visible));
+  this.textContent=visible?'Masquer les diagnostics':'Diagnostics';
+};
 initCognitiveGraph();void loopCognitiveTrace();
 updateClock();refresh();setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
