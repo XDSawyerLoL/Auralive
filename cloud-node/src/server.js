@@ -32,6 +32,7 @@ import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
 import { RESOURCE_CATALOG, discoverResources } from './toolbox_resources.js';
 import { searchPublicResources } from './toolbox_research.js';
 import { runPaperBacktest } from './trading_lab.js';
+import { auditPublicHomepage } from './revenue_audit.js';
 import { AURA_PLAYBOOKS, SKILLS_VERSION, SKILLS_POLICY, planAgentSkills } from './agent_skills.js';
 import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
@@ -1467,6 +1468,40 @@ app.post('/api/trading/paper/backtest', async (request, reply) => {
   } finally {
     tradingLabBusy=false;
   }
+});
+
+// AURA Revenue: genuine public-web audit, not a simulated income stream.
+// No invoicing, card collection, payment link or client outreach from this API.
+let auditInProgress=false;
+let auditLastRun=0;
+app.get('/api/revenue/readiness', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return {
+    mode:'audit-production-ready',
+    audit_available:true,
+    automatic_customer_acquisition:false,
+    payment_processing_connected:false,
+    verified_aura_receipts_eur:null,
+    revenue_source:'none-connected',
+    paid_api_calls:0,
+    upfront_platform_cost_eur:0,
+    next_dependency:'Activer une vraie offre publique, un prestataire de paiement et une livraison après paiement confirmé.',
+    note:'Aucun chiffre d’affaires vérifié dans AURA; le trading en simulation ne rapporte rien.',
+  };
+});
+app.post('/api/revenue/audit/preview', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if(auditInProgress||Date.now()-auditLastRun<20000)
+    return reply.code(429).send({error:'Un audit est en cours ou trop récent. Réessayer dans 20 secondes.'});
+  auditInProgress=true;
+  auditLastRun=Date.now();
+  try{
+    return await auditPublicHomepage(request.body?.url);
+  }catch(error){
+    const message=String(error?.message||error).slice(0,160);
+    return reply.code(/HTTP|réseau|délai|fetch|ENOTFOUND|certificat|connect|indisponible/i.test(message)?503:422)
+      .send({error:message});
+  }finally{auditInProgress=false;}
 });
 
 // Founder-only knowledge endpoints. No public-chat access or implicit ingestion.
