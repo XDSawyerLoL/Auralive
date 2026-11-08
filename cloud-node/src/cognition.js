@@ -459,7 +459,7 @@ export class CognitionEngine {
       // Social conversation is not a request for an internal monitoring report.
       // Keep all numerical state in plan.affect / organism telemetry but only
       // expose measurements when the user explicitly requests diagnostics.
-      const detailedState = /\\b(?:pourcent|pourcentage|chiffre|statistique|indicateur|m[eé]trique|mesur|score|niveau|d[eé]tail|diagnostic|homeostasie|hom[eé]ostasie|tableau de bord)\\b/i.test(raw);
+      const detailedState = /\b(?:pourcent|pourcentage|chiffre|statistique|indicateur|m[eé]trique|mesur|score|niveau|d[eé]tail|diagnostic|homeostasie|hom[eé]ostasie|tableau de bord)\b/i.test(raw);
       goal = detailedState
         ? 'Expliquer brièvement les mesures réellement disponibles, leur caractère computationnel et ce qui a changé depuis la dernière interaction, sans prétendre à des sentiments humains.'
         : 'Répondre comme dans une conversation familière, en une ou deux phrases : ton ajusté à l’humeur computationnelle et au contexte relationnel, sans pourcentage, jargon ni récitation de tableau de bord.';
