@@ -279,7 +279,7 @@ export class CognitiveKernel {
     );
     // A journalled agent result is not proof of an external operation.
     // Never promote an unverified operator request to a successful action.
-    try { this.autonomyTelemetry?.recordOperation(String(kind), context?.executed === true); }
+    try { this.autonomyTelemetry?.recordOperation(String(kind), context?.executed === true, String(context?.outcome || '')); }
     catch (_) { /* Telemetry never breaks the cognitive database trace. */ }
   }
 
