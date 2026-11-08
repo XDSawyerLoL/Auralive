@@ -48,6 +48,12 @@ export const COGNITIVE_ATLAS_CSS = String.raw`
 .cog-node .node-center{fill:#183248;stroke:#42677c;stroke-width:1.5}
 .cog-node .node-glyph{font-family:inherit;font-weight:700;fill:#c8e5f0;font-size:19px;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
 .cog-node .node-title{font-family:inherit;font-weight:650;fill:#d3e5f2;font-size:14px;text-anchor:middle;pointer-events:none}
+.cog-node.micro .node-glyph{font-size:13px;color:#a4d4e3}
+.cog-node.micro .node-title{font-size:10px;fill:#b7cdda;font-weight:600}
+.cog-node.micro .node-meta{font-size:9px}
+.cog-node.micro .node-ring{stroke-dasharray:2 5}
+.cog-node.micro[data-state=done] .node-halo{fill:#114953;stroke:#79eadc}
+
 .cog-node .node-meta{font-family:inherit;font-size:11px;fill:#7396ab;text-anchor:middle;pointer-events:none;font-variant-numeric:tabular-nums}
 .cog-node[data-state=done] .node-halo{fill:#0e3c43;stroke:#63d8d4;filter:drop-shadow(0 0 8px rgba(80,225,210,.22))}
 .cog-node[data-state=done] .node-ring{stroke:#65dccf;opacity:.77}
