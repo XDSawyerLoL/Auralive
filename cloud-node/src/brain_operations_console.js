@@ -141,7 +141,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <div id="chatHistory" role="log" aria-live="polite" aria-label="Échanges de la session"></div>
         </section>
         <section class="detail-card causal-card" id="causal-panel">
-          <div class="inline-head"><h3>Cause → décision → conséquence</h3><span id="causalStatus" class="truth-chip">Non observé</span></div>
+          <div class="inline-head"><h3>Signal → décision → état</h3><span id="causalStatus" class="truth-chip">Non observé</span></div>
           <p id="causalEvidence" class="causal-evidence">Envoie une requête pour relier son trajet à un bilan homéostatique enregistré par le noyau.</p>
           <div class="causal-digest">
             <div><span>Décision du noyau</span><strong id="causalDecision">—</strong></div>
@@ -195,6 +195,13 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <div class="panel" id="homeostasis-panel">
       <div class="panel-header"><h2>Homéostasie</h2><small>Indices internes, calculés par AuraOrganism</small></div>
       <div class="affect-status"><span>Humeur du noyau</span><strong id="organismMood">—</strong></div>
+      <div class="somatic-sensors">
+        <div class="inline-head"><h3>Capteurs du processus</h3><span id="somaticFreshness" class="truth-chip">Non mesuré</span></div>
+        <div><span>CPU Node</span><strong id="somaticCpu">—</strong></div>
+        <div><span>Mémoire heap</span><strong id="somaticHeap">—</strong></div>
+        <div><span>Pression calculée</span><strong id="somaticPressure">—</strong></div>
+        <small id="somaticScope">Processus Node uniquement, pas l’ensemble de la machine.</small>
+      </div>
       <div id="metricList" class="metric-list"></div>
       <p class="affect-bridge" id="affectBridge">Transmission homéostasie → langage : aucune observation chargée.</p>
       <p class="small-text" id="metricTime">Aucune mesure actuellement reçue.</p>
