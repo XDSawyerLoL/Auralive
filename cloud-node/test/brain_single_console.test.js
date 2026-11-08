@@ -8,7 +8,7 @@ import {BRAIN_NODES,buildBrainFlowGraph} from '../src/brain_flow.js';
 test('one site page has integrated request, graph, modules, tools, metrics and event evidence',()=>{
  for(const id of ['chatInput','chatSend','chatHistory','requestPreview',
    'currentFlowLabel','graphCanvas','graphViewport','moduleList',
-   'toolList','flowList','eventList','metricList','ownerKey','ownerSignIn']){
+   'toolList','flowList','eventList','metricList']){
    assert.ok(BRAIN_OPERATIONS_HTML.includes('id="'+id+'"'),id);
  }
  assert.match(BRAIN_OPERATIONS_HTML,/interface unique/i);
@@ -32,7 +32,7 @@ test('request is sent to true AURA API and graph polls while model response is p
  assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/brain\/graph'/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(state\.busy&&!document\.hidden\)void poll\(\)/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/Réponse reçue, mais aucun trajet corrélé|Connexion propriétaire/i);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/Réponse reçue, mais aucun trajet corrélé/i);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.flow=null;state\.replayStarted=0/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.pollInFlight/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/Message envoyé. Lecture des transitions réellement enregistrées/i);
@@ -44,7 +44,7 @@ test('missing or unauthorized observations never become fabricated successful wo
  assert.equal(graph.edges.filter(e=>e.signal_recent).length,0);
  assert.ok(graph.nodes.every(n=>n.activity_verified===false));
  assert.match(BRAIN_OPERATIONS_SCRIPT,/aucune utilisation récente n’est prouvée/i);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/Connexion propriétaire requise/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Connexion propriétaire requise|Session propriétaire requise|Journal accessible uniquement en session propriétaire/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/Aucun texte vérifiable généré|Le noyau n’a pas confirmé le traitement/);
 });
 
@@ -54,7 +54,8 @@ test('the ONE page distinguishes conversation from explicit owner-only operator 
  assert.match(BRAIN_OPERATIONS_HTML,/<option value="mission">Mission \/ outils<\/option>/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/if\(mission&&!state\.data\?\.authorized\)/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Connecte la session propriétaire pour déclencher une mission\. Aucun outil n’a été appelé/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.pendingMission=msg/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_HTML,/id="ownerKey"|id="ownerSignIn"/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/field\.value=msg/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/res\.status===401\|\|res\.status===403/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/allowed_risks:\[\]/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/\/api\/kernel\/operator/);
@@ -70,4 +71,14 @@ test('idle graph breathes without fabricating neural events, and reduced motion 
  assert.match(BRAIN_OPERATIONS_SCRIPT,/eventElapsed<1600/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Math\.random\(/);
  assert.doesNotThrow(()=>new Function(BRAIN_OPERATIONS_SCRIPT));
+});
+
+test('all observation panels are open without a login form',()=>{
+ assert.match(BRAIN_OPERATIONS_HTML,/OBSERVATIONS PUBLIQUES/);
+ for(const msg of ['Connexion propriétaire nécessaire','Connexion propriétaire requise',
+  'Journal accessible uniquement en session propriétaire','Les traces d’exécution nécessitent la session propriétaire']){
+  assert.ok(!BRAIN_OPERATIONS_SCRIPT.includes(msg),msg);
+ }
+ assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/state\.data\?\.authorized/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/d\.observed_hop_count\|\|0/);
 });
