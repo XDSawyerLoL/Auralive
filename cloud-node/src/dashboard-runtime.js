@@ -1019,24 +1019,77 @@ async function speakAura(text,ticket){
     console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
-async function sendMessage(text){
+// Never render an unavailable model as a person answering "lu".
+let chatBusy=false;
+let lastChatFailure='';
+function addChatServiceNotice(message){
+  const safe=escapeHtml(String(message||'').slice(0,200));
+  $('messages').insertAdjacentHTML('beforeend',
+    '<div class="msg service-msg" role="status"><strong class="service-card-title">Français naturel indisponible</strong>'+
+    '<span>'+safe+'</span><div class="service-actions">'+
+    '<button type="button" data-aura-action="retry-language">Réessayer le message</button>'+
+    '<button type="button" data-aura-action="diagnose-language">Voir le diagnostic</button>'+
+    '</div></div>');
+  $('messages').scrollTop=$('messages').scrollHeight;
+}
+async function sendMessage(text,options){
+  text=String(text||'').trim();if(!text||chatBusy)return;
+  chatBusy=true;
   try{primeVoice();}catch(_){}
-  text=(text||'').trim();if(!text)return;
-  $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
-  $('message').value='';
+  const repeated=Boolean(options&&options.repeat);
+  const button=$('send');
+  if(button)button.disabled=true;
+  if(!repeated){
+    $('messages').insertAdjacentHTML('beforeend',
+      '<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
+    $('message').value='';
+  }
+  const pending=document.createElement('div');
+  pending.className='msg service-msg';
+  pending.textContent='Recherche d’une réponse française vérifiée…';
+  pending.setAttribute('role','status');
+  $('messages').appendChild(pending);
   $('messages').scrollTop=$('messages').scrollHeight;
   try{
-    const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
-    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
+    const out=await api('/api/chat',{method:'POST',
+      body:JSON.stringify({text:text,author:'Utilisateur'})});
+    pending.remove();
+    const answer=String(out?.answer||'').trim();
+    if(out?.language_unavailable || out?.response_kind==='model-unavailable'
+      || !out?.ok || !answer){
+      lastChatFailure=text;
+      addChatServiceNotice('Aucun modèle ne produit actuellement de réponse. Le message est conservé pour un nouvel essai. Aucun dialogue artificiel ajouté.');
+      void refreshEnginePanel();
+      $('chatState').textContent='Modèle français indisponible';
+      return;
+    }
+    lastChatFailure='';
+    $('messages').insertAdjacentHTML('beforeend',
+      '<div class="msg aura"><span class="who">AURA · réponse générée</span>'+escapeHtml(answer)+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
-    if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
-    if(unavailable)void refreshEnginePanel();
-    refresh();
+    void speakAura(answer,out.voice_ticket||'');
+    void refresh();
   }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
+    pending.remove();
+    lastChatFailure=text;
+    addChatServiceNotice('Échec technique : '+String(error?.message||'').slice(0,135));
+    $('chatState').textContent='Erreur du service de conversation';
+  }finally{
+    chatBusy=false;
+    if(button)button.disabled=false;
   }
 }
+$('messages').addEventListener('click',function(event){
+  const target=event.target?.closest?.('[data-aura-action]');
+  if(!target)return;
+  const action=target.getAttribute('data-aura-action');
+  if(action==='retry-language'&&lastChatFailure){
+    void sendMessage(lastChatFailure,{repeat:true});
+  }else if(action==='diagnose-language'){
+    void refreshEnginePanel();
+    $('enginePanel')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+});
 // AURA Trading Lab: explicit paper backtest only. No live orders or broker credentials.
 function tradingEuro(number){
   return Number(number||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2});
@@ -1108,6 +1161,75 @@ $('tradeBacktest').onclick=async function(){
       :'Simulation indisponible : '+String(error.message||error).slice(0,170);
   }finally{button.disabled=false;button.textContent='Tester la stratégie';}
 };
+// Genuine, bounded AURA audit. Revenue is "not connected" until verified receipts.
+let auditReport=null;
+function renderAuditReport(report){
+  if(!Array.isArray(report?.checks)||!report.checked_at)throw new Error('Format de rapport invalide');
+  $('auditResults').innerHTML=report.checks.map(check=>
+    '<div class="audit-check"><span>'+escapeHtml(check.detail||check.id||'Contrôle')+
+    '</span><strong class="'+(check.status==='pass'?'good':'review')+'">'+
+    (check.status==='pass'?'CONFORME':'À EXAMINER')+'</strong></div>').join('');
+  $('auditState').textContent='Analyse effectuée · '+report.pass_count+' contrôles conformes / '+
+    report.review_count+' points à examiner · '+report.duration_ms+' ms · HTML initial uniquement.';
+  $('auditExport').disabled=false;
+  auditReport=report;
+}
+async function refreshRevenueReadiness(){
+  try{
+    const state=await api('/api/revenue/readiness');
+    $('revenueVerified').textContent=state.revenue_source==='none-connected'?'Non connectées':'À vérifier';
+    $('revenueSales').textContent=state.payment_processing_connected?'À vérifier':'Non activées';
+    $('revenueMode').textContent=state.audit_available?'AUDIT OPÉRATIONNEL':'À CONFIGURER';
+  }catch(error){
+    $('revenueMode').textContent='ACCÈS PRIVÉ REQUIS';
+    $('revenueVerified').textContent='Données non disponibles';
+    $('revenueSales').textContent='À configurer';
+  }
+}
+$('auditRun').onclick=async function(){
+  const button=$('auditRun');
+  const url=String($('auditUrl').value||'').trim();
+  if(!/^https:\/\/[^\s]+\/$/i.test(url)){
+    $('auditState').textContent='Indiquer une URL HTTPS publique de page d’accueil avec le / final, sans paramètres.';
+    return;
+  }
+  button.disabled=true;
+  $('auditExport').disabled=true;
+  $('auditResults').innerHTML='';
+  $('auditState').textContent='Audit réel en cours. Aucun service payant utilisé.';
+  auditReport=null;
+  try{
+    const report=await api('/api/revenue/audit/preview',{method:'POST',
+      body:JSON.stringify({url})});
+    renderAuditReport(report);
+  }catch(error){
+    $('auditState').textContent=error.status===401||error.status===403
+      ?'Connexion privée administrateur nécessaire pour auditer un site.'
+      :'Audit impossible : '+String(error.message||error).slice(0,180);
+  }finally{button.disabled=false;}
+};
+$('auditExport').onclick=function(){
+  if(!auditReport)return;
+  const report=auditReport;
+  const lines=[
+    '# AURA · Audit technique de la page d’accueil',
+    'Site : '+report.url,
+    'Date : '+report.checked_at,
+    'Statut HTTP : '+report.status_code,
+    'Contrôles conformes : '+report.pass_count,
+    'Points à examiner : '+report.review_count,'',
+    '## Observations',
+    ...report.checks.map(check=>'- ['+(check.status==='pass'?'OK':'REVOIR')+'] '+String(check.detail||'')),
+    '',
+    'Limites : '+String(report.scope||''),
+    'Analyse automatisée informative, non une certification ni une promesse commerciale.',
+  ];
+  const blob=new Blob([lines.join('\n')],{type:'text/markdown;charset=utf-8'});
+  const obj=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=obj;a.download='aura-audit-'+new Date().toISOString().slice(0,10)+'.md';
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(obj);
+};
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
 document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
@@ -1163,5 +1285,5 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();refresh();void refreshAutoPaperStatus();setInterval(refreshAutoPaperStatus,120000);try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();void refreshRevenueReadiness();void refreshAutoPaperStatus();setInterval(refreshAutoPaperStatus,120000);try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
