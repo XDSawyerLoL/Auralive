@@ -45,6 +45,31 @@ La journalisation effective par `kernel.trace` d’un agent, d’un groupe d’a
 
 Les traces de conversation sont isolées par **session de navigateur**, y compris quand la personne est authentifiée comme fondatrice. Le contexte conversationnel historique privé peut rester partagé dans le noyau, mais les traces de navigateur ne le sont plus. Le flux d’autonomie est réservé à la session fondatrice authentifiée. L’API ne sérialise qu’une liste blanche de métriques numériques, drapeaux et états prédéfinis ; elle n’inclut jamais les contenus de conversation, prompts, missions, erreurs techniques ou documents externes.
 
+## Flux d'événements en direct — transport SSE
+
+**Il existe désormais deux chemins de lecture complémentaires :**
+
+- `GET /api/cognition/events` : connexion `text/event-stream` de la **session de navigateur signée**. Le serveur transmet un instantané expurgé dès l'ouverture, puis après chaque jalon réellement enregistré par `CognitiveTraceLedger.mark` et `finish`.
+- `GET /api/cognition/autonomy/events` : même transport, **accessible uniquement à une session fondatrice authentifiée** via `requirePrivate`.
+- `GET /api/cognition/trace` et `GET /api/cognition/autonomy` : lecture REST de secours ; elle reste utilisable sans EventSource et si un reverse proxy coupe les connexions longues.
+- `POST /api/chat` contient toujours l'identifiant et la **trace finale vérifiée**, même si une requête de streaming a été routée vers un autre processus Node.
+
+Le navigateur lance le flux SSE **après** le premier appel REST qui installe le cookie de session. Il affiche explicitement « Événements directs » lorsque les messages SSE sont reçus, et « Flux indisponible · secours actif » si le navigateur repasse aux interrogations périodiques. Le mode Autonomie change d'abonnement ; le flux précédent est fermé.
+
+Le transport est borné à **4 connexions par session** et **120 connexions par processus**, émet un battement de vie toutes les 15 secondes, et ferme automatiquement chaque flux au bout de 2 minutes (EventSource peut se reconnecter). `Cache-Control: private, no-store, no-transform` et `X-Accel-Buffering: no` demandent au proxy de ne pas mettre en cache ou en tampon les messages, mais **certains hébergeurs peuvent malgré tout tamponner les événements**.
+
+Les notifications de `CognitiveTraceLedger` n'exposent jamais l'identifiant interne de session, les prompts, les réponses, les documents récupérés, les secrets ni le raisonnement privé. Les listeners sont désabonnés à la fermeture de connexion et leurs erreurs n'interrompent pas le noyau.
+
+**Limite restante :** plusieurs instances Node ont des mémoires distinctes. Le SSE suit seulement les traitements du processus où il est connecté. Une observation multi-instance continue nécessitera un journal partagé ou un bus d'événements explicite, redigé et isolé par session ; sans cela, l'instantané final de `POST /api/chat` assure uniquement la vérité du résultat final, pas une animation live inter-processus.
+
+### Test manuel SSE
+
+1. Ouvrir l'inspecteur réseau du navigateur. Vérifier que `/api/cognition/events` répond 200 et `Content-Type: text/event-stream`, avec une connexion active.
+2. Envoyer « salut ». Les événements `running` et `done` doivent arriver **durant** la requête. Les événements d'absence de moteur doivent être affichés comme `error`, pas comme une sortie réussie.
+3. Fermer la connexion SSE : le panneau doit indiquer le mode de secours et les traces doivent encore être visibles.
+4. Essayer une session publique sur `/api/cognition/autonomy/events` : la requête doit être refusée.
+5. Sur un déploiement à plusieurs processus, vérifier le comportement des événements pendant la requête ; ne pas prétendre qu'un flux inter-processus existe tant qu'il n'a pas été implémenté.
+
 ## Contraintes
 
 - Ce n’est **pas** une visualisation des poids, couches, tokens internes ou états de conscience d’un modèle.
