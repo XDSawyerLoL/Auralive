@@ -98,7 +98,7 @@ test('dashboard direct mode clears obsolete browser token state', () => {
 
 test('dashboard live metrics survive optional mobile visual failures', () => {
   assert.equal(DASHBOARD_HTML.includes("if(!nctx||!pctx)"), true);
-  assert.equal(DASHBOARD_HTML.includes("refresh();void refreshAutoPaperStatus();"), true);
+  assert.equal(DASHBOARD_HTML.includes("refresh();void refreshRevenueReadiness();void refreshAutoPaperStatus();"), true);
   assert.equal(DASHBOARD_HTML.includes("try{initLivingAuraScene();}catch(error)"), true);
   const metricsIndex = DASHBOARD_HTML.indexOf("metric('energy',soul.energy,boot.runtime_ready)");
   const organismIndex = DASHBOARD_HTML.indexOf("const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}");
@@ -302,5 +302,6 @@ test('AURA immersive cockpit exposes visible live language-engine diagnosis and 
   assert.match(DASHBOARD_SCRIPT,/api\('\/api\/language\/embedded\/status'\)/);
   assert.match(DASHBOARD_SCRIPT,/function renderLanguageEngine\(state\)/);
   assert.match(DASHBOARD_SCRIPT,/embedded-unsafe-redirect/);
-  assert.match(DASHBOARD_SCRIPT,/if\(!unavailable\)speakAura/);
+  assert.match(DASHBOARD_SCRIPT,/void speakAura\(answer,out.voice_ticket\|\|''\)/);
+  assert.match(DASHBOARD_SCRIPT,/out\?\.language_unavailable/);
 });
