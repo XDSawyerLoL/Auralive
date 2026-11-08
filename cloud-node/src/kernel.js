@@ -1024,7 +1024,11 @@ export class CognitiveKernel {
     };
   }
 
-  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
+  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '', onTrace = null) {
+    // Only measured milestones, no private prompts or chain-of-thought.
+    const observe = (stage, status = 'done', details = {}) => {
+      try { if (typeof onTrace === 'function') onTrace(stage, status, details); } catch (_) { /* observability must never interrupt dialogue */ }
+    };
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
@@ -1042,6 +1046,8 @@ export class CognitiveKernel {
         now(),
       ],
     );
+
+    observe('input');
 
     // L'organisme reçoit l'interaction avant toute formulation.
     const pre = this.organism.beforeInteraction(
@@ -1066,6 +1072,11 @@ export class CognitiveKernel {
       dream: pre.dream || null,
     });
     await this.saveSoul();
+    observe('homeostasis', 'done', {
+      delta_stability: Number(pre.impact_delta?.stabilite || 0),
+      delta_curiosity: Number(pre.impact_delta?.curiosite || 0),
+      delta_frustration: Number(pre.impact_delta?.frustration || 0),
+    });
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent(
@@ -1081,6 +1092,7 @@ export class CognitiveKernel {
           },
       privateView ? 'cloud-private' : 'cloud-public',
     );
+    observe('stimulus');
 
     const privateSoul = privateView
       ? await this.soul({ privateView: true })
@@ -1113,6 +1125,12 @@ export class CognitiveKernel {
       ).catch(() => []),
     ]);
 
+    observe('context', 'done', {
+      messages: recentMessages.length,
+      intentions: intentions.length, lessons: lessons.length,
+      reflections: reflections.length, work_items: work.length,
+    });
+
     let plan = this.cognition.planReply({
       text: content,
       soul: privateView ? privateSoul : publicSoul,
@@ -1125,6 +1143,8 @@ export class CognitiveKernel {
       recentMessages: [...recentMessages].reverse(),
       privateView,
     });
+
+    observe('decision', 'done', { decision_act: plan.act, semantic_requested: Boolean(plan.needs_semantic_support) });
 
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
@@ -1172,6 +1192,7 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
+        observe('research', 'done', { research_evidence: Number(externalResearch?.evidence_count || 0), confidence: Number(externalResearch?.confidence || 0) });
         await this.trace(
           'web-research',
           'Mémoire externe',
@@ -1184,6 +1205,7 @@ export class CognitiveKernel {
           },
         );
       } catch (error) {
+        observe('research', 'error');
         plan = {
           ...plan,
           external_evidence_required: true,
@@ -1202,6 +1224,10 @@ export class CognitiveKernel {
       }
     }
 
+    if (!(plan.needs_semantic_support && this.webSubstrate?.enabled && requiresExternalKnowledge(content))) {
+      observe('research', 'skipped');
+    }
+
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
@@ -1214,12 +1240,16 @@ export class CognitiveKernel {
         },
       );
       plan = this.cognition.integrateSemanticSupport(plan, support);
+      observe('semantic', support ? 'done' : 'skipped', { semantic_available: Boolean(support), token_budget: Number(inference.token_budget || 0) });
+    } else {
+      observe('semantic', 'skipped');
     }
 
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
+    observe('expression', 'done', { answer_chars: String(answer || '').length });
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
@@ -1233,6 +1263,7 @@ export class CognitiveKernel {
       post_delta: post.post_delta || {},
     });
     await this.saveSoul();
+    observe('homeostasis_post');
 
     await query(
       "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
@@ -1246,6 +1277,7 @@ export class CognitiveKernel {
       language_model_used_for_decision: false,
     });
 
+    observe('persistence');
     return {
       ok: true,
       answer,
