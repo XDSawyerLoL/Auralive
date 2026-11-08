@@ -1,4 +1,5 @@
 import { embeddedLanguageRuntime } from './embedded_language.js';
+import { GroqFreeFaculty } from './groq_free.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -68,9 +69,10 @@ function compactContext(rows = []) {
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
-  constructor(ai, { embedded = embeddedLanguageRuntime } = {}) {
+  constructor(ai, { embedded = embeddedLanguageRuntime, groq = new GroqFreeFaculty() } = {}) {
     this.ai = ai;
     this.embedded = embedded;
+    this.groq = groq;
     this.lastError = '';
     this.lastBackend = '';
     this.lastModel = '';
@@ -92,6 +94,7 @@ export class FrenchLanguageFaculty {
 
   async status() {
     const federation = this.federation?.snapshot?.() || {};
+    const groq = this.groq?.snapshot?.() || { enabled: false, api_key_configured: false };
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
     const embeddedInstalled = Boolean(embedded.installed);
@@ -100,8 +103,10 @@ export class FrenchLanguageFaculty {
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(embedded.ready || federation.enabled || local);
-    const blockingReason = installing ? 'embedded-language-installing'
+    const ready = Boolean(embedded.ready || groq.enabled || federation.enabled || local);
+    const blockingReason = this.lastMode === 'degraded' && groq.last_error_code
+      ? groq.last_error_code
+      : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
@@ -121,7 +126,13 @@ export class FrenchLanguageFaculty {
       ? classifyFreeLanguageFailure(this.lastError || federation.last_error || '')
       : null;
     const failureCode = failed?.code || blockingReason;
-    const setupHint = installing
+    const setupHint = failureCode.startsWith('groq-free-')
+      ? (failureCode === 'groq-free-rate-limited' ? 'Quota Groq Free atteint : attendre le renouvellement du quota ou utiliser OpenRouter gratuit.'
+        : failureCode === 'groq-free-auth-rejected' ? 'Clé Groq Free refusée : vérifier AURA_GROQ_API_KEY et le compte Groq Free.'
+        : 'Groq Free ne répond pas : vérifier les diagnostics de la faculté française et le fournisseur OpenRouter gratuit.')
+      : groq.api_key_configured && !groq.free_plan_confirmed
+        ? 'La clé Groq est présente mais le niveau gratuit n’est pas confirmé : activer AURA_GROQ_FREE_PLAN_CONFIRMED=true uniquement pour un compte Groq Free.'
+      : installing
       ? 'Installation vérifiée du moteur français libre en cours sur cet hébergement.'
       : provisionFailed
         ? 'Impossible d’installer le moteur libre : vérifier la mémoire, le disque, le réseau HTTPS et les permissions.'
@@ -129,7 +140,7 @@ export class FrenchLanguageFaculty {
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.setup_hint
       : blockingReason === 'openrouter-free-key-missing'
-      ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
+      ? 'Aucun fournisseur gratuit prêt : définir AURA_GROQ_API_KEY avec AURA_GROQ_FREE_PLAN_CONFIRMED=true (compte Groq Free uniquement), ou AURA_OPENROUTER_API_KEY. Garder AURA_ZERO_COST_MODE=true.'
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
         : blockingReason === 'free-federation-disabled'
@@ -143,13 +154,17 @@ export class FrenchLanguageFaculty {
       version: FrenchLanguageFaculty.VERSION,
       ready,
       verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+        || (groq.enabled && this.lastMode === 'groq-free')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
       primary: embedded.ready ? 'hostinger-embedded'
+        : groq.enabled ? 'groq-free'
         : federation.enabled ? 'zero-cost-federation'
           : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
+      groq,
       zero_cost: Boolean(federation.zero_cost_mode ?? true),
       federation_ready: Boolean(federation.enabled),
+      groq_free_ready: Boolean(groq.enabled),
       local_ready: local,
       last_mode: this.lastMode,
       last_backend: this.lastBackend,
@@ -239,7 +254,8 @@ export class FrenchLanguageFaculty {
     // A broken optional native runtime must never block a configured cloud speech provider.
     // Run local inference only when health and inference have already been verified.
     const tryEmbedded = async () => {
-      if (!this.embedded.status?.().ready) return '';
+      const localStatus = this.embedded.status?.() || {};
+      if (!localStatus.ready || localStatus.probe_verified === false) return '';
       try {
         const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
         if (answer) {
@@ -255,10 +271,29 @@ export class FrenchLanguageFaculty {
         return '';
       }
     };
-    // Without federation, use the local runtime if it is healthy.
-    if (!this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
+    // Prefer verified self-hosted inference; fall back to explicitly free federation
+    // on failure. Never block on a model that is merely installed or booting.
+    const localAnswer = await tryEmbedded();
+    if (localAnswer) return localAnswer;
+
+    // Optional additional free inference source. No key or unconfirmed billing
+    // tier means no network request is made and no cost is incurred here.
+    if (this.groq?.enabled) {
+      try {
+        const result = await this.groq.generate(prompt, system, maxTokens, taskRole);
+        const answer = cleanSpeechOutput(result?.answer || '');
+        if (answer) {
+          this.lastMode = 'groq-free';
+          this.lastError = '';
+          this.lastBackend = 'groq-free';
+          this.lastModel = String(result?.model || '');
+          this.lastLatencyMs = Date.now() - started;
+          return answer;
+        }
+        this.lastError = 'groq-free-empty-output';
+      } catch (_) {
+        this.lastError = String(this.groq?.snapshot?.()?.last_error_code || 'groq-free-unavailable');
+      }
     }
 
     if (this.federation?.enabled) {
@@ -290,12 +325,6 @@ export class FrenchLanguageFaculty {
       } catch (error) {
         this.lastError = safeError(error);
       }
-    }
-
-    // Federation was preferred; if unavailable, a healthy local engine can still answer.
-    if (this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
     }
 
     if (await this.localAvailable()) {

@@ -1,3 +1,5 @@
+import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
+
 export const DASHBOARD_SCRIPT = String.raw`
 const $ = function(id){ return document.getElementById(id); };
 let lastSoul = null;
@@ -680,7 +682,11 @@ async function refresh(){
       }else if(nativeDialogueReady){
         $('languageDot').className='live-dot warn';
         const strict=String(language.mode||'')==='natural-language-unavailable';
-        $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
+        const configuredButUntested=Boolean(language.groq_free?.enabled)
+          || ['zero-cost-federation','hostinger-embedded'].includes(String(language.provider||''));
+        $('languageText').textContent=strict
+          ? (configuredButUntested?'Français · non vérifié':'Français · indisponible')
+          : 'Français · dégradé';
         $('languageText').title=strict
           ? String(language.setup_hint || 'Aucun modèle libre disponible : vérifier /api/ai/runtime.') + ' AURA refuse de simuler une conversation pré-écrite tant que le modèle manque.'
           : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
@@ -788,6 +794,9 @@ async function refresh(){
     $('chatState').textContent=error.message;
   }
 }
+
+${COGNITIVE_ATLAS_SCRIPT}
+
 function primeVoice(){
   if(voicePrimed)return;
   voicePrimed=true;
@@ -889,21 +898,49 @@ async function speakAura(text,ticket){
   }
 }
 async function sendMessage(text){
+  if(cogAwaitingReply)return;
   try{primeVoice();}catch(_){}
   text=(text||'').trim();if(!text)return;
+  if(cogMode!=='dialogue')switchCognitiveMode('dialogue');
+  cogAwaitingReply=true;
+  cogTraceId='';
+  cogReplayVersion++;
+  cogReplaying=false;
+  cogTrace=null;
+  cogTraceOrigin='poll';
+  renderCognitiveGraph();
+  $('send').disabled=true;
+  // Establish the per-visitor session cookie before the long-running chat request.
+  await refreshCognitiveTrace();
   $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
   $('message').value='';
   $('messages').scrollTop=$('messages').scrollHeight;
   try{
     const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
-    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
+    if(out.trace_id)cogTraceId=String(out.trace_id);
+    if(out.trace?.available && out.trace?.id===cogTraceId){
+      cogTrace=out.trace;
+      cogTraceOrigin='reply';
+      renderCognitiveGraph();
+    }
+    await refreshCognitiveTrace();
+    const unavailable=out.response_mode==='natural-language-unavailable'
+      || (out.language_generated!==true
+        && /faculté de français naturel est indisponible|aucun moteur linguistique opérationnel|aucune réponse générée/i.test(String(out.answer||'')));
+    const roleLabel=unavailable?'SERVICE · NON EXÉCUTÉ':'AURA';
+    $('messages').insertAdjacentHTML('beforeend',
+      '<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">'+roleLabel+'</span>'
+      +escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
     if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
     if(unavailable)void refreshEnginePanel();
     refresh();
   }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
+    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura service-msg"><span class="who">SERVICE · NON EXÉCUTÉ</span>Requête interrompue : '+escapeHtml(error.message)+'</div>');
+    await refreshCognitiveTrace();
+  }finally{
+    cogAwaitingReply=false;
+    $('send').disabled=false;
   }
 }
 $('send').onclick=function(){sendMessage($('message').value);};
@@ -919,5 +956,17 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+$('cogModeDialogue').onclick=function(){switchCognitiveMode('dialogue');};
+$('cogModeAutonomy').onclick=function(){switchCognitiveMode('autonomy');};
+$('cogReplay').onclick=replayCognitiveTrace;
+$('cogDiagnostics').onclick=function(){
+  const panel=$('auraDiagnostics');
+  const visible=panel.classList.toggle('diagnostics-open');
+  this.setAttribute('aria-expanded',String(visible));
+  this.textContent=visible?'Masquer les diagnostics':'Diagnostics';
+};
+try{initCognitiveGraph();void loopCognitiveTrace();}catch(error){console.warn('AURA cognitive graph unavailable; dialogue and metrics continue.',error);}
+// Ensure the signed browser cookie exists before opening the live event stream.
+void refreshCognitiveTrace().then(function(){if(cogGraphReady)connectCognitiveEventStream();});
+updateClock();refresh();setInterval(updateClock,1000);setInterval(refresh,8000);
 `;

@@ -29,6 +29,7 @@ import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { CognitionEngine } from './cognition.js';
+import { CognitiveTraceLedger } from './cognitive_trace.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
 import { seedQuanticProducts } from './products.js';
@@ -122,7 +123,8 @@ function parseChatSession(value) {
 }
 
 function ensureChatSession(request, reply) {
-  if (isPrivate(request)) return 'private-founder';
+  // The founder still has the shared *conversation* context in CognitiveKernel,
+  // but cognitive traces must be isolated per browser, including private sessions.
   const existing = parseChatSession(cookies(request).aura_chat_session);
   if (existing) return existing;
   const created = createChatSession();
@@ -317,6 +319,7 @@ const corsOrigins = new Set(
     .filter(Boolean),
 );
 const metrics = new RuntimeMetrics();
+const cognitiveTrace = new CognitiveTraceLedger();
 const cloudVoice = new CloudVoice();
 const voiceStudio = new VoiceStudioProvider();
 
@@ -335,6 +338,8 @@ const horizon = new HorizonBridge(async (type, payload, source) => {
   }
 });
 kernel = new CognitiveKernel(ai, horizon, bridge, webSubstrate, fabric);
+// Optional, non-blocking observability of genuine autonomous kernel cycles.
+kernel.autonomyTelemetry = cognitiveTrace;
 const evolution = new EvolutionLab(ai, kernel, bridge);
 const commandCenter = new CommandCenter(
   kernel,
@@ -876,6 +881,13 @@ app.get('/api/capabilities', async (request) => {
       native_dialogue_version: CognitionEngine.VERSION,
       faculty_version: String(expressionDiagnostic.language?.version || ''),
       provider: String(expressionDiagnostic.language?.primary || 'unavailable'),
+      groq_free: {
+        configured: Boolean(expressionDiagnostic.language?.groq?.api_key_configured),
+        plan_confirmed: Boolean(expressionDiagnostic.language?.groq?.free_plan_confirmed),
+        enabled: Boolean(expressionDiagnostic.language?.groq?.enabled),
+        last_error_code: String(expressionDiagnostic.language?.groq?.last_error_code || ''),
+        cooldown_until: expressionDiagnostic.language?.groq?.cooldown_until || null,
+      },
       local_worker: Boolean(bridgeStatus?.worker_online),
       fallback_only: !expressionDiagnostic.natural_french_ready,
       mode: String(expressionDiagnostic.mode || 'unavailable'),
@@ -1415,6 +1427,87 @@ app.post('/api/kernel/operator', async (request, reply) => {
   return kernel.operate(task, risks);
 });
 
+// Server-sent cognitive events. Every payload is an already-redacted ledger
+// snapshot; only the authenticated/signed browser session may subscribe.
+// This is best-effort single-process streaming: the final POST /api/chat trace
+// remains authoritative if a reverse proxy or another Node process intervenes.
+function openCognitiveEventStream(request, reply, session, currentSnapshot) {
+  const raw = reply.raw;
+  let closed = false;
+  const send = (payload) => {
+    if (closed || raw.destroyed || raw.writableEnded) return;
+    try {
+      // A slow client must not accumulate unbounded response buffers.
+      // Browsers will reconnect; REST polling remains a safe fallback.
+      if (!raw.write('event: trace\ndata: ' + JSON.stringify(payload) + '\n\n')) {
+        cleanup();
+        raw.end();
+      }
+    } catch (_) { cleanup(); }
+  };
+  const unsubscribe = cognitiveTrace.subscribe(session, send);
+  if (!unsubscribe) {
+    return reply.code(429).send({ error: 'Limite de connexions de télémétrie atteinte' });
+  }
+  let heartbeat;
+  let lifetime;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    unsubscribe();
+    clearInterval(heartbeat);
+    clearTimeout(lifetime);
+  };
+  const inherited = reply.getHeaders();
+  reply.hijack();
+  raw.writeHead(200, {
+    ...inherited,
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'private, no-store, no-transform',
+    'X-Accel-Buffering': 'no',
+    Connection: 'keep-alive',
+  });
+  raw.once('close', cleanup);
+  raw.once('error', cleanup);
+  raw.write('retry: 5000\n\n');
+  send(currentSnapshot());
+  heartbeat = setInterval(() => {
+    if (!closed && !raw.destroyed) raw.write(': heartbeat\n\n');
+  }, 15000);
+  heartbeat.unref?.();
+  lifetime = setTimeout(() => {
+    cleanup();
+    if (!raw.destroyed && !raw.writableEnded) raw.end();
+  }, 120000);
+  lifetime.unref?.();
+}
+
+app.get('/api/cognition/events', async (request, reply) => {
+  const session = ensureChatSession(request, reply);
+  return openCognitiveEventStream(request, reply, session,
+    () => cognitiveTrace.snapshot(session));
+});
+
+app.get('/api/cognition/autonomy/events', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return openCognitiveEventStream(request, reply, '__internal_autonomy__',
+    () => cognitiveTrace.snapshotAutonomy());
+});
+
+// The autonomous stream is founder-only: it may reveal operational rhythms.
+app.get('/api/cognition/autonomy', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  reply.header('Cache-Control', 'private, no-store');
+  return cognitiveTrace.snapshotAutonomy(String(request.query?.id || '').slice(0, 64));
+});
+
+// A private-by-session read-only trace feed. No raw prompts, retrieved text or model internals.
+app.get('/api/cognition/trace', async (request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  const session = ensureChatSession(request, reply);
+  return cognitiveTrace.snapshot(session, String(request.query?.id || '').slice(0, 64));
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
@@ -1431,20 +1524,31 @@ app.post('/api/chat', async (request, reply) => {
   if (!text) return reply.code(422).send({ error: 'Message vide' });
   const privateView = isPrivate(request);
   const chatSessionId = ensureChatSession(request, reply);
-  const response = await kernel.chat(
-    text,
-    String(request.body?.author || 'Utilisateur'),
-    privateView,
-    chatSessionId,
-  );
+  const traceId = cognitiveTrace.start(chatSessionId);
+  let response;
+  try {
+    response = await kernel.chat(
+      text,
+      String(request.body?.author || 'Utilisateur'),
+      privateView,
+      chatSessionId,
+      (stage, status, details) => cognitiveTrace.mark(traceId, stage, status, details),
+    );
+  } catch (error) {
+    cognitiveTrace.finish(traceId, 'error');
+    throw error;
+  }
   const curiosityItem = await curiosity.questionForInteraction(text).catch(() => null);
   const baseAnswer = String(response?.answer || '').trim();
   const curiosityQuestion = String(curiosityItem?.question || '').trim();
   const answer = curiosityQuestion
     ? `${baseAnswer}\n\n${curiosityQuestion}`
     : baseAnswer;
+  cognitiveTrace.finish(traceId, 'done');
   return {
     ...response,
+    trace_id: traceId,
+    trace: cognitiveTrace.snapshot(chatSessionId, traceId),
     answer,
     curiosity_question: curiosityItem || null,
     voice_ticket: answer ? createVoiceTicket(answer) : '',

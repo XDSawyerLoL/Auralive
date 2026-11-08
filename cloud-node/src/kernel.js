@@ -277,6 +277,10 @@ export class CognitiveKernel {
       'INSERT INTO aura_cognitive_traces(kind,title,content,context,created_at) VALUES(?,?,?,?,?)',
       [String(kind).slice(0, 80), String(title).slice(0, 240), String(content).slice(0, 4000), JSON.stringify(context).slice(0, 12000), now()],
     );
+    // A journalled agent result is not proof of an external operation.
+    // Never promote an unverified operator request to a successful action.
+    try { this.autonomyTelemetry?.recordOperation(String(kind), context?.executed === true, String(context?.outcome || '')); }
+    catch (_) { /* Telemetry never breaks the cognitive database trace. */ }
   }
 
   async observeEvent(type, payload = {}, source = 'cloud') {
@@ -636,7 +640,18 @@ export class CognitiveKernel {
     if (!config.cognitiveEnabled && !force) return { ok: false, skipped: true, reason: 'noyau cognitif désactivé' };
     if (this.tickRunning) return { ok: true, skipped: true, reason: 'un cycle cognitif est déjà en cours' };
     this.tickRunning = true;
+    let telemetryId = '';
+    let telemetryFailed = false;
+    const emit = (stage, status = 'done', details = {}) => {
+      try {
+        if (telemetryId) this.autonomyTelemetry?.mark(telemetryId, stage, status, details);
+      } catch (_) { /* Never break cognitive execution for visual diagnostics. */ }
+    };
     try {
+      telemetryId = this.autonomyTelemetry?.startAutonomy(trigger) || '';
+    } catch (_) { /* Telemetry is optional. */ }
+    try {
+      emit('regulation', 'running');
       const timestamp = now();
       this.lastTickAt = timestamp;
       this.soulCache.cycles = Number(this.soulCache.cycles || 0) + 1;
@@ -648,6 +663,15 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      emit('regulation', 'done', {
+        delta_stability: Number(idle.effect?.stabilite || 0),
+        delta_curiosity: Number(idle.effect?.curiosite || 0),
+        delta_frustration: Number(idle.effect?.frustration || 0),
+        state_stability: idle.state.stabilite, state_clarity: idle.state.clarte,
+        state_curiosity: idle.state.curiosite, state_confidence: idle.state.confiance,
+        state_frustration: idle.state.frustration, state_engagement: idle.state.engagement,
+        state_mood: idle.state.mood
+      });
       if (idle.activity !== 'presence' || idle.dream) {
         await this.recordOrganismEvent('idle-life', idle.activity_label || 'vie intérieure', {
           activity: idle.activity,
@@ -668,6 +692,10 @@ export class CognitiveKernel {
         || (continuity.due && underLimit);
       await this.saveSoul();
       if (!shouldReflect) {
+        emit('context_auto', 'skipped');
+        emit('reflection_auto', 'skipped', { cycle_reflected: false });
+        emit('execution_auto', 'skipped');
+        emit('commit_auto', 'done');
         return {
           ok: true,
           skipped: true,
@@ -679,7 +707,13 @@ export class CognitiveKernel {
         };
       }
 
+      emit('context_auto', 'running');
       const bundle = await this.contextBundle(text);
+      emit('context_auto', 'done', {
+        stimuli_count: Array.isArray(bundle.stimuli) ? bundle.stimuli.length : 0,
+        lessons_count: Array.isArray(bundle.lessons) ? bundle.lessons.length : 0,
+      });
+      emit('reflection_auto', 'running');
       // Le noyau décide ici sans LLM : l’identité, les priorités, la mémoire et
       // les intentions ne dépendent d’aucun fournisseur de langage.
       const parsed = this.cognition.reflect(bundle, this.soulCache, { trigger: effectiveTrigger, text });
@@ -741,8 +775,16 @@ export class CognitiveKernel {
         language_model_used_for_decision: false,
       };
       await this.trace('reflection', title, summary, reflection);
+      emit('reflection_auto', 'done', { confidence, cycle_reflected: true });
+      emit('execution_auto', 'skipped');
+      emit('commit_auto', 'done');
       return { ok: true, reflection, soul: await this.soul() };
+    } catch (error) {
+      telemetryFailed = true;
+      throw error;
     } finally {
+      try { if (telemetryId) this.autonomyTelemetry?.finish(telemetryId, telemetryFailed ? 'error' : 'done'); }
+      catch (_) { /* Observability is never a dependency of autonomy. */ }
       this.tickRunning = false;
     }
   }
@@ -1024,7 +1066,11 @@ export class CognitiveKernel {
     };
   }
 
-  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
+  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '', onTrace = null) {
+    // Only measured milestones, no private prompts or chain-of-thought.
+    const observe = (stage, status = 'done', details = {}) => {
+      try { if (typeof onTrace === 'function') onTrace(stage, status, details); } catch (_) { /* observability must never interrupt dialogue */ }
+    };
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
@@ -1042,6 +1088,9 @@ export class CognitiveKernel {
         now(),
       ],
     );
+
+    observe('input');
+    observe('homeostasis', 'running');
 
     // L'organisme reçoit l'interaction avant toute formulation.
     const pre = this.organism.beforeInteraction(
@@ -1066,8 +1115,18 @@ export class CognitiveKernel {
       dream: pre.dream || null,
     });
     await this.saveSoul();
+    observe('homeostasis', 'done', {
+      delta_stability: Number(pre.impact_delta?.stabilite || 0),
+      delta_curiosity: Number(pre.impact_delta?.curiosite || 0),
+      delta_frustration: Number(pre.impact_delta?.frustration || 0),
+      state_stability: pre.state.stabilite, state_clarity: pre.state.clarte,
+        state_curiosity: pre.state.curiosite, state_confidence: pre.state.confiance,
+        state_frustration: pre.state.frustration, state_engagement: pre.state.engagement,
+        state_mood: pre.state.mood
+    });
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
+    observe('stimulus', 'running');
     await this.observeEvent(
       'aura.cloud.chat',
       privateView
@@ -1081,6 +1140,7 @@ export class CognitiveKernel {
           },
       privateView ? 'cloud-private' : 'cloud-public',
     );
+    observe('stimulus');
 
     const privateSoul = privateView
       ? await this.soul({ privateView: true })
@@ -1094,14 +1154,36 @@ export class CognitiveKernel {
           ),
         };
 
+    observe('context', 'running');
+    // Actual concurrent retrievals, with independent start/completion events.
+    // The visualization cannot infer these timings from Promise.all alone.
+    const measuredLookup = (stage, execute, metric = '') => {
+      observe(stage, 'running');
+      return Promise.resolve().then(execute).then((rows) => {
+        const details = metric && Array.isArray(rows) ? { [metric]: rows.length } : {};
+        observe(stage, 'done', details);
+        return rows;
+      }, (error) => {
+        observe(stage, 'error');
+        throw error;
+      });
+    };
+    const skippedLookup = (stage, value) => {
+      observe(stage, 'skipped');
+      return Promise.resolve(value);
+    };
     const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
-      privateView ? this.intentions(6) : Promise.resolve([]),
-      privateView ? this.lessons(6) : Promise.resolve([]),
-      privateView ? this.reflections(4) : Promise.resolve([]),
-      privateView ? this.workItems(5) : this.publicWorkItems(5),
-      privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot(),
-      privateView ? this.activitySinceLastConversation(conversationSession) : Promise.resolve({}),
-      query(
+      privateView ? measuredLookup('context_intentions', () => this.intentions(6), 'intentions')
+        : skippedLookup('context_intentions', []),
+      privateView ? measuredLookup('context_lessons', () => this.lessons(6), 'lessons')
+        : skippedLookup('context_lessons', []),
+      privateView ? measuredLookup('context_reflections', () => this.reflections(4), 'reflections')
+        : skippedLookup('context_reflections', []),
+      measuredLookup('context_work', () => privateView ? this.workItems(5) : this.publicWorkItems(5), 'work_items'),
+      measuredLookup('context_agenda', () => privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot()),
+      privateView ? measuredLookup('context_continuity', () => this.activitySinceLastConversation(conversationSession))
+        : skippedLookup('context_continuity', {}),
+      measuredLookup('context_messages', () => query(
         privateView
           ? `SELECT author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id IN ('private-founder','')
@@ -1110,9 +1192,16 @@ export class CognitiveKernel {
              WHERE session_id=?
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
-      ).catch(() => []),
+      ), 'messages').catch(() => []),
     ]);
 
+    observe('context', 'done', {
+      messages: recentMessages.length,
+      intentions: intentions.length, lessons: lessons.length,
+      reflections: reflections.length, work_items: work.length,
+    });
+
+    observe('decision', 'running');
     let plan = this.cognition.planReply({
       text: content,
       soul: privateView ? privateSoul : publicSoul,
@@ -1125,6 +1214,8 @@ export class CognitiveKernel {
       recentMessages: [...recentMessages].reverse(),
       privateView,
     });
+
+    observe('decision', 'done', { decision_act: plan.act, semantic_requested: Boolean(plan.needs_semantic_support) });
 
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
@@ -1149,6 +1240,7 @@ export class CognitiveKernel {
       && this.webSubstrate?.enabled
       && requiresExternalKnowledge(content)
     ) {
+      observe('research', 'running');
       try {
         if (this.fabric?.enabled !== false && this.fabric?.registry?.has('web.research')) {
           const routed = await this.fabric.execute(
@@ -1172,6 +1264,7 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
+        observe('research', 'done', { research_evidence: Number(externalResearch?.evidence_count || 0), confidence: Number(externalResearch?.confidence || 0) });
         await this.trace(
           'web-research',
           'Mémoire externe',
@@ -1184,6 +1277,7 @@ export class CognitiveKernel {
           },
         );
       } catch (error) {
+        observe('research', 'error');
         plan = {
           ...plan,
           external_evidence_required: true,
@@ -1202,9 +1296,14 @@ export class CognitiveKernel {
       }
     }
 
+    if (!(plan.needs_semantic_support && this.webSubstrate?.enabled && requiresExternalKnowledge(content))) {
+      observe('research', 'skipped');
+    }
+
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
+      observe('semantic', 'running');
       const support = await this.expression.semanticSupport(
         plan,
         await this.contextForAi(privateView),
@@ -1214,16 +1313,27 @@ export class CognitiveKernel {
         },
       );
       plan = this.cognition.integrateSemanticSupport(plan, support);
+      observe('semantic', support ? 'done' : 'skipped', { semantic_available: Boolean(support), token_budget: Number(inference.token_budget || 0) });
+    } else {
+      observe('semantic', 'skipped');
     }
 
+    observe('expression', 'running');
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
+    const languageMode = String(this.expression.lastMode || 'unknown');
+    const languageGenerated = languageMode === 'french-language-faculty';
+    observe('expression', languageMode === 'natural-language-unavailable' ? 'error' : 'done', {
+      answer_chars: String(answer || '').length, language_mode: languageMode,
+      language_backend: String(this.expression.language?.lastBackend || 'unavailable'),
+    });
+    observe('homeostasis_post', 'running');
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
-      true,
+      languageGenerated,
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
@@ -1231,13 +1341,25 @@ export class CognitiveKernel {
       author: String(author).slice(0,120),
       act: plan.act || 'respond',
       post_delta: post.post_delta || {},
+      language_generated: languageGenerated,
     });
     await this.saveSoul();
+    observe('homeostasis_post', 'done', {
+      state_stability: post.state.stabilite, state_clarity: post.state.clarte,
+        state_curiosity: post.state.curiosite, state_confidence: post.state.confiance,
+        state_frustration: post.state.frustration, state_engagement: post.state.engagement,
+        state_mood: post.state.mood
+    });
+    observe('persistence', 'running');
 
-    await query(
-      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
-      [conversationSession, String(answer).slice(0, 12000), now()],
-    );
+    // A diagnostic is not an AURA conversation turn. Preserve the user's
+    // request, but never pollute the conversational memory with fake replies.
+    if (languageGenerated || languageMode === 'deterministic-emergency-fallback') {
+      await query(
+        "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
+        [conversationSession, String(answer).slice(0, 12000), now()],
+      );
+    }
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,
@@ -1246,9 +1368,12 @@ export class CognitiveKernel {
       language_model_used_for_decision: false,
     });
 
+    observe('persistence');
     return {
       ok: true,
       answer,
+      response_mode: languageMode,
+      language_generated: languageGenerated,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,

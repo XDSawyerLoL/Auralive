@@ -182,6 +182,16 @@ export const config = Object.freeze({
   freeFederationCatalogTtlSeconds: int('AURA_FREE_FEDERATION_CATALOG_TTL_SECONDS', 900, 60, 86400),
   freeFederationMaxCatalogModels: int('AURA_FREE_FEDERATION_MAX_CATALOG_MODELS', 24, 1, 100),
   freeFederationExploration: num('AURA_FREE_FEDERATION_EXPLORATION', 0.12, 0.01, 0.5),
+  // Optional Groq Free Plan only. No calls until owner has explicitly
+  // confirmed the organization is on the non-billing Free tier.
+  groqApiKey: process.env.AURA_GROQ_API_KEY || process.env.GROQ_API_KEY
+    // Support pre-existing OpenAI-compatible Groq configuration only if
+    // the endpoint is the exact official Groq API. No arbitrary URL/key reuse.
+    || (String(process.env.AI_BASE_URL || '').replace(/[/]$/, '') === 'https://api.groq.com/openai/v1'
+      ? LEGACY_GEMINI_API_KEY : ''),
+  groqFreePlanConfirmed: bool('AURA_GROQ_FREE_PLAN_CONFIRMED', false),
+  groqFreeModel: String(process.env.AURA_GROQ_FREE_MODEL || 'openai/gpt-oss-20b').trim(),
+  groqFreeMaxRequestsPerDay: int('AURA_GROQ_FREE_MAX_REQUESTS_PER_DAY', 100, 1, 1000),
   openRouterApiKey: process.env.AURA_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '',
   openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
   openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),

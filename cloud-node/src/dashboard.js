@@ -1,4 +1,5 @@
 import { DASHBOARD_SCRIPT } from './dashboard-runtime.js';
+import { COGNITIVE_ATLAS_CSS, COGNITIVE_ATLAS_HTML } from './cognitive_atlas_ui.js';
 
 export const DASHBOARD_HTML = String.raw`<!doctype html>
 <html lang="fr">
@@ -133,6 +134,8 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 @media(max-width:640px){.shell{padding:8px}.topbar{height:62px;padding:9px 12px;top:5px;border-radius:19px}.brand-name{font-size:19px}.aura-intro{padding:22px 6px 15px}.aura-intro h1{font-size:30px}.intro-copy{font-size:12px}.build-version{display:none}.status-rail{grid-template-columns:1fr 1fr;gap:8px}.rail-item{min-height:70px;padding:11px}.rail-item:last-child{grid-column:1 / -1}.rail-value{font-size:12px}.main{gap:9px}.chat{min-height:calc(100svh - 68px)}.chat-head{padding:16px}.messages{padding:14px;gap:12px}.msg{font-size:15px;max-width:92%;padding:13px 15px}.composer{padding:10px}.composer textarea{font-size:16px}.chat-hint{padding:0 12px 10px}.side{grid-template-columns:1fr;gap:9px}.map-wrap{height:250px}.organism-hud,.map-badge{display:flex}.map-foot{font-size:10px}.engine-panel{padding:15px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 
+
+${COGNITIVE_ATLAS_CSS}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -169,6 +172,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
   <main class="main">
     <section class="panel chat">
       <div class="chat-head"><div><div class="chat-title">Parler à AURA</div><div class="chat-sub">Conversation principale</div></div><div id="chatState" class="chat-head-state">Connexion…</div></div>
+${COGNITIVE_ATLAS_HTML}
       <div class="messages" id="messages"><div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div></div>
       <div class="composer">
         <button id="voiceBtn" title="Dicter">◉</button>
@@ -179,7 +183,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
       <div class="quick"></div>
     </section>
 
-    <aside class="side">
+    <aside class="side" id="auraDiagnostics">
       <section class="panel aura-card">
         <div class="side-head"><strong>AURA vivante</strong><span id="organismMood">réveil</span><div class="top-spacer"></div><button id="refreshMap" class="icon-btn">↺</button></div>
         <div class="map-wrap" id="livingMap">
