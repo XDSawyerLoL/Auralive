@@ -98,7 +98,8 @@ test('dashboard direct mode clears obsolete browser token state', () => {
 
 test('dashboard live metrics survive optional mobile visual failures', () => {
   assert.equal(DASHBOARD_HTML.includes("if(!nctx||!pctx)"), true);
-  assert.equal(DASHBOARD_HTML.includes("refresh();try{initLivingAuraScene();}catch(error)"), true);
+  assert.equal(DASHBOARD_HTML.includes("refresh();void refreshAutoPaperStatus();"), true);
+  assert.equal(DASHBOARD_HTML.includes("try{initLivingAuraScene();}catch(error)"), true);
   const metricsIndex = DASHBOARD_HTML.indexOf("metric('energy',soul.energy,boot.runtime_ready)");
   const organismIndex = DASHBOARD_HTML.indexOf("const organism=(ks&&ks.organism)||(soul&&soul.organism)||{}");
   assert.ok(metricsIndex >= 0);
