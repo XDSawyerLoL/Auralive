@@ -936,7 +936,7 @@ async function sendMessage(text){
     if(unavailable)void refreshEnginePanel();
     refresh();
   }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
+    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura service-msg"><span class="who">SERVICE · NON EXÉCUTÉ</span>Requête interrompue : '+escapeHtml(error.message)+'</div>');
     await refreshCognitiveTrace();
   }finally{
     cogAwaitingReply=false;
