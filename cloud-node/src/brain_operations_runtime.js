@@ -12,7 +12,7 @@ const POS={
  trading:[1040,570],audit:[1005,664],voice:[1084,488],peer:[190,566]
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
-const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false,pendingMission:null};
+const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
 const canvas=$('graphCanvas'),ctx=canvas.getContext('2d'),view=$('graphViewport');
 const reduced=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -103,7 +103,6 @@ function chooseFlow(id){
 
 function renderFlows(){
  const root=$('flowList');root.replaceChildren();
- if(!state.data?.authorized){root.append(element('p','empty','Connexion propriétaire requise pour observer les trajets individuels.'));return;}
  const flows=state.data?.flows||[];
  if(!flows.length){root.append(element('p','empty','Aucun parcours enregistré. Une requête envoyée ici créera des transitions visibles si elles sont effectivement persistées.'));return;}
  for(const flow of flows){
@@ -118,7 +117,6 @@ function renderFlows(){
 
 function renderEvents(){
  const root=$('eventList');root.replaceChildren();
- if(!state.data?.authorized){root.append(element('p','empty','Journal accessible uniquement en session propriétaire AURA.'));return;}
  const events=state.data?.events||[];
  if(!events.length){root.append(element('p','empty','Aucun événement récent dans les journaux consultés.'));return;}
  for(const ev of events.slice(0,50)){
@@ -147,7 +145,6 @@ function renderMetrics(){
 
 function renderTools(){
  const root=$('toolList');root.replaceChildren();
- if(!state.data?.authorized){root.append(element('p','empty','Connexion propriétaire nécessaire pour afficher les appels d’outils.'));return;}
  const tools=state.data?.observed_tools||[];
  if(!tools.length){root.append(element('p','empty','Aucun appel d’outil consigné sur la période. Un outil installé n’est pas une activité.'));return;}
  for(const tool of tools){
@@ -196,10 +193,6 @@ function renderMemory(){
 
 function renderActivity(){
  const root=$('activityStats');root.replaceChildren();
- if(!state.data?.authorized){
-   root.append(element('p','empty','Les traces d’exécution nécessitent la session propriétaire.'));
-   return;
- }
  const flows=state.data.flows||[];
  if(!flows.length){
    root.append(element('p','empty','Aucune mission ou réponse corrélée attestée sur la période.'));
@@ -215,10 +208,6 @@ function renderActivity(){
 
 function renderToolMirror(){
  const root=$('toolMirror');root.replaceChildren();
- if(!state.data?.authorized){
-   root.append(element('p','empty','Connexion propriétaire requise : aucun appel privé n’est divulgué.'));
-   return;
- }
  const tools=state.data?.observed_tools||[];
  if(!tools.length){
    root.append(element('p','empty','Aucun outil invoqué dans les traces consultées.'));
@@ -237,19 +226,17 @@ function renderToolMirror(){
 function renderKPIs(){
  const d=state.data;if(!d)return;
  setText('kModules',d.nodes?.length||0);
- setText('kHops',d.authorized?d.observed_hop_count:'🔒');
- setText('kFlows',d.authorized?(d.flows?.length||0):'🔒');
- setText('kSignals',d.authorized?d.recent_signal_count:'🔒');
- setText('kTools',d.authorized?(d.observed_tools?.length||0):'🔒');
+ setText('kHops',d.observed_hop_count||0);
+ setText('kFlows',d.flows?.length||0);
+ setText('kSignals',d.recent_signal_count||0);
+ setText('kTools',d.observed_tools?.length||0);
  setText('kOrganism',shortTime(d.telemetry?.source?.updated_at));
- $('graphClock').textContent='Relevé : '+stamp(d.sampled_at)+' · '+(d.authorized?'session privée active':'vue architecture seule');
+ $('graphClock').textContent='Relevé : '+stamp(d.sampled_at)+' · '+(d.database_observations_available?'observations publiques':'journal indisponible');
  $('onlineState').dataset.state=d.runtime_ready?'active':'error';
  $('onlineState').lastChild.textContent=d.runtime_ready?'Noyau joignable':'Noyau indisponible';
- $('graphCaption').textContent=d.authorized?
-   'Cyan : transitions observées récemment. Ambre : replay du trajet sélectionné. Gris : dépendances déclarées dans le code. Aucun flux n’est inventé.'
-  :'Vue architecturale uniquement : les trajets privés restent masqués jusqu’à authentification. Aucun passage d’outil n’est simulé.';
- $('authState').textContent=d.authorized?'Session propriétaire active · trajets détaillés autorisés':'Traces détaillées protégées · connexion privée';
- $('ownerFields').hidden=d.authorized;$('ownerArea').hidden=d.authorized;
+ $('graphCaption').textContent=d.database_observations_available===false
+   ?'Observations indisponibles : réseau architectural affiché sans traces inventées.'
+   :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
 function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
@@ -442,16 +429,6 @@ $('refreshMap').onclick=poll;setInterval(()=>{if(!document.hidden)poll();},state
 // committed module hops BEFORE the model produces its final answer.
 setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
 
-$('ownerSignIn').onclick=async()=>{
- const field=$('ownerKey');const secret=field.value.trim();if(!secret)return;$('ownerSignIn').disabled=true;
- try{
-   const res=await fetch('/api/auth/session',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:secret})});
-   const out=await res.json();if(!res.ok||out.authenticated!==true)throw new Error('Accès refusé');field.value='';await poll();
-   if(state.pendingMission){$('chatMode').value='mission';$('chatInput').value=state.pendingMission;state.pendingMission=null;$('chatSend').click();}
- }catch(_){$('authState').textContent='Clé non validée. Vérifier la session propriétaire AURA.';}
- finally{field.value='';$('ownerSignIn').disabled=false;}
-};
-
 const history=$('chatHistory');
 $('chatExpand').onclick=()=>{const open=!history.classList.contains('open');history.classList.toggle('open',open);$('chatExpand').setAttribute('aria-expanded',String(open));};
 function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;$('chatExpand').setAttribute('aria-expanded','true');}
@@ -490,10 +467,8 @@ $('chatSend').onclick=async()=>{
    let out;
    try{out=await res.json();}catch{throw Error('Réponse serveur non lisible');}
    if((res.status===401||res.status===403)&&mission){
-     state.pendingMission=msg;
-     chatLine('AURA · ACCÈS PRIVÉ','Cette action nécessite une authentification. La mission est conservée et reprendra après connexion.');
-     $('authState').textContent='Authentification nécessaire pour cette action privée.';
-     $('ownerArea').hidden=false;$('ownerFields').hidden=false;
+     field.value=msg;
+     chatLine('AURA · ACTION PROTÉGÉE','Les observations sont ouvertes. Cette commande peut modifier le serveur : son exécution exige une autorisation distincte. La requête reste dans le champ de saisie.');
    }else if(!res.ok||out?.ok!==true){
      const failure=typeof out?.error==='string'?out.error:'Le noyau n’a pas confirmé le traitement.';
      chatLine('SERVICE · NON EXÉCUTÉ',failure.slice(0,750));
@@ -518,17 +493,15 @@ $('chatSend').onclick=async()=>{
    await poll();
    if(out?.brain_flow_id){
      let flow=state.data?.flows?.find(f=>f.id===out.brain_flow_id);
-     if(!flow&&state.data?.authorized){
+     if(!flow){
        await new Promise(resolve=>setTimeout(resolve,400));
        await poll();
        flow=state.data?.flows?.find(f=>f.id===out.brain_flow_id);
      }
      if(flow)chooseFlow(flow.id);
-     else setText('currentFlowSummary',!state.data?.authorized
-       ?'Réponse reçue. Connecte la session propriétaire pour consulter le trajet.'
-       :state.data?.database_observations_available===false
-         ?'La base des événements est indisponible : trajet non attesté.'
-         :'Réponse reçue, mais aucun trajet corrélé n’est présent dans les traces consultées.');
+     else setText('currentFlowSummary',state.data?.database_observations_available===false
+       ?'La base des événements est indisponible : trajet non attesté.'
+       :'Réponse reçue, mais aucun trajet corrélé n’est présent dans les traces consultées.');
    }
  }catch(error){
    chatLine('SERVICE · ÉCHEC',
