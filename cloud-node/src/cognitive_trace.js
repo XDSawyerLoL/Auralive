@@ -21,7 +21,9 @@ const ALLOWED_DETAILS = new Set([
   'state_frustration', 'state_engagement', 'state_mood',
 ]);
 const LIMIT = 120;
-const EVENTS_PER_TRACE = 96; // enough for real parallel memory lookups, no loss of early evidence
+const EVENTS_PER_TRACE = 96; // bounded chronological evidence, including parallel retrievals
+const MAX_STREAMS_PER_SESSION = 4;
+const MAX_STREAMS_TOTAL = 120;
 const TTL_MS = 20 * 60_000;
 const cleanDetails = (details = {}) => {
   const result = {};
@@ -57,6 +59,42 @@ export class CognitiveTraceLedger {
   constructor({ clock = () => Date.now() } = {}) {
     this.clock = clock;
     this.runs = new Map();
+    this.listeners = new Map();
+    this.listenerCount = 0;
+  }
+
+  // Subscribers receive only sanitized copies, never run internals or secrets.
+  // A stream is held for the lifetime of its HTTP connection and cleaned up
+  // by the caller; capacity limits prevent runaway connections on shared hosting.
+  subscribe(sessionId, onSnapshot) {
+    const session = String(sessionId || '');
+    if (!session || typeof onSnapshot !== 'function') return null;
+    let set = this.listeners.get(session);
+    if ((set?.size || 0) >= MAX_STREAMS_PER_SESSION
+      || this.listenerCount >= MAX_STREAMS_TOTAL) return null;
+    if (!set) {
+      set = new Set();
+      this.listeners.set(session, set);
+    }
+    set.add(onSnapshot);
+    this.listenerCount += 1;
+    let closed = false;
+    return () => {
+      if (closed) return;
+      closed = true;
+      if (!set.delete(onSnapshot)) return;
+      this.listenerCount -= 1;
+      if (set.size === 0) this.listeners.delete(session);
+    };
+  }
+
+  notify(run) {
+    const subscribers = this.listeners.get(run.session_id);
+    if (!subscribers?.size) return;
+    const safeCopy = this.snapshot(run.session_id, run.id);
+    for (const handler of [...subscribers]) {
+      try { handler(safeCopy); } catch (_) { /* Telemetry cannot affect cognition. */ }
+    }
   }
 
   prune() {
@@ -132,6 +170,7 @@ export class CognitiveTraceLedger {
       details: cleanDetails(details),
     });
     if (run.events.length > EVENTS_PER_TRACE) run.events.shift();
+    this.notify(run);
     return true;
   }
 
@@ -146,6 +185,8 @@ export class CognitiveTraceLedger {
       stage: run.kind === 'autonomy' ? 'cycle' : 'request', status: run.state, at: run.finished_at,
       elapsed_ms: run.duration_ms, duration_ms: run.duration_ms, details: {},
     });
+    if (run.events.length > EVENTS_PER_TRACE) run.events.shift();
+    this.notify(run);
     return true;
   }
 
