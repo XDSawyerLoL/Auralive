@@ -5,6 +5,8 @@ import { randomUUID } from 'node:crypto';
 const STAGES = new Set([
   'request', 'input', 'homeostasis', 'stimulus', 'context', 'decision',
   'research', 'semantic', 'expression', 'homeostasis_post', 'persistence',
+  'context_intentions', 'context_lessons', 'context_reflections', 'context_work',
+  'context_agenda', 'context_continuity', 'context_messages',
   'cycle', 'regulation', 'context_auto', 'reflection_auto', 'execution_auto', 'commit_auto',
 ]);
 const STATES = new Set(['running', 'done', 'skipped', 'error']);
