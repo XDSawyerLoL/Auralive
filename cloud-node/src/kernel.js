@@ -13,6 +13,7 @@ import { SkillLearningEngine } from './skill_learning.js';
 import { AgentRunLedger } from './agent_runs.js';
 import { knowledgeVault, knowledgeContext } from './knowledge_vault.js';
 import { resourceContext, isToolDiscoveryRequest } from './toolbox_resources.js';
+import { agentSkillsGuidance, selectAgentSkills } from './agent_skills.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -890,6 +891,11 @@ export class CognitiveKernel {
       const toolbox = resourceContext(focus, 3);
       if (toolbox) lines.push(toolbox);
     }
+    // Procedures are advisory: never execute actions, change permissions, or claim success.
+    if (privateView && focus) {
+      const guidance = agentSkillsGuidance(focus, {limit:2});
+      if (guidance) lines.push(guidance);
+    }
     if (lessons.length) lines.push('LEÇONS APPRISES', ...lessons.map((row) => `- ${row.content} (preuves=${row.evidence_count}, confiance=${row.confidence})`));
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
     if (privateView && recentMessages.length) {
@@ -919,6 +925,7 @@ export class CognitiveKernel {
       operator: 'tools',
       critic: 'critic',
     })[name] || 'general';
+    const selectedSkills = selectAgentSkills(task, { role:name, limit:2 });
     const run = await this.agentRuns.execute({
       role: name,
       missionId,
@@ -926,7 +933,7 @@ export class CognitiveKernel {
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
         `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true, task)).slice(0, 6000)}`,
-        AGENT_ROLES[name],
+        AGENT_ROLES[name] + '\n' + agentSkillsGuidance(task, {role:name,limit:2}),
         700,
         taskRole,
       ),
@@ -936,7 +943,9 @@ export class CognitiveKernel {
       outcome: run.status, task_role: taskRole,
     });
     return { agent: name, answer: run.answer || 'IA non configurée sur AURA Cloud.',
-      status: run.status, run_id: run.id };
+      status: run.status, run_id: run.id,
+      proposed_skills: selectedSkills.map((item) => item.id),
+      skills_executed: false };
   }
 
   async swarm(task, names) {
@@ -1157,6 +1166,11 @@ export class CognitiveKernel {
           kind: 'toolbox_candidates',
           note: resourceContext(content, 2).slice(0, 1700),
           evidence_status: 'offline-directory-not-executed',
+        }] : []),
+        ...(privateView && selectAgentSkills(content, {limit:2}).length ? [{
+          kind: 'agent_skill_procedure',
+          note: agentSkillsGuidance(content, {limit:2}).slice(0, 2000),
+          evidence_status: 'local-playbook-not-executed',
         }] : []),
       ],
     };
