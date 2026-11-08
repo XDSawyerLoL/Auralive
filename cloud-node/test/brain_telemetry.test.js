@@ -23,7 +23,7 @@ function publicSnapshot(){
     created_at:new Date(T-90_000).toISOString()}],
  };
 }
-test('telemetry is sourced exclusively from public v9 organism and genuine kernel counters',()=>{
+test('telemetry is sourced exclusively from public v10 organism and genuine kernel counters',()=>{
  const t=buildBrainTelemetry(publicSnapshot(),{language:{
   enabled:true,last_status:'verified-text',last_model:'qwen/qwen3.8-27b',
  }},T);
@@ -124,7 +124,7 @@ test('fullscreen brain action is functional without disrupting the chat on the h
 });
 
 
-test('Homeostasis v9 actually reacts to interaction, response and idle tick (not a static UI mock)',()=>{
+test('Homeostasis v10 actually reacts to interaction, response and idle tick (not a static UI mock)',()=>{
  const organism=new AuraOrganism();
  const state=organism.migrate({continuity:.87,current_intention:'Vérifier les mesures'});
  const original=organism.publicState(state);
@@ -137,7 +137,7 @@ test('Homeostasis v9 actually reacts to interaction, response and idle tick (not
  const observed=organism.publicState(idle.state);
  assert.notEqual(observed.pression_de_reve,original.pression_de_reve);
  assert.ok(observed.updated_at);
- assert.equal(observed.schema_revision,9);
+ assert.equal(observed.schema_revision,10);
  assert.equal(typeof observed.dynamics.activation,'number');
  assert.equal(typeof observed.stabilite,'number');
  assert.ok(observed.stabilite>=0&&observed.stabilite<=1);
