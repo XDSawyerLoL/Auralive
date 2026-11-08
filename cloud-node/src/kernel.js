@@ -12,6 +12,7 @@ import { NativePolicyLearner } from './native_learning.js';
 import { SkillLearningEngine } from './skill_learning.js';
 import { AgentRunLedger } from './agent_runs.js';
 import { knowledgeVault, knowledgeContext } from './knowledge_vault.js';
+import { resourceContext, isToolDiscoveryRequest } from './toolbox_resources.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -884,6 +885,11 @@ export class CognitiveKernel {
     if (privateView) lines.push(`intention=${soul.current_intention || ''}`, `pensée_dominante=${soul.dominant_thought || ''}`);
     if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
     if (privateView && knowledgeNotes.length) lines.push(knowledgeContext(knowledgeNotes));
+    // Advisory only: local suggestions cannot authorize an external call or a paid service.
+    if (privateView && focus && isToolDiscoveryRequest(focus)) {
+      const toolbox = resourceContext(focus, 3);
+      if (toolbox) lines.push(toolbox);
+    }
     if (lessons.length) lines.push('LEÇONS APPRISES', ...lessons.map((row) => `- ${row.content} (preuves=${row.evidence_count}, confiance=${row.confidence})`));
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
     if (privateView && recentMessages.length) {
@@ -1147,6 +1153,11 @@ export class CognitiveKernel {
           note: `[projet=${note.project || 'general'}; source=${note.source}; note=${note.id}] ${note.title}: ${note.body.slice(0, 700)}`,
           evidence_status: 'founder-declared-unverified',
         })),
+        ...(privateView && isToolDiscoveryRequest(content) ? [{
+          kind: 'toolbox_candidates',
+          note: resourceContext(content, 2).slice(0, 1700),
+          evidence_status: 'offline-directory-not-executed',
+        }] : []),
       ],
     };
 
