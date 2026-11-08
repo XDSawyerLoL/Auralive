@@ -31,6 +31,7 @@ import { CognitiveKernel } from './kernel.js';
 import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
 import { RESOURCE_CATALOG, discoverResources } from './toolbox_resources.js';
 import { searchPublicResources } from './toolbox_research.js';
+import { runPaperBacktest } from './trading_lab.js';
 import { AURA_PLAYBOOKS, SKILLS_VERSION, SKILLS_POLICY, planAgentSkills } from './agent_skills.js';
 import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
@@ -1405,6 +1406,32 @@ app.post('/api/toolbox/research', async (request, reply) => {
     const message = String(error?.message || error);
     const unavailable = /indisponible|timeout|fetch failed/i.test(message);
     return reply.code(unavailable ? 503 : 422).send({ error:message.slice(0,220) });
+  }
+});
+
+// Strict simulation: no broker keys, order-placement endpoints or investment account.
+let tradingLabBusy=false;
+let tradingLabLastRun=0;
+app.get('/api/trading/mode', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return {mode:'paper-only',live_orders_enabled:false,real_money_traded:false,
+    real_profit_eur:0,external_paid_apis:0,available_pairs:['XBTEUR','ETHEUR'],
+    note:'Simulation historique sans engagement financier. Pas de garantie de bénéfice.'};
+});
+app.post('/api/trading/paper/backtest', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if(tradingLabBusy || Date.now()-tradingLabLastRun<15000)
+    return reply.code(429).send({error:'Simulation déjà en cours ou fréquence limitée : attendre 15 secondes'});
+  tradingLabBusy=true;
+  tradingLabLastRun=Date.now();
+  try {
+    return await runPaperBacktest(request.body||{});
+  } catch(error) {
+    const message=String(error?.message||error).slice(0,180);
+    const network=/Kraken|fetch|network|timeout|délai/i.test(message);
+    return reply.code(network?503:422).send({error:message});
+  } finally {
+    tradingLabBusy=false;
   }
 });
 
