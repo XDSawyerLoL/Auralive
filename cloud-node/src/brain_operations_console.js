@@ -76,7 +76,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <aside class="rail">
       <section class="panel modules-panel" id="module-list">
         <div class="panel-header"><h2>Modules réels</h2><small id="moduleCount">—</small></div>
-        <div class="panel-body"><input id="moduleSearch" class="search" placeholder="Chercher un module, un outil, un fournisseur…" aria-label="Filtrer les modules"></div>
+        <div class="panel-body module-toolbar">
+          <input id="moduleSearch" class="search" placeholder="Chercher un module, un outil, un fournisseur…" aria-label="Filtrer les modules">
+          <select id="moduleGroup" aria-label="Catégorie des modules"><option value="all">Tous les domaines</option></select>
+          <small id="moduleSummary">Inventaire des capacités installées, distinct des exécutions attestées.</small>
+        </div>
         <div id="moduleList" class="modules-list" aria-label="Modules disponibles et états observés"><p class="empty">Chargement de la cartographie…</p></div>
       </section>
     </aside>
@@ -88,6 +92,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <p>Régions = fonctions réelles d’AURA · Traits discrets = architecture · Impulsions = transitions persistées.</p>
         </div>
         <div class="graph-controls">
+          <select id="graphLens" aria-label="Isoler une famille de modules"><option value="all">Tout le réseau</option></select>
+          <button id="graphLabels" type="button" aria-pressed="false" title="Afficher davantage de noms de modules">Tous les noms</button>
           <button id="graphLess" type="button" title="Dézoomer">−</button>
           <button id="graphReset" type="button" title="Recentrer">◎</button>
           <button id="graphMore" type="button" title="Zoomer">+</button>
@@ -98,6 +104,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <canvas id="graphCanvas" role="img" aria-label="Carte neuronale interactive des modules réels et de leurs transitions observées"></canvas>
           <div class="graph-hud">
             <div class="graph-floating" id="graphClock">Aucun relevé disponible pour le moment.</div>
+            <div class="graph-floating" id="graphHover" aria-live="off">Survole un point : module, statut et dernière observation.</div>
             <div class="graph-floating">Glisser · Zoomer · Cliquer sur un module · Rejouer un trajet enregistré</div>
           </div>
           <div class="neural-inspector memory-inspector" role="button" tabindex="0" data-inspect="memory">
@@ -140,6 +147,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <div class="field-label">Implémentation réelle</div><div class="field-value" id="nodeSource">—</div>
           <div class="field-label">Dernière transition relevée</div><div class="field-value" id="nodeLast">Aucun événement observé</div>
           <div class="field-label">Preuve / interprétation</div><div class="field-value" id="nodeEvidence">Code présent ≠ activité réelle.</div>
+          <div class="field-label">Connexions connues</div><div id="nodeConnections" class="node-connections"></div>
         </section>
 
         <section class="detail-card">
