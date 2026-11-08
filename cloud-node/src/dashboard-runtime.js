@@ -833,7 +833,7 @@ let cogTrace=null;
 let cogSelected='';
 let cogTraceId='';
 let cogAwaitingReply=false;
-let cogFetchBusy=false;
+let cogAutonomyForbidden=false;
 const cogElements=new Map();
 const cogEdges=[];
 function cogSvgNode(tag,attrs,parent){
@@ -881,7 +881,10 @@ function cogEventState(stage){
 }
 function renderCognitiveGraph(){
   const events=Array.isArray(cogTrace&&cogTrace.events)?cogTrace.events:[];
-  const latest=events.length?events[events.length-1]:null;
+  const important=events.filter(function(event){return event.stage!=='request'&&event.stage!=='cycle';});
+  const latest=important.find(function(event){return event.status==='error';})
+    || important.at(-1)
+    || (events.length?events[events.length-1]:null);
   cogStages().forEach(function(stage){
     const el=cogElements.get(stage.id);if(!el)return;
     const state=cogEventState(stage.id);
@@ -918,15 +921,19 @@ function renderCognitiveGraph(){
   const strong=document.createElement('strong');strong.textContent=title;
   const desc=document.createElement('span');desc.textContent=body;
   $('cogDetail').append(strong,desc);
-  $('cogDuration').textContent=available
-    ? (runState==='running'?'En cours · ':'Durée · ')+((cogTrace.duration_ms??latest?.elapsed_ms??0)/1000).toFixed(2)+' s':'—';
+  const totalMs=cogTrace?.duration_ms??events.at(-1)?.elapsed_ms??0;
+  const stageMs=evt?.duration_ms;
+  $('cogDuration').textContent=!available?'—'
+    :(stageMs==null?'':('Étape '+(stageMs/1000).toFixed(2)+' s · '))
+      +(runState==='running'?'En cours ':'Total ')+(totalMs/1000).toFixed(2)+' s';
   const list=$('cogEvents');list.replaceChildren();
   events.slice(-10).reverse().forEach(function(event){
     if(event.stage==='request'&&event.status==='running')return;
     const el=document.createElement('span');
     el.className='cog-event';el.dataset.state=event.status;
     const st=cogStages().find(function(n){return n.id===event.stage;});
-    el.textContent=(st?st.name:event.stage)+' · '+(COG_STATUS[event.status]||event.status)+' · '+event.elapsed_ms+' ms';
+    const time=event.duration_ms==null?'à '+event.elapsed_ms+' ms':event.duration_ms+' ms';
+    el.textContent=(st?st.name:event.stage)+' · '+(COG_STATUS[event.status]||event.status)+' · '+time;
     list.appendChild(el);
   });
 }
@@ -934,26 +941,34 @@ function switchCognitiveMode(next){
   const mode=next==='autonomy'?'autonomy':'dialogue';
   if(cogMode===mode)return;
   cogMode=mode;
+  cogAutonomyForbidden=false;
   cogSelected='';
   cogTrace=null;
   $('cogModeDialogue').setAttribute('aria-pressed',String(mode==='dialogue'));
   $('cogModeAutonomy').setAttribute('aria-pressed',String(mode==='autonomy'));
   initCognitiveGraph();
-  void refreshCognitiveTrace();
+  if(cogFetchPending){
+    void cogFetchPending.then(function(){if(cogMode===mode)void refreshCognitiveTrace();});
+  }else{
+    void refreshCognitiveTrace();
+  }
 }
 let cogFetchPending=null;
 async function refreshCognitiveTrace(){
+  if(cogAutonomyForbidden&&cogMode==='autonomy')return;
   if(cogFetchPending)return cogFetchPending;
   cogFetchPending=(async function(){
+    const mode=cogMode;
     try{
-      const mode=cogMode;
       const parameter=mode==='dialogue'&&cogTraceId?'?id='+encodeURIComponent(cogTraceId):'';
       const data=await api(mode==='autonomy'?'/api/cognition/autonomy':'/api/cognition/trace'+parameter);
       if(mode!==cogMode)return;
       cogTrace=data;
       renderCognitiveGraph();
     }catch(error){
-      if(error.status===401&&cogMode==='autonomy'){
+      if(mode!==cogMode)return;
+      if(error.status===401&&mode==='autonomy'){
+        cogAutonomyForbidden=true;
         $('cogState').textContent='Accès privé';
         $('cogDetail').textContent='La vue autonome est réservée à une session fondatrice authentifiée.';
       }else{
