@@ -36,6 +36,19 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <button data-focus="journal-panel" type="button">≡ Journal</button>
     <button data-focus="chatInput" type="button">✦ Requête AURA</button>
   </nav>
+  <section id="runtimeIncident" class="runtime-incident" aria-live="polite" aria-label="Diagnostic du noyau" hidden>
+    <div class="incident-icon" aria-hidden="true">!</div>
+    <div class="incident-main">
+      <strong id="runtimeTitle">Noyau en attente de diagnostic</strong>
+      <p id="runtimeMessage">L’interface fonctionne, mais l’activité du noyau n’est pas vérifiée.</p>
+      <small id="runtimeMeta">Les modules visibles sont une architecture déclarée, pas des activités exécutées.</small>
+      <small id="runtimeFeedback" role="status"></small>
+    </div>
+    <div class="incident-actions">
+      <button type="button" id="runtimeCheck">Vérifier l’état</button>
+      <button type="button" id="runtimeRetry" hidden>Relancer (administrateur)</button>
+    </div>
+  </section>
   <section class="hero">
     <div class="hero-card">
       <h1>Cartographie cognitive d’AURA</h1>
