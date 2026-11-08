@@ -100,7 +100,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'Pour un état interne, décris les faits et l’humeur du noyau comme des indicateurs computationnels, pas des sentiments humains vécus.',
     'Ne crée ni action, ni mémoire, ni émotion humaine vécue, ni chiffre non fourni.',
     'Ne change pas l’intention décidée et n’ajoute pas de question par automatisme.',
-    'Réponds en français naturel à la première personne d’AURA ; ne montre pas les champs.',
+    'Réponds en français naturel contemporain à la première personne d’AURA ; ne montre pas les champs.',
   ].join('\n');
   const budget = limit - instructions.length - 1;
   let json = JSON.stringify(payload);
@@ -137,7 +137,7 @@ export function compactFrenchSystem() {
     'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
     'Ne fais pas passer une mission proposée pour une action exécutée.',
     'Pas d’explications sur ton statut de modèle, pas de questions de politesse automatiques.',
-    'Formule naturellement la décision et les faits d’AURA en français à la première personne. /no_think',
+    'Formule en français courant et naturel la décision et les faits d’AURA à la première personne. /no_think',
   ].join(' ');
 }
 
@@ -202,6 +202,7 @@ export class FrenchLanguageFaculty {
     this.lastModel = '';
     this.lastLatencyMs = 0;
     this.lastMode = 'unavailable';
+    this.lastNucleusContract = {accepted:false, code:'not-checked', origin:'AURA.nucleus.CognitionEngine.planReply'};
   }
 
   get federation() {
@@ -293,6 +294,8 @@ export class FrenchLanguageFaculty {
       last_model: this.lastModel,
       last_latency_ms: this.lastLatencyMs,
       last_error: this.lastError,
+      nucleus_contract: this.lastNucleusContract,
+      provider_is_verbalizer_only: true,
       normal_path_scripted: false,
       emergency_fallback_only: true,
       role: 'french-language-expression-only',
@@ -373,17 +376,29 @@ export class FrenchLanguageFaculty {
     const system = this.system();
     const started = Date.now();
     this.lastError = '';
+    this.lastNucleusContract = {accepted:false, code:'not-checked',
+      origin:'AURA.nucleus.CognitionEngine.planReply'};
+    const accept = (candidate) => {
+      const result = validateNucleusSpeech(plan, candidate);
+      this.lastNucleusContract = {...result, origin:'AURA.nucleus.CognitionEngine.planReply'};
+      if(!result.accepted){
+        this.lastError = 'nucleus-verbalization-rejected:' + result.code;
+        return '';
+      }
+      return candidate;
+    };
     // GroqCloud Free is the preferred conversational model when the operator
     // explicitly confirms their organization has NO paid Developer billing.
     // Never interpret a configured key alone as proof of a free plan.
     if(this.groq?.enabled){
       try{
         const result=await this.groq.generate(
-          compactFrenchPrompt(plan),
+          compactFrenchPrompt(plan, {maxChars:4500}),
           compactFrenchSystem(),
           Math.max(500,Math.min(Number(maxTokens)||700,900)),
         );
-        const answer=cleanSpeechOutput(result?.answer||'');
+        const candidate=cleanSpeechOutput(result?.answer||'');
+        const answer=accept(candidate);
         if(answer){
           this.lastMode='groq-free';
           this.lastBackend='groq-free';
@@ -392,7 +407,7 @@ export class FrenchLanguageFaculty {
           this.lastError='';
           return answer;
         }
-        this.lastError='Groq Free empty completion';
+        if(!candidate) this.lastError='Groq Free empty completion';
       }catch(error){
         this.lastError=safeError(error);
       }
@@ -402,11 +417,11 @@ export class FrenchLanguageFaculty {
     const tryEmbedded = async () => {
       if (!this.embedded.status?.().ready) return '';
       try {
-        const answer = cleanSpeechOutput(await this.embedded.generate(
+        const answer = accept(cleanSpeechOutput(await this.embedded.generate(
           compactFrenchPrompt(plan),
           compactFrenchSystem(),
           Math.max(96, Math.min(Number(maxTokens) || 350, 450)),
-        ));
+        )));
         if (answer) {
           this.lastMode = 'hostinger-embedded';
           this.lastBackend = 'hostinger-embedded-llama';
@@ -430,7 +445,7 @@ export class FrenchLanguageFaculty {
         // The full semantic JSON is appropriate for larger models, but the
         // free router may select a small or reasoning-heavy model. Use a
         // bounded French conversation prompt so output tokens remain usable.
-        const freePrompt=compactFrenchPrompt(plan);
+        const freePrompt=compactFrenchPrompt(plan, {maxChars:3800});
         const freeSystem=compactFrenchSystem();
         let result = await this.federation.generate(
           freePrompt,
@@ -438,8 +453,8 @@ export class FrenchLanguageFaculty {
           Math.max(500, Math.min(Number(maxTokens) || 700, 1000)),
           taskRole,
         );
-        let answer = cleanSpeechOutput(result?.answer || '');
-        if (!answer && result?.answer) {
+        let answer = accept(cleanSpeechOutput(result?.answer || ''));
+        if (!answer && result?.answer && this.lastNucleusContract.code==='empty') {
           // One bounded retry is only for an actual reasoning/instruction
           // leak, never for a provider error or billing restriction.
           result = await this.federation.generate(
@@ -447,7 +462,7 @@ export class FrenchLanguageFaculty {
             freeSystem,
             700, taskRole,
           );
-          answer = cleanSpeechOutput(result?.answer || '');
+          answer = accept(cleanSpeechOutput(result?.answer || ''));
           if (!answer) this.lastError = 'speech-reasoning-leak-rejected';
         }
         if (answer) {
@@ -465,12 +480,12 @@ export class FrenchLanguageFaculty {
 
     if (await this.localAvailable()) {
       try {
-        const answer = cleanSpeechOutput(await this.ai.bridge.infer(
+        const answer = accept(cleanSpeechOutput(await this.ai.bridge.infer(
           prompt,
           system,
           Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
           'conversation',
-        ));
+        )));
         if (answer) {
           this.lastMode = 'runtime-local';
           this.lastError = '';
@@ -485,6 +500,7 @@ export class FrenchLanguageFaculty {
     }
 
     this.lastMode = 'degraded';
+    this.lastNucleusContract = {...this.lastNucleusContract, accepted:false};
     this.lastError = this.lastError
       || ((this.groq?.enabled || this.federation?.enabled) ? 'free-provider-empty-response' : 'no-free-provider-connected');
     this.lastBackend = '';
