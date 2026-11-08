@@ -1,4 +1,5 @@
 import { DASHBOARD_SCRIPT } from './dashboard-runtime.js';
+import { COGNITIVE_ATLAS_CSS, COGNITIVE_ATLAS_HTML } from './cognitive_atlas_ui.js';
 
 export const DASHBOARD_HTML = String.raw`<!doctype html>
 <html lang="fr">
@@ -134,54 +135,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 
 
-/* AURA Cognitive Trace — genuine instrumented events, no synthetic neural activity. */
-.main{grid-template-columns:minmax(0,1fr)}
-.side{display:none;order:1;grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.side.diagnostics-open{display:grid}
-@media(max-width:720px){.side.diagnostics-open{grid-template-columns:1fr}}
-
-.side>.aura-card{display:none} /* Avoid showing the legacy synthetic particle scene beside measured activity. */
-.cog-panel{border-bottom:1px solid rgba(132,199,219,.18);background:radial-gradient(ellipse at 45% 40%,rgba(20,90,110,.22),transparent 58%),radial-gradient(circle at 85% 80%,rgba(125,65,124,.15),transparent 45%),#060a12;overflow:hidden}
-.cog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 20px 4px}
-.cog-heading h2{font-size:17px;line-height:1.3;letter-spacing:.015em;margin:0;color:#f2f8ff}
-.cog-kicker{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#78bed1;margin-bottom:3px}
-.cog-state{font-size:12px;color:#a3beca;text-align:right;max-width:40%}
-.cog-switch{display:flex;flex-wrap:wrap;gap:7px;padding:9px 20px 0;align-items:center}
-.cog-switch button{background:rgba(39,66,77,.46);color:#b7d5df;border:1px solid rgba(139,196,216,.19);padding:8px 15px;font-size:12px;font-weight:650;border-radius:10px;min-height:34px}
-.cog-switch button[aria-pressed="true"]{color:#f8feff;border-color:rgba(111,218,234,.68);background:rgba(47,115,131,.34)}
-.cog-switch button:disabled{opacity:.45;cursor:not-allowed}
-.cog-switch button:focus-visible{outline:2px solid #a0ecfd;outline-offset:3px}
-.cog-viewport{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:rgba(130,204,219,.5) transparent}
-.cog-svg{min-width:810px;width:100%;height:auto;max-height:405px;display:block;background-image:radial-gradient(rgba(122,192,220,.13) 1px,transparent 1px);background-size:24px 24px}
-.cog-edge{fill:none;stroke:rgba(103,155,183,.27);stroke-width:1.5;transition:stroke .25s}
-.cog-edge.active{stroke:#71d8e9;stroke-width:2.3;stroke-dasharray:6 8;animation:cog-flow 1.2s linear infinite}
-.cog-edge.error{stroke:#fd748f}
-.cog-node{cursor:pointer;outline:none}
-.cog-node circle{fill:#0e1d2c;stroke:#476179;stroke-width:1.7;transition:fill .22s,stroke .22s}
-.cog-node[data-state="done"] circle{fill:#173b47;stroke:#72dfea}
-.cog-node[data-state="running"] circle{fill:#49331c;stroke:#ffcb79}
-.cog-node[data-state="error"] circle{fill:#421b32;stroke:#fc7696}
-.cog-node[data-state="skipped"] circle{fill:#1b2532;stroke:#526575;stroke-dasharray:3 4}
-.cog-node:focus circle,.cog-node:hover circle,.cog-node.selected circle{stroke-width:3.2}
-.cog-node text{fill:#eaf3f9;font-size:16px;font-family:inherit;font-weight:600;pointer-events:none}
-.cog-node .cog-sub{fill:#9eb9c8;font-size:11px;font-weight:400}
-.cog-node[data-state="running"] circle{animation:cog-node-pulse 1.25s ease-in-out infinite}
-.cog-node.just-verified circle:first-child{animation:cog-verified .75s ease-out}
-.cog-edge.just-verified{stroke:#b0f6fa;stroke-width:3.2;filter:drop-shadow(0 0 5px rgba(120,235,245,.7))}
-.cog-lower{padding:2px 20px 16px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}
-.cog-description{font-size:12px;color:#b9cbd7;min-height:38px;line-height:1.45}
-.cog-description strong{color:#fff;display:block;font-size:13px}
-.cog-duration{font-size:12px;color:#7fc9d6;font-variant-numeric:tabular-nums;white-space:nowrap}
-.cog-events{display:flex;flex-wrap:wrap;gap:6px;padding:0 20px 14px;max-height:98px;overflow:auto}
-.cog-event{font-size:11px;border:1px solid rgba(146,187,206,.19);color:#b4cbda;background:rgba(13,30,42,.85);border-radius:8px;padding:5px 8px}
-.cog-event[data-state="error"]{border-color:#d77091;color:#ffd1df}
-.cog-foot{padding:0 20px 15px;font-size:11px;color:#849ba9}
-@keyframes cog-verified{0%{filter:drop-shadow(0 0 18px rgba(129,231,242,.94));stroke-width:6}100%{filter:none;stroke-width:1.7}}
-@keyframes cog-flow{to{stroke-dashoffset:-28}}
-@keyframes cog-node-pulse{50%{filter:drop-shadow(0 0 8px #ffbd69)}}
-@media(max-width:640px){.cog-svg{min-width:1020px}.cog-heading{padding:12px 12px 0}.cog-heading h2{font-size:15px}.cog-kicker{font-size:9px}.cog-state{font-size:10px}.cog-svg{min-height:210px}.cog-node text{font-size:16px}.cog-lower{padding:3px 12px 13px}.cog-events{padding:0 12px 12px}.cog-foot{padding:0 12px 12px}}
-@media(prefers-reduced-motion:reduce){.cog-edge.active,.cog-node[data-state="running"] circle,.cog-node.just-verified circle:first-child{animation:none}}
-
+${COGNITIVE_ATLAS_CSS}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -218,22 +172,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
   <main class="main">
     <section class="panel chat">
       <div class="chat-head"><div><div class="chat-title">Parler à AURA</div><div class="chat-sub">Conversation principale</div></div><div id="chatState" class="chat-head-state">Connexion…</div></div>
-      <section class="cog-panel" aria-label="Cartographie des traitements réels d'AURA">
-        <div class="cog-heading">
-          <div><div class="cog-kicker">OBSERVABILITÉ COGNITIVE · DONNÉES RÉELLES</div><h2>Le chemin d'une décision</h2></div>
-          <div id="cogState" class="cog-state" aria-live="polite">Aucune requête instrumentée</div>
-        </div>
-        <div class="cog-switch" role="group" aria-label="Choix des événements à observer">
-          <button type="button" id="cogModeDialogue" aria-pressed="true">Conversation</button>
-          <button type="button" id="cogModeAutonomy" aria-pressed="false" title="Activité réelle du noyau, accès fondateur privé">Autonomie</button>
-          <button type="button" id="cogReplay" disabled title="Rejouer uniquement les événements effectivement enregistrés">Revoir la trace</button>
-          <button type="button" id="cogDiagnostics" aria-expanded="false" aria-controls="auraDiagnostics">Diagnostics</button>
-        </div>
-        <div class="cog-viewport" tabindex="0" aria-label="Carte cognitive, faire défiler horizontalement sur les petits écrans"><svg id="cogGraph" class="cog-svg" viewBox="0 0 1050 405" role="group" aria-label="Étapes mesurées du traitement; sélectionner un nœud pour les détails"></svg></div>
-        <div class="cog-lower"><div id="cogDetail" class="cog-description" aria-live="polite">En attente d'une requête. Aucun événement simulé.</div><div id="cogDuration" class="cog-duration">—</div></div>
-        <div id="cogEvents" class="cog-events" aria-label="Historique de la requête"></div>
-        <div class="cog-foot">Étapes réellement exécutées, avec preuves horodatées. Ce graphe ne représente pas les activations internes d'un LLM.</div>
-      </section>
+${COGNITIVE_ATLAS_HTML}
       <div class="messages" id="messages"><div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div></div>
       <div class="composer">
         <button id="voiceBtn" title="Dicter">◉</button>
