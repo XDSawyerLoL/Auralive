@@ -29,8 +29,10 @@ function statePlan(question='Comment tu te sens AURA ?'){
     ],
   });
   assert.equal(plan.act,'report_internal_state');
-  assert.ok(plan.facts.length<=3);
-  assert.equal(plan.facts.some(f=>/\d+\s*%/.test(f)),false);
+  if(!/pourcentage|indicateurs détaillés/i.test(question)){
+    assert.ok(plan.facts.length<=3);
+    assert.equal(plan.facts.some(f=>/\d+\s*%/.test(f)),false);
+  }
   return plan;
 }
 function faculty(groq,embedded){
