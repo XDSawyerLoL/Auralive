@@ -18,14 +18,19 @@ export const COGNITIVE_ATLAS_CSS = String.raw`
 .cog-switch button[aria-pressed=true],.cog-switch button:hover,.cog-zoom button:hover{color:#f6feff;border-color:rgba(103,231,234,.6);background:rgba(49,127,146,.25)}
 .cog-switch button:focus-visible,.cog-zoom button:focus-visible,.cog-node:focus-visible,.cog-event:focus-visible{outline:2px solid #9cf2ff;outline-offset:3px}
 .cog-switch button:disabled{opacity:.4;cursor:default}
-.cog-toolbar-end{margin-left:auto;display:flex;gap:7px;align-items:center}
+.cog-toolbar-end{margin-left:auto;display:flex;gap:9px;align-items:center}
+.cog-transport{display:flex;align-items:center;gap:7px;color:#a4bbca;font-size:11px;min-width:125px;white-space:nowrap}
+.cog-transport:before{content:'';width:7px;height:7px;border-radius:50%;background:#6d8092;flex-shrink:0}
+.cog-transport[data-mode=live]:before{background:#6ce4cf;box-shadow:0 0 7px rgba(108,228,207,.55)}
+.cog-transport[data-mode=poll]:before{background:#efc27e}
+.cog-transport[data-mode=error]:before{background:#fc809d}
 .cog-zoom{display:flex;gap:4px}
 .cog-zoom button{padding:6px 10px;min-width:35px}
 .cog-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:rgba(105,170,193,.15);border-top:1px solid rgba(109,163,185,.13);border-bottom:1px solid rgba(109,163,185,.17)}
 .cog-stat{background:rgba(7,17,31,.94);padding:12px 18px;min-width:0}
-.cog-stat small{font-size:9px;color:#799bb0;text-transform:uppercase;letter-spacing:.14em;display:block;margin-bottom:4px}
+.cog-stat small{font-size:11px;color:#799bb0;text-transform:uppercase;letter-spacing:.14em;display:block;margin-bottom:4px}
 .cog-stat strong{font-size:19px;font-weight:650;color:#e8f8ff;font-variant-numeric:tabular-nums;display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
-.cog-stat span{font-size:10px;color:#7391a4}
+.cog-stat span{font-size:11px;color:#7391a4}
 .cog-stage{display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:530px}
 .cog-viewport{position:relative;overflow:hidden;min-height:510px;background:radial-gradient(ellipse at 46% 46%,rgba(28,102,133,.16),transparent 60%),radial-gradient(circle at 81% 81%,rgba(135,64,132,.11),transparent 42%),linear-gradient(170deg,#06121e,#040a13)}
 .cog-viewport:before{content:'';position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(129,199,224,.22) .7px,transparent 1px);background-size:25px 25px;opacity:.38}
@@ -49,8 +54,8 @@ export const COGNITIVE_ATLAS_CSS = String.raw`
 .cog-node .node-glyph{font-family:inherit;font-weight:700;fill:#c8e5f0;font-size:19px;pointer-events:none;text-anchor:middle;dominant-baseline:middle}
 .cog-node .node-title{font-family:inherit;font-weight:650;fill:#d3e5f2;font-size:14px;text-anchor:middle;pointer-events:none}
 .cog-node.micro .node-glyph{font-size:13px;color:#a4d4e3}
-.cog-node.micro .node-title{font-size:10px;fill:#b7cdda;font-weight:600}
-.cog-node.micro .node-meta{font-size:9px}
+.cog-node.micro .node-title{font-size:11px;fill:#c9dfea;font-weight:600}
+.cog-node.micro .node-meta{font-size:10px}
 .cog-node.micro .node-ring{stroke-dasharray:2 5}
 .cog-node.micro[data-state=done] .node-halo{fill:#114953;stroke:#79eadc}
 
@@ -93,7 +98,7 @@ export const COGNITIVE_ATLAS_CSS = String.raw`
 .cog-events{padding:7px 19px 14px;display:flex;gap:7px;overflow-x:auto;min-height:69px;scrollbar-width:thin;scrollbar-color:rgba(121,177,199,.45) transparent}
 .cog-event{font:inherit;flex:0 0 auto;background:rgba(21,39,56,.9);color:#b8d2df;border:1px solid rgba(116,169,190,.24);border-radius:8px;padding:8px 10px;text-align:left;min-width:119px;cursor:pointer}
 .cog-event b{font-size:11px;display:block;color:#e5f4fc;font-weight:650;margin-bottom:4px}
-.cog-event span{font-size:10px;color:#8ba7ba;font-variant-numeric:tabular-nums}
+.cog-event span{font-size:11px;color:#8ba7ba;font-variant-numeric:tabular-nums}
 .cog-event[data-state=error]{border-color:#ce6484}.cog-event[data-state=done]{border-color:rgba(90,198,192,.42)}
 .cog-event[data-state=skipped]{opacity:.58}.cog-event.active{background:#1b5260;border-color:#8be8e2}
 .cog-foot{display:flex;justify-content:space-between;gap:16px;padding:10px 19px 15px;border-top:1px solid rgba(107,161,184,.11);color:#6f92a6;font-size:10px;line-height:1.45}
@@ -120,7 +125,9 @@ export const COGNITIVE_ATLAS_HTML = String.raw`
           <button type="button" id="cogReplay" disabled>Revoir le flux</button>
           <button type="button" id="cogExport" disabled title="Exporter uniquement les mesures anonymisées">Exporter JSON</button>
           <button type="button" id="cogDiagnostics" aria-expanded="false" aria-controls="auraDiagnostics">Diagnostics</button>
-          <div class="cog-toolbar-end"><div class="cog-zoom" role="group" aria-label="Zoom de la carte">
+          <div class="cog-toolbar-end">
+            <span id="cogTransport" class="cog-transport" data-mode="pending" role="status">Connexion aux événements…</span>
+            <div class="cog-zoom" role="group" aria-label="Zoom de la carte">
             <button type="button" id="cogZoomOut" aria-label="Réduire">−</button>
             <button type="button" id="cogZoomReset" aria-label="Réinitialiser le zoom">100%</button>
             <button type="button" id="cogZoomIn" aria-label="Agrandir">+</button>
