@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {BRAIN_HTML} from '../src/brain_console.js';
 import {BRAIN_SCRIPT} from '../src/brain_console_runtime.js';
 import {DASHBOARD_HTML} from '../src/dashboard.js';
+import {AuraOrganism} from '../src/organism.js';
 import {buildBrainTelemetry,boundedMetric,evaluateTelemetryFreshness,BRAIN_METRICS} from '../src/brain_telemetry.js';
 
 const T=Date.UTC(2026,10,8,14,0);
@@ -120,4 +121,24 @@ test('fullscreen brain action is functional without disrupting the chat on the h
  assert.match(BRAIN_SCRIPT,/document\.exitFullscreen/);
  assert.match(BRAIN_HTML,/\.stage:fullscreen/);
  assert.match(DASHBOARD_HTML,/id="messages"/);
+});
+
+
+test('Homeostasis v9 actually reacts to interaction, response and idle tick (not a static UI mock)',()=>{
+ const organism=new AuraOrganism();
+ const state=organism.migrate({continuity:.87,current_intention:'Vérifier les mesures'});
+ const original=organism.publicState(state);
+ const interaction=organism.beforeInteraction(state,'Je voudrais avancer sur AURA.');
+ assert.ok(interaction.state.turns>state.turns);
+ const after=organism.afterReply(interaction.state,'Je vais examiner les données réelles.',true);
+ assert.notEqual(after.state.clarte,interaction.state.clarte);
+ assert.notEqual(after.state.satisfaction,interaction.state.satisfaction);
+ const idle=organism.idleTick(after.state,120);
+ const observed=organism.publicState(idle.state);
+ assert.notEqual(observed.pression_de_reve,original.pression_de_reve);
+ assert.ok(observed.updated_at);
+ assert.equal(observed.schema_revision,9);
+ assert.equal(typeof observed.dynamics.activation,'number');
+ assert.equal(typeof observed.stabilite,'number');
+ assert.ok(observed.stabilite>=0&&observed.stabilite<=1);
 });
