@@ -1080,8 +1080,11 @@ async function sendMessage(text,options){
       return;
     }
     lastChatFailure='';
+    const authorLabel=out?.nucleus_verbalization_validated
+      ? 'AURA · décision du noyau · français formulé'
+      : 'AURA · réponse générée (contrat non attesté)';
     $('messages').insertAdjacentHTML('beforeend',
-      '<div class="msg aura"><span class="who">AURA · réponse générée</span>'+escapeHtml(answer)+'</div>');
+      '<div class="msg aura"><span class="who">'+authorLabel+'</span>'+escapeHtml(answer)+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
     void speakAura(answer,out.voice_ticket||'');
     void refresh();
