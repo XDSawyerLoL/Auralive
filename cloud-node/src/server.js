@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
-import { embeddedLanguageRuntime } from './embedded_language.js';
+import { embeddedLanguageRuntime, shouldWarmInstalledLanguage } from './embedded_language.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -24,10 +24,21 @@ import {
   schemaStatus,
 } from './db.js';
 import { DASHBOARD_HTML } from './dashboard.js';
+import { BRAIN_HTML } from './brain_console.js';
+import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
+import { buildBrainTelemetry } from './brain_telemetry.js';
+import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
+import { query as readBrainTraceRows } from './db.js';
 import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
+import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
+import { RESOURCE_CATALOG, discoverResources } from './toolbox_resources.js';
+import { searchPublicResources } from './toolbox_research.js';
+import { runPaperBacktest } from './trading_lab.js';
+import { auditPublicHomepage } from './revenue_audit.js';
+import { AURA_PLAYBOOKS, SKILLS_VERSION, SKILLS_POLICY, planAgentSkills } from './agent_skills.js';
 import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
@@ -410,7 +421,10 @@ async function startRuntime() {
     // Always non-blocking: the first verified GGUF install can take minutes.
     // Production-only to avoid downloading model weights during CI/test runs.
     if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
-      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false') {
+      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false'
+      && !embeddedLanguageRuntime.installed()) {
+      // The independent startup loop handles already installed files, even if
+      // the database is unavailable; this path only provisions missing files.
       void embeddedLanguageRuntime.start().catch((error) => {
         app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
           'AURA: local French engine warmup failed');
@@ -512,9 +526,20 @@ app.addHook('onSend', async (_request, reply, payload) => {
   return payload;
 });
 
+app.get('/cerveau', async (_request, reply) => {
+  reply.header('Cache-Control','no-cache');
+  return reply.type('text/html; charset=utf-8').send(BRAIN_OPERATIONS_HTML);
+});
+app.get('/cerveau/anatomie', async (_request, reply) =>
+  reply.redirect('/cerveau', 302)
+);
+app.get('/brain', async (_request, reply) =>
+  reply.redirect('/cerveau', 302)
+);
+
 app.get('/', async (_request, reply) => {
-  reply.type('text/html; charset=utf-8');
-  return DASHBOARD_HTML;
+  reply.header('Cache-Control','no-cache');
+  return reply.type('text/html; charset=utf-8').send(BRAIN_OPERATIONS_HTML);
 });
 
 const GLIDE_WINDOWS_DOWNLOAD = String(
@@ -969,12 +994,35 @@ app.get('/api/skills', async (request, reply) => {
   return { skills: await kernel.skillLearning.list(request.query?.limit) };
 });
 
+// Versioned, offline AURA Skills procedures. Distinct from learned Fabric skills.
+// These routes return information only; they never run models, tools or shell commands.
+app.get('/api/skills/playbooks', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return { version: SKILLS_VERSION, monetary_budget_eur: 0,
+    execution: 'advisory-only', policy: SKILLS_POLICY,
+    playbooks: AURA_PLAYBOOKS };
+});
+
+app.post('/api/skills/plan', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  try {
+    return planAgentSkills(request.body?.objective, {
+      role: request.body?.role,
+      limit: request.body?.limit,
+      skills: request.body?.skills,
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error).slice(0,220) });
+  }
+});
+
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
   organism: 'homeostasie_v9_unified',
   cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
   dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
   skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
+  agent_skills: 'six versioned local read-only playbooks -> private planning -> evidence checklist; 0 EUR and no implicit execution',
   language_model_role: 'French Language Faculty: replaceable zero-cost multilingual model for expression only; deterministic wording is emergency fallback, never the normal path',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
@@ -1263,10 +1311,87 @@ async function publicOperationalSnapshot() {
 
 app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
 
+// Public read-only brain diagnostic. No private thoughts, raw memory or credentials.
+app.get('/api/brain/telemetry', async (_request, reply) => {
+  reply.header('Cache-Control','no-store');
+  const projection=await publicOperationalSnapshot();
+  const groq=ai.groq?.snapshot?.()||{};
+  return buildBrainTelemetry(projection,{
+    language:{
+      enabled:groq.enabled===true,
+      model:String(groq.model||'').slice(0,90),
+      last_model:String(groq.last_model||'').slice(0,90),
+      last_status:String(groq.last_status||''),
+    },
+  });
+});
+
+// Public read-only neural observations. Load persisted metadata for every viewer;
+// strictly whitelist response fields so prompts, command parameters, DB IDs,
+// credentials, and private context never leave the server.
+app.get('/api/brain/graph', async (request, reply) => {
+  reply.header('Cache-Control','no-store');
+  const current=await publicOperationalSnapshot();
+  const groq=ai.groq?.snapshot?.()||{};
+  const telemetry=buildBrainTelemetry(current,{language:{
+    enabled:groq.enabled===true,last_status:String(groq.last_status||''),
+    model:String(groq.model||''),last_model:String(groq.last_model||''),
+  }});
+  let traceRows=[],commandRows=[],organismRows=[],dataAvailable=false;
+  if(bootstrap.dbReady){
+    const results=await Promise.allSettled([
+      readBrainTraceRows(
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','operator','agent','swarm','web-research','web-research-error','reflection','expression','event') ORDER BY id DESC LIMIT 250"),
+      readBrainTraceRows(
+        'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
+      readBrainTraceRows(
+        'SELECT id,kind,created_at FROM aura_organism_events ORDER BY id DESC LIMIT 60'),
+    ]);
+    dataAvailable=results.every(item=>item.status==='fulfilled');
+    traceRows=results[0].status==='fulfilled'?results[0].value:[];
+    commandRows=results[1].status==='fulfilled'?results[1].value:[];
+    organismRows=results[2].status==='fulfilled'?results[2].value:[];
+  }
+  return {
+    ...toPublicBrainFlowGraph(buildBrainFlowGraph({telemetry,traceRows,commandRows,organismRows})),
+    telemetry,
+    authorized:true, // Public observation access, NOT privileged operator authorization.
+    observations_public:true,
+    database_observations_available:dataAvailable,
+    observation_access:'public-redacted',
+    no_private_contents_exposed:true,
+  };
+});
+
+
 app.get('/api/language/embedded/status', async () => ({
   // Public, path-free diagnostics. Does not disclose server folders or secrets.
   ...kernel.expression.language.embedded.status(),
 }));
+
+// Manually verify an installed model. No download, cloud API or user text involved.
+// Never wait for a 150-second native startup in an HTTP request on shared hosting.
+app.post('/api/language/embedded/start', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  const engine=kernel.expression.language.embedded;
+  if (process.env.AURA_EMBEDDED_LANGUAGE_ENABLED === 'false')
+    return reply.code(409).send({error:'Moteur local désactivé'});
+  if (!engine.installed())
+    return reply.code(409).send({error:'Les fichiers du modèle ou du moteur sont absents. Aucun téléchargement lancé.'});
+  const before=engine.status();
+  if (before.ready) return {started:false,already_ready:true,status:before};
+  if (engine.booting) return reply.code(202).send({started:false,already_starting:true,status:before});
+  if (Date.now()<engine.cooldownUntil)
+    return reply.code(429).send({error:'Temporisation après échec; consulter le diagnostic.',status:before});
+  const budget=before.memory_preflight;
+  if (budget && budget.safe_to_start===false)
+    return reply.code(409).send({error:'Mémoire insuffisante pour démarrer Qwen3 Q8 sans risque.',status:before});
+  void engine.start({allowProvision:false}).catch(error=>{
+    app.log.warn({code:String(error?.code||'embedded-start-failed')},'AURA: manual local engine verification failed');
+  });
+  return reply.code(202).send({started:true,external_api_calls:0,paid_cost_eur:0,
+    status:engine.status(),message:'Démarrage local demandé. Actualiser le diagnostic pour la preuve d’inférence.'});
+});
 
 app.get('/api/language/progress', async () => {
   if (!bootstrap.runtimeReady) return { status: 'not-evaluated', score: null, delta: null, evaluated_at: null };
@@ -1319,6 +1444,204 @@ app.get('/api/kernel/lessons', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.lessons(request.query?.limit)
     : undefined);
+
+// Offline-curated directory. Links are informational, not external actions.
+app.get('/api/toolbox/resources', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  const category = String(request.query?.category || '').trim().slice(0,40);
+  const includeBlocked = String(request.query?.include_blocked || '') === 'true';
+  const resources = RESOURCE_CATALOG.filter((item) =>
+    (!category || item.category===category) && (includeBlocked || !item.blocked));
+  return { count:resources.length, resources, automatic_execution:false };
+});
+
+app.get('/api/toolbox/recommend', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  const q = String(request.query?.q || '').slice(0,600);
+  return { query:q, resources:discoverResources(q, {
+    category:String(request.query?.category||''),
+    limit:request.query?.limit,
+  }), automatic_execution:false };
+});
+
+// Only human-requested searches for public titles. No crawler or arbitrary URLs.
+app.post('/api/toolbox/research', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRateLimit(request, reply, 'toolbox-research', 5, 60)) return;
+  try {
+    return await searchPublicResources(request.body?.provider, request.body?.query, {
+      allowExternal:request.body?.allow_external === true,
+    });
+  } catch (error) {
+    const message = String(error?.message || error);
+    const unavailable = /indisponible|timeout|fetch failed/i.test(message);
+    return reply.code(unavailable ? 503 : 422).send({ error:message.slice(0,220) });
+  }
+});
+
+// Strict simulation: no broker keys, order-placement endpoints or investment account.
+let tradingLabBusy=false;
+let tradingLabLastRun=0;
+let paperAutoTimer=null;
+let paperAutoInitialTimer=null;
+const PAPER_AUTO_INTERVAL_MS=6*60*60*1000;
+const paperAutoState={running:false,last_checked_at:null,last_error:null,latest:null,
+  live_orders_enabled:false,real_money_traded:false,real_profit_eur:0,mode:'paper-auto-scan'};
+async function runAutomaticPaperScan(){
+  if(tradingLabBusy||paperAutoState.running)return;
+  paperAutoState.running=true;
+  try{
+    // Public data only. Does not contact a brokerage account or place orders.
+    const result=await runPaperBacktest({pair:'XBTEUR'});
+    paperAutoState.latest=result;
+    paperAutoState.last_error=null;
+    paperAutoState.last_checked_at=new Date().toISOString();
+  }catch(error){
+    paperAutoState.last_error=String(error?.message||error).replace(/https?:\/\/\S+/g,'[URL]').slice(0,150);
+    paperAutoState.last_checked_at=new Date().toISOString();
+  }finally{paperAutoState.running=false;}
+}
+function startAutomaticPaperScan(){
+  if(process.env.CI==='true'||process.env.NODE_ENV==='test'
+    ||process.env.AURA_PAPER_MONITOR_ENABLED==='false'||paperAutoTimer)return;
+  paperAutoInitialTimer=setTimeout(()=>{void runAutomaticPaperScan();},20000);
+  paperAutoInitialTimer.unref?.();
+  paperAutoTimer=setInterval(()=>{void runAutomaticPaperScan();},PAPER_AUTO_INTERVAL_MS);
+  paperAutoTimer.unref?.();
+}
+
+app.get('/api/trading/mode', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return {mode:'paper-only',live_orders_enabled:false,real_money_traded:false,
+    real_profit_eur:0,external_paid_apis:0,available_pairs:['XBTEUR','ETHEUR'],
+    note:'Simulation historique sans engagement financier. Pas de garantie de bénéfice.'};
+});
+app.get('/api/trading/paper/status', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return { ...paperAutoState,latest:paperAutoState.latest||null,
+    scan_interval_hours:6,
+    caution:'Surveillance d’une simulation historique. Ce n’est ni un forward test certifié ni du trading réel.' };
+});
+app.post('/api/trading/paper/backtest', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if(tradingLabBusy || Date.now()-tradingLabLastRun<15000)
+    return reply.code(429).send({error:'Simulation déjà en cours ou fréquence limitée : attendre 15 secondes'});
+  tradingLabBusy=true;
+  tradingLabLastRun=Date.now();
+  try {
+    return await runPaperBacktest(request.body||{});
+  } catch(error) {
+    const message=String(error?.message||error).slice(0,180);
+    const network=/Kraken|fetch|network|timeout|délai/i.test(message);
+    return reply.code(network?503:422).send({error:message});
+  } finally {
+    tradingLabBusy=false;
+  }
+});
+
+// AURA Revenue: genuine public-web audit, not a simulated income stream.
+// No invoicing, card collection, payment link or client outreach from this API.
+let auditInProgress=false;
+let auditLastRun=0;
+app.get('/api/revenue/readiness', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return {
+    mode:'audit-production-ready',
+    audit_available:true,
+    automatic_customer_acquisition:false,
+    payment_processing_connected:false,
+    verified_aura_receipts_eur:null,
+    revenue_source:'none-connected',
+    paid_api_calls:0,
+    upfront_platform_cost_eur:0,
+    next_dependency:'Activer une vraie offre publique, un prestataire de paiement et une livraison après paiement confirmé.',
+    note:'Aucun chiffre d’affaires vérifié dans AURA; le trading en simulation ne rapporte rien.',
+  };
+});
+app.post('/api/revenue/audit/preview', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if(auditInProgress||Date.now()-auditLastRun<20000)
+    return reply.code(429).send({error:'Un audit est en cours ou trop récent. Réessayer dans 20 secondes.'});
+  auditInProgress=true;
+  auditLastRun=Date.now();
+  try{
+    return await auditPublicHomepage(request.body?.url);
+  }catch(error){
+    const message=String(error?.message||error).slice(0,160);
+    return reply.code(/HTTP|réseau|délai|fetch|ENOTFOUND|certificat|connect|indisponible/i.test(message)?503:422)
+      .send({error:message});
+  }finally{auditInProgress=false;}
+});
+
+// Founder-only knowledge endpoints. No public-chat access or implicit ingestion.
+app.get('/api/knowledge/notes', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  return { notes: await knowledgeVault.list({
+    project: String(request.query?.project || ''),
+    limit: request.query?.limit,
+  }) };
+});
+
+app.get('/api/knowledge/notes/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const note = await knowledgeVault.get(request.params.id);
+  return note || reply.code(404).send({ error: 'Note inconnue' });
+});
+
+app.get('/api/knowledge/search', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const text = String(request.query?.q || '').trim();
+  return { notes: await knowledgeVault.search(text, {
+    project: String(request.query?.project || ''),
+    limit: request.query?.limit,
+  }) };
+});
+
+app.post('/api/knowledge/notes', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return reply.code(201).send(await knowledgeVault.create(request.body || {}));
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error).slice(0, 240) });
+  }
+});
+
+app.patch('/api/knowledge/notes/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    return await knowledgeVault.revise(
+      request.params.id, request.body || {}, request.body?.expected_version,
+    );
+  } catch (error) {
+    const message = String(error?.message || error);
+    return reply.code(message === 'VERSION_CONFLICT' ? 409 : message === 'Note introuvable' ? 404 : 422)
+      .send({ error: message.slice(0, 240) });
+  }
+});
+
+app.delete('/api/knowledge/notes/:id', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  try {
+    const current = await knowledgeVault.get(request.params.id);
+    if (!current) return reply.code(404).send({ error: 'Note inconnue' });
+    return await knowledgeVault.revise(current.id, { retract: true }, current.version);
+  } catch (error) {
+    const message = String(error?.message || error);
+    return reply.code(message === 'VERSION_CONFLICT' ? 409 : 422)
+      .send({ error: message.slice(0, 240) });
+  }
+});
+
+app.get('/api/knowledge/export', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  const notes = await knowledgeVault.list({ project: String(request.query?.project || ''), limit: 300 });
+  const format = String(request.query?.format || 'markdown').toLowerCase();
+  if (format === 'jsoncanvas') return { format: 'jsoncanvas', canvas: toJsonCanvas(notes), count: notes.length };
+  if (format !== 'markdown') return reply.code(422).send({ error: 'Format attendu: markdown ou jsoncanvas' });
+  return { format: 'markdown', files: notes.map((note) => ({
+    name: note.id + '.md', content: toMarkdown(note),
+  })), count: notes.length };
+});
 
 app.get('/api/kernel/intentions', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
@@ -1437,16 +1760,28 @@ app.post('/api/chat', async (request, reply) => {
     privateView,
     chatSessionId,
   );
-  const curiosityItem = await curiosity.questionForInteraction(text).catch(() => null);
   const baseAnswer = String(response?.answer || '').trim();
+  // Never append a curiosity prompt to an empty/unavailable model reply.
+  // This distinguishes a real AI answer from a server diagnostic.
+  const unavailable = Boolean(response?.language_unavailable) || !baseAnswer;
+  const curiosityItem = unavailable ? null
+    : await curiosity.questionForInteraction(text).catch(() => null);
   const curiosityQuestion = String(curiosityItem?.question || '').trim();
-  const answer = curiosityQuestion
-    ? `${baseAnswer}\n\n${curiosityQuestion}`
-    : baseAnswer;
+  const answer = unavailable ? ''
+    : curiosityQuestion ? `${baseAnswer}\n\n${curiosityQuestion}` : baseAnswer;
   return {
     ...response,
+    ok: !unavailable,
     answer,
-    curiosity_question: curiosityItem || null,
+    response_kind: unavailable ? 'model-unavailable' : 'model-generated',
+    language_unavailable: unavailable,
+    retryable: unavailable,
+    service_status: unavailable ? {
+      code: 'french-inference-unavailable',
+      message: 'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
+      recovery: 'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
+    } : null,
+    curiosity_question: curiosityItem,
     voice_ticket: answer ? createVoiceTicket(answer) : '',
     voice_profile: 'mairaiy',
   };
@@ -2057,6 +2392,18 @@ function startMaintenance() {
 }
 
 export function startRuntimeLoop() {
+  // AURA observes a fictitious trading strategy automatically every 6h;
+  // zero-cost public data only, no account or live orders.
+  startAutomaticPaperScan();
+  // Installed local inference is independent of MySQL initialization.
+  // Do not download weights here: no unmanaged bandwidth or cost at startup.
+  if(shouldWarmInstalledLanguage()
+    && embeddedLanguageRuntime.installed()){
+    void embeddedLanguageRuntime.start({allowProvision:false}).catch(error=>{
+      app.log.warn({code:String(error?.code||'embedded-start-failed')},
+        'AURA: independent local French warmup failed');
+    });
+  }
   startRuntime().catch((error) => {
     bootstrap.startupError = safeError(error);
   });
@@ -2072,6 +2419,8 @@ export function startRuntimeLoop() {
 }
 
 export async function stopAura() {
+  if(paperAutoTimer){clearInterval(paperAutoTimer);paperAutoTimer=null;}
+  if(paperAutoInitialTimer){clearTimeout(paperAutoInitialTimer);paperAutoInitialTimer=null;}
   if (retryTimer) {
     clearInterval(retryTimer);
     retryTimer = null;

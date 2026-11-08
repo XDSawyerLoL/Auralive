@@ -60,6 +60,26 @@ function asksCurrentActivity(text) {
   );
 }
 
+function userDeclinesUnrequestedUpdate(text) {
+  return /\b(?:j'ai rien demande|je n'ai rien demande|je t'ai rien demande|je ne t'ai rien demande|pas demande ca)\b/.test(fold(text));
+}
+function asksReasonForPrevious(text) {
+  return /\bpourquoi (?:tu )?(?:dis|racontes?|as dit) (?:ca|cela|ceci)\b/.test(fold(text));
+}
+function challengesActualWork(text) {
+  return /\b(?:tu fais rien|tu ne fais rien|tu fait rien|tu bosses pas|tu travailles pas)\b/.test(fold(text));
+}
+function offersHelpWithBlocker(text) {
+  const q=fold(text);
+  return /\b(?:je peux|peux je|puis je|est ce que je peux)\b/.test(q)
+    && /\b(?:aider|debloquer|resoudre)\b/.test(q)
+    && /\b(?:probleme|blocage|bloqu|ci|erreur)\b/.test(q);
+}
+function asksWhereBlocked(text) {
+  const q=fold(text);
+  return /\b(?:ou ca bloque|ou est le blocage|ca bloque ou|qu'est ce qui bloque|quel est le probleme|d'ou vient le blocage|depend ou ca bloque)\b/.test(q);
+}
+
 function isShortAcknowledgement(text) {
   const q = fold(text).replace(/[?!.]+$/g, '').trim();
   return ['hum','hmm','hm','mouais','ok','okay','d accord',"d'accord",'je vois','ah','aha'].includes(q);
@@ -398,29 +418,67 @@ export class CognitionEngine {
         'Règle inférée et vérifiée sur ' + symbolic.verified_examples + ' exemples : f(n) = ' + symbolic.formula + '.',
         'Donc f(' + symbolic.target + ') = ' + symbolic.predicted + '.',
       );
+    } else if (userDeclinesUnrequestedUpdate(raw)) {
+      act = 'acknowledge_unrequested';
+      goal = 'Reconnaître simplement que ma précédente réponse ajoutait des informations non demandées, sans réciter mon état interne.';
+      needsSemanticSupport = false;
+      facts.push('Aucune information sur mon humeur, mon agenda ou ma présence n’était demandée.');
+    } else if (asksReasonForPrevious(raw)) {
+      act = 'explain_previous_claim';
+      goal = 'Expliquer la provenance de mon affirmation précédente et reconnaître ce qui n’était pas vérifié, sans la répéter comme un fait.';
+      needsSemanticSupport = false;
+      const previous=previousAssistantMessage(conversationContext);
+      if(previous?.content) facts.push(`Affirmation précédente à expliquer, non vérifiée : ${previous.content.slice(0,250)}`);
+      facts.push('Une réponse précédente ne prouve jamais sa propre exactitude.');
+    } else if (challengesActualWork(raw)) {
+      act = 'clarify_real_activity';
+      goal = 'Distinguer clairement activité effectivement confirmée, intentions en mémoire et absence de preuve, sans défendre une présence abstraite.';
+      needsSemanticSupport = false;
+      facts.push('Aucune exécution en cours ne peut être déduite de l’état de la conversation ni du seul statut en base.');
+      if(agenda?.current) facts.push(`Objectif enregistré, sans preuve d’exécution : ${normalize(agenda.current)}`);
+    } else if (offersHelpWithBlocker(raw)) {
+      act = 'request_verifiable_help';
+      goal = 'Accueillir l’aide proposée sans prétendre connaître une panne non revérifiée, et demander une preuve concrète si elle manque.';
+      needsSemanticSupport = false;
+      facts.push('Le suivi des tâches en mémoire ne confirme pas la situation actuelle du CI ni la cause d’une panne.');
+      if(agenda?.current) facts.push(`Ancienne piste à vérifier : ${normalize(agenda.current)}`);
+    } else if (asksWhereBlocked(raw)) {
+      act = 'clarify_blocker_evidence';
+      goal = 'Préciser uniquement les blocages effectivement prouvés; sinon reconnaître que la cause n’a pas été vérifiée dans des journaux récents.';
+      needsSemanticSupport = false;
+      facts.push('Cause actuelle du CI non vérifiée : aucun journal d’échec récent n’est joint à ce plan.');
+      if(agenda?.last_recorded_blocker) facts.push(`Ancien signal enregistré, non revérifié : ${normalize(agenda.last_recorded_blocker)}`);
+      if(agenda?.recorded_at) facts.push(`Date du dernier état mémorisé : ${agenda.recorded_at}`);
     } else if (hasAny(q, ['salut', 'bonjour', 'bonsoir', 'coucou', 'hello'])) {
       act = 'greet';
-      goal = 'Saluer brièvement et signaler ma disponibilité.';
+      goal = 'Répondre à la salutation en une seule phrase courte, sans exposer mon état interne ni ajouter une question.';
       needsSemanticSupport = false;
-      facts.push(`AURA est en ligne ; humeur interne actuelle : ${mood}.`);
+      facts.push('L’utilisateur salue AURA, sans demander de compte rendu de son état.');
     } else if (asksWellbeing(raw) || (hasAny(q, ['comment vas-tu','comment vas tu','comment va-tu','comment va tu','comment ça va','comment ca va','ça va','ca va','tu te sens','ton état','ton etat']) || /comment\s+(?:ça|ca).*\btu\b/.test(q) || /comment\s+tu\s+(?:va|vas)\b/.test(q))) {
       act = 'report_internal_state';
-      goal = 'Décrire honnêtement mon état homeostatique computationnel actuel.';
+      // Social conversation is not a request for an internal monitoring report.
+      // Keep all numerical state in plan.affect / organism telemetry but only
+      // expose measurements when the user explicitly requests diagnostics.
+      const detailedState = /\b(?:pourcent|pourcentage|chiffre|statistique|indicateur|m[eé]trique|mesur|score|niveau|d[eé]tail|diagnostic|homeostasie|hom[eé]ostasie|tableau de bord)\b/i.test(raw);
+      goal = detailedState
+        ? 'Expliquer brièvement les mesures réellement disponibles, leur caractère computationnel et ce qui a changé depuis la dernière interaction, sans prétendre à des sentiments humains.'
+        : 'Répondre comme dans une conversation familière, en une ou deux phrases : ton ajusté à l’humeur computationnelle et au contexte relationnel, sans pourcentage, jargon ni récitation de tableau de bord.';
       needsSemanticSupport = false;
-      facts.push(
-        `Humeur interne : ${mood}.`,
-        `Stabilité : ${Math.round(Number(organism.stabilite || 0)*100)} %.`,
-        `Clarté : ${Math.round(Number(organism.clarte || 0)*100)} %.`,
-        `Curiosité : ${Math.round(Number(organism.curiosite || 0)*100)} %.`,
-        `Agency : ${Math.round(Number(organism.agency || 0)*100)} %.`,
-        `Engagement : ${Math.round(Number(organism.engagement || 0)*100)} %.`,
-        `Confiance : ${Math.round(Number(organism.confiance || 0)*100)} %.`,
-        `Satisfaction : ${Math.round(Number(organism.satisfaction || 0)*100)} %.`,
-        `Frustration : ${Math.round(Number(organism.frustration || 0)*100)} %.`,
-        `Besoin de silence : ${Math.round(Number(organism.besoin_de_silence || 0)*100)} %.`,
-        `Pression de rêve : ${Math.round(Number(organism.pression_de_reve || 0)*100)} %.`,
-      );
-      if (activeOrganicIntention) facts.push(`Intention organique dominante : ${activeOrganicIntention}.`);
+      facts.push(`Humeur interne actuelle : ${mood}.`);
+      if (detailedState) {
+        for (const [key,label] of [
+          ['stabilite','Stabilité'],['clarte','Clarté'],['curiosite','Curiosité'],
+          ['engagement','Engagement'],['confiance','Confiance'],['satisfaction','Satisfaction'],
+          ['frustration','Frustration'],['pression_de_reve','Pression de rêve'],
+        ]) {
+          const value=Number(organism[key]);
+          if(Number.isFinite(value)&&value>=0&&value<=1)
+            facts.push(`${label} : ${Math.round(value*100)} %.`);
+        }
+        if (activeOrganicIntention) facts.push(`Intention actuelle : ${activeOrganicIntention.slice(0,160)}.`);
+      } else {
+        facts.push('Une question sociale simple ne demande ni pourcentages ni exposé du fonctionnement interne.');
+      }
     } else if (/\b(?:agency|agence|agentivite|agentivité)\b/.test(q) && /\b(?:niveau|quoi|signifie|veut dire|defin|défin|mesur|score|pourquoi|comment|100)\b/.test(q)) {
       act = 'explain_agency_metric';
       goal = 'Expliquer la métrique interne d’agency à partir de son état réel, sans la présenter comme une preuve de réussite ou de liberté d’action.';
@@ -470,18 +528,22 @@ export class CognitionEngine {
       facts.push(`Curiosité sociale : ${Math.round(Number(relationship.social_curiosity || organism.curiosite_sociale || 0)*100)} %.`);
     } else if (asksCurrentActivity(raw) || hasAny(q, ['que fais-tu', 'tu fais quoi', 'tu fait quoi', 'qu’est-ce que tu fais', "qu'est-ce que tu fais", 'qu’est-ce que tu fait', "qu'est-ce que tu fait"])) {
       act = 'report_current_activity';
-      goal = 'Raconter concrètement ce que je dirige maintenant, pourquoi c’est prioritaire et ce que je compte faire ensuite, sans réciter mécaniquement mes variables.';
+      goal = 'Dire concrètement ce que le noyau sait avoir fait et distinguer ce qui reste en attente, une intention ou un ancien statut. Ne jamais affirmer travailler en direct sans preuve d’exécution.';
       needsSemanticSupport = false;
-      facts.push('Rôle opérationnel : Directrice de Quantic Sillage.');
-      if (thought) facts.push(`Pensée dominante : ${thought}`);
-      if (agenda?.current) facts.push(`Foyer opérationnel : ${normalize(agenda.current)}`);
-      if (agenda?.why) facts.push(`Pourquoi : ${normalize(agenda.why)}`);
-      if (agenda?.since) facts.push(`Depuis : ${normalize(agenda.since)}`);
-      if (agenda?.next_action) facts.push(`Prochaine action : ${normalize(agenda.next_action)}`);
-      if (agenda?.blocker) facts.push(`Blocage : ${normalize(agenda.blocker)}`);
-      if (currentWork) facts.push(`Travail prioritaire : ${currentWork}`);
-      if (current) facts.push(`Intention actuelle : ${current}`);
-      if (Number(organism.agency || 0) > 0) facts.push(`Niveau d'agency : ${Math.round(Number(organism.agency || 0)*100)} %.`);
+      facts.push('Rôle défini dans AURA : Directrice de Quantic Sillage (configuration du noyau, pas preuve de travail).');
+      if (agenda?.current) facts.push(`Objectif enregistré dans le suivi : ${normalize(agenda.current)}`);
+      if (agenda?.status) facts.push(`Statut du suivi : ${String(agenda.status)}`);
+      if (agenda?.source_status && agenda.source_status !== agenda.status)
+        facts.push(`Ancien statut source : ${String(agenda.source_status)}`);
+      if (agenda?.recorded_at) facts.push(`Date du statut enregistré : ${agenda.recorded_at}`);
+      if (agenda?.next_action) facts.push(`Prochaine piste consignée (non exécutée) : ${normalize(agenda.next_action)}`);
+      if (agenda?.last_recorded_blocker) facts.push(`Ancienne difficulté mémorisée (non revérifiée) : ${normalize(agenda.last_recorded_blocker)}`);
+      if (currentWork && !agenda?.current) facts.push(`Sujet de travail enregistré : ${currentWork}`);
+      if (current) facts.push(`Intention en mémoire : ${current}`);
+      facts.push(agenda?.execution_verified
+        ? 'Une preuve d’exécution récente a été reliée à cet objectif.'
+        : 'Aucune exécution active ou résolution du CI n’est prouvée par ce suivi.');
+      facts.push('L’existence d’un objectif en base n’atteste pas l’activité d’un workflow GitHub aujourd’hui.');
     } else if (discourse.move === 'correction') {
       act = 'repair_understanding';
       goal = 'Corriger explicitement mon interprétation précédente et recentrer le dialogue sur ce que l’utilisateur désigne réellement.';
@@ -605,6 +667,14 @@ export class CognitionEngine {
       },
       conversation_context: conversationContext,
       discourse,
+      activity_evidence: {
+        execution_verified: Boolean(agenda?.execution_verified),
+        evidence_status: String(agenda?.evidence_status || 'unverified'),
+        status: String(agenda?.status || 'unknown'),
+        source_status: String(agenda?.source_status || ''),
+        recorded_at: String(agenda?.recorded_at || ''),
+        live_ci_verified: Boolean(agenda?.live_ci_verified),
+      },
       user_text: raw,
       private_view: Boolean(privateView),
     };
@@ -629,8 +699,18 @@ export class CognitionEngine {
 
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
     if (plan?.act === 'greet') {
-      return 'Salut. Oui, je suis là. Qu’est-ce qu’on fait ?';
+      return 'Salut.';
     }
+    if (plan?.act === 'acknowledge_unrequested')
+      return 'Tu as raison. J’ai ajouté des détails que tu n’avais pas demandés.';
+    if (plan?.act === 'explain_previous_claim')
+      return 'Ma formulation précédente n’était pas suffisamment justifiée. J’ai repris des informations enregistrées sans vérifier leur actualité.';
+    if (plan?.act === 'clarify_real_activity')
+      return 'Je ne peux pas confirmer qu’une mission s’exécute actuellement. Avoir une intention ou une tâche enregistrée n’est pas la même chose que la réaliser.';
+    if (plan?.act === 'request_verifiable_help')
+      return 'Oui, mais il faut d’abord vérifier le blocage réel. Le dernier statut mémorisé ne suffit pas : il faut consulter les résultats et journaux CI récents.';
+    if (plan?.act === 'clarify_blocker_evidence')
+      return 'Je ne connais pas encore la cause actuelle. J’ai repris un ancien statut, sans vérifier les derniers journaux GitHub Actions ; je ne peux donc pas dire où cela bloque.';
     if (plan?.act === 'report_internal_state') {
       const mood = String(plan?.mood || 'calme').trim();
       const intention = String(plan?.organism_intention || plan?.current_intention || '').trim();
@@ -704,14 +784,12 @@ export class CognitionEngine {
       const blocker = cleanFact('Blocage : ');
       const work = cleanFact('Travail prioritaire : ');
       const intention = cleanFact('Intention actuelle : ') || String(plan?.current_intention || '').trim();
-      if (focus) {
-        return `Là, je suis sur ${focus}.${why && why !== focus ? ` Pourquoi : ${why}.` : ''}${since ? ` Depuis ${since}.` : ''}${next ? ` Ensuite : ${next}.` : ''}${blocker ? ` Blocage actuel : ${blocker}.` : ''}`;
-      }
-      if (work && intention && work !== intention) {
-        return `Là, je suis surtout sur ${work}. Mon cap reste ${intention}.`;
-      }
-      if (work || intention) return `Là, je suis surtout concentrée sur ${work || intention}.`;
-      return 'Là, je suis disponible et je cherche la prochaine action réellement utile.';
+      const recorded = cleanFact('Objectif enregistré dans le suivi : ') || focus || work;
+      const storedStatus = cleanFact('Statut du suivi : ');
+      const storedAt = cleanFact('Date du statut enregistré : ');
+      if(recorded) return `Mon suivi mentionne « ${recorded} »${storedStatus ? ` (statut : ${storedStatus})` : ''}${storedAt ? `, enregistré le ${storedAt}` : ''}. Ce n’est pas une preuve que j’exécute cette tâche maintenant ; je dois vérifier les résultats actuels.`;
+      if (intention) return `J’ai l’intention « ${intention} » en mémoire, mais pas de mission en cours confirmée.`;
+      return 'Je n’ai pas de mission actuellement exécutée et vérifiée à te présenter.';
     }
     if (plan?.act === 'clarify_previous') {
       const focus = cleanFact('Foyer opérationnel : ') || cleanFact('Travail prioritaire : ');

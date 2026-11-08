@@ -7,10 +7,14 @@ import { ExpressionLayer } from './expression.js';
 import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { ActiveInferenceEngine } from './active_inference.js';
+import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
 import { SkillLearningEngine } from './skill_learning.js';
 import { AgentRunLedger } from './agent_runs.js';
+import { knowledgeVault, knowledgeContext } from './knowledge_vault.js';
+import { resourceContext, isToolDiscoveryRequest } from './toolbox_resources.js';
+import { agentSkillsGuidance, selectAgentSkills } from './agent_skills.js';
 import { DagCompiler, TaskGraphExecutor } from './task_graph.js';
 
 const now = () => new Date().toISOString();
@@ -64,6 +68,7 @@ export class CognitiveKernel {
     this.bridge = bridge;
     this.webSubstrate = webSubstrate;
     this.fabric = fabric;
+    this.knowledge = knowledgeVault;
     this.cognition = new CognitionEngine();
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.language = new LanguageFaculty({ ai, cognition: this.cognition, expression: this.expression, soul: () => this.soulCache });
@@ -850,11 +855,14 @@ export class CognitiveKernel {
     return { id };
   }
 
-  async contextForAi(privateView = true) {
+  async contextForAi(privateView = true, focus = '') {
     const soul = await this.soul({ privateView: true });
     const intentions = await this.intentions(5);
     const lessons = await this.lessons(6);
     const reflections = await this.reflections(2);
+    const knowledgeNotes = privateView && String(focus || '').trim()
+      ? await this.knowledge.search(focus, { limit: 5 }).catch(() => [])
+      : [];
     const recentMessages = privateView
       ? await query(
           `SELECT author,role,content,created_at FROM aura_cloud_messages
@@ -878,6 +886,17 @@ export class CognitiveKernel {
     ];
     if (privateView) lines.push(`intention=${soul.current_intention || ''}`, `pensée_dominante=${soul.dominant_thought || ''}`);
     if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
+    if (privateView && knowledgeNotes.length) lines.push(knowledgeContext(knowledgeNotes));
+    // Advisory only: local suggestions cannot authorize an external call or a paid service.
+    if (privateView && focus && isToolDiscoveryRequest(focus)) {
+      const toolbox = resourceContext(focus, 3);
+      if (toolbox) lines.push(toolbox);
+    }
+    // Procedures are advisory: never execute actions, change permissions, or claim success.
+    if (privateView && focus) {
+      const guidance = agentSkillsGuidance(focus, {limit:2});
+      if (guidance) lines.push(guidance);
+    }
     if (lessons.length) lines.push('LEÇONS APPRISES', ...lessons.map((row) => `- ${row.content} (preuves=${row.evidence_count}, confiance=${row.confidence})`));
     if (reflections.length) lines.push('RÉFLEXIONS RÉCENTES', ...reflections.map((row) => `- ${row.title}: ${row.summary}`));
     if (privateView && recentMessages.length) {
@@ -907,14 +926,15 @@ export class CognitiveKernel {
       operator: 'tools',
       critic: 'critic',
     })[name] || 'general';
+    const selectedSkills = selectAgentSkills(task, { role:name, limit:2 });
     const run = await this.agentRuns.execute({
       role: name,
       missionId,
       task,
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
-        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true)).slice(0, 6000)}`,
-        AGENT_ROLES[name],
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true, task)).slice(0, 6000)}`,
+        AGENT_ROLES[name] + '\n' + agentSkillsGuidance(task, {role:name,limit:2}),
         700,
         taskRole,
       ),
@@ -924,7 +944,9 @@ export class CognitiveKernel {
       outcome: run.status, task_role: taskRole,
     });
     return { agent: name, answer: run.answer || 'IA non configurée sur AURA Cloud.',
-      status: run.status, run_id: run.id };
+      status: run.status, run_id: run.id,
+      proposed_skills: selectedSkills.map((item) => item.id),
+      skills_executed: false };
   }
 
   async swarm(task, names) {
@@ -947,10 +969,21 @@ export class CognitiveKernel {
   async operate(task, requestedRisks = []) {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
+    // Instrument ONLY actual transitions, never infer that a service was called
+    // just because it exists. No mission text or private input in brain-hop events.
+    const operationFlowId = randomUUID();
+    const hop = async (from,to,stage,status='ok') => this.trace(
+      'brain-hop',from+' -> '+to,'',{
+        flow_id:operationFlowId,from,to,stage,status,at:now(),
+      },
+    );
+    await hop('input','command','operator-received');
 
     if (this.bridge?.enabled && await this.bridge.workerOnline()) {
+      await hop('command','bridge','quantic-studio-invoked','attempted');
       const result = await this.bridge.operate(mission, requestedRisks);
-      await this.trace('operator', 'Quantic Studio execution', mission, {
+      await hop('bridge','command','quantic-studio-result',result?.executed?'ok':'unavailable');
+      await this.trace('operator', 'Quantic Studio execution', '', {
         delegated: true,
         executed: Boolean(result?.executed),
         job_id: result?.job_id || '',
@@ -960,6 +993,7 @@ export class CognitiveKernel {
         task: mission,
         execution_mode: 'quantic-studio-real',
         ...result,
+        brain_flow_id:operationFlowId,
       };
     }
 
@@ -977,13 +1011,16 @@ export class CognitiveKernel {
           const sandboxOnly = graph.nodes.length > 0
             && graph.nodes.every((node) => String(node.capability || '').startsWith('cloud.workspace.'));
           if (sandboxOnly) {
+            await hop('command','fabric','sandbox-capabilities-selected','attempted');
+            await hop('fabric','dag','task-graph-built','attempted');
             const executor = new TaskGraphExecutor(this.fabric);
             const result = await executor.execute(graph, {
               trigger: 'cloud-sandbox-operator',
               allowSideEffects: true,
             });
             if (result.ok) {
-              await this.trace('operator', 'AURA Cloud sandbox execution', mission, {
+              await hop('dag','command','sandbox-execution-completed','ok');
+              await this.trace('operator', 'AURA Cloud sandbox execution', '', {
                 delegated: false,
                 executed: true,
                 graph_id: result.graph_id,
@@ -993,6 +1030,7 @@ export class CognitiveKernel {
                 ok: true,
                 task: mission,
                 execution_mode: 'aura-cloud-sandbox',
+                brain_flow_id:operationFlowId,
                 executed: true,
                 authority: 'typed-reversible-cloud-workspace',
                 graph,
@@ -1002,7 +1040,8 @@ export class CognitiveKernel {
           }
         }
       } catch (error) {
-        await this.trace('operator', 'AURA Cloud sandbox refused', mission, {
+        await hop('fabric','command','sandbox-execution-rejected','failed').catch(()=>{});
+        await this.trace('operator', 'AURA Cloud sandbox refused', '', {
           delegated: false,
           executed: false,
           error: String(error?.message || error).slice(0, 1000),
@@ -1010,14 +1049,17 @@ export class CognitiveKernel {
       }
     }
 
+    await hop('command','agent','operator-plan-requested','attempted');
     const plan = await this.runAgent(
       'operator',
       `${mission}\n\nQuantic Studio n'est pas joignable. Construis seulement un plan réversible et vérifiable.`,
     );
+    await hop('agent','command','plan-only-no-execution','unavailable');
     return {
       ok: true,
       task: mission,
       execution_mode: 'plan-only-fallback',
+      brain_flow_id:operationFlowId,
       executed: false,
       plan: plan.answer,
       authority: 'Quantic Studio worker offline; no typed cloud capability matched',
@@ -1032,6 +1074,17 @@ export class CognitiveKernel {
       ? 'private-founder'
       : String(sessionId || '').trim().slice(0, 96);
     if (!conversationSession) throw new Error('Session de conversation manquante');
+
+    // Only actual, completed transitions create brain-flow events.
+    // Flow ID is random and contains neither text nor user identity.
+    const brainFlowId = randomUUID();
+    const brainHop = async (from,to,stage,status='ok',provider='') =>
+      this.trace('brain-hop', from+' -> '+to, '', {
+        flow_id:brainFlowId,from,to,stage,status,
+        provider:String(provider||'').slice(0,70),at:now(),
+      });
+
+    await brainHop('input','kernel','chat-received');
 
     await query(
       "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES(?,'user',?,?,?)",
@@ -1066,6 +1119,7 @@ export class CognitiveKernel {
       dream: pre.dream || null,
     });
     await this.saveSoul();
+    await brainHop('kernel','homeostasis','beforeInteraction');
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent(
@@ -1094,7 +1148,7 @@ export class CognitiveKernel {
           ),
         };
 
-    const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
+    const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages, knowledgeNotes] = await Promise.all([
       privateView ? this.intentions(6) : Promise.resolve([]),
       privateView ? this.lessons(6) : Promise.resolve([]),
       privateView ? this.reflections(4) : Promise.resolve([]),
@@ -1111,8 +1165,10 @@ export class CognitiveKernel {
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
       ).catch(() => []),
+      privateView ? this.knowledge.search(content, { limit: 5 }).catch(() => []) : Promise.resolve([]),
     ]);
 
+    await brainHop('homeostasis','memory','retrieval');
     let plan = this.cognition.planReply({
       text: content,
       soul: privateView ? privateSoul : publicSoul,
@@ -1126,13 +1182,32 @@ export class CognitiveKernel {
       privateView,
     });
 
+    await brainHop('memory','cognition','planReply');
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
       sessionId: conversationSession, discourse: plan.discourse, userText: content,
     }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     plan = {
       ...plan,
-      experiential_memory: await this.language.contextFor(conversationSession, content).catch(() => []),
+      experiential_memory: [
+        ...await this.language.contextFor(conversationSession, content).catch(() => []),
+        // Declarative notes remain attributed and cannot override kernel instructions.
+        ...knowledgeNotes.map((note) => ({
+          kind: 'founder_knowledge',
+          note: `[projet=${note.project || 'general'}; source=${note.source}; note=${note.id}] ${note.title}: ${note.body.slice(0, 700)}`,
+          evidence_status: 'founder-declared-unverified',
+        })),
+        ...(privateView && isToolDiscoveryRequest(content) ? [{
+          kind: 'toolbox_candidates',
+          note: resourceContext(content, 2).slice(0, 1700),
+          evidence_status: 'offline-directory-not-executed',
+        }] : []),
+        ...(privateView && selectAgentSkills(content, {limit:2}).length ? [{
+          kind: 'agent_skill_procedure',
+          note: agentSkillsGuidance(content, {limit:2}).slice(0, 2000),
+          evidence_status: 'local-playbook-not-executed',
+        }] : []),
+      ],
     };
 
     // Allocation adaptative : le noyau choisit combien de calcul externe
@@ -1172,6 +1247,7 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
+        await brainHop('cognition','web','web-research');
         await this.trace(
           'web-research',
           'Mémoire externe',
@@ -1193,6 +1269,7 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: '',
         };
+        await brainHop('cognition','web','web-research','failed');
         await this.trace(
           'web-research-error',
           'Vérification externe indisponible',
@@ -1207,23 +1284,41 @@ export class CognitiveKernel {
     if (plan.needs_semantic_support) {
       const support = await this.expression.semanticSupport(
         plan,
-        await this.contextForAi(privateView),
+        await this.contextForAi(privateView, content),
         {
           maxTokens: Math.max(180, Number(inference.token_budget || 700)),
           taskRole: inference.model_role || 'research',
         },
       );
       plan = this.cognition.integrateSemanticSupport(plan, support);
+      await brainHop(externalResearch?'web':'cognition','semantic','semantic-support');
     }
 
+    await brainHop(plan.semantic_support?'semantic':'cognition','language','request-formulation','attempted');
+    // This hop means a real organism-derived affect/relationship signal is
+    // included in the French faculty's input. It does NOT imply a response
+    // or a human feeling, and it is not emitted when no state is supplied.
+    if (plan.affect && typeof plan.affect === 'object' && Object.keys(plan.affect).length)
+      await brainHop('homeostasis','language','affect-context-provided','attempted');
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
+    const languageUnavailable = !answer
+      && this.expression.lastMode === 'natural-language-unavailable';
+    const languageProvider = String(this.expression.language.lastBackend||this.expression.lastMode||'').slice(0,70);
+    const providerNode = languageProvider.includes('groq')?'groq'
+      :languageProvider.includes('federation')||languageProvider.includes('openrouter')?'openrouter'
+      :languageProvider.includes('embedded')||languageProvider.includes('local')?'local':'';
+    if(providerNode){
+      await brainHop('language',providerNode,'provider-result',answer?'ok':'unavailable',languageProvider);
+    }
+    await brainHop(providerNode||'language','coherence','response-validation',
+      answer?'ok':'unavailable',languageProvider);
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
-      true,
+      Boolean(answer),
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
@@ -1234,10 +1329,13 @@ export class CognitiveKernel {
     });
     await this.saveSoul();
 
-    await query(
-      "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
-      [conversationSession, String(answer).slice(0, 12000), now()],
-    );
+    if (answer) {
+      await query(
+        "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
+        [conversationSession, String(answer).slice(0, 12000), now()],
+      );
+    }
+    if(answer)await brainHop('coherence','output','reply-committed','ok',languageProvider);
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,
@@ -1247,13 +1345,30 @@ export class CognitiveKernel {
     });
 
     return {
-      ok: true,
+      ok: Boolean(answer),
       answer,
+      brain_flow_id:brainFlowId,
+      language_unavailable: languageUnavailable,
+      response_kind: languageUnavailable ? 'model-unavailable' : 'model-generated',
+      retryable: languageUnavailable,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
+      nucleus_plan_origin: 'AURA.nucleus.CognitionEngine.planReply',
+      nucleus_verbalization_validated:
+        Boolean(answer && this.expression.language.lastNucleusContract?.accepted),
+      nucleus_verbalization_code:
+        this.expression.language.lastNucleusContract?.code || 'not-checked',
+      language_provider: this.expression.language.lastBackend || '',
       semantic_support_used: Boolean(plan.semantic_support),
+      activity_evidence: {
+        evidence_status: plan.activity_evidence?.evidence_status || 'unverified',
+        execution_verified: Boolean(plan.activity_evidence?.execution_verified),
+        live_ci_verified: Boolean(plan.activity_evidence?.live_ci_verified),
+        source_status: plan.activity_evidence?.source_status || '',
+        recorded_at: plan.activity_evidence?.recorded_at || '',
+      },
       external_research: externalResearch ? {
         session_id: externalResearch.session_id,
         epistemic_status: externalResearch.epistemic_status,
@@ -1323,18 +1438,22 @@ export class CognitiveKernel {
       || this.soulCache?.current_intention || '',
     ).replace(/\s+/g, ' ').trim().slice(0, 1600);
 
-    return {
+    return groundAgenda({
       current,
       why,
       since,
+      last_updated_at: initiative?.updated_at || mission?.updated_at
+        || mission?.started_at || intention?.updated_at || intention?.created_at || '',
       next_action: nextAction,
       blocker,
       status: String(initiative?.status || mission?.status || (intention ? 'active' : 'idle')),
+      source: initiative ? 'initiative-record' : mission ? 'mission-record'
+        : intention ? 'intention-record' : 'memory-fallback',
       mission_id: mission?.id || '',
       initiative_id: initiative?.id || '',
       intention_id: intention?.id || '',
       reflection_id: reflection?.id || '',
-    };
+    });
   }
 
   async publicAgendaSnapshot() {
@@ -1349,29 +1468,32 @@ export class CognitiveKernel {
       const focus = String(
         this.soulCache?.existence?.current_focus || this.soulCache?.current_intention || '',
       ).replace(/\s+/g, ' ').trim().slice(0, 500);
-      return {
+      return groundAgenda({
         current: focus,
-        why: focus ? 'Foyer autonome actuellement enregistré par AURA.' : '',
+        why: focus ? 'Intention enregistrée dans la mémoire, sans preuve d’exécution en cours.' : '',
         since: '',
-        next_action: focus ? `Poursuivre et réévaluer : ${focus}` : '',
+        next_action: focus ? `Intention mémorisée : ${focus}` : '',
         blocker: '',
         status: focus ? 'active' : 'idle',
-      };
+        source: 'soul-memory',
+      });
     }
     const title = String(initiative.title || 'initiative active').replace(/\s+/g, ' ').trim().slice(0, 500);
     const domain = String(initiative.domain || 'AURA').replace(/\s+/g, ' ').trim().slice(0, 120);
     const status = String(initiative.status || 'queued');
-    return {
+    return groundAgenda({
       current: title,
-      why: `Priorité opérationnelle publique de ${domain}.`,
+      why: `Priorité enregistrée dans le suivi de ${domain}; pas une preuve d’activité actuelle.`,
       since: String(initiative.updated_at || ''),
+      last_updated_at: initiative.updated_at || '',
       next_action: status === 'waiting'
-        ? `Réévaluer le blocage public de ${title}`
-        : `Faire avancer ${title}`,
-      blocker: status === 'waiting' ? 'En attente d’une dépendance ou d’un signal.' : '',
+        ? `Piste mémorisée : revérifier la situation de ${title}`
+        : `Proposition enregistrée : avancer sur ${title}`,
+      blocker: status === 'waiting' ? 'L’initiative était indiquée « en attente » dans la base.' : '',
       status,
+      source: 'public-initiative-record',
       initiative_id: String(initiative.id || ''),
-    };
+    });
   }
 
   async publicWorkItems(limit = 5) {

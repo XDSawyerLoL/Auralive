@@ -111,24 +111,24 @@ test('production entry uses one Fastify listener on Hostinger port 3000 with run
   assert.equal(root.status, 200);
   const html = await root.text();
   assert.match(html, /AURA/);
-  assert.match(html, /Company OS/);
+  assert.match(html, /Cartographie cognitive d.AURA/);
   assert.doesNotMatch(stderr, /listen\(\) was called more than once/);
   assert.equal(child.exitCode, null, stderr);
 });
 
-test('direct Fastify server serves AURA dashboard without MySQL', async (t) => {
+test('direct Fastify server serves the one neural AURA interface without MySQL', async (t) => {
   const child = launch();
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += String(chunk); });
   t.after(() => { if (!child.killed) child.kill('SIGTERM'); });
 
-  const html = await waitFor('/', (text) => text.includes('Company OS'));
+  const html = await waitFor('/', (text) => text.includes('Cartographie cognitive'));
   assert.match(html, /AURA/);
-  assert.match(html, /Company OS/);
-  assert.match(html, /AURA vivante/);
-  assert.match(html, /Parler à AURA/);
-  assert.match(html, /id="message"/);
-  assert.match(html, /id="send"/);
+  assert.match(html, /Cartographie cognitive d.AURA/);
+  assert.match(html, /Réseau neuronal/);
+  assert.match(html, /id="graphCanvas"/);
+  assert.match(html, /id="chatInput"/);
+  assert.match(html, /id="chatSend"/);
 
   const healthText = await waitFor('/healthz', (text) => text.includes('"ok":true'));
   const payload = JSON.parse(healthText);

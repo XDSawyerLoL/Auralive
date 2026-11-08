@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 16;
+export const LATEST_SCHEMA_VERSION = 17;
 
 export function getDb() {
   if (pool) return pool;
@@ -682,6 +682,41 @@ async function applyMigrations(db) {
     );
     current = 16;
   }
+
+  if (current < 17) {
+    // Authoritative shared knowledge store: never rely on per-instance Hostinger files.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_knowledge_notes (
+      id CHAR(36) PRIMARY KEY,
+      namespace VARCHAR(40) NOT NULL DEFAULT 'founder',
+      title VARCHAR(240) NOT NULL,
+      body LONGTEXT NOT NULL,
+      kind VARCHAR(32) NOT NULL DEFAULT 'note',
+      project VARCHAR(120) NOT NULL DEFAULT '',
+      tags LONGTEXT NOT NULL,
+      source VARCHAR(320) NOT NULL DEFAULT 'fondateur:manuel',
+      confidence DOUBLE NOT NULL DEFAULT 0.5,
+      status VARCHAR(32) NOT NULL DEFAULT 'active',
+      version INT NOT NULL DEFAULT 1,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_knowledge_scope(namespace,status,project,updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_knowledge_revisions (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      note_id CHAR(36) NOT NULL,
+      version INT NOT NULL,
+      event VARCHAR(24) NOT NULL,
+      snapshot LONGTEXT NOT NULL,
+      changed_at VARCHAR(40) NOT NULL,
+      UNIQUE KEY uq_aura_knowledge_revisions_version(note_id,version),
+      INDEX idx_aura_knowledge_revisions_note(note_id,changed_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      'INSERT IGNORE INTO aura_schema_migrations(version,name,applied_at) VALUES(17,?,?)',
+      ['sourced-versioned-founder-knowledge', new Date().toISOString()],
+    );
+    current = 17;
+  }
 }
 
 export async function initSchema() {
@@ -903,7 +938,7 @@ export async function schemaStatus() {
 
 export async function createLogicalBackup(reason = 'scheduled') {
   const timestamp = new Date().toISOString();
-  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs, skills] = await Promise.all([
+  const [soul, intentions, lessons, routines, improvements, evolution, commandServices, initiatives, reasoningSessions, fabricCapabilities, fabricGraphs, skills, knowledgeNotes] = await Promise.all([
     query('SELECT id,state,updated_at FROM aura_soul_state ORDER BY id'),
     query('SELECT * FROM aura_intentions ORDER BY updated_at DESC LIMIT 200'),
     query('SELECT * FROM aura_lessons ORDER BY updated_at DESC LIMIT 300'),
@@ -916,6 +951,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     query('SELECT id,manifest_hash,transport,provider,trust,observed_reliability,latency_ms,cost_microunits,side_effects,last_seen_at,updated_at FROM aura_fabric_capabilities ORDER BY observed_reliability DESC LIMIT 200'),
     query('SELECT id,objective,status,created_at,updated_at FROM aura_fabric_graphs ORDER BY updated_at DESC LIMIT 100'),
     query('SELECT id,strategy_key,name,recipe,status,successes,failures,context_count,confidence,source,promoted_at,updated_at FROM aura_skills ORDER BY confidence DESC,updated_at DESC LIMIT 200'),
+    query("SELECT * FROM aura_knowledge_notes WHERE namespace='founder' ORDER BY updated_at DESC LIMIT 500"),
   ]);
   const payload = JSON.stringify({
     format: 'aura-cognitive-snapshot-v1',
@@ -933,6 +969,7 @@ export async function createLogicalBackup(reason = 'scheduled') {
     fabric_capabilities: fabricCapabilities,
     fabric_graphs: fabricGraphs,
     skills,
+    knowledge_notes: knowledgeNotes,
   });
   const id = randomUUID();
   await query(

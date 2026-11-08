@@ -19,9 +19,11 @@ RÉGLAGES HOSTINGER
 - En production, AURA force 0.0.0.0:3000 même si une variable PORT différente est injectée
 
 ACCÈS DIRECT
-- Le dashboard AURA est public.
+- La même interface neuronale AURA est servie à / et /cerveau.
 - POST /api/chat fonctionne sans AURA_CLOUD_TOKEN, avec session navigateur signée et rate limiting.
-- Aucun champ "Accès privé" ni token n'est demandé à l'utilisateur.
+- La conversation publique reste utilisable sans jeton de propriétaire.
+- Les traces de graphes détaillées, identifiants de trajets, journaux et outils observés exigent une session propriétaire pour protéger les données.
+- Le formulaire propriétaire n'enregistre pas la clé dans le navigateur et utilise une session HttpOnly.
 - AURA_CLOUD_TOKEN est optionnel et protège uniquement les endpoints privés d'administration / bridge.
 - Ne jamais exposer AURA_CLOUD_TOKEN dans le navigateur.
 
@@ -82,8 +84,10 @@ AURA_MAIRAIY_REQUIRE_PROFILE=true
 AURA_VOICE_FABRIC_STRICT_IDENTITY=true
 
 VÉRIFICATION APRÈS DÉPLOIEMENT
-1. GET / doit afficher :
-   AURA 2.2.1 · LONG HORIZON
+1. GET / doit afficher l'INTERFACE UNIQUE :
+   AURA / Cerveau opérationnel · Cartographie cognitive d'AURA.
+   GET /cerveau affiche exactement la même interface.
+   GET /cerveau/anatomie redirige vers /cerveau.
 
 2. GET /__aura_gateway doit retourner :
    "gateway_ready": true
@@ -117,3 +121,19 @@ DIAGNOSTIC D'UN ANCIEN DÉPLOIEMENT
 - Si la page affiche "Accès privé", AURA_CLOUD_TOKEN à saisir, ou un badge antérieur à 2.2.1 :
   Hostinger sert encore un ancien paquet ou un ancien processus.
 - Redéployer l'artefact aura-cloud-hostinger et redémarrer l'application.
+
+INTERFACE NEURONALE UNIQUE — VALIDATION APRÈS INSTALLATION
+- Redémarrer l'application Node.js après remplacement de l'ancienne version.
+- Se rendre à / : constater le graphe et le champ « Requête AURA » dans la MÊME page.
+- Renseigner la clé propriétaire via l'interface pour observer les trajets privés en direct.
+- Envoyer « Salut AURA ». Le tracé doit suivre les événements brain-hop réellement persistés : entrée → CognitiveKernel → homéostasie → mémoire → cognition → langage → fournisseur → cohérence → réponse.
+- Le réseau reste immobile sans événements brain-hop ; cela n'est pas un bug d'animation.
+- Sélectionner le trajet enregistré pour son replay unique. Un ancien trajet n'est pas une tâche en cours.
+- Les modules visibles dans le code sans preuve récente restent indiqués « disponibles / non observés ».
+- Ne jamais traiter les valeurs du Trading Lab papier comme des profits encaissés.
+- Un moteur français non configuré peut empêcher une réponse parlée malgré le graphe fonctionnel : vérifier le diagnostic Groq Free et les clés serveur.
+- Si / affiche encore Company OS ou un ancien tableau de bord, Hostinger exécute l'ancien code ou cache une ancienne page.
+
+CONTRAINTES DE RÉALITÉ
+- La page ne mesure ni conscience ni émotions biologiques ; elle montre des modules logiciels et des traces.
+- L'archive est testée en CI, mais seul un déploiement Hostinger et une requête sur le serveur réel peuvent confirmer son fonctionnement en production.

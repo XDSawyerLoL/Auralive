@@ -6,6 +6,9 @@ let livingScene = null;
 let voicePlayer = null;
 let voiceAudioContext = null;
 let voicePrimed = false;
+let localVoiceOptIn = false;
+let localVoiceGeneration = 0;
+try { localVoiceOptIn = localStorage.getItem('aura_local_voice_opt_in') === '1'; } catch (_) {}
 try{localStorage.removeItem('aura_token');sessionStorage.removeItem('aura_token');}catch(_){}
 const AURA_API_BASE=(function(){
   try{
@@ -557,19 +560,25 @@ function renderLanguageEngine(state){
   const stage=String(install.stage||'not-started');
   const backend=String(state?.status||'');
   const fail=String(install.error_code||state?.failure_code||'');
-  const installed=stage==='installed-verified'&&!!state?.installed;
+  const filesPresent=Boolean(state?.binary_found&&state?.model_found);
+  const installed=Boolean(state?.installed);
+  const budget=state?.memory_preflight||{};
+  const memoryBlocked=budget.safe_to_start===false;
   const healthy=Boolean(state?.ready&&state?.probe_verified&&state?.last_probe_at);
   const booting=backend==='starting'||backend==='verifying-inference';
-  const blocked=stage==='blocked'||backend==='startup-failed'||!!fail;
-  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'blocked';
+  const blocked=memoryBlocked||stage==='blocked'||backend==='startup-failed'||!!fail;
+  const kind=healthy?'ready':blocked?'blocked':booting?'loading':'loading';
   panel.dataset.state=kind;
-  $('engineChip').textContent=healthy?'Réponse vérifiée':blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
+  $('engineChip').textContent=healthy?'Réponse vérifiée'
+    :memoryBlocked?'Mémoire insuffisante'
+    :blocked?'Échec réel':booting?'Initialisation en cours':'Non vérifié';
   $('railLanguage').textContent=healthy?'Conversation disponible'
     :booting?'Chargement du modèle':'Français non opérationnel';
   const titles={
     'embedded-unsafe-redirect':'Redirection HTTPS de téléchargement interdite',
     'embedded-sha256-mismatch':'Le modèle ou moteur téléchargé a échoué au contrôle d’intégrité',
     'embedded-insufficient-cgroup-memory':'Mémoire serveur insuffisante pour installer le modèle',
+    'embedded-insufficient-cgroup-headroom':'Pas assez de mémoire libre pour charger le modèle Q8',
     'embedded-cache-unavailable-or-noexec':'Cache inexécutable ou espace disque insuffisant',
     'embedded-download-http-403':'Téléchargement refusé à la source',
     'embedded-download-http-429':'Téléchargement temporairement limité',
@@ -592,9 +601,11 @@ function renderLanguageEngine(state){
     'embedded-static-sha256-mismatch':'Intégrité du moteur invalide'
   };
   $('engineTitle').textContent=healthy?'Génération locale vérifiée'
+    :memoryBlocked?'Mémoire insuffisante pour charger Qwen3 Q8'
     :blocked?(titles[fail]||'Moteur français indisponible')
       :booting?'Chargement du moteur linguistique'
-        :'Fichiers installés · français non vérifié';
+        :filesPresent?'Fichiers détectés · inférence non vérifiée'
+          :'Fichiers du modèle à installer';
   const attempts=Array.isArray(state?.boot_attempts)?state.boot_attempts:[];
   const history=attempts.map(a=>a.profile+': '+a.outcome+
     (a.exit_signal?' '+a.exit_signal:a.exit_code!==null&&a.exit_code!==undefined?' code '+a.exit_code:'')+
@@ -602,6 +613,8 @@ function renderLanguageEngine(state){
     .join(' · ');
   $('engineDescription').textContent=healthy
     ?'Un test local a réellement généré des tokens sur ce serveur. Ce résultat prouve le fonctionnement de l’inférence, pas un apprentissage linguistique.'
+    :memoryBlocked
+      ?'Mémoire disponible estimée : '+String(budget.headroom_mb??'inconnue')+' Mo, minimum prudent : '+String(budget.minimum_headroom_mb||740)+' Mo. Le démarrage est interdit pour protéger le site. Il faut un modèle plus petit ou davantage de mémoire existante.'
     :booting
       ?backend==='verifying-inference'?'Le modèle a répondu au contrôle de santé. AURA vérifie maintenant la production réelle de tokens.'
          :'Le modèle est installé. Une tentative de démarrage est en cours ; aucune réponse française n’a encore été vérifiée.'
@@ -623,17 +636,27 @@ function renderLanguageEngine(state){
     'installed-verified':'Fichiers GGUF et exécutable vérifiés',
     'blocked':'Installation bloquée'
   };
-  $('engineStage').textContent=stages[stage]||backend||'En attente';
+  $('engineStage').textContent=stage==='not-started'&&filesPresent
+    ?'Fichiers déjà présents · installateur non sollicité'
+    :stages[stage]||backend||'En attente';
   // This bar measures file installation only, never linguistic learning.
   const fileProgress={
     'not-started':0,'locating-existing-install':10,'downloading-cpu-runtime':25,
     'extracting-cpu-runtime':50,'downloading-open-model':70,
     'installed-verified':100,'blocked':0
   };
-  $('engineProgress').style.width=(fileProgress[stage]??0)+'%';
+  $('engineProgress').style.width=(filesPresent?100:(fileProgress[stage]??0))+'%';
+  const variant=install.engine_variant==='unselected'&&filesPresent
+    ?'fichiers détectés' :String(install.engine_variant||'variante inconnue');
   $('engineRevision').textContent='llama.cpp '+String(install.engine_revision||'local')+
-    ' · '+String(install.model||'GGUF')+
-    ' · '+String(install.engine_variant||'variante inconnue');
+    ' · '+String(install.model||'GGUF')+' · '+variant;
+  const startButton=$('engineStart');
+  if(startButton){
+    startButton.disabled=healthy||booting||!installed||memoryBlocked||state?.enabled===false;
+    startButton.title=memoryBlocked?'Mémoire insuffisante : démarrage désactivé pour protéger Hostinger.'
+      :!installed?'Modèle ou exécutable absent.'
+      :'Action privée. Démarrage local et test d’inférence; aucune API payante.';
+  }
 }
 async function refreshEnginePanel(){
   try{renderLanguageEngine(await api('/api/language/embedded/status'));}
@@ -652,6 +675,22 @@ async function refresh(){
       $('serverRevision').textContent='Serveur · '+String(info?.build?.git_sha_short||'révision inconnue');
     }catch(_){$('serverRevision').textContent='Serveur · connexion partielle';}
     await refreshEnginePanel();
+    try{
+      const aiStatus=await api('/api/ai/runtime');
+      const free=aiStatus?.groq_free||{};
+      const state=free.last_status==='verified-text'?'Réponse vérifiée'
+        :free.enabled?'Configuré · réponse à vérifier'
+        :free.api_key_configured&&!free.free_plan_operator_confirmed?'Formule Free à confirmer'
+        :!free.api_key_configured?'Clé API à configurer':'Désactivé';
+      $('groqFreeStatus').textContent='Groq Free · '+state
+        +' · modèle '+String(free.model||'qwen/qwen3.8-27b')
+        +' · appels locaux aujourd’hui '+String(free.process_requests_today??0)
+        +' / '+String(free.daily_cap??'—')
+        +(free.last_error?' · '+String(free.last_error).slice(0,120):'');
+      if(free.last_status==='verified-text')$('languageText').title='Dernière génération Groq Free vérifiée · '+String(free.last_model||'');
+    }catch(_){
+      $('groqFreeStatus').textContent='Groq Free · diagnostic indisponible, aucun résultat confirmé';
+    }
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
@@ -707,6 +746,13 @@ async function refresh(){
             ? 'Clé Gemini TTS absente sur AURA Cloud.'
             : String(voice.fabric_reason||'Voix Aoede indisponible · aucun autre timbre autorisé');
         $('voiceText').title=reasonLabel;
+      }
+      // The founder explicitly chose a separate zero-euro voice; never label it Aoede.
+      if(localVoiceOptIn){
+        const localReady=Boolean(localFrenchVoice());
+        $('voiceDot').className='live-dot '+(localReady?'good':'warn');
+        $('voiceText').textContent=localReady?'AURA · voix locale 0 €':'AURA · voix locale absente';
+        $('voiceText').title='Voix française installée dans le navigateur; aucune requête TTS externe.';
       }
     }catch(_){
       $('voiceDot').className='live-dot';
@@ -785,7 +831,96 @@ async function refresh(){
     }
   }catch(error){
     setLive(false,'Indisponible');
-    $('chatState').textContent=error.message;
+    $('chatState').textContent='Noyau inaccessible · vérifier la connexion';
+  }
+}
+// Zero-euro emergency voice: installed French voice on the user's device only.
+// This is NOT the historical Mairaiy / Aoede voice. It is never sent to a provider.
+function localFrenchVoice(){
+  const synth=window.speechSynthesis;
+  if(!synth || typeof window.SpeechSynthesisUtterance !== 'function') return null;
+  const voices=(synth.getVoices()||[]).filter(function(voice){
+    return voice && voice.localService === true && /^fr(?:-|$)/i.test(voice.lang||'');
+  });
+  voices.sort(function(a,b){
+    function score(voice){
+      const name=String(voice.name||'');
+      return (/^fr-FR$/i.test(voice.lang||'')?20:0)+(/natural|neural/i.test(name)?10:0);
+    }
+    return score(b)-score(a);
+  });
+  return voices[0] || null;
+}
+function stopLocalFrenchVoice(){
+  localVoiceGeneration++;
+  if(window.speechSynthesis){try{window.speechSynthesis.cancel();}catch(_){}}
+}
+function updateLocalVoiceButton(){
+  const button=$('localVoiceBtn');
+  if(!button)return;
+  const ready=Boolean(localFrenchVoice());
+  button.textContent=localVoiceOptIn?'Voix locale : ON':'Voix locale : OFF';
+  button.setAttribute('aria-pressed',localVoiceOptIn?'true':'false');
+  button.title=ready
+    ? 'Voix française installée sur cet appareil, 0 €. Secours différent d’Aoede.'
+    : 'Aucune voix française hors ligne détectée sur cet appareil.';
+}
+function spokenFrenchText(text){
+  return String(text||'')
+    .replace(/\x60\x60\x60[\s\S]*?\x60\x60\x60/g,' Un extrait de code est affiché. ')
+    .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,'$1')
+    .replace(/https?:\/\/\S+/g,' un lien ')
+    .replace(/[*#_~\x60]/g,'')
+    .replace(/[\[\]{}]/g,' ')
+    .replace(/\s+/g,' ').trim().slice(0,3200);
+}
+function spokenFrenchChunks(text,maxSize){
+  const tokens=spokenFrenchText(text).match(/\S+\s*/g)||[];
+  const chunks=[];let current='';
+  const max=Math.max(80,Math.min(220,Number(maxSize)||170));
+  for(const token of tokens){
+    if(current.length+token.length>max && current){
+      chunks.push(current.trim());current='';
+    }
+    if(token.length>max){
+      for(let i=0;i<token.length;i+=max)chunks.push(token.slice(i,i+max));
+    }else current+=token;
+  }
+  if(current.trim())chunks.push(current.trim());
+  return chunks;
+}
+async function speakLocalFrench(text){
+  const synth=window.speechSynthesis;
+  const voice=localFrenchVoice();
+  if(!synth || !voice)throw new Error('Aucune voix française installée hors ligne. Ajoute une voix française dans Windows puis recharge cette page.');
+  const chunks=spokenFrenchChunks(text,170);
+  if(!chunks.length)throw new Error('Aucun texte lisible à prononcer.');
+  const generation=++localVoiceGeneration;
+  try{synth.cancel();}catch(_){}
+  document.body.classList.add('aura-speaking');
+  $('voiceText').textContent='AURA · voix locale (secours)';
+  try{
+    for(const textChunk of chunks){
+      if(generation!==localVoiceGeneration)return;
+      await new Promise(function(resolve,reject){
+        const utterance=new window.SpeechSynthesisUtterance(textChunk);
+        utterance.voice=voice;
+        utterance.lang=voice.lang||'fr-FR';
+        utterance.rate=0.98;
+        utterance.pitch=1;
+        utterance.volume=1;
+        utterance.onend=resolve;
+        utterance.onerror=function(event){
+          reject(new Error('Lecture locale interrompue : '+String(event&&event.error||'inconnue')));
+        };
+        synth.speak(utterance);
+      });
+    }
+  }finally{
+    if(generation===localVoiceGeneration){
+      document.body.classList.remove('aura-speaking');
+      $('voiceText').textContent='AURA · secours local 0 €';
+    }
   }
 }
 function primeVoice(){
@@ -860,6 +995,18 @@ async function playVoiceSegment(payload){
 }
 async function speakAura(text,ticket){
   if(!text)return;
+  // Explicitly chosen local mode: never send the text to a billable TTS API.
+  // Aoede remains the primary/default voice when local mode is disabled.
+  if(localVoiceOptIn){
+    try{
+      await speakLocalFrench(text);
+      $('chatState').textContent='Lecture locale française (0 €), différente d’Aoede.';
+    }catch(error){
+      $('chatState').textContent=String(error&&error.message||error).slice(0,170);
+      $('voiceText').textContent='AURA · voix locale indisponible';
+    }
+    return;
+  }
   try{
     if(!ticket)throw new Error('Ticket vocal absent');
     const out=await api('/api/voice/speak',{
@@ -878,7 +1025,7 @@ async function speakAura(text,ticket){
   }catch(error){
     document.body.classList.remove('aura-speaking');
     $('voiceText').textContent='Mairaiy · indisponible';
-    $('voiceText').title='Voix Aoede indisponible · aucun autre timbre utilisé';
+    $('voiceText').title='Aoede indisponible · la voix locale 0 € reste facultative';
     const reason=String(error&&error.message||'');
     $('chatState').textContent=reason.includes('free-tier-unconfirmed')
       ? 'Réponse texte prête · Aoede bloquée par le garde-fou zéro-coût'
@@ -888,30 +1035,344 @@ async function speakAura(text,ticket){
     console.error('Mairaiy Aoede indisponible; changement de timbre interdit',error);
   }
 }
-async function sendMessage(text){
+// Never render an unavailable model as a person answering "lu".
+let chatBusy=false;
+let lastChatFailure='';
+function addChatServiceNotice(message){
+  const safe=escapeHtml(String(message||'').slice(0,200));
+  $('messages').insertAdjacentHTML('beforeend',
+    '<div class="msg service-msg" role="status"><strong class="service-card-title">Français naturel indisponible</strong>'+
+    '<span>'+safe+'</span><div class="service-actions">'+
+    '<button type="button" data-aura-action="retry-language">Réessayer le message</button>'+
+    '<button type="button" data-aura-action="diagnose-language">Voir le diagnostic</button>'+
+    '</div></div>');
+  $('messages').scrollTop=$('messages').scrollHeight;
+}
+async function sendMessage(text,options){
+  text=String(text||'').trim();if(!text||chatBusy)return;
+  chatBusy=true;
   try{primeVoice();}catch(_){}
-  text=(text||'').trim();if(!text)return;
-  $('messages').insertAdjacentHTML('beforeend','<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
-  $('message').value='';
+  const repeated=Boolean(options&&options.repeat);
+  const button=$('send');
+  if(button)button.disabled=true;
+  if(!repeated){
+    $('messages').insertAdjacentHTML('beforeend',
+      '<div class="msg user"><span class="who">VOUS</span>'+escapeHtml(text)+'</div>');
+    $('message').value='';
+  }
+  const pending=document.createElement('div');
+  pending.className='msg service-msg';
+  pending.textContent='Recherche d’une réponse française vérifiée…';
+  pending.setAttribute('role','status');
+  $('messages').appendChild(pending);
   $('messages').scrollTop=$('messages').scrollHeight;
   try{
-    const out=await api('/api/chat',{method:'POST',body:JSON.stringify({text:text,author:'Utilisateur'})});
-    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
+    const out=await api('/api/chat',{method:'POST',
+      body:JSON.stringify({text:text,author:'Utilisateur'})});
+    pending.remove();
+    const answer=String(out?.answer||'').trim();
+    if(out?.language_unavailable || out?.response_kind==='model-unavailable'
+      || !out?.ok || !answer){
+      lastChatFailure=text;
+      addChatServiceNotice('Aucun modèle ne produit actuellement de réponse. Le message est conservé pour un nouvel essai. Aucun dialogue artificiel ajouté.');
+      void refreshEnginePanel();
+      $('chatState').textContent='Modèle français indisponible';
+      return;
+    }
+    lastChatFailure='';
+    const factualAct=['report_current_activity','clarify_real_activity',
+      'clarify_blocker_evidence','request_verifiable_help','explain_previous_claim']
+      .includes(String(out?.act||''));
+    const unverified=factualAct && out?.activity_evidence?.execution_verified!==true;
+    const authorLabel=out?.nucleus_verbalization_validated
+      ? (unverified ? 'AURA · formulation contrôlée · statut non vérifié'
+        : 'AURA · formulation du noyau contrôlée')
+      : 'AURA · réponse générée (contrat non attesté)';
+    $('messages').insertAdjacentHTML('beforeend',
+      '<div class="msg aura"><span class="who">'+authorLabel+'</span>'+escapeHtml(answer)+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
-    if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
-    if(unavailable)void refreshEnginePanel();
-    refresh();
+    void speakAura(answer,out.voice_ticket||'');
+    void refresh();
   }catch(error){
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura"><span class="who">AURA</span>Je ne peux pas répondre pour le moment : '+escapeHtml(error.message)+'</div>');
+    pending.remove();
+    lastChatFailure=text;
+    addChatServiceNotice('Échec technique : '+String(error?.message||'').slice(0,135));
+    $('chatState').textContent='Erreur du service de conversation';
+  }finally{
+    chatBusy=false;
+    if(button)button.disabled=false;
   }
 }
+$('messages').addEventListener('click',function(event){
+  const target=event.target?.closest?.('[data-aura-action]');
+  if(!target)return;
+  const action=target.getAttribute('data-aura-action');
+  if(action==='retry-language'&&lastChatFailure){
+    void sendMessage(lastChatFailure,{repeat:true});
+  }else if(action==='diagnose-language'){
+    void refreshEnginePanel();
+    $('enginePanel')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+});
+// AURA Trading Lab: explicit paper backtest only. No live orders or broker credentials.
+function tradingEuro(number){
+  return Number(number||0).toLocaleString('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2});
+}
+function renderTradingSimulation(report){
+  if(!report||report.status!=='simulation_only'||report.real_money_traded!==false)
+    throw new Error('Rapport de trading fictif invalide');
+  const pnl=Number(report.virtual_pnl_eur||0);
+  $('tradePnl').textContent=(pnl>0?'+':'')+tradingEuro(pnl);
+  $('tradePnl').style.color=pnl<0?'#ff9caa':pnl>0?'#9cf8d4':'#f3fffc';
+  $('tradeDrawdown').textContent=Number(report.max_drawdown_pct||0).toFixed(2)+' %';
+  $('tradeCount').textContent=String(report.closed_trades||0);
+  $('tradeStatus').textContent='SIMULATION · '+String(report.price_candles||0)+
+    ' bougies closes · '+String(report.requested_pair||'')+' · '+
+    'Résultat virtuel, jamais un gain encaissé.';
+  const series=Array.isArray(report.equity_curve)?report.equity_curve:[];
+  if(series.length>=2){
+    const values=series.map(x=>Number(x.equity_eur)||0);
+    const low=Math.min(...values),high=Math.max(...values);
+    const diff=Math.max(1,high-low);
+    const d=values.map((v,i)=>{
+      const px=10+(380*i/Math.max(1,values.length-1));
+      const py=76-65*(v-low)/diff;
+      return (i?'L':'M')+px.toFixed(1)+' '+py.toFixed(1);
+    }).join(' ');
+    $('tradeChartPath').setAttribute('d',d);
+    $('tradeChartPath').setAttribute('stroke',pnl>=0?'#78ddc8':'#fc9ba2');
+  }
+  const events=Array.isArray(report.trades)?report.trades.slice(-6).reverse():[];
+  $('tradeTrades').innerHTML=events.map(event=>
+    '<div class="trade-event"><span>'+escapeHtml(event.type==='buy'?'ACHAT FICTIF':'VENTE FICTIVE')+
+    ' · '+escapeHtml(new Date(event.time*1000).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+
+    '</span><span>'+escapeHtml(event.type==='buy'?tradingEuro(event.invested_eur):tradingEuro(event.pnl_eur))+'</span></div>'
+  ).join('');
+}
+let tradeLastReportStamp='';
+async function refreshAutoPaperStatus(){
+  try{
+    const status=await api('/api/trading/paper/status');
+    if(status&&status.latest&&status.latest.checked_at!==tradeLastReportStamp){
+      tradeLastReportStamp=status.latest.checked_at;
+      renderTradingSimulation(status.latest);
+      $('tradeStatus').textContent='Surveillance automatique toutes les 6 h · dernier calcul : '+
+        new Date(status.last_checked_at).toLocaleString('fr-FR')+
+        ' · capital et gains totalement fictifs.';
+    } else if(status?.running) {
+      $('tradeStatus').textContent='Surveillance automatique : analyse des prix publics en cours…';
+    } else if(status?.last_error&&!status.latest) {
+      $('tradeStatus').textContent='Données publiques indisponibles : '+String(status.last_error).slice(0,120);
+    }
+  }catch(error){
+    if(error.status===401||error.status===403){
+      $('tradeStatus').textContent='Connexion privée requise pour suivre les simulations automatiques.';
+    }
+  }
+}
+$('tradeBacktest').onclick=async function(){
+  const button=$('tradeBacktest');
+  button.disabled=true;button.textContent='Analyse…';
+  $('tradeStatus').textContent='Chargement des cours publics et simulation hors marché réel…';
+  try{
+    const result=await api('/api/trading/paper/backtest',{
+      method:'POST',body:JSON.stringify({pair:$('tradePair').value}),
+    });
+    renderTradingSimulation(result);
+  }catch(error){
+    $('tradeStatus').textContent=error.status===401||error.status===403
+      ?'Connexion privée AURA requise pour la simulation.'
+      :'Simulation indisponible : '+String(error.message||error).slice(0,170);
+  }finally{button.disabled=false;button.textContent='Tester la stratégie';}
+};
+// Private actions use the existing HttpOnly AURA session; no token storage.
+let ownerSessionAuthenticated=false;
+async function refreshOwnerSession(){
+  try{
+    const state=await api('/api/auth/session');
+    ownerSessionAuthenticated=state?.authenticated===true;
+  }catch(_){ownerSessionAuthenticated=false;}
+  $('ownerSessionStatus').textContent=ownerSessionAuthenticated
+    ?'Session propriétaire active · actions privées disponibles.'
+    :'Accès propriétaire requis pour les missions et les audits.';
+  $('ownerConnectRow').hidden=ownerSessionAuthenticated;
+  $('ownerDisconnect').hidden=!ownerSessionAuthenticated;
+  $('autonomyRun').disabled=!ownerSessionAuthenticated;
+  $('auditRun').disabled=!ownerSessionAuthenticated;
+  return ownerSessionAuthenticated;
+}
+$('ownerConnect').onclick=async function(){
+  const input=$('ownerSessionToken');
+  const secret=String(input.value||'').trim();
+  if(!secret){$('ownerSessionStatus').textContent='Saisir la clé privée AURA.';return;}
+  $('ownerConnect').disabled=true;
+  try{
+    const result=await api('/api/auth/session',{
+      method:'POST',body:JSON.stringify({token:secret}),
+    });
+    if(!result?.authenticated)throw new Error('Connexion propriétaire non validée');
+    input.value='';
+    await refreshOwnerSession();
+    void refreshRevenueReadiness();
+  }catch(error){
+    $('ownerSessionStatus').textContent='Connexion refusée : '+String(error?.message||error).slice(0,135);
+  }finally{
+    input.value='';
+    $('ownerConnect').disabled=false;
+  }
+};
+$('ownerDisconnect').onclick=async function(){
+  try{await api('/api/auth/session',{method:'DELETE'});}catch(_){}
+  ownerSessionAuthenticated=false;
+  await refreshOwnerSession();
+  $('revenueMode').textContent='ACCÈS PRIVÉ REQUIS';
+};
+// Founder's operator. Real execution is reported distinctly from a plan-only result.
+$('autonomyRun').onclick=async function(){
+  const task=String($('autonomyTask').value||'').trim();
+  if(task.length<8){
+    $('autonomyStatus').textContent='Décrire une mission concrète avant de la lancer.';
+    return;
+  }
+  const button=$('autonomyRun');button.disabled=true;
+  $('autonomyResult').textContent='';
+  $('autonomyStatus').textContent='Mission soumise au moteur AURA. Aucune permission de risque supplémentaire accordée.';
+  try{
+    const result=await api('/api/kernel/operator',{
+      method:'POST',
+      body:JSON.stringify({task:task.slice(0,1500),allowed_risks:[]}),
+    });
+    const executed=result?.executed===true;
+    const mode=String(result?.execution_mode||'indéterminé');
+    $('autonomyStatus').textContent=executed
+      ?'Exécution signalée par AURA ('+mode+'). Examiner les preuves et résultats ci-dessous.'
+      :'Aucune exécution confirmée ('+mode+'). Seul un plan ou un refus a été retourné.';
+    const details=executed?(result?.result||result):(result?.plan||result?.error||result);
+    $('autonomyResult').textContent=typeof details==='string'
+      ?details.slice(0,3000) :JSON.stringify(details,null,2).slice(0,3000);
+  }catch(error){
+    $('autonomyStatus').textContent=error.status===401||error.status===403
+      ?'Connexion administrateur AURA requise pour exécuter une mission.'
+      :'Mission non réalisée : '+String(error?.message||error).slice(0,170);
+  }finally{button.disabled=false;}
+};
+// Genuine, bounded AURA audit. Revenue is "not connected" until verified receipts.
+let auditReport=null;
+function renderAuditReport(report){
+  if(!Array.isArray(report?.checks)||!report.checked_at)throw new Error('Format de rapport invalide');
+  $('auditResults').innerHTML=report.checks.map(check=>
+    '<div class="audit-check"><span>'+escapeHtml(check.detail||check.id||'Contrôle')+
+    '</span><strong class="'+(check.status==='pass'?'good':'review')+'">'+
+    (check.status==='pass'?'CONFORME':'À EXAMINER')+'</strong></div>').join('');
+  $('auditState').textContent='Analyse effectuée · '+report.pass_count+' contrôles conformes / '+
+    report.review_count+' points à examiner · '+report.duration_ms+' ms · HTML initial uniquement.';
+  $('auditExport').disabled=false;
+  auditReport=report;
+}
+async function refreshRevenueReadiness(){
+  try{
+    const state=await api('/api/revenue/readiness');
+    $('revenueVerified').textContent=state.revenue_source==='none-connected'?'Non connectées':'À vérifier';
+    $('revenueSales').textContent=state.payment_processing_connected?'À vérifier':'Non activées';
+    $('revenueMode').textContent=state.audit_available?'AUDIT OPÉRATIONNEL':'À CONFIGURER';
+  }catch(error){
+    $('revenueMode').textContent='ACCÈS PRIVÉ REQUIS';
+    $('revenueVerified').textContent='Données non disponibles';
+    $('revenueSales').textContent='À configurer';
+  }
+}
+$('auditRun').onclick=async function(){
+  const button=$('auditRun');
+  const url=String($('auditUrl').value||'').trim();
+  if(!/^https:\/\/[^\s]+\/$/i.test(url)){
+    $('auditState').textContent='Indiquer une URL HTTPS publique de page d’accueil avec le / final, sans paramètres.';
+    return;
+  }
+  button.disabled=true;
+  $('auditExport').disabled=true;
+  $('auditResults').innerHTML='';
+  $('auditState').textContent='Audit réel en cours. Aucun service payant utilisé.';
+  auditReport=null;
+  try{
+    const report=await api('/api/revenue/audit/preview',{method:'POST',
+      body:JSON.stringify({url})});
+    renderAuditReport(report);
+  }catch(error){
+    $('auditState').textContent=error.status===401||error.status===403
+      ?'Connexion privée administrateur nécessaire pour auditer un site.'
+      :'Audit impossible : '+String(error.message||error).slice(0,180);
+  }finally{button.disabled=false;}
+};
+$('auditExport').onclick=function(){
+  if(!auditReport)return;
+  const report=auditReport;
+  const lines=[
+    '# AURA · Audit technique de la page d’accueil',
+    'Site : '+report.url,
+    'Date : '+report.checked_at,
+    'Statut HTTP : '+report.status_code,
+    'Contrôles conformes : '+report.pass_count,
+    'Points à examiner : '+report.review_count,'',
+    '## Observations',
+    ...report.checks.map(check=>'- ['+(check.status==='pass'?'OK':'REVOIR')+'] '+String(check.detail||'')),
+    '',
+    'Limites : '+String(report.scope||''),
+    'Analyse automatisée informative, non une certification ni une promesse commerciale.',
+  ];
+  const blob=new Blob([lines.join('\n')],{type:'text/markdown;charset=utf-8'});
+  const obj=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=obj;a.download='aura-audit-'+new Date().toISOString().slice(0,10)+'.md';
+  document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(obj);
+};
 $('send').onclick=function(){sendMessage($('message').value);};
 $('message').addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage($('message').value);}});
 document.querySelectorAll('.quick button').forEach(function(btn){btn.onclick=function(){sendMessage(btn.getAttribute('data-prompt'));};});
 $('refreshMap').onclick=refresh;
 $('modeBtn').onclick=refresh;
 $('engineRefresh').onclick=refreshEnginePanel;
+$('engineStart').onclick=async function(){
+  const button=$('engineStart');
+  button.disabled=true;
+  $('engineDescription').textContent='Demande de démarrage local en cours. Cette action ne télécharge rien et ne contacte aucune API payante.';
+  try{
+    const response=await api('/api/language/embedded/start',{
+      method:'POST',body:JSON.stringify({}),
+    });
+    $('engineDescription').textContent=response.already_ready
+      ?'Modèle déjà vérifié.' : 'Démarrage demandé. AURA contrôle la génération réelle de texte.';
+  }catch(error){
+    $('engineDescription').textContent=error.status===401||error.status===403
+      ?'Se connecter en administrateur AURA pour démarrer le moteur. Le public ne peut pas lancer de processus.'
+      :String(error.message||'Échec du démarrage').slice(0,260);
+  }finally{
+    await refreshEnginePanel();
+  }
+};
+$('localVoiceBtn').onclick=function(){
+  if(localVoiceOptIn){
+    localVoiceOptIn=false;
+    stopLocalFrenchVoice();
+    try{localStorage.removeItem('aura_local_voice_opt_in');}catch(_){}
+    $('chatState').textContent='Voix de secours locale désactivée.';
+    updateLocalVoiceButton();
+    return;
+  }
+  if(!localFrenchVoice()){
+    $('chatState').textContent='Aucune voix française installée hors ligne n’est disponible dans ce navigateur.';
+    updateLocalVoiceButton();
+    return;
+  }
+  localVoiceOptIn=true;
+  try{localStorage.setItem('aura_local_voice_opt_in','1');}catch(_){}
+  updateLocalVoiceButton();
+  void speakLocalFrench('Bonjour. Je suis AURA. La voix française locale de secours est activée.')
+    .catch(function(error){$('chatState').textContent=String(error&&error.message||error).slice(0,170);});
+};
+if(window.speechSynthesis && 'onvoiceschanged' in window.speechSynthesis){
+  window.speechSynthesis.addEventListener('voiceschanged',updateLocalVoiceButton);
+}
+updateLocalVoiceButton();
 $('voiceBtn').onclick=function(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){$('message').placeholder='Reconnaissance vocale non disponible sur ce navigateur.';return;}
@@ -919,5 +1380,5 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();void refreshOwnerSession();void refreshRevenueReadiness();void refreshAutoPaperStatus();setInterval(refreshAutoPaperStatus,120000);try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 `;

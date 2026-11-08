@@ -8,6 +8,15 @@ import { embeddedProvisioner } from './embedded_provisioner.js';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const errorText = e => String(e?.message || e || '').slice(0, 2500);
 const safePath = value => path.resolve(String(value || ''));
+// Some managed Node hosts do not set NODE_ENV=production. This decision
+// depends on explicit switches, never on a production label alone.
+export function shouldWarmInstalledLanguage(env=process.env) {
+  return env.CI!=='true'
+    && env.NODE_ENV!=='test'
+    && env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
+    && env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false';
+}
+
 export function classifyEmbeddedFailure(error) {
   const reason = errorText(error).toLowerCase();
   if (/eacces|eperm|permission denied|noexec|operation not permitted/.test(reason))
@@ -22,6 +31,9 @@ export function classifyEmbeddedFailure(error) {
   if (/pthread_create|cannot create thread|failed to create thread|resource temporarily unavailable|thread.create.failed|exit.signal.sigabrt/.test(reason))
     return {code:'embedded-thread-capacity-exhausted',
       hint:'Le serveur Hostinger refuse la création de threads (SIGABRT/EAGAIN). AURA limite strictement les threads HTTP, calcul et batch ; vérifier la limite pids du compte.'};
+  if (/embedded-insufficient-cgroup-headroom/.test(reason))
+    return {code:'embedded-insufficient-cgroup-headroom',
+      hint:'La mémoire disponible est trop basse pour lancer Qwen3 Q8 en sécurité sur cet hébergement. Ne pas tenter de démarrage qui ferait tomber le site; choisir un GGUF plus léger ou un moteur local extérieur à Hostinger.'};
   if (/sigkill|exit.signal.sigkill|enomem|out of memory|killed|bad.alloc|cannot allocate memory|failed to allocate|oom.kill|exit.code.137/i.test(reason))
     return { code: 'embedded-insufficient-memory',
       hint: 'Le processus a probablement dépassé la mémoire disponible. AURA tente un contexte et des lots plus petits.' };
@@ -265,6 +277,29 @@ export function cgroupMemorySnapshot({
     oom_events:events.oom??null,oom_kills:events.oom_kill??null};
 }
 // Linux counts pthreads as cgroup tasks, independently of the memory quota.
+// Return bounded, non-sensitive cgroup headroom; Linux inactive file cache can
+// usually be reclaimed, so avoid treating it as permanently unavailable.
+export function embeddedStartupBudget(memory=cgroupMemorySnapshot(),{read=fs.readFileSync}={}){
+  let inactiveMb=0;
+  try{
+    const match=String(read('/sys/fs/cgroup/memory.stat','utf8')).match(/(?:^|\n)inactive_file\s+(\d+)/);
+    if(match)inactiveMb=Math.max(0,Math.round(Number(match[1])/1048576));
+  }catch{}
+  const limit=Number(memory?.limit_mb);
+  const current=Number(memory?.current_mb);
+  const known=Number.isFinite(limit)&&limit>0&&Number.isFinite(current)&&current>=0;
+  const headroom=known?Math.max(0,limit-current+Math.min(current,inactiveMb)):null;
+  // 639 MB Q8 GGUF plus llama.cpp runtime and KV cache. Do not spawn under 740 MB.
+  const required=740;
+  return {
+    known,headroom_mb:headroom,
+    recommended_low_memory:!known||headroom<1500||limit<2048,
+    safe_to_start:!known||headroom>=required,
+    minimum_headroom_mb:required,
+    // It is a planning estimate, not a memory allocation guarantee.
+    caution:'Le système d’exploitation peut imposer d’autres limites de mémoire ou de processus.',
+  };
+}
 export function cgroupPidSnapshot({read=fs.readFileSync}={}){
   const readCounter=paths=>{
     for(const file of paths){
@@ -310,9 +345,19 @@ export function locateEmbeddedRuntime({
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
-  const candidates=[path.join(root,'.aura-language-runtime'),
+  // Provisioner stores its GGUF in ~/.cache/aura-language-runtime by default.
+  // On a Node restart its in-memory "paths" are lost. Discover the persistent
+  // cache rather than downloading the same 639 MB model again.
+  const override=String(process.env.AURA_EMBEDDED_CACHE_DIR||'').trim();
+  const candidates=[
+    ...(override ? [safePath(override)] : []),
+    path.join(root,'.aura-language-runtime'),
     path.join(root,'aura-language-runtime'),
-    ...(home ? [path.join(home,'.aura-language-runtime')] : [])];
+    ...(home ? [
+      path.join(home,'.cache','aura-language-runtime'),
+      path.join(home,'.aura-language-runtime'),
+    ] : []),
+  ];
   const queue=candidates.filter(fs.existsSync).map(dir=>({dir,depth:0}));
   let scanned=0;
   while (queue.length && scanned<300 && (!executable || !gguf)) {
@@ -432,6 +477,7 @@ export class EmbeddedLanguageRuntime {
       oom_kills_during_start:this.lastOomKillDelta,
       pids_before_start:this.pidsAtBoot,
       pids_after_failure:this.pidsAfterFailure,
+      memory_preflight:embeddedStartupBudget(),
       boot_attempts:this.bootAttempts.slice(-4),
       paid_model_api_required:false};
   }
@@ -460,14 +506,23 @@ export class EmbeddedLanguageRuntime {
       this.lastFailure+=' out of memory embedded-cgroup-oom-kill';
     this.cooldownUntil=Date.now()+60_000;
   }
-  async start(){
+  async start({allowProvision=true}={}){
     if(this.ready && this.child?.exitCode===null)return true;
     if(this.booting)return this.booting;
     if(Date.now()<this.cooldownUntil)return false;
+    // Only constrain real production Hostinger processes, never CI mocks.
+    if(process.env.CI!=='true' && process.env.NODE_ENV!=='test'){
+      const budget=embeddedStartupBudget();
+      if(!budget.safe_to_start){
+        this.failureStage='memory-preflight';
+        this.fail('embedded-insufficient-cgroup-headroom');
+        return false;
+      }
+    }
     const hasInstallation=this.installed();
     const unresolvedLibraries=this.lastFailure
       && classifyEmbeddedFailure(this.lastFailure).code==='embedded-shared-library-unresolved';
-    const needsCanonical = this.canProvision()
+    const needsCanonical = allowProvision && this.canProvision()
       && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource));
     if(!hasInstallation && !needsCanonical)return false;
     this.booting=needsCanonical ? this.installAndBoot() : this.bootWithExecutable();
@@ -490,12 +545,15 @@ export class EmbeddedLanguageRuntime {
   async bootWithExecutable(){
     if(!this.repairExecutable())return false;
     this.repairedLibraryAliases=repairLlamaLibraryAliases(this.inspect().executable);
-    let success=await this.boot();
+    const budget=embeddedStartupBudget();
+    const startLow=process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+      && budget.recommended_low_memory;
+    let success=await this.boot(false,startLow);
     if(success)return true;
     // Reduce model memory requirements for process OOM, SIGKILL or a stalled
     // first warmup. No recursive retry loops or background orphan servers.
     const firstFailure=classifyEmbeddedFailure(this.lastFailure).code;
-    if(['embedded-insufficient-memory','embedded-startup-timeout',
+    if(!startLow && ['embedded-insufficient-memory','embedded-startup-timeout',
       'embedded-thread-capacity-exhausted'].includes(firstFailure)){
       this.cooldownUntil=0;
       success=await this.boot(false,true);

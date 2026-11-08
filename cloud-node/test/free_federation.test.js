@@ -260,3 +260,163 @@ test('startup does not waste nine free requests on the language benchmark', asyn
   assert.doesNotMatch(server,/setImmediate\(\(\) => \{ void kernel\.language\.evaluate/);
   assert.match(server,/post\('\/api\/language\/evaluate'/);
 });
+
+
+test('French free routing avoids mandatory hidden-reasoning models when verified text models exist',()=>{
+  const script=[
+    "process.env.AURA_ZERO_COST_MODE='true';",
+    "process.env.AI_MODE='off';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+    "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='true';",
+    "process.env.AURA_OPENROUTER_API_KEY='fake-free-key';",
+    "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+    "let requested=null;",
+    "global.fetch=async(url,opts={})=>{",
+    "  if(String(url).endsWith('/models')) return new Response(JSON.stringify({data:[",
+    "    {id:'trial/mandatory:free',name:'Multilingual French conversation Qwen reasoning',context_length:128000,pricing:{prompt:'0',completion:'0'},architecture:{output_modalities:['text']},reasoning:{mandatory:true,supported_efforts:['minimal']}},",
+    "    {id:'trial/regular:free',name:'Plain instruction model',context_length:32000,pricing:{prompt:'0',completion:'0'},architecture:{output_modalities:['text']},reasoning:{mandatory:false,supported_efforts:['none']}},",
+    "  ]}),{status:200});",
+    "  requested=JSON.parse(opts.body);",
+    "  return new Response(JSON.stringify({model:requested.model,choices:[{message:{content:'Bonjour, je vous réponds.'}}],usage:{cost:0,completion_tokens:16}}),{status:200});",
+    "};",
+    "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+    "const result=await new ZeroCostFederation().generate('Bonjour','Réponds en français',650,'french');",
+    "console.log(JSON.stringify({requested,result}));",
+  ].join('\n');
+  const result=run(script);
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(payload.requested.model,'trial/regular:free');
+  assert.equal(payload.requested.reasoning.effort,'none');
+  assert.ok(payload.requested.max_tokens>=900);
+  assert.match(payload.result.answer,/Bonjour/);
+  assert.equal(payload.result.costMicrounits,0);
+});
+
+
+test('empty OpenRouter free router reply recovers with a verified free chat model', () => {
+  const script = [
+    "process.env.AURA_ZERO_COST_MODE='true';",
+    "process.env.AI_MODE='off';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+    "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='true';",
+    "process.env.AURA_OPENROUTER_API_KEY='mock-key';",
+    "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+    "let catalogs=0; const called=[];",
+    "global.fetch=async(url,opts={})=>{",
+    "  if(String(url).endsWith('/models')) {",
+    "    catalogs++;",
+    "    const data=catalogs===1 ? [] : [",
+    "      {id:'trial/conversation:free',name:'French multilingual conversation',context_length:32000,pricing:{prompt:'0',completion:'0'},architecture:{output_modalities:['text']},reasoning:{mandatory:false}},",
+    "      {id:'trial/paid:free',name:'French multilingual conversation',context_length:200000,pricing:{prompt:'0.001',completion:'0'},architecture:{output_modalities:['text']}},",
+    "    ];",
+    "    return new Response(JSON.stringify({data}),{status:200});",
+    "  }",
+    "  const body=JSON.parse(opts.body);called.push(body.model);",
+    "  if(body.model==='openrouter/free') return new Response(JSON.stringify({",
+    "    model:'trial/reasoning:free',choices:[{finish_reason:'length',message:{content:null,reasoning:'not visible'}}],",
+    "    usage:{cost:0,completion_tokens:900,completion_tokens_details:{reasoning_tokens:900}}",
+    "  }),{status:200});",
+    "  return new Response(JSON.stringify({model:body.model,choices:[{message:{content:'Bonjour, je peux vous répondre en français.'}}],usage:{cost:0,completion_tokens:20}}),{status:200});",
+    "};",
+    "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+    "const federation=new ZeroCostFederation();",
+    "const result=await federation.generate('lu','Tu réponds naturellement',700,'french');",
+    "console.log(JSON.stringify({result,called,status:federation.snapshot()}));",
+  ].join('\n');
+  const completed=run(script);
+  assert.equal(completed.status,0,completed.stderr||completed.stdout);
+  const data=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(data.result.answer,'Bonjour, je peux vous répondre en français.');
+  assert.deepEqual(data.called,['openrouter/free','trial/conversation:free']);
+  assert.equal(data.status.process_requests_today,2);
+  assert.match(data.status.last_error,/free model fallback:/);
+  assert.equal(data.result.costMicrounits,0);
+});
+
+test('OpenRouter authentication errors do not trigger a chargeable or repeated request', () => {
+  const script = [
+    "process.env.AURA_ZERO_COST_MODE='true';",
+    "process.env.AI_MODE='off';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+    "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';",
+    "process.env.AURA_OPENROUTER_API_KEY='invalid-key';",
+    "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+    "let calls=0;",
+    "global.fetch=async()=>{calls++;return new Response('invalid_api_key',{status:401});};",
+    "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+    "const federation=new ZeroCostFederation();",
+    "let error='';try{await federation.generate('lu','Réponds en français',700,'french');}catch(e){error=e.message;}",
+    "console.log(JSON.stringify({calls,error,status:federation.snapshot()}));",
+  ].join('\n');
+  const completed=run(script);
+  assert.equal(completed.status,0,completed.stderr||completed.stdout);
+  const data=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(data.calls,1);
+  assert.match(data.error,/HTTP 401/);
+  assert.equal(data.status.process_requests_today,1);
+});
+
+
+test('OpenRouter refuses retries on HTTP 401, 402, 403, 429 even if a free fallback exists', () => {
+  for (const status of [401, 402, 403, 429]) {
+    const script = [
+      "process.env.AURA_ZERO_COST_MODE='true';",
+      "process.env.AI_MODE='off';",
+      "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+      "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';",
+      "process.env.AURA_OPENROUTER_API_KEY='mock-key';",
+      "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+      "let calls=0;",
+      "global.fetch=async()=>{calls++;return new Response('quota or access rejected',{status:"+status+"});};",
+      "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+      "const fed=new ZeroCostFederation();",
+      "let error='';try{await fed.generate('Bonjour','Réponds',700,'french');}catch(e){error=e.message;}",
+      "console.log(JSON.stringify({calls,error,usage:fed.snapshot().process_requests_today}));",
+    ].join('\n');
+    const completed=run(script);
+    assert.equal(completed.status,0,completed.stderr||completed.stdout);
+    const actual=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+    assert.equal(actual.calls,1,'HTTP '+status+' must not repeat inference');
+    assert.equal(actual.usage,1);
+    assert.match(actual.error,new RegExp('HTTP '+status));
+  }
+});
+
+test('OpenRouter quota/credit error inside HTTP 200 is terminal, never an empty-response retry', () => {
+  for(const upstream of [
+    {code:402,message:'Insufficient credits'}, {code:429,message:'quota_exceeded'},
+    {code:400,message:'billing account required'},
+  ]) {
+    const script=[
+      "process.env.AURA_ZERO_COST_MODE='true';",
+      "process.env.AI_MODE='off';",
+      "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+      "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='false';",
+      "process.env.AURA_OPENROUTER_API_KEY='mock-key';",
+      "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+      "let calls=0;",
+      "global.fetch=async()=>{calls++;return new Response(JSON.stringify({error:"+JSON.stringify(upstream)+"}),{status:200});};",
+      "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+      "const fed=new ZeroCostFederation();",
+      "let error='';try{await fed.generate('Bonjour','Réponds',700,'french');}catch(e){error=e.message;}",
+      "console.log(JSON.stringify({calls,error,usage:fed.snapshot().process_requests_today}));",
+    ].join('\n');
+    const completed=run(script);
+    assert.equal(completed.status,0,completed.stderr||completed.stdout);
+    const actual=JSON.parse(completed.stdout.trim().split(/\r?\n/).at(-1));
+    assert.equal(actual.calls,1,'terminal upstream error must never retry');
+    assert.match(actual.error,/OpenRouter free/);
+    assert.doesNotMatch(actual.error,/free fallback/);
+  }
+});
+
+test('terminal-error classifier blocks quota, billing and authorization but not empty text', async () => {
+  const {isTerminalFreeProviderFailure}=await import('../src/free_federation.js');
+  for(const value of ['HTTP 401','HTTP 402','HTTP 403','HTTP 429',
+    'insufficient_quota','rate_limit_exceeded','budget exhausted',
+    'billing account required','invalid_api_key','negative balance']) {
+    assert.equal(isTerminalFreeProviderFailure(value),true,value);
+  }
+  assert.equal(isTerminalFreeProviderFailure('OpenRouter free response empty: model=openrouter/free'),false);
+});

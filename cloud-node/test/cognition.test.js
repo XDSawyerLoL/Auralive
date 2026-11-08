@@ -42,7 +42,7 @@ test('reply plan is built from AURA state before expression', () => {
   assert.equal(plan.needs_semantic_support, false);
   assert.match(plan.facts.join(' '), /Consolider la mémoire/);
   assert.match(plan.facts.join(' '), /Directrice de Quantic Sillage/);
-  assert.match(engine.deterministicReply(plan), /Là, je suis surtout/);
+  assert.match(engine.deterministicReply(plan), /intention .* en mémoire, mais pas de mission en cours confirmée/);
 });
 
 test('reply plan carries relational and executive continuity', () => {

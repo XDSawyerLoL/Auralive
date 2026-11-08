@@ -58,8 +58,14 @@ jobs:
             fi
             sleep 0.5
           done
-          grep -q 'data-aura-ui="immersive-cognition-v3"' /tmp/aura-dashboard.html
-          grep -q "Parler à AURA" /tmp/aura-dashboard.html
+          grep -q 'Cartographie cognitive d' /tmp/aura-dashboard.html
+          grep -q 'id="graphCanvas"' /tmp/aura-dashboard.html
+          grep -q 'id="chatInput"' /tmp/aura-dashboard.html
+          grep -q 'id="chatMode"' /tmp/aura-dashboard.html
+          curl -fsS http://127.0.0.1:49999/cerveau > /tmp/aura-neural.html
+          grep -q 'id="graphCanvas"' /tmp/aura-neural.html
+          curl -fsS http://127.0.0.1:49999/api/brain/graph > /tmp/aura-brain-graph.json
+          grep -q '"version":"brain-flow-v1"' /tmp/aura-brain-graph.json
           curl -fsS http://127.0.0.1:49999/healthz | grep -q '"ok":true'
           curl -fsS http://127.0.0.1:49999/api/bootstrap/status | grep -q '"server_ready":true'
       - name: Dependency production tree

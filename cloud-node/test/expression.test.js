@@ -22,8 +22,8 @@ test('strict French mode refuses to impersonate natural conversation with script
   });
 
   const answer = await expression.verbalize(plan);
-  assert.match(answer, /faculté de français naturel est indisponible/i);
-  assert.doesNotMatch(answer, /libllama|hbuilds|hostingersite|\.so\.0/i);
+  assert.equal(answer, '', 'A failed model must never impersonate AURA with scripted text');
+  assert.equal(expression.lastMode,'natural-language-unavailable');
   assert.doesNotMatch(answer, /Valider les tests/);
   const diagnostic = await expression.diagnostic();
   assert.equal(diagnostic.mode, 'natural-language-unavailable');
@@ -51,7 +51,7 @@ test('normal French conversation is verbalized by the free language faculty, nev
       async generate(prompt, system, maxTokens, role) {
         calls.push({ prompt, system, maxTokens, role });
         return {
-          answer: 'Je suis en train de valider le noyau, puis je passerai aux tests réels.',
+          answer: 'Mon suivi indique la validation du noyau et des tests à lancer. Je n’ai pas de preuve d’exécution à cet instant.',
           provider: 'openrouter',
           model: 'mistral/test:free',
           requestedModel: 'mistral/test:free',
@@ -88,7 +88,7 @@ test('normal French conversation is verbalized by the free language faculty, nev
   };
 
   const answer = await expression.verbalize(plan);
-  assert.equal(answer, 'Je suis en train de valider le noyau, puis je passerai aux tests réels.');
+  assert.equal(answer, 'Mon suivi indique la validation du noyau et des tests à lancer. Je n’ai pas de preuve d’exécution à cet instant.');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].role, 'french');
   assert.match(calls[0].system, /faculté linguistique française/i);

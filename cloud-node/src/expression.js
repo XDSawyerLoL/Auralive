@@ -68,12 +68,9 @@ export class ExpressionLayer {
     this.fallbackCount += 1;
     if (config.frenchLanguageRequired) {
       this.lastMode = 'natural-language-unavailable';
-      // Operational diagnostic only; never impersonate natural conversation with templates.
-      // A technical setup hint belongs in /api/ai/runtime, not in the chat.
-      // Never claim a generated reply when no real language engine responded.
-      return 'Ma faculté de français naturel est indisponible pour le moment. '
-        + 'Aucun moteur linguistique opérationnel n’a pu produire de réponse. '
-        + 'Je conserve le contexte de notre conversation pour la reprise.';
+      // Do not invent speech or a feeling of "presence" when inference fails.
+      // The API returns a structured outage with a retry affordance instead.
+      return '';
     }
 
     // Secours legacy explicitement opt-in seulement.

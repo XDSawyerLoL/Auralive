@@ -30,6 +30,48 @@ function safeText(error) {
     .slice(0, 700);
 }
 
+// OpenRouter chat responses can contain text parts rather than one string.
+// Never turn message.reasoning or reasoning_details into spoken answers.
+export function openRouterVisibleText(payload) {
+  const content=payload?.choices?.[0]?.message?.content;
+  if(typeof content==='string') return content.trim();
+  if(!Array.isArray(content)) return '';
+  return content
+    .filter(part=>part && ['text','output_text'].includes(String(part.type||'text')))
+    .map(part=>typeof part.text==='string'?part.text:'')
+    .filter(Boolean).join('\n').trim();
+}
+
+export function openRouterEmptyDiagnostic(payload, requestedModel='openrouter/free') {
+  const choice=payload?.choices?.[0]||{};
+  const safe=(value)=>String(value||'unknown').replace(/[^a-z0-9_.:!/-]/gi,'').slice(0,110);
+  const usage=payload?.usage||{};
+  const output=Number(usage.completion_tokens ?? usage.output_tokens);
+  const thinking=Number(usage.completion_tokens_details?.reasoning_tokens
+    ?? usage.output_tokens_details?.reasoning_tokens);
+  return {
+    model:safe(payload?.model||requestedModel),
+    finish_reason:safe(choice.finish_reason),
+    completion_tokens:Number.isFinite(output)&&output>=0?output:null,
+    reasoning_tokens:Number.isFinite(thinking)&&thinking>=0?thinking:null,
+    reasoning_only:!openRouterVisibleText(payload)
+      && (Number.isFinite(thinking)&&thinking>0
+        || Boolean(choice?.message?.reasoning||choice?.message?.reasoning_details)),
+  };
+}
+
+// Terminal free-tier failures must never trigger another model call.
+// Some providers report quota or billing errors inside a 200 JSON envelope.
+export function isTerminalFreeProviderFailure(error) {
+  const reason = safeText(error).toLowerCase();
+  return /\bhttp\s*(?:401|402|403|429)\b/.test(reason)
+    || /(?:quota|rate[._ -]?limit|budget)[._ -]?(?:exhausted|exceeded|reached|limit)/.test(reason)
+    || /(?:insufficient|exhausted|negative)[._ -]?(?:credits?|balance|quota)/.test(reason)
+    || /(?:auth(?:entication)?|permission|payment)[._ -]?(?:failed|required|denied)/.test(reason)
+    || /(?:invalid[._ -]?api[._ -]?key|unauthori[sz]ed|forbidden|billing)/.test(reason)
+    || /(?:budget[._ -]?exhausted|daily[._ -]?budget[._ -]?exhausted|cooldown[._ -]?active)/.test(reason);
+}
+
 function clamp01(value, fallback = 0.5) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -343,8 +385,14 @@ export class ZeroCostFederation {
 
     if (!candidates.length) return 'openrouter/free';
 
-    const learned = await this.#learnedScores(role, candidates.map((row) => row.id));
-    const ranked = candidates.map((row) => {
+    // Interactive French should produce an actual answer, not spend its
+    // entire free completion budget in mandatory internal reasoning.
+    const nonMandatory=INTERACTIVE_ROLES.has(roleName(role))
+      ? candidates.filter((row)=>row?.reasoning?.mandatory!==true)
+      : [];
+    const speechCandidates=nonMandatory.length?nonMandatory:candidates;
+    const learned = await this.#learnedScores(role, speechCandidates.map((row) => row.id));
+    const ranked = speechCandidates.map((row) => {
       const stats = learned.get(row.id);
       const calls = Number(stats?.calls || 0);
       const successes = Number(stats?.successes || 0);
@@ -368,6 +416,25 @@ export class ZeroCostFederation {
       return ranked[1].id;
     }
     return ranked[0].id;
+  }
+
+  // Recover an empty free-router reply only with a live zero-price,
+  // text-capable model; do not expose hidden reasoning as an answer.
+  async #recoveryModel(role, failedModel) {
+    if (!INTERACTIVE_ROLES.has(roleName(role))) return '';
+    const catalog = await this.#refreshCatalog();
+    const candidates = catalog.filter((row) =>
+      row.id !== failedModel
+      && row.id !== 'openrouter/free'
+      && modelEligible(row)
+      && row?.reasoning?.mandatory !== true
+    );
+    candidates.sort((a, b) =>
+      roleAffinity(b, role) - roleAffinity(a, role)
+      || Number(b.context_length || 0) - Number(a.context_length || 0)
+      || String(a.id).localeCompare(String(b.id))
+    );
+    return String(candidates[0]?.id || '');
   }
 
   async #assertCatalogFree(model) {
@@ -403,21 +470,36 @@ export class ZeroCostFederation {
       };
       if (config.publicBaseUrl) headers['HTTP-Referer'] = config.publicBaseUrl;
 
+      const interactive = INTERACTIVE_ROLES.has(roleName(role));
+      const meta=this.catalog.find(item=>item.id===requestedModel);
+      const reason=meta?.reasoning;
+      const efforts=Array.isArray(reason?.supported_efforts)?reason.supported_efforts:[];
+      // Only request a supported reasoning level. Dynamic openrouter/free has
+      // no published reasoning contract: do not send unsupported parameters.
+      const reducedReasoning=interactive && reason?.mandatory!==true
+        ? (efforts.includes('none') ? {effort:'none'}
+          : efforts.includes('minimal') ? {effort:'minimal'} : null) : null;
+      const requestBody={
+        model:requestedModel,
+        messages:[
+          { role:'system',content:String(system||'') },
+          { role:'user',content:String(prompt||'') },
+        ],
+        temperature:interactive ? 0.45 :
+          (Number.isFinite(config.aiTemperature) ? config.aiTemperature : 0.65),
+        // Reasoning-only completions can use all 200-300 tokens. Preserve
+        // sufficient room for the visible French answer on free models.
+        max_tokens:interactive
+          ? Math.max(900,Math.min(Number(maxTokens)||900,1400))
+          : Math.max(64,Math.min(Number(maxTokens)||700,4000)),
+        stream:false,
+        usage:{include:true},
+      };
+      if(reducedReasoning)requestBody.reasoning=reducedReasoning;
       response = await fetch(`${config.openRouterBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: requestedModel,
-          messages: [
-            { role: 'system', content: String(system || '') },
-            { role: 'user', content: String(prompt || '') },
-          ],
-          temperature: Number.isFinite(config.aiTemperature) ? config.aiTemperature : 0.65,
-          max_tokens: Math.max(64, Math.min(Number(maxTokens) || 700, 4000)),
-          stream: false,
-          usage: { include: true },
-        }),
-        signal: AbortSignal.timeout(config.freeFederationTimeoutMs),
+        method:'POST',headers,
+        body:JSON.stringify(requestBody),
+        signal:AbortSignal.timeout(config.freeFederationTimeoutMs),
       });
 
       const raw = await response.text();
@@ -434,14 +516,28 @@ export class ZeroCostFederation {
         throw new Error(`OpenRouter free HTTP ${response.status}: ${raw.slice(0, 500)}`);
       }
       body = raw ? JSON.parse(raw) : {};
+      if(body?.error){
+        const code=Number(body.error.code ?? body.error.status ?? 0);
+        const label=Number.isInteger(code)&&code>=400&&code<=599
+          ? 'HTTP '+code : 'upstream error';
+        const info=safeText(body.error.message || body.error.code || 'unknown').slice(0,180);
+        throw new Error('OpenRouter free '+label+': '+info);
+      }
       const cost = Number(body?.usage?.cost ?? body?.usage?.cost_details?.upstream_inference_cost ?? 0);
       if (Number.isFinite(cost) && cost > 0) {
         this.quarantined.add('openrouter');
         throw new Error(`ZERO_COST_INVARIANT_VIOLATION: OpenRouter reported cost ${cost}`);
       }
 
-      const answer = String(body?.choices?.[0]?.message?.content || '').trim();
-      if (!answer) throw new Error('OpenRouter free response empty');
+      const answer = openRouterVisibleText(body);
+      if(!answer){
+        const info=openRouterEmptyDiagnostic(body,requestedModel);
+        throw new Error('OpenRouter free response empty: model='+info.model
+          +' finish='+info.finish_reason
+          +' reasoning_only='+info.reasoning_only
+          +' output_tokens='+(info.completion_tokens??'unknown')
+          +' reasoning_tokens='+(info.reasoning_tokens??'unknown'));
+      }
       const actualModel = String(body?.model || requestedModel).trim().slice(0, 240);
       const latencyMs = Date.now() - started;
       await this.#markProvider('openrouter', true, String(response.status));
@@ -480,22 +576,32 @@ export class ZeroCostFederation {
       try {
         result = await this.#openRouter(prompt, system, maxTokens, role, requestedModel);
       } catch (primaryError) {
-        // 429 limits apply at account/provider level; retrying another model wastes quota.
-        if (requestedModel === 'openrouter/free' || this.quarantined.has('openrouter')
-          || /\bhttp\s*429\b|budget.exhausted/i.test(String(primaryError?.message || ''))) {
+        const failure = safeText(primaryError);
+        // Account restrictions, quota and financial guard failures should
+        // never trigger a second call, paid or free.
+        if (this.quarantined.has('openrouter') || isTerminalFreeProviderFailure(failure)) {
           throw primaryError;
         }
-        // Direct free variants can disappear or hit a provider-specific quota.
-        // The official zero-priced router is the bounded resilience fallback.
-        result = await this.#openRouter(prompt, system, maxTokens, role, 'openrouter/free');
-        this.lastError = `direct free model fallback: ${safeText(primaryError)}`;
+        const empty = /openrouter free response empty/i.test(failure);
+        // The dynamic router can select a model that spends all completion
+        // tokens on hidden reasoning. One verified alternative is enough.
+        const verifiedAlternative = empty ? await this.#recoveryModel(role, requestedModel) : '';
+        const recoveryModel = verifiedAlternative
+          || (requestedModel !== 'openrouter/free' ? 'openrouter/free' : '');
+        if (!recoveryModel) throw primaryError;
+        try {
+          result = await this.#openRouter(prompt, system, maxTokens, role, recoveryModel);
+        } catch (recoveryError) {
+          throw new Error(`${failure} | free fallback ${recoveryModel}: ${safeText(recoveryError)}`);
+        }
+        this.lastError = `free model fallback: ${failure}`;
       }
       this.lastProvider = result.provider;
       this.lastModel = result.model;
       this.lastRequestedModel = result.requestedModel;
       this.lastRole = role;
       this.lastLatencyMs = Date.now() - started;
-      if (!this.lastError.startsWith('direct free model fallback:')) this.lastError = '';
+      if (!this.lastError.startsWith('free model fallback:')) this.lastError = '';
       return result;
     } catch (error) {
       this.lastRole = role;

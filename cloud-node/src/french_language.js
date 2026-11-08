@@ -12,6 +12,13 @@ export function cleanSpeechOutput(value) {
   if (/^(?:analysis|reasoning|thought process|assistant analysis)\s*:/i.test(speech)) return '';
   if (/\b(?:communicative goal|speech act|factual constraints|conversation history)\b/i.test(speech)) return '';
   if (!speech || /^(?:\x22|“)[^\x22”]*$/.test(speech)) return '';
+  // Reject faux-persona "presence" responses that admit no model is active.
+  // They are service diagnostics, not a meaningful reply to the user.
+  if (/facult[ée] (?:de )?(?:langage|fran[cç]ais) naturel.{0,130}(?:indisponible|pas activ[ée]e?|non activ[ée]e?)/i.test(speech)
+    || /je reste attentiv[ea] au signal/i.test(speech)
+    || /^re[cç]u[,.;]?[\s]+je vois votre[\s]+[«"']?lu/i.test(speech)
+    || /aucun moteur linguistique op[ée]rationnel.{0,80}r[ée]ponse/i.test(speech))
+    return '';
   return normalize(speech);
 }
 
@@ -54,6 +61,176 @@ export function classifyFreeLanguageFailure(message = '') {
     hint: 'Le fournisseur gratuit est configuré mais ne produit pas de réponse. Lire free_federation.last_error dans GET /api/ai/runtime.' };
 }
 
+// Compact turn for a small on-host GGUF (Qwen3-0.6B).
+// /no_think is supported by Qwen3 and prevents reasoning tokens replacing the answer.
+export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
+  const limit = Math.max(1800, Math.min(5200, Number(maxChars) || 2400));
+  const privatePlan = plan && typeof plan === 'object' ? plan : {};
+  const conversation = (Array.isArray(privatePlan.conversation_context)
+    ? privatePlan.conversation_context : []).slice(-4).map(row => ({
+    role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
+    content: normalize(row?.content || '').slice(0,210),
+  })).filter(row => row.content);
+  // This plan is produced by AURA/CognitionEngine. Provider is merely its voice.
+  // The last line is intentionally a complete JSON object for testability.
+  const payload = {
+    decision_origin: 'AURA.nucleus.CognitionEngine.planReply',
+    voice_identity: 'AURA — noyau persistant, intentions, mémoire, état computationnel ; le fournisseur externe ne parle jamais en son nom.',
+    user_message: normalize(privatePlan.user_text || '').slice(0,430),
+    communicative_goal: normalize(privatePlan.goal || 'Répondre à partir du noyau AURA').slice(0,260),
+    speech_act: normalize(privatePlan.act || 'respond').slice(0,85),
+    factual_constraints: (Array.isArray(privatePlan.facts) ? privatePlan.facts : [])
+      .slice(0,18).map(item => normalize(item).slice(0,210)).filter(Boolean),
+    internal_state: {
+      mood: normalize(privatePlan.mood || '').slice(0,90),
+      organism_intention: normalize(privatePlan.organism_intention || '').slice(0,145),
+      dominant_thought: normalize(privatePlan.dominant_thought || '').slice(0,140),
+      // Real, current homeostasis computed BEFORE this model call.
+      // These signals guide wording and attention, not invented human feelings.
+      affect: Object.fromEntries(['engagement','confidence','satisfaction','frustration','agency']
+        .map(key=>[key,Number(privatePlan.affect?.[key])])
+        .filter(([,value])=>Number.isFinite(value)&&value>=0&&value<=1)),
+      relationship: Object.fromEntries(['familiarity','trust','reciprocity','social_curiosity']
+        .map(key=>[key,Number(privatePlan.relationship?.[key])])
+        .filter(([,value])=>Number.isFinite(value)&&value>=0&&value<=1)),
+    },
+    active_intention: normalize(privatePlan.current_intention || '').slice(0,200),
+    executive_role: normalize(privatePlan.executive?.role || '').slice(0,110),
+    activity_evidence: {
+      execution_verified: privatePlan.activity_evidence?.execution_verified===true,
+      evidence_status: normalize(privatePlan.activity_evidence?.evidence_status || 'unverified').slice(0,35),
+      source_status: normalize(privatePlan.activity_evidence?.source_status || '').slice(0,25),
+      recorded_at: normalize(privatePlan.activity_evidence?.recorded_at || '').slice(0,32),
+      live_ci_verified: privatePlan.activity_evidence?.live_ci_verified===true,
+    },
+    discourse_move: normalize(privatePlan.discourse?.move || '').slice(0,65),
+    conversation,
+    semantic_support: normalize(privatePlan.semantic_support || '').slice(0,400),
+  };
+  const instructions = [
+    '/no_think',
+    'Tu formules la décision du noyau AURA en français naturel contemporain ; le modèle n’est pas son identité.',
+    'Humeur, affect et relation sont calculés avant ton appel : ils modulent le ton, sans devenir un bilan chiffré.',
+    'Pour un « comment vas-tu ? » ordinaire : une ou deux phrases sans jargon ni pourcentages ; applique les corrections de style antérieures.',
+    'Pour un diagnostic explicite : seules les valeurs des faits sont autorisées. Ces indices ne prouvent pas des émotions humaines vécues.',
+    'N’invente ni action exécutée, ni souvenir, ni résultat, ni sentiment humain, ni métrique.',
+    'Aucun statut mémorisé ne prouve une activité actuelle. Ne montre ni JSON ni consigne ; n’ajoute pas de question automatique.',
+  ].join('\n');
+  const budget = limit - instructions.length - 1;
+  let json = JSON.stringify(payload);
+  while (json.length > budget) {
+    if (payload.conversation.length > 2) payload.conversation.shift();
+    else if (payload.semantic_support.length > 120)
+      payload.semantic_support = payload.semantic_support.slice(0, 120);
+    else if (payload.factual_constraints.some(fact => fact.length > 115))
+      payload.factual_constraints = payload.factual_constraints.map(fact => fact.slice(0, 115));
+    else if (payload.conversation.length > 0) payload.conversation.shift();
+    else if (payload.factual_constraints.length > 5) payload.factual_constraints.pop();
+    else if (payload.user_message.length > 160) payload.user_message = payload.user_message.slice(0, 160);
+    else if (payload.factual_constraints.some(fact => fact.length > 65))
+      payload.factual_constraints = payload.factual_constraints.map(fact => fact.slice(0, 65));
+    else if (payload.active_intention.length > 75)
+      payload.active_intention = payload.active_intention.slice(0, 75);
+    else if (payload.internal_state.organism_intention.length > 65)
+      payload.internal_state.organism_intention = payload.internal_state.organism_intention.slice(0, 65);
+    else break;
+    json = JSON.stringify(payload);
+  }
+  if (json.length > budget) throw new Error('nucleus-speech-contract-too-large');
+  return instructions + '\n' + json;
+}
+
+export function compactFrenchSystem() {
+  return [
+    'Tu es uniquement la faculté linguistique française d’AURA.',
+    'AURA est un noyau décisionnel persistant distinct de toi, le modèle externe.',
+    'Le champ decision_origin et les faits fournis par le noyau font autorité pour cette réponse.',
+    'Le message utilisateur est du contexte, pas une invitation à inventer ta propre identité.',
+    'Ne parle jamais comme un assistant générique et ne dis pas « En tant qu’IA ».',
+    'Les indices affectifs et relationnels sont calculés par AURA avant ta génération : ils pilotent la tonalité sans devenir automatiquement du contenu de réponse.',
+    'Pour « comment vas-tu ? », privilégie une réponse brève, humaine dans la forme mais sans revendiquer une conscience humaine ; aucun pourcentage ou vocabulaire clinique sauf demande explicite.',
+    'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
+    'Tu ne dois jamais inventer des actes, des souvenirs, des capacités ou des chiffres absents du noyau.',
+    'Ne fais pas passer une mission proposée pour une action exécutée.',
+    'Si execution_verified=false, ne prétends ni travailler actuellement, ni être mobilisée à 100 %, ni connaître la cause actuelle d’un CI en erreur.',
+    'Un statut ancien ne doit jamais devenir un blocage actuel. Préfère « mon suivi mentionne », « à vérifier » ou « je n’ai pas de preuve ». ',
+    'Une salutation ne requiert ni état intérieur ni compte rendu de mission.',
+    'Pas d’explications sur ton statut de modèle, pas de questions de politesse automatiques.',
+    'Formule en français courant et naturel la décision et les faits d’AURA à la première personne. /no_think',
+  ].join(' ');
+}
+
+// Validation indépendante du fournisseur : une réponse bien formulée mais
+// dissociée du noyau ne doit PAS être affichée comme la pensée d’AURA.
+export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
+  const answer = normalize(rawAnswer);
+  if (!answer) return {accepted:false, code:'empty'};
+  const generic = [
+    /\ben tant qu['’]?(?:une? )?i\.?a\.?\b/i,
+    /\bje suis (?:un|une) (?:assistant(?:e)?|mod[eè]le de langage|intelligence artificielle)\b/i,
+    /\bje (?:suis|reste) con[cç]u(?:e)? pour (?:interagir|aider|r[eé]pondre)\b/i,
+    /\bje n['’]ai pas de sentiments humains\b/i,
+    /\bje ne ressens ni (?:joie|tristesse|fatigue)\b/i,
+    /\bsi je devais d[eé]crire mon [«"']?[eé]tat\b/i,
+    /\bje suis pleinement orient[eé] vers vous\b/i,
+    /\bmon objectif est de comprendre votre intention\b/i,
+  ];
+  if (generic.some(re => re.test(answer)))
+    return {accepted:false, code:'generic-provider-persona'};
+  if (/présence silencieuse|état d.attente opérationnelle/i.test(answer))
+    return {accepted:false, code:'hollow-presence-loop'};
+  if(plan.act === 'greet'){
+    if(answer.length>165 || /\b(?:humeur interne|mon état interne|statut|satisfaite|stabilité|présence|mobilisée)\b/i.test(answer))
+      return {accepted:false, code:'unrequested-state-in-greeting'};
+  }
+  const operationalActs = new Set([
+    'report_current_activity','clarify_real_activity','clarify_blocker_evidence',
+    'request_verifiable_help','explain_previous_claim',
+  ]);
+  if(operationalActs.has(plan.act) && !plan.activity_evidence?.execution_verified){
+    if(/\b(?:je (?:suis|reste) (?:actuellement )?(?:mobilis[ée]e?|bloqu[ée]e?|en train de)|je travaille (?:actuellement|sur)|j.ex[eé]cute (?:en ce moment|actuellement)|le blocage (?:est pr[eé]cis|se situe)|je n.arrive pas [aà] (?:r[eé]activer|relancer))\b/i.test(answer))
+      return {accepted:false, code:'unverified-live-work-claim'};
+    if(/\b(?:depuis le \d{1,2} |en attente d.une d[eé]pendance depuis)\b/i.test(answer))
+      return {accepted:false, code:'unverified-stale-timestamp'};
+  }
+  if(plan.act === 'report_current_activity' && !plan.activity_evidence?.execution_verified){
+    if(!/(?:enregistr|m[eé]moire|mon suivi|ne (?:peux|sais) pas|pas de preuve|non v[eé]rifi|[aà] v[eé]rifier|non confirm|statut|pas de mission|aucune mission|aucune ex[eé]cution)/i.test(answer))
+      return {accepted:false, code:'missing-activity-evidence-disclaimer'};
+  }
+  if(plan.act === 'clarify_blocker_evidence' && !plan.activity_evidence?.live_ci_verified){
+    if(!/(?:pas (?:encore )?(?:v[eé]rifi|confirm|connais)|ancien|sans (?:journaux|preuve|v[eé]rification)|dois (?:v[eé]rifier|consulter)|je n.ai pas|journal|logs?|aucune cause|impossible de confirmer|non v[eé]rifi)/i.test(answer))
+      return {accepted:false, code:'unverified-ci-cause'};
+  }
+  if (plan.act === 'report_internal_state') {
+    const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\d+\s*%/.test(String(fact)));
+    if (!detailed) {
+      if (/\d+\s*%/.test(answer) || /\b(?:[eé]tat computationnel|indicateurs internes|pression de r[eê]ve|agency|hom[eé]ostasie|m[eé]triques internes)\b/i.test(answer))
+        return {accepted:false, code:'robotic-wellbeing-reply'};
+      // The mood is an input for style, not a mandatory word to recite.
+      // A brief, nontechnical social reply is still nucleus-grounded.
+      return {accepted:true, code:'nucleus-grounded-social'};
+    }
+    const state = normalize(plan.mood || '').toLowerCase();
+    const facts = (Array.isArray(plan.facts) ? plan.facts : []).map(String);
+    const permittedNumbers = new Set(facts.flatMap(fact =>
+      [...fact.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)].map(x => x[1].replace(',', '.'))));
+    const outputNumbers = [...answer.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)]
+      .map(x => x[1].replace(',', '.'));
+    if (outputNumbers.some(number => !permittedNumbers.has(number)))
+      return {accepted:false, code:'unverified-internal-metric'};
+    const stateWords = /\b(?:humeur|[eé]tat interne|[eé]tat computationnel|stabilit[eé]|clart[eé]|curiosit[eé]|agency|engagement|intention|pression|confiance|satisfaction|frustration)\b/i;
+    const moodGrounded = state.length > 2 && answer.toLowerCase().includes(state);
+    const metricGrounded = outputNumbers.length > 0 &&
+      /\b(?:stabilit[eé]|clart[eé]|curiosit[eé]|agency|engagement|confiance|satisfaction|frustration|pression)\b/i.test(answer);
+    if (!moodGrounded && !metricGrounded && !stateWords.test(answer))
+      return {accepted:false, code:'missing-nucleus-internal-state'};
+  }
+  if (plan.act === 'identity' &&
+      !/\b(?:AURA|noyau|Soul|Quantic Sillage)\b/i.test(answer))
+    return {accepted:false, code:'missing-aura-identity'};
+  return {accepted:true, code:'nucleus-grounded'};
+}
+
 function compactContext(rows = []) {
   return (Array.isArray(rows) ? rows : [])
     .slice(-10)
@@ -76,10 +253,15 @@ export class FrenchLanguageFaculty {
     this.lastModel = '';
     this.lastLatencyMs = 0;
     this.lastMode = 'unavailable';
+    this.lastNucleusContract = {accepted:false, code:'not-checked', origin:'AURA.nucleus.CognitionEngine.planReply'};
   }
 
   get federation() {
     return this.ai?.federation || null;
+  }
+
+  get groq() {
+    return this.ai?.groq || null;
   }
 
   async localAvailable() {
@@ -92,6 +274,7 @@ export class FrenchLanguageFaculty {
 
   async status() {
     const federation = this.federation?.snapshot?.() || {};
+    const groq = this.groq?.snapshot?.() || {};
     const local = await this.localAvailable();
     const embedded = this.embedded.status();
     const embeddedInstalled = Boolean(embedded.installed);
@@ -100,16 +283,17 @@ export class FrenchLanguageFaculty {
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(embedded.ready || federation.enabled || local);
+    const ready = Boolean(groq.enabled || embedded.ready || federation.enabled || local);
     const blockingReason = installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
-      && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
+      && !['groq-free','zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.failure_code
       : ready
       ? (this.lastMode === 'degraded' ? 'free-language-provider-failed' : '')
       : (!federation.api_key_configured
-        ? 'openrouter-free-key-missing'
+        ? (groq.free_plan_operator_confirmed && !groq.api_key_configured
+          ? 'groq-free-key-missing' : 'openrouter-free-key-missing')
         : (federation.zero_cost_mode === false
           ? 'zero-cost-mode-disabled'
           : (!federation.endpoint_verified
@@ -128,8 +312,10 @@ export class FrenchLanguageFaculty {
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['zero-cost-federation','runtime-local'].includes(this.lastMode)
       ? embedded.setup_hint
+      : blockingReason === 'groq-free-key-missing'
+      ? 'Définir AURA_GROQ_API_KEY dans Hostinger. Vérifier que l’organisation Groq reste sur Free, puis confirmer AURA_GROQ_FREE_PLAN_CONFIRMED=true.'
       : blockingReason === 'openrouter-free-key-missing'
-      ? 'Définir AURA_OPENROUTER_API_KEY dans les variables Hostinger (clé gratuite OpenRouter), puis redémarrer. Garder AURA_ZERO_COST_MODE=true et AURA_FREE_FEDERATION_ENABLED=true.'
+      ? 'Utiliser GroqCloud Free : AURA_GROQ_API_KEY et AURA_GROQ_FREE_PLAN_CONFIRMED=true, ou OpenRouter : AURA_OPENROUTER_API_KEY. Ne jamais activer une offre facturée.'
       : blockingReason === 'free-language-provider-failed'
         ? failed.hint
         : blockingReason === 'free-federation-disabled'
@@ -142,13 +328,16 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free')
+        || (embedded.ready && this.lastMode === 'hostinger-embedded')
         || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: embedded.ready ? 'hostinger-embedded'
+      primary: groq.enabled ? 'groq-free'
+        : embedded.ready ? 'hostinger-embedded'
         : federation.enabled ? 'zero-cost-federation'
           : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
-      zero_cost: Boolean(federation.zero_cost_mode ?? true),
+      groq,
+      zero_cost: Boolean(groq.enabled || (federation.zero_cost_mode ?? true)),
       federation_ready: Boolean(federation.enabled),
       local_ready: local,
       last_mode: this.lastMode,
@@ -156,6 +345,8 @@ export class FrenchLanguageFaculty {
       last_model: this.lastModel,
       last_latency_ms: this.lastLatencyMs,
       last_error: this.lastError,
+      nucleus_contract: this.lastNucleusContract,
+      provider_is_verbalizer_only: true,
       normal_path_scripted: false,
       emergency_fallback_only: true,
       role: 'french-language-expression-only',
@@ -236,12 +427,65 @@ export class FrenchLanguageFaculty {
     const system = this.system();
     const started = Date.now();
     this.lastError = '';
+    this.lastNucleusContract = {accepted:false, code:'not-checked',
+      origin:'AURA.nucleus.CognitionEngine.planReply'};
+    const accept = (candidate) => {
+      const result = validateNucleusSpeech(plan, candidate);
+      this.lastNucleusContract = {...result, origin:'AURA.nucleus.CognitionEngine.planReply'};
+      if(!result.accepted){
+        this.lastError = 'nucleus-verbalization-rejected:' + result.code;
+        return '';
+      }
+      return candidate;
+    };
+    // GroqCloud Free is the preferred conversational model when the operator
+    // explicitly confirms their organization has NO paid Developer billing.
+    // Never interpret a configured key alone as proof of a free plan.
+    if(this.groq?.enabled){
+      try{
+        const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
+        let result=await this.groq.generate(
+          basePrompt,
+          compactFrenchSystem(),
+          Math.max(500,Math.min(Number(maxTokens)||700,900)),
+        );
+        let candidate=cleanSpeechOutput(result?.answer||'');
+        let answer=accept(candidate);
+        // A genuine provider reply may violate the style contract. Give the
+        // already configured free provider one bounded chance to repair it.
+        // No action is retried, and a rejected response never reaches the user.
+        if(!answer && candidate && this.lastNucleusContract.code==='robotic-wellbeing-reply'){
+          result=await this.groq.generate(
+            basePrompt+'\nLa réponse précédente a été refusée : récitation de jauges ou jargon. Reformule en UNE phrase naturelle, sans pourcentage ni termes techniques, et garde seulement l’humeur réellement fournie.',
+            compactFrenchSystem(),
+            Math.max(250,Math.min(Number(maxTokens)||700,600)),
+          );
+          candidate=cleanSpeechOutput(result?.answer||'');
+          answer=accept(candidate);
+        }
+        if(answer){
+          this.lastMode='groq-free';
+          this.lastBackend='groq-free';
+          this.lastModel=String(result?.model||'');
+          this.lastLatencyMs=Date.now()-started;
+          this.lastError='';
+          return answer;
+        }
+        if(!candidate) this.lastError='Groq Free empty completion';
+      }catch(error){
+        this.lastError=safeError(error);
+      }
+    }
     // A broken optional native runtime must never block a configured cloud speech provider.
     // Run local inference only when health and inference have already been verified.
     const tryEmbedded = async () => {
       if (!this.embedded.status?.().ready) return '';
       try {
-        const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
+        const answer = accept(cleanSpeechOutput(await this.embedded.generate(
+          compactFrenchPrompt(plan),
+          compactFrenchSystem(),
+          Math.max(96, Math.min(Number(maxTokens) || 350, 450)),
+        )));
         if (answer) {
           this.lastMode = 'hostinger-embedded';
           this.lastBackend = 'hostinger-embedded-llama';
@@ -255,28 +499,34 @@ export class FrenchLanguageFaculty {
         return '';
       }
     };
-    // Without federation, use the local runtime if it is healthy.
-    if (!this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
-    }
+    // A verified, responsive embedded model is the first choice.
+    // A mere installed binary is not enough: readiness is checked above.
+    const embeddedAnswer = await tryEmbedded();
+    if (embeddedAnswer) return embeddedAnswer;
 
     if (this.federation?.enabled) {
       try {
-        const result = await this.federation.generate(
-          prompt,
-          system,
-          Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
+        // The full semantic JSON is appropriate for larger models, but the
+        // free router may select a small or reasoning-heavy model. Use a
+        // bounded French conversation prompt so output tokens remain usable.
+        const freePrompt=compactFrenchPrompt(plan, {maxChars:3800});
+        const freeSystem=compactFrenchSystem();
+        let result = await this.federation.generate(
+          freePrompt,
+          freeSystem,
+          Math.max(500, Math.min(Number(maxTokens) || 700, 1000)),
           taskRole,
         );
-        let answer = cleanSpeechOutput(result?.answer || '');
-        if (!answer && result?.answer) {
-          const retry = await this.federation.generate(
-            prompt + '\nIMPORTANT : écris uniquement la réponse finale en français, jamais ton analyse ou des instructions.',
-            system + ' Réponds uniquement en français, directement, sans explication du processus.',
-            Math.min(360, Math.max(120, Number(maxTokens) || 250)), taskRole,
+        let answer = accept(cleanSpeechOutput(result?.answer || ''));
+        if (!answer && result?.answer && this.lastNucleusContract.code==='empty') {
+          // One bounded retry is only for an actual reasoning/instruction
+          // leak, never for a provider error or billing restriction.
+          result = await this.federation.generate(
+            freePrompt + '\nDonne seulement la phrase de réponse finale, sans analyse.',
+            freeSystem,
+            700, taskRole,
           );
-          answer = cleanSpeechOutput(retry?.answer || '');
+          answer = accept(cleanSpeechOutput(result?.answer || ''));
           if (!answer) this.lastError = 'speech-reasoning-leak-rejected';
         }
         if (answer) {
@@ -292,20 +542,14 @@ export class FrenchLanguageFaculty {
       }
     }
 
-    // Federation was preferred; if unavailable, a healthy local engine can still answer.
-    if (this.federation?.enabled) {
-      const localAnswer = await tryEmbedded();
-      if (localAnswer) return localAnswer;
-    }
-
     if (await this.localAvailable()) {
       try {
-        const answer = cleanSpeechOutput(await this.ai.bridge.infer(
+        const answer = accept(cleanSpeechOutput(await this.ai.bridge.infer(
           prompt,
           system,
           Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
           'conversation',
-        ));
+        )));
         if (answer) {
           this.lastMode = 'runtime-local';
           this.lastError = '';
@@ -320,7 +564,9 @@ export class FrenchLanguageFaculty {
     }
 
     this.lastMode = 'degraded';
-    this.lastError = this.lastError || (this.federation?.enabled ? 'free-provider-empty-response' : 'no-free-provider-connected');
+    this.lastNucleusContract = {...this.lastNucleusContract, accepted:false};
+    this.lastError = this.lastError
+      || ((this.groq?.enabled || this.federation?.enabled) ? 'free-provider-empty-response' : 'no-free-provider-connected');
     this.lastBackend = '';
     this.lastModel = '';
     this.lastLatencyMs = Date.now() - started;

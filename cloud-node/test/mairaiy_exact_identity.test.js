@@ -11,14 +11,15 @@ function read(relative) {
   return fs.readFileSync(path.join(root, relative), 'utf8');
 }
 
-test('AURA web never falls back to a generic browser TTS for Mairaiy', () => {
+test('Aoede identity is default; optional local speech never claims to be Mairaiy', () => {
   const dashboard = read('src/dashboard-runtime.js');
-
-  assert.equal(dashboard.includes('speechSynthesis'), false);
-  assert.equal(dashboard.includes('SpeechSynthesisUtterance'), false);
-  assert.equal(dashboard.includes('speakBrowserFallback'), false);
   assert.match(dashboard, /Mairaiy · Aoede/);
-  assert.match(dashboard, /aucun autre timbre utilisé/);
+  assert.match(dashboard, /if\(localVoiceOptIn\)/);
+  assert.match(dashboard, /AURA · voix locale/);
+  assert.match(dashboard, /différente d’Aoede/);
+  assert.equal(dashboard.includes('speakBrowserFallback'), false);
+  assert.equal(dashboard.includes('aura_local_voice_opt_in'), true);
+  assert.equal(dashboard.includes('localService === true'), true);
 });
 
 test('AURA canonical voice is historical Aoede and optional Voice Fabric must certify it', () => {
