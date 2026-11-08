@@ -140,3 +140,45 @@ test('kernel records real stage transitions with unique IDs and no message conte
  assert.match(src,/brainHop\('coherence','output'/);
  assert.match(src,/brain_flow_id:brainFlowId/);
 });
+
+
+test('operator traces distinguish actual tool invocation from a plan-only mission',()=>{
+ const src=fs.readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
+ const start=src.indexOf('  async operate(task, requestedRisks = [])');
+ const end=src.indexOf('  async chat(',start);
+ assert.ok(start>0 && end>start);
+ const section=src.slice(start,end);
+ assert.match(section,/const operationFlowId = randomUUID\(\)/);
+ assert.match(section,/this\.trace\(\s*'brain-hop'/);
+ assert.match(section,/hop\('input','command','operator-received'\)/);
+ assert.match(section,/hop\('command','bridge','quantic-studio-invoked','attempted'\)/);
+ assert.match(section,/hop\('bridge','command','quantic-studio-result',result\?\.executed\?'ok':'unavailable'\)/);
+ assert.match(section,/hop\('command','fabric','sandbox-capabilities-selected','attempted'\)/);
+ assert.match(section,/hop\('fabric','dag','task-graph-built','attempted'\)/);
+ assert.match(section,/hop\('dag','command','sandbox-execution-completed','ok'\)/);
+ assert.match(section,/hop\('command','agent','operator-plan-requested','attempted'\)/);
+ assert.match(section,/hop\('agent','command','plan-only-no-execution','unavailable'\)/);
+ assert.doesNotMatch(section,/this\.trace\('brain-hop'[^;]+mission/);
+});
+
+test('a real tool route displays invocation while plan-only never claims execution',()=>{
+ const samples=[
+  hop(71,'tool-run','input','command',2100,'ok'),
+  hop(72,'tool-run','command','fabric',1800,'attempted'),
+  hop(73,'tool-run','fabric','dag',1400,'attempted'),
+  hop(74,'tool-run','dag','command',800,'ok'),
+  hop(75,'planning-only','input','command',900,'ok'),
+  hop(76,'planning-only','command','agent',700,'attempted'),
+  hop(77,'planning-only','agent','command',500,'unavailable'),
+ ];
+ const graph=buildBrainFlowGraph({telemetry,traceRows:samples},now);
+ assert.equal(graph.flows.length,2);
+ const launched=graph.flows.find(f=>f.id==='tool-run');
+ const planned=graph.flows.find(f=>f.id==='planning-only');
+ assert.ok(launched.steps.some(h=>h.from==='fabric' && h.to==='dag'));
+ assert.equal(planned.running_verified,false);
+ assert.equal(planned.state,'error');
+ assert.ok(graph.observed_tools.some(tool=>tool.id==='fabric'));
+ assert.ok(graph.observed_tools.some(tool=>tool.id==='agent'));
+ assert.equal(graph.observed_tools.every(tool=>tool.execution_verified===false),true);
+});
