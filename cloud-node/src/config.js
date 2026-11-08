@@ -185,6 +185,16 @@ export const config = Object.freeze({
   openRouterApiKey: process.env.AURA_OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY || '',
   openRouterBaseUrl: String(process.env.AURA_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/$/, ''),
   openRouterFreeModels: csv('AURA_OPENROUTER_FREE_MODELS', 'openrouter/free'),
+  // GroqCloud Free: ONLY if the account holder explicitly confirms the
+  // organization is on FREE, not Developer (which charges for tokens).
+  // The key is server-private; the endpoint and models are hard allowlisted.
+  groqFreeEnabled: bool('AURA_GROQ_FREE_ENABLED', true),
+  groqFreePlanConfirmed: bool('AURA_GROQ_FREE_PLAN_CONFIRMED', false),
+  groqApiKey: process.env.AURA_GROQ_API_KEY || process.env.GROQ_API_KEY || '',
+  groqFreeModel: String(process.env.AURA_GROQ_FREE_MODEL || 'qwen/qwen3.8-27b').trim(),
+  groqFreeMaxRequestsPerDay: int('AURA_GROQ_FREE_MAX_REQUESTS_PER_DAY', 500, 1, 950),
+  groqFreeTimeoutMs: int('AURA_GROQ_FREE_TIMEOUT_MS', 25000, 3000, 90000),
+
 
   // Historical Mairaiy identity: Gemini 3.1 Flash TTS Preview + prebuilt Aoede.
   // Model and timbre are deliberately locked so stale Hostinger variables cannot
