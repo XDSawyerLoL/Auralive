@@ -21,6 +21,7 @@ const ALLOWED_DETAILS = new Set([
   'state_frustration', 'state_engagement', 'state_mood',
 ]);
 const LIMIT = 120;
+const EVENTS_PER_TRACE = 96; // enough for real parallel memory lookups, no loss of early evidence
 const TTL_MS = 20 * 60_000;
 const cleanDetails = (details = {}) => {
   const result = {};
@@ -126,7 +127,7 @@ export class CognitiveTraceLedger {
       duration_ms: durationMs,
       details: cleanDetails(details),
     });
-    if (run.events.length > 32) run.events.shift();
+    if (run.events.length > EVENTS_PER_TRACE) run.events.shift();
     return true;
   }
 
