@@ -675,6 +675,22 @@ async function refresh(){
       $('serverRevision').textContent='Serveur · '+String(info?.build?.git_sha_short||'révision inconnue');
     }catch(_){$('serverRevision').textContent='Serveur · connexion partielle';}
     await refreshEnginePanel();
+    try{
+      const aiStatus=await api('/api/ai/runtime');
+      const free=aiStatus?.groq_free||{};
+      const state=free.last_status==='verified-text'?'Réponse vérifiée'
+        :free.enabled?'Configuré · réponse à vérifier'
+        :free.api_key_configured&&!free.free_plan_operator_confirmed?'Formule Free à confirmer'
+        :!free.api_key_configured?'Clé API à configurer':'Désactivé';
+      $('groqFreeStatus').textContent='Groq Free · '+state
+        +' · modèle '+String(free.model||'qwen/qwen3.8-27b')
+        +' · appels locaux aujourd’hui '+String(free.process_requests_today??0)
+        +' / '+String(free.daily_cap??'—')
+        +(free.last_error?' · '+String(free.last_error).slice(0,120):'');
+      if(free.last_status==='verified-text')$('languageText').title='Dernière génération Groq Free vérifiée · '+String(free.last_model||'');
+    }catch(_){
+      $('groqFreeStatus').textContent='Groq Free · diagnostic indisponible, aucun résultat confirmé';
+    }
     $('setupBanner').classList.toggle('show',!boot.runtime_ready);
     if(!boot.runtime_ready){
       const issues=Array.isArray(boot.issues)?boot.issues:[];
