@@ -143,3 +143,22 @@ test('unverified agent executions never appear as confirmed external actions', (
   assert.equal(successEvents.find(e => e.stage === 'execution_auto').details.execution_confirmed, false);
   assert.equal(ledger.snapshotAutonomy(swarm).events.find(e => e.stage === 'execution_auto').status, 'skipped');
 });
+
+test('parallel context lookups remain distinct, measured, and bounded', () => {
+  let time = 1_800_000_000_000;
+  const ledger = new CognitiveTraceLedger({clock:()=>time});
+  const id=ledger.start('diagnostic');
+  const names=['context_intentions','context_lessons','context_reflections',
+    'context_work','context_agenda','context_continuity','context_messages'];
+  for(const [index,stage] of names.entries()){
+    time+=2;ledger.mark(id,stage,'running');
+    time+=5;ledger.mark(id,stage,'done',{messages:index});
+  }
+  for(let i=0;i<40;i++){time++;ledger.mark(id,'decision','running');}
+  const snap=ledger.snapshot('diagnostic',id);
+  for(const stage of names) {
+    assert.equal(snap.events.find(e=>e.stage===stage&&e.status==='done')?.duration_ms,5);
+  }
+  assert.ok(snap.events.length>32);
+  assert.ok(snap.events.length<=96);
+});
