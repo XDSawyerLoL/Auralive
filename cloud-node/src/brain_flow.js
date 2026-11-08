@@ -35,7 +35,7 @@ export const BRAIN_NODES=Object.freeze([
  ['peer','PeerMesh','execution','peer_mesh.js'],
 ]);
 const CORE_EDGES=Object.freeze([
- ['input','homeostasis'],['homeostasis','memory'],['memory','cognition'],
+ ['input','kernel'],['kernel','homeostasis'],['homeostasis','memory'],['memory','cognition'],
  ['cognition','language'],['language','coherence'],['coherence','output'],
  ['cognition','web'],['web','semantic'],['semantic','language'],
  ['language','groq'],['language','openrouter'],['language','local'],
