@@ -28,7 +28,7 @@ const cleanDetails = (details = {}) => {
     } else if (key === 'trigger_kind' && typeof value === 'string') {
       result[key] = ['ambient', 'manual', 'continuity', 'scheduled', 'event', 'other'].includes(value) ? value : 'other';
     } else if (key === 'operation_kind' && typeof value === 'string') {
-      result[key] = ['agent', 'swarm', 'operator'].includes(value) ? value : 'other';
+      result[key] = ['agent', 'swarm', 'operator', 'outcome'].includes(value) ? value : 'other';
     } else if (key === 'language_mode' && typeof value === 'string') {
       const modes = ['french-language-faculty', 'natural-language-unavailable', 'deterministic-emergency-fallback'];
       result[key] = modes.includes(value) ? value : 'unknown';
@@ -71,7 +71,8 @@ export class CognitiveTraceLedger {
     const id = this.start('__internal_autonomy__', 'autonomy');
     const bucket = /^continuity:/.test(String(trigger)) ? 'continuity'
       : ['ambient', 'manual', 'scheduled', 'event'].includes(String(trigger)) ? String(trigger) : 'other';
-    this.mark(id, 'cycle', 'running', { trigger_kind: bucket });
+    const run = this.runs.get(id);
+    if (run?.events?.[0]) run.events[0].details = cleanDetails({ trigger_kind: bucket });
     return id;
   }
 
@@ -83,9 +84,14 @@ export class CognitiveTraceLedger {
     const run = this.runs.get(id);
     if (!run || run.state !== 'running' || !STAGES.has(stage) || !STATES.has(status)) return false;
     const stamp = this.clock();
+    const previous = status !== 'running'
+      ? [...run.events].reverse().find((event) => event.stage === stage && event.status === 'running')
+      : null;
+    const durationMs = previous ? Math.max(0, stamp - new Date(previous.at).getTime()) : null;
     run.events.push({
       stage, status, at: new Date(stamp).toISOString(),
       elapsed_ms: Math.max(0, stamp - run.started_ms),
+      duration_ms: durationMs,
       details: cleanDetails(details),
     });
     if (run.events.length > 32) run.events.shift();
@@ -101,7 +107,7 @@ export class CognitiveTraceLedger {
     run.duration_ms = Math.max(0, stamp - run.started_ms);
     run.events.push({
       stage: run.kind === 'autonomy' ? 'cycle' : 'request', status: run.state, at: run.finished_at,
-      elapsed_ms: run.duration_ms, details: {},
+      elapsed_ms: run.duration_ms, duration_ms: run.duration_ms, details: {},
     });
     return true;
   }
