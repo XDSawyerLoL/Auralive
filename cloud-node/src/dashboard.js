@@ -237,6 +237,7 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
  .chat{top:73px;height:calc(100dvh - 87px);min-height:340px}
 }
 
+.groq-provider-status{border:1px solid rgba(122,221,190,.16);background:rgba(66,163,143,.06);color:#b5e2d2;padding:10px 12px;border-radius:10px;font-size:11px;line-height:1.55}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -341,6 +342,7 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
         <div class="engine-kicker"><span>FACULTÉ LINGUISTIQUE · INFÉRENCE LOCALE</span><span class="engine-chip" id="engineChip">Diagnostic</span></div>
         <div class="engine-title" id="engineTitle">Connexion au moteur de français…</div>
         <div class="engine-description" id="engineDescription">Lecture de l’installation et de sa disponibilité réelle sur le serveur.</div>
+        <div id="groqFreeStatus" class="groq-provider-status" role="status">Groq Free · vérification du plan et de la clé…</div>
         <div class="engine-progress" aria-label="Installation des fichiers uniquement, pas apprentissage du français"><span id="engineProgress"></span></div>
         <div class="engine-row"><span id="engineStage">État en attente</span><span id="engineCost">Modèle libre · aucun coût par requête</span></div>
         <div class="engine-foot"><span id="engineRevision">Révision moteur —</span><div class="engine-controls"><button type="button" id="engineStart" title="Démarrer et vérifier le modèle installé · authentification privée requise · aucune API payante">Démarrer / vérifier</button><button type="button" id="engineRefresh">Actualiser l’état</button></div></div>
