@@ -1080,8 +1080,13 @@ async function sendMessage(text,options){
       return;
     }
     lastChatFailure='';
+    const factualAct=['report_current_activity','clarify_real_activity',
+      'clarify_blocker_evidence','request_verifiable_help','explain_previous_claim']
+      .includes(String(out?.act||''));
+    const unverified=factualAct && out?.activity_evidence?.execution_verified!==true;
     const authorLabel=out?.nucleus_verbalization_validated
-      ? 'AURA · décision du noyau · français formulé'
+      ? (unverified ? 'AURA · formulation contrôlée · statut non vérifié'
+        : 'AURA · formulation du noyau contrôlée')
       : 'AURA · réponse générée (contrat non attesté)';
     $('messages').insertAdjacentHTML('beforeend',
       '<div class="msg aura"><span class="who">'+authorLabel+'</span>'+escapeHtml(answer)+'</div>');
