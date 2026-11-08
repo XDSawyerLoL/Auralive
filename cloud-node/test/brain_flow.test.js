@@ -227,7 +227,8 @@ test('anonymous neural projection exposes actual counts and steps without leakin
  assert.equal(visible.flows[0].steps.length,2);
  assert.equal(visible.flows[0].steps[0].provider,'');
  assert.equal(visible.flows[0].steps[1].provider,'groq-free');
- assert.equal(visible.observed_tools.length,0);
+ assert.deepEqual(visible.observed_tools.map(t=>t.id).sort(),['agent','command']);
+ assert.ok(visible.observed_tools.every(t=>t.execution_verified===false));
  assert.ok(visible.events.some(e=>e.label==='Commande enregistrée'));
  assert.ok(visible.events.some(e=>e.label==='Événement de l’organisme'));
  const json=JSON.stringify(visible);
