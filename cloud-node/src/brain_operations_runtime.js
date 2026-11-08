@@ -625,7 +625,7 @@ $('runtimeRetry').onclick=async()=>{
    body:'{}',
   });
   if(res.status===401||res.status===403)
-   setText('runtimeFeedback','Session propriétaire requise : aucune relance effectuée.');
+   setText('runtimeFeedback','Accès administrateur nécessaire : aucune relance effectuée.');
   else if(!res.ok)
    setText('runtimeFeedback','Relance refusée (HTTP '+res.status+'). Vérifier le journal Hostinger.');
   else {
