@@ -31,7 +31,7 @@ button{cursor:pointer}
 .panel{border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,rgba(18,16,16,.94),rgba(9,8,8,.91));box-shadow:inset 0 1px rgba(255,255,255,.03),0 20px 60px rgba(0,0,0,.26);overflow:hidden}
 .chat{display:flex;flex-direction:column;min-height:calc(100vh - 92px)}
 .chat-head{display:flex;align-items:center;gap:8px;padding:13px 15px;border-bottom:1px solid rgba(255,255,255,.045)}
-.chat-title{font-size:13px;font-weight:760}.chat-sub{font-size:8px;color:#7d726d}.chat-head-state{margin-left:auto;font-size:8px;color:#998d87}
+.chat-title{font-size:13px;font-weight:760}.chat-sub{font-size:8px;color:#7d726d}.chat-head-state{margin-left:auto;font-size:8px;color:#998d87}.local-voice-btn{flex-shrink:0;background:rgba(255,255,255,.035);color:#e7c3b5;border:1px solid rgba(255,196,156,.2);border-radius:12px;padding:8px 10px;font-size:11px;cursor:pointer}.local-voice-btn[aria-pressed="true"]{background:rgba(148,208,156,.12);color:#c9eccb;border-color:rgba(148,208,156,.4)}
 .messages{flex:1;display:flex;flex-direction:column;gap:11px;padding:18px;overflow:auto;background:radial-gradient(circle at 50% 0,rgba(255,171,86,.025),transparent 38%)}
 .msg{max-width:78%;font-size:15px;line-height:1.6;padding:11px 13px;border-radius:16px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
 .msg.user{align-self:flex-end;background:rgba(255,171,87,.07);border-color:rgba(255,184,108,.11)}.msg.aura{align-self:flex-start}.who{display:block;font-size:7px;color:#776b66;letter-spacing:.08em;margin-bottom:5px}.msg.aura .who{color:#e1b88e}
@@ -130,7 +130,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .details summary{padding:14px 18px;font-size:11px}
 @media(max-width:1100px){.main{grid-template-columns:minmax(0,1fr) 360px}.status-compact .pill:nth-child(n+3){display:none}}
 @media(max-width:900px){.shell{padding:12px}.aura-intro{padding:22px 4px 17px}.main{grid-template-columns:minmax(0,1fr)}.side{display:grid;grid-template-columns:1fr 1fr;order:0}.aura-card{grid-row:span 2}.map-wrap{height:330px}.chat{min-height:65svh}.side .mini-card:nth-of-type(n+3){display:block}}
-@media(max-width:640px){.shell{padding:8px}.topbar{height:62px;padding:9px 12px;top:5px;border-radius:19px}.brand-name{font-size:19px}.aura-intro{padding:22px 6px 15px}.aura-intro h1{font-size:30px}.intro-copy{font-size:12px}.build-version{display:none}.status-rail{grid-template-columns:1fr 1fr;gap:8px}.rail-item{min-height:70px;padding:11px}.rail-item:last-child{grid-column:1 / -1}.rail-value{font-size:12px}.main{gap:9px}.chat{min-height:calc(100svh - 68px)}.chat-head{padding:16px}.messages{padding:14px;gap:12px}.msg{font-size:15px;max-width:92%;padding:13px 15px}.composer{padding:10px}.composer textarea{font-size:16px}.chat-hint{padding:0 12px 10px}.side{grid-template-columns:1fr;gap:9px}.map-wrap{height:250px}.organism-hud,.map-badge{display:flex}.map-foot{font-size:10px}.engine-panel{padding:15px}}
+@media(max-width:640px){.local-voice-btn{font-size:10px;padding:7px}.chat-head{flex-wrap:wrap}.chat-head-state{flex-basis:100%;margin-left:0}.shell{padding:8px}.topbar{height:62px;padding:9px 12px;top:5px;border-radius:19px}.brand-name{font-size:19px}.aura-intro{padding:22px 6px 15px}.aura-intro h1{font-size:30px}.intro-copy{font-size:12px}.build-version{display:none}.status-rail{grid-template-columns:1fr 1fr;gap:8px}.rail-item{min-height:70px;padding:11px}.rail-item:last-child{grid-column:1 / -1}.rail-value{font-size:12px}.main{gap:9px}.chat{min-height:calc(100svh - 68px)}.chat-head{padding:16px}.messages{padding:14px;gap:12px}.msg{font-size:15px;max-width:92%;padding:13px 15px}.composer{padding:10px}.composer textarea{font-size:16px}.chat-hint{padding:0 12px 10px}.side{grid-template-columns:1fr;gap:9px}.map-wrap{height:250px}.organism-hud,.map-badge{display:flex}.map-foot{font-size:10px}.engine-panel{padding:15px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 
 </style>
@@ -168,7 +168,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
   </section>
   <main class="main">
     <section class="panel chat">
-      <div class="chat-head"><div><div class="chat-title">Parler à AURA</div><div class="chat-sub">Conversation principale</div></div><div id="chatState" class="chat-head-state">Connexion…</div></div>
+      <div class="chat-head"><div><div class="chat-title">Parler à AURA</div><div class="chat-sub">Conversation principale</div></div><button id="localVoiceBtn" class="local-voice-btn" type="button" aria-pressed="false" title="Activer une voix française hors ligne, différente d’Aoede, sans API et sans coût">Voix locale : OFF</button><div id="chatState" class="chat-head-state">Connexion…</div></div>
       <div class="messages" id="messages"><div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div></div>
       <div class="composer">
         <button id="voiceBtn" title="Dicter">◉</button>
