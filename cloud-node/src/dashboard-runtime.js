@@ -902,18 +902,21 @@ function renderCognitiveGraph(){
     list.appendChild(el);
   });
 }
+let cogFetchPending=null;
 async function refreshCognitiveTrace(){
-  if(cogFetchBusy)return;
-  cogFetchBusy=true;
-  try{
-    const parameter=(!cogAwaitingReply&&cogTraceId)?'?id='+encodeURIComponent(cogTraceId):'';
-    cogTrace=await api('/api/cognition/trace'+parameter);
-    renderCognitiveGraph();
-  }catch(error){
-    $('cogState').textContent='Télémétrie indisponible';
-    $('cogDetail').textContent='Impossible de vérifier les événements du noyau : '+String(error.message||'réseau');
-    $('cogDuration').textContent='—';
-  }finally{cogFetchBusy=false;}
+  if(cogFetchPending)return cogFetchPending;
+  cogFetchPending=(async function(){
+    try{
+      const parameter=cogTraceId?'?id='+encodeURIComponent(cogTraceId):'';
+      cogTrace=await api('/api/cognition/trace'+parameter);
+      renderCognitiveGraph();
+    }catch(error){
+      $('cogState').textContent='Télémétrie indisponible';
+      $('cogDetail').textContent='Impossible de vérifier les événements du noyau : '+String(error.message||'réseau');
+      $('cogDuration').textContent='—';
+    }
+  })();
+  try{await cogFetchPending;}finally{cogFetchPending=null;}
 }
 async function loopCognitiveTrace(){
   await refreshCognitiveTrace();
@@ -1064,5 +1067,5 @@ $('voiceBtn').onclick=function(){
   rec.start();
 };
 initCognitiveGraph();void loopCognitiveTrace();
-updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
