@@ -81,3 +81,19 @@ test('dashboard simulation is visibly labeled and clickable',()=>{
   assert.match(js,/status!=='simulation_only'/);
   assert.match(js,/real_money_traded!==false/);
 });
+
+test('autonomous scan runs only in simulation and cannot trigger brokerage orders',()=>{
+  const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+  assert.match(server,/PAPER_AUTO_INTERVAL_MS=6\*60\*60\*1000/);
+  assert.match(server,/runAutomaticPaperScan/);
+  assert.match(server,/process\.env\.CI==='true'/);
+  assert.match(server,/AURA_PAPER_MONITOR_ENABLED==='false'/);
+  assert.match(server,/startAutomaticPaperScan\(\)/);
+  assert.match(server,/app\.get\('\/api\/trading\/paper\/status'/);
+  const start=server.indexOf('async function runAutomaticPaperScan()');
+  const end=server.indexOf('function startAutomaticPaperScan()',start);
+  const block=server.slice(start,end);
+  assert.match(block,/runPaperBacktest\(\{pair:'XBTEUR'\}\)/);
+  assert.doesNotMatch(block,/AddOrder|create_order|submitOrder|liveTrading|API_KEY/);
+  assert.match(server,/real_money_traded:false,real_profit_eur:0/);
+});
