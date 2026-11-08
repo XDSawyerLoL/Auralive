@@ -135,6 +135,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 
 
 /* AURA Cognitive Trace — genuine instrumented events, no synthetic neural activity. */
+.side>.aura-card{display:none} /* Avoid showing the legacy synthetic particle scene beside measured activity. */
 .cog-panel{border-bottom:1px solid rgba(132,199,219,.18);background:radial-gradient(ellipse at 45% 40%,rgba(20,90,110,.22),transparent 58%),radial-gradient(circle at 85% 80%,rgba(125,65,124,.15),transparent 45%),#060a12;overflow:hidden}
 .cog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 20px 4px}
 .cog-heading h2{font-size:17px;line-height:1.3;letter-spacing:.015em;margin:0;color:#f2f8ff}
