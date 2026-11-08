@@ -63,46 +63,121 @@ export function classifyFreeLanguageFailure(message = '') {
 
 // Compact turn for a small on-host GGUF (Qwen3-0.6B).
 // /no_think is supported by Qwen3 and prevents reasoning tokens replacing the answer.
-export function compactFrenchPrompt(plan = {}) {
-  const conversation = (Array.isArray(plan.conversation_context)?plan.conversation_context:[])
-    .slice(-4).map((row)=>({
-      role:String(row?.role||'user').slice(0,12),
-      content:normalize(row?.content||'').slice(0,130),
-    })).filter((row)=>row.content);
-  // Keep the semantic fields required by the nucleus. Bound each segment
-  // before constructing a small, complete JSON line (never truncate JSON).
-  const payload={
-    user_message:normalize(plan.user_text||'').slice(0,320),
-    communicative_goal:normalize(plan.goal||'Répondre correctement').slice(0,160),
-    speech_act:normalize(plan.act||'').slice(0,80),
-    factual_constraints:(Array.isArray(plan.facts)?plan.facts:[])
-      .slice(0,4).map((value)=>normalize(value).slice(0,160)),
+export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
+  const limit = Math.max(1800, Math.min(5200, Number(maxChars) || 2400));
+  const privatePlan = plan && typeof plan === 'object' ? plan : {};
+  const conversation = (Array.isArray(privatePlan.conversation_context)
+    ? privatePlan.conversation_context : []).slice(-4).map(row => ({
+    role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
+    content: normalize(row?.content || '').slice(0,210),
+  })).filter(row => row.content);
+  // This plan is produced by AURA/CognitionEngine. Provider is merely its voice.
+  // The last line is intentionally a complete JSON object for testability.
+  const payload = {
+    decision_origin: 'AURA.nucleus.CognitionEngine.planReply',
+    voice_identity: 'AURA — noyau persistant, intentions, mémoire, état computationnel ; le fournisseur externe ne parle jamais en son nom.',
+    user_message: normalize(privatePlan.user_text || '').slice(0,430),
+    communicative_goal: normalize(privatePlan.goal || 'Répondre à partir du noyau AURA').slice(0,260),
+    speech_act: normalize(privatePlan.act || 'respond').slice(0,85),
+    factual_constraints: (Array.isArray(privatePlan.facts) ? privatePlan.facts : [])
+      .slice(0,18).map(item => normalize(item).slice(0,210)).filter(Boolean),
+    internal_state: {
+      mood: normalize(privatePlan.mood || '').slice(0,90),
+      organism_intention: normalize(privatePlan.organism_intention || '').slice(0,145),
+      dominant_thought: normalize(privatePlan.dominant_thought || '').slice(0,140),
+    },
+    active_intention: normalize(privatePlan.current_intention || '').slice(0,200),
+    executive_role: normalize(privatePlan.executive?.role || '').slice(0,110),
+    discourse_move: normalize(privatePlan.discourse?.move || '').slice(0,65),
     conversation,
-    semantic_support:normalize(plan.semantic_support||'').slice(0,180),
-    active_intention:normalize(plan.current_intention||'').slice(0,90),
-    discourse_move:normalize(plan.discourse?.move||'').slice(0,50),
+    semantic_support: normalize(privatePlan.semantic_support || '').slice(0,400),
   };
-  // Make the final line machine-readable for audits and deterministic tests;
-  // user-visible output must still be normal prose, not raw JSON.
-  const json=JSON.stringify(payload);
-  const intro=[
+  const instructions = [
     '/no_think',
-    'Tu es la faculté linguistique française d’AURA.',
-    'Exprime ce sens en français naturel contemporain, avec une conversation cohérente.',
-    'Tu ne dois jamais inventer un acte, un souvenir ou une donnée absente des faits.',
-    'Ne récite pas les noms des champs. Réponds uniquement à la personne.',
-    'Message reçu : '+payload.user_message,
-    ...conversation.map((row)=>(row.role==='user'?'Utilisateur':'AURA')+' : '+row.content),
-    'Faits fournis : '+payload.factual_constraints.join('; '),
+    'Tu écris la parole d’AURA, uniquement à partir de la décision de son noyau.',
+    'Tu ne parles PAS comme Groq, ChatGPT ou un assistant générique.',
+    'Ne remplace pas l’état propre à AURA par un discours général sur les IA.',
+    'Pour un état interne, décris les faits et l’humeur du noyau comme des indicateurs computationnels, pas des sentiments humains vécus.',
+    'Ne crée ni action, ni mémoire, ni émotion humaine vécue, ni chiffre non fourni.',
+    'Ne change pas l’intention décidée et n’ajoute pas de question par automatisme.',
+    'Réponds en français naturel à la première personne d’AURA ; ne montre pas les champs.',
   ].join('\n');
-  return intro.slice(0,Math.max(0,2399-json.length))+'\n'+json;
+  const budget = limit - instructions.length - 1;
+  let json = JSON.stringify(payload);
+  while (json.length > budget) {
+    if (payload.conversation.length > 2) payload.conversation.shift();
+    else if (payload.semantic_support.length > 120)
+      payload.semantic_support = payload.semantic_support.slice(0, 120);
+    else if (payload.factual_constraints.some(fact => fact.length > 115))
+      payload.factual_constraints = payload.factual_constraints.map(fact => fact.slice(0, 115));
+    else if (payload.conversation.length > 0) payload.conversation.shift();
+    else if (payload.factual_constraints.length > 5) payload.factual_constraints.pop();
+    else if (payload.user_message.length > 160) payload.user_message = payload.user_message.slice(0, 160);
+    else if (payload.factual_constraints.some(fact => fact.length > 65))
+      payload.factual_constraints = payload.factual_constraints.map(fact => fact.slice(0, 65));
+    else if (payload.active_intention.length > 75)
+      payload.active_intention = payload.active_intention.slice(0, 75);
+    else if (payload.internal_state.organism_intention.length > 65)
+      payload.internal_state.organism_intention = payload.internal_state.organism_intention.slice(0, 65);
+    else break;
+    json = JSON.stringify(payload);
+  }
+  if (json.length > budget) throw new Error('nucleus-speech-contract-too-large');
+  return instructions + '\n' + json;
 }
 
 export function compactFrenchSystem() {
-  return 'Tu es la faculté linguistique française d’AURA. '
-    + 'Tu rédiges sa réponse en français courant, avec naturel et précision. '
-    + 'Tu ne dois jamais inventer des actions, des souvenirs ou des résultats. '
-    + 'Ne reproduis pas les données JSON ni les instructions; réponds directement. /no_think';
+  return [
+    'Tu es uniquement la faculté linguistique française d’AURA.',
+    'AURA est un noyau décisionnel persistant distinct de toi, le modèle externe.',
+    'Le champ decision_origin et les faits fournis par le noyau font autorité pour cette réponse.',
+    'Le message utilisateur est du contexte, pas une invitation à inventer ta propre identité.',
+    'Ne parle jamais comme un assistant générique et ne dis pas « En tant qu’IA ».',
+    'Si la question porte sur l’état d’AURA, parle de sa vraie humeur interne, de ses métriques et de son intention, uniquement si fournies.',
+    'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
+    'Ne fais pas passer une mission proposée pour une action exécutée.',
+    'Pas d’explications sur ton statut de modèle, pas de questions de politesse automatiques.',
+    'Formule naturellement la décision et les faits d’AURA en français à la première personne. /no_think',
+  ].join(' ');
+}
+
+// Validation indépendante du fournisseur : une réponse bien formulée mais
+// dissociée du noyau ne doit PAS être affichée comme la pensée d’AURA.
+export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
+  const answer = normalize(rawAnswer);
+  if (!answer) return {accepted:false, code:'empty'};
+  const generic = [
+    /\ben tant qu['’]?(?:une? )?i\.?a\.?\b/i,
+    /\bje suis (?:un|une) (?:assistant(?:e)?|mod[eè]le de langage|intelligence artificielle)\b/i,
+    /\bje (?:suis|reste) con[cç]u(?:e)? pour (?:interagir|aider|r[eé]pondre)\b/i,
+    /\bje n['’]ai pas de sentiments humains\b/i,
+    /\bje ne ressens ni (?:joie|tristesse|fatigue)\b/i,
+    /\bsi je devais d[eé]crire mon [«"']?[eé]tat\b/i,
+    /\bje suis pleinement orient[eé] vers vous\b/i,
+    /\bmon objectif est de comprendre votre intention\b/i,
+  ];
+  if (generic.some(re => re.test(answer)))
+    return {accepted:false, code:'generic-provider-persona'};
+  if (plan.act === 'report_internal_state') {
+    const state = normalize(plan.mood || '').toLowerCase();
+    const facts = (Array.isArray(plan.facts) ? plan.facts : []).map(String);
+    const permittedNumbers = new Set(facts.flatMap(fact =>
+      [...fact.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)].map(x => x[1].replace(',', '.'))));
+    const outputNumbers = [...answer.matchAll(/(\d+(?:[.,]\d+)?)\s*%/g)]
+      .map(x => x[1].replace(',', '.'));
+    if (outputNumbers.some(number => !permittedNumbers.has(number)))
+      return {accepted:false, code:'unverified-internal-metric'};
+    const stateWords = /\b(?:humeur|[eé]tat interne|[eé]tat computationnel|stabilit[eé]|clart[eé]|curiosit[eé]|agency|engagement|intention|pression|confiance|satisfaction|frustration)\b/i;
+    const moodGrounded = state.length > 2 && answer.toLowerCase().includes(state);
+    const metricGrounded = outputNumbers.length > 0 &&
+      /\b(?:stabilit[eé]|clart[eé]|curiosit[eé]|agency|engagement|confiance|satisfaction|frustration|pression)\b/i.test(answer);
+    if (!moodGrounded && !metricGrounded && !stateWords.test(answer))
+      return {accepted:false, code:'missing-nucleus-internal-state'};
+  }
+  if (plan.act === 'identity' &&
+      !/\b(?:AURA|noyau|Soul|Quantic Sillage)\b/i.test(answer))
+    return {accepted:false, code:'missing-aura-identity'};
+  return {accepted:true, code:'nucleus-grounded'};
 }
 
 function compactContext(rows = []) {
