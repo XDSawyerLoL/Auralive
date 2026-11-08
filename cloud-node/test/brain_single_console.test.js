@@ -31,7 +31,7 @@ test('request is sent to true AURA API and graph polls while model response is p
  assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/brain\/graph'/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(state\.busy&&!document\.hidden\)void poll\(\)/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/leur association précise à ta requête sera vérifiée/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/leur association précise à ta requête sera vérifiée/i);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.flow=null;state\.replayStarted=0/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.pollInFlight/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/Réponse en cours/);
@@ -42,7 +42,7 @@ test('missing or unauthorized observations never become fabricated successful wo
  assert.equal(graph.flows.length,0);
  assert.equal(graph.edges.filter(e=>e.signal_recent).length,0);
  assert.ok(graph.nodes.every(n=>n.activity_verified===false));
- assert.match(BRAIN_OPERATIONS_SCRIPT,/Aucune utilisation récente n’est prouvée/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/aucune utilisation récente n’est prouvée/i);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/Connexion propriétaire requise/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/Le moteur de langage n’a pas fourni de réponse vérifiable/);
 });
