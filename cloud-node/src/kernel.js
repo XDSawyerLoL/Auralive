@@ -993,6 +993,7 @@ export class CognitiveKernel {
         task: mission,
         execution_mode: 'quantic-studio-real',
         ...result,
+        brain_flow_id:operationFlowId,
       };
     }
 
@@ -1029,6 +1030,7 @@ export class CognitiveKernel {
                 ok: true,
                 task: mission,
                 execution_mode: 'aura-cloud-sandbox',
+                brain_flow_id:operationFlowId,
                 executed: true,
                 authority: 'typed-reversible-cloud-workspace',
                 graph,
@@ -1057,6 +1059,7 @@ export class CognitiveKernel {
       ok: true,
       task: mission,
       execution_mode: 'plan-only-fallback',
+      brain_flow_id:operationFlowId,
       executed: false,
       plan: plan.answer,
       authority: 'Quantic Studio worker offline; no typed cloud capability matched',
