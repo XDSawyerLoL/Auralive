@@ -31,6 +31,7 @@ import { CognitiveKernel } from './kernel.js';
 import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
 import { RESOURCE_CATALOG, discoverResources } from './toolbox_resources.js';
 import { searchPublicResources } from './toolbox_research.js';
+import { AURA_PLAYBOOKS, SKILLS_VERSION, SKILLS_POLICY, planAgentSkills } from './agent_skills.js';
 import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
@@ -972,12 +973,35 @@ app.get('/api/skills', async (request, reply) => {
   return { skills: await kernel.skillLearning.list(request.query?.limit) };
 });
 
+// Versioned, offline AURA Skills procedures. Distinct from learned Fabric skills.
+// These routes return information only; they never run models, tools or shell commands.
+app.get('/api/skills/playbooks', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return { version: SKILLS_VERSION, monetary_budget_eur: 0,
+    execution: 'advisory-only', policy: SKILLS_POLICY,
+    playbooks: AURA_PLAYBOOKS };
+});
+
+app.post('/api/skills/plan', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  try {
+    return planAgentSkills(request.body?.objective, {
+      role: request.body?.role,
+      limit: request.body?.limit,
+      skills: request.body?.skills,
+    });
+  } catch (error) {
+    return reply.code(422).send({ error: String(error?.message || error).slice(0,220) });
+  }
+});
+
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
   organism: 'homeostasie_v9_unified',
   cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
   dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
   skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
+  agent_skills: 'six versioned local read-only playbooks -> private planning -> evidence checklist; 0 EUR and no implicit execution',
   language_model_role: 'French Language Faculty: replaceable zero-cost multilingual model for expression only; deterministic wording is emergency fallback, never the normal path',
   cognition_independent_from_language_model: true,
   language_provider_replaceable: true,
