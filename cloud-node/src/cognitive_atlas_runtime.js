@@ -395,16 +395,24 @@ function exportCognitiveTrace(){
  document.body.append(link);link.click();link.remove();
  setTimeout(function(){URL.revokeObjectURL(url);},1000);
 }
+function cogSetTransport(mode,label){
+  const element=$('cogTransport');
+  if(!element)return;
+  element.dataset.mode=mode;
+  element.textContent=label;
+}
 function closeCognitiveEventStream(){
   if(cogLiveStream){
     try{cogLiveStream.close();}catch(_){}
     cogLiveStream=null;
   }
   cogStreamReady=false;
+  cogSetTransport('poll','Interrogation périodique');
 }
 function connectCognitiveEventStream(){
   closeCognitiveEventStream();
   if(typeof EventSource==='undefined')return;
+  cogSetTransport('pending','Connexion directe…');
   const mode=cogMode;
   const url=apiUrl(mode==='autonomy'
     ? '/api/cognition/autonomy/events' : '/api/cognition/events');
@@ -412,7 +420,10 @@ function connectCognitiveEventStream(){
     const stream=new EventSource(url,{withCredentials:true});
     cogLiveStream=stream;
     stream.onopen=function(){
-      if(cogLiveStream===stream&&cogMode===mode)cogStreamReady=true;
+      if(cogLiveStream===stream&&cogMode===mode){
+        cogStreamReady=true;
+        cogSetTransport('live','Flux direct connecté');
+      }
     };
     stream.addEventListener('trace',function(event){
       if(cogLiveStream!==stream||cogMode!==mode)return;
@@ -426,6 +437,7 @@ function connectCognitiveEventStream(){
       // routed this connection to another Node instance.
       if(!snapshot.available&&cogTrace?.available)return;
       cogStreamReady=true;
+      cogSetTransport('live','Événements directs');
       cogTraceOrigin='stream';
       cogTrace=snapshot;
       renderCognitiveGraph();
@@ -433,6 +445,7 @@ function connectCognitiveEventStream(){
     stream.onerror=function(){
       if(cogLiveStream!==stream)return;
       cogStreamReady=false;
+      cogSetTransport('poll','Flux indisponible · secours actif');
       // EventSource reconnects automatically on transient network failures.
       // REST polling remains independently available.
       if(stream.readyState===EventSource.CLOSED)closeCognitiveEventStream();
