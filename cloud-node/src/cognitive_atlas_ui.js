@@ -1,6 +1,11 @@
 // AURA Cognitive Atlas 2 — zero-dependency visual layer.
 export const COGNITIVE_ATLAS_CSS = String.raw`
 /* Cognitive Atlas 2 — detailed instrumented runtime map, no simulated model neurons */
+.main{grid-template-columns:minmax(0,1fr)!important;gap:12px!important}
+.side{display:none!important;order:1;grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.side.diagnostics-open{display:grid!important}
+.side>.aura-card{display:none!important}
+@media(max-width:720px){.side.diagnostics-open{grid-template-columns:minmax(0,1fr)}}
 .cog-panel{color:#eaf4ff;background:#050b15;border-top:1px solid rgba(80,148,175,.25);border-bottom:1px solid rgba(80,148,175,.25);overflow:hidden;isolation:isolate}
 .cog-heading{display:flex;gap:20px;justify-content:space-between;align-items:center;padding:20px 22px 9px}
 .cog-kicker{font-size:10px;font-weight:700;color:#63bfd6;letter-spacing:.19em;text-transform:uppercase;display:flex;align-items:center;gap:9px}
