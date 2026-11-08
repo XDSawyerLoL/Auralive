@@ -9,10 +9,23 @@ const POS={
  groq:[930,125],openrouter:[948,220],local:[956,315],coherence:[913,430],output:[1080,395],
  web:[638,84],fabric:[690,585],toolbox:[596,530],command:[430,640],dag:[586,690],agent:[274,642],
  bridge:[810,660],github:[906,596],scout:[534,54],curiosity:[390,66],evolution:[226,72],
- trading:[1040,570],audit:[1005,664],voice:[1084,488],peer:[190,566]
+ trading:[1040,570],audit:[1005,664],voice:[1084,488],peer:[190,566],
+ dialogue:[535,170],nativelearning:[300,24],skilllearning:[375,718],reflex:[415,310],
+ truth:[560,512],linguisticmemory:[222,320],federation:[1100,173],
+ runtime:[605,465],voicefabric:[1050,535],expert:[754,728],horizon:[955,738]
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
-const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
+const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
+const ANCHORS=new Set(['input','kernel','homeostasis','memory','cognition','language','coherence','output','web','groq','command','fabric','dag','agent','knowledge','inference','toolbox','journal']);
+const LENSES=Object.entries(GROUPS);
+for(const [group,label] of LENSES){
+ for(const id of ['moduleGroup','graphLens']){
+  const select=$(id),option=element('option','',label);
+  option.value=group;select.append(option);
+ }
+}
+$('graphLens').addEventListener('change',e=>{state.focusGroup=e.target.value;scheduleDraw();});
+$('graphLabels').addEventListener('click',()=>{state.showAllLabels=!state.showAllLabels;$('graphLabels').setAttribute('aria-pressed',String(state.showAllLabels));$('graphLabels').textContent=state.showAllLabels?'Noms essentiels':'Tous les noms';scheduleDraw();});
 const canvas=$('graphCanvas'),ctx=canvas.getContext('2d'),view=$('graphViewport');
 const reduced=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -42,24 +55,31 @@ function explainNode(n){
 }
 
 function renderModules(){
- const root=$('moduleList'), needle=$('moduleSearch').value.toLowerCase().trim();
- root.replaceChildren();
- let count=0;
- for(const [group,label] of Object.entries(GROUPS)){
-   const nodes=dataNodes().filter(n=>n.group===group && (!needle || (n.label+' '+n.code+' '+n.id).toLowerCase().includes(needle)));
+ const root=$('moduleList'),needle=$('moduleSearch').value.toLowerCase().trim();
+ const groupFilter=$('moduleGroup').value;
+ root.replaceChildren();let count=0;
+ for(const [group,label] of LENSES){
+   if(groupFilter!=='all'&&group!==groupFilter)continue;
+   const members=dataNodes().filter(n=>n.group===group);
+   const nodes=members.filter(n=>!needle||(n.label+' '+n.code+' '+n.id).toLowerCase().includes(needle));
    if(!nodes.length)continue;
-   root.append(element('div','group-label',label));
+   const verified=members.filter(isRecent).length;
+   root.append(element('div','group-label',label+' · '+members.length+' modules'+(verified?' · '+verified+' récent(s)':'')));
    for(const n of nodes){
      count++;
      const row=element('button','module-row'+(isRecent(n)?' recent':'')+(state.selected===n.id?' selected':''));
-     row.type='button';
-     row.append(element('span','module-light'),element('span','name',n.label),element('span','state',nodeStateLabel(n)));
-     row.addEventListener('click',()=>selectNode(n.id));
+     row.type='button';row.title=n.label+' — '+n.code+' — '+nodeStateLabel(n);
+     const info=element('span','module-description');
+     info.append(element('span','name',n.label),element('small','',n.code));
+     row.append(element('span','module-light'),info,element('span','state',nodeStateLabel(n)));
+     row.addEventListener('click',()=>{selectNode(n.id);state.focusGroup='all';$('graphLens').value='all';const p=project(n.id);state.panX+=canvasW*.5-p.x;state.panY+=canvasH*.5-p.y;scheduleDraw();});
      root.append(row);
    }
  }
  if(!count)root.append(element('p','empty','Aucun module correspondant.'));
- setText('moduleCount',dataNodes().length+' modules');
+ const all=dataNodes(),recent=all.filter(isRecent).length;
+ setText('moduleCount',all.length+' modules');
+ setText('moduleSummary',count+' affichés · '+recent+' observés récemment · autres présents dans le code (pas forcément actifs).');
 }
 
 function renderInspect(){
@@ -71,6 +91,18 @@ function renderInspect(){
  setText('nodeSource',n.code);
  setText('nodeLast',stamp(n.last_observed_at));
  setText('nodeEvidence',explainNode(n));
+ const connections=$('nodeConnections');connections.replaceChildren();
+ const edges=(state.data?.edges||[]).filter(e=>e.from===n.id||e.to===n.id);
+ if(!edges.length)connections.append(element('small','', 'Aucune dépendance déclarée.'));
+ for(const edge of edges.slice(0,24)){
+   const other=edge.from===n.id?edge.to:edge.from;
+   const peer=findNode(other);
+   const btn=element('button','connection-link',(edge.from===n.id?'→ ':'← ')+(peer?.label||other));
+   btn.type='button';btn.title=(edge.observed_count||0)+' transition(s) persistée(s), dépendance logicielle déclarée';
+   if(edge.observed_count>0)btn.classList.add('observed');
+   btn.addEventListener('click',()=>selectNode(other));
+   connections.append(btn);
+ }
 }
 
 function renderRoute(){
