@@ -1,139 +1,97 @@
-AURA Cloud Node — Hostinger 2.2.1 — CANONICAL / ZERO COST
+AURA Cloud Node 3.0 — Cerveau causal / homéostasie v10
+GUIDE DE DÉPLOIEMENT ET DE RÉCUPÉRATION HOSTINGER
 
-SOURCE À DÉPLOYER
-- Dépôt : XDSawyerLoL/Auralive
-- Runtime canonique : cloud-node/
-- Artefact GitHub Actions recommandé : aura-cloud-hostinger
-- Ne pas déployer l'ancien paquet Python deploy/hostinger/.
+SOURCE CORRECTE
+- Dépôt GitHub : XDSawyerLoL/Auralive
+- Source canonique : cloud-node/
+- Archive : aura-cloud-hostinger (artefact de la CI)
+- NE PAS utiliser l'ancien paquet Python deploy/hostinger/.
+- Dans le ZIP, package.json et server.js doivent être DIRECTEMENT à la racine.
+- Le ZIP ne contient PAS les secrets MySQL nécessaires au démarrage.
 
-RÉGLAGES HOSTINGER
-- Framework : Other / Node.js
-- Node.js : 22.x
-- Répertoire racine du ZIP : ./
-- package.json doit être directement à la racine
-- server.js doit être directement à la racine
-- Installation : npm install --omit=dev
-- Démarrage : npm start
-- Output directory : vide
-- Port public attendu par Hostinger : 3000
-- En production, AURA force 0.0.0.0:3000 même si une variable PORT différente est injectée
+INSTALLATION / MISE À JOUR
+1. Dans Hostinger hPanel, ouvrir l'application Node.js AURA (ne pas créer une autre application).
+2. Conserver les variables d'environnement, la base MySQL existante et les données.
+   Ne pas supprimer les tables, ni remplacer un .env qui contient des secrets.
+3. Remplacer les fichiers applicatifs à la racine par ceux du ZIP.
+4. Node.js : 22.x ; installation : npm install --omit=dev ; commande : npm start.
+5. Le serveur écoute sur 0.0.0.0. Il utilise AURA_PORT, sinon PORT fourni
+   par Hostinger, sinon 3000. Éviter de forcer un port différent du port géré.
+6. AURA_GATEWAY_ONLY doit être false ou absent. Si true, seule la passerelle
+   HTTP démarre : le noyau et la mémoire restent indisponibles.
+7. Redémarrer l'application Node.js depuis hPanel.
 
-ACCÈS DIRECT
-- La même interface neuronale AURA est servie à / et /cerveau.
-- POST /api/chat fonctionne sans AURA_CLOUD_TOKEN, avec session navigateur signée et rate limiting.
-- La conversation publique reste utilisable sans jeton de propriétaire.
-- Les traces de graphes détaillées, identifiants de trajets, journaux et outils observés exigent une session propriétaire pour protéger les données.
-- Le formulaire propriétaire n'enregistre pas la clé dans le navigateur et utilise une session HttpOnly.
-- AURA_CLOUD_TOKEN est optionnel et protège uniquement les endpoints privés d'administration / bridge.
-- Ne jamais exposer AURA_CLOUD_TOKEN dans le navigateur.
+VARIABLES NÉCESSAIRES POUR LE NOYAU PERSISTANT
+  NODE_ENV=production
+  AURA_ZERO_COST_MODE=true
+  AURA_GATEWAY_ONLY=false
 
-GARANTIE FINANCIÈRE
-- AURA_ZERO_COST_MODE=true doit rester activé.
-- Aucun fallback Gemini/OpenAI distant potentiellement facturable.
-- Expert Bridge externe bloqué en mode zéro coût.
-- TTS Gemini Cloud bloqué.
-- Mairaiy utilise Providence/Kokoro ff_siwis via la route Quantic autorisée à 0 €.
-- Sans capacité gratuite disponible, AURA reste sur son noyau natif plutôt que de dépenser.
+  # Choisir l'une des deux méthodes MySQL :
+  DATABASE_URL=mysql://...             (si Hostinger fournit une URL)
+  # OU (si pas d'URL)
+  DB_HOST=...
+  DB_PORT=3306
+  DB_USER=...
+  DB_PASSWORD=...
+  DB_NAME=...
 
-ARCHITECTURE DE DÉMARRAGE
-- un seul process Node
-- un seul listener Fastify public
-- bind 0.0.0.0
-- port 3000 forcé en production
-- passerelle native de récupération sur 3000 si le bootstrap Fastify échoue
-- MySQL démarre sans empêcher l'interface de répondre
-- timeout connexion MySQL : 5 s par défaut
+  # Administration privée recommandée :
+  AURA_CLOUD_TOKEN=<secret unique conservé uniquement côté serveur>
 
-VARIABLES MINIMALES
-NODE_ENV=production
-AURA_ZERO_COST_MODE=true
-AI_MODE=off
-MAIRAIY_CLOUD_VOICE_ENABLED=false
-DB_HOST=...
-DB_PORT=3306
-DB_USER=...
-DB_PASSWORD=...
-DB_NAME=...
-DB_CONNECT_TIMEOUT_MS=5000
+Ne PAS saisir les secrets dans la conversation ni dans l'URL du navigateur.
+Les identifiants doivent être définis dans les variables d'environnement hPanel.
+Le noyau ne peut pas fonctionner durablement sans base MySQL accessible.
 
-IDENTITÉS SÉPARÉES — RECOMMANDÉES / PRODUCTION
-AURA_CLOUD_TOKEN=<secret-admin-fondateur>
-AURA_BRIDGE_TOKEN=<secret-runtime-worker>
-AURA_PRODUCT_TOKENS_JSON={"quantic-glide":"...","quantic-mail":"...","identity-vault":"...","quantic-os":"...","zoon":"...","pulse":"...","quantic-news":"...","providence":"...","horizon":"..."}
-AURA_ALLOW_LEGACY_BRIDGE_ADMIN_TOKEN=false
-AURA_ALLOW_LEGACY_PRODUCT_ADMIN_TOKEN=false
-AURA_EVOLUTION_CANARY_TOKEN=
+DIAGNOSTIC VÉRIFIABLE
+- Ouvrir /cerveau.
+- Si le noyau est indisponible, un bandeau en haut affiche désormais :
+  code public d'incident, état MySQL, dernière tentative, et consigne.
+- Le code public est calculé sans exposer le serveur MySQL ni les mots de passe.
+- GET /api/brain/graph -> runtime_diagnostic indique la catégorie exacte
+  connue par le processus et les compteurs de traces réellement disponibles.
+- GET /healthz -> ready:true avec db:true confirme le noyau persistant ;
+  ne pas confondre HTTP 200, gateway_ready et runtime_ready.
+- GET /__aura_gateway -> application_ready:true confirme seulement Fastify.
+- GET /api/build -> identité de version et état du déploiement.
 
-COMPANY OS
-AURA_CONTINUITY_ENABLED=true
-AURA_COMMAND_PORTFOLIO_WORKSTREAMS=4
-AURA_COMMAND_PRODUCT_STALE_SECONDS=360
-AURA_COMMAND_PRODUCT_OFFLINE_SECONDS=900
-AURA_DIRECTOR_MERGE_MIN_CHECKS=2
-AURA_DIRECTOR_AUTO_MERGE_PATH_PREFIXES=docs/,test/,tests/
+CODES D'INCIDENT / ACTIONS
+- database-unconfigured : renseigner DATABASE_URL ou DB_HOST/USER/PASSWORD/NAME.
+- database-authentication : vérifier l'utilisateur et le mot de passe MySQL.
+- database-missing : vérifier le nom et l'existence de la base MySQL.
+- database-dns : vérifier l'adresse de l'hôte MySQL.
+- database-timeout / database-connection : vérifier l'accès réseau / les quotas.
+- database-schema : vérifier migrations et permissions SQL, sans supprimer les données.
+- gateway-only : désactiver AURA_GATEWAY_ONLY puis redémarrer Node.js.
+- kernel-failed : lire les journaux de l'application dans hPanel.
+- memory-exhausted : vérifier la limite mémoire Node / réchauffement du LLM.
+- starting : attendre la prochaine observation de démarrage.
 
-VOIX MAIRAIY EN LIGNE
-AURA_VOICE_FABRIC_ENABLED=true
-AURA_VOICE_FABRIC_PIN_QUANTIC_ENDPOINT=true
-AURA_VOICE_FABRIC_BASE_URL=https://mediumorchid-badger-314305.hostingersite.com/voice
-AURA_VOICE_FABRIC_API_KEY=
-AURA_VOICE_FABRIC_MODEL=kokoro
-AURA_VOICE_FABRIC_TRUSTED_ZERO_COST_ORIGINS=https://mediumorchid-badger-314305.hostingersite.com/voice
-AURA_MAIRAIY_VOICE_PROFILE_NAME=Mairaiy
-AURA_MAIRAIY_REQUIRE_PROFILE=true
-AURA_VOICE_FABRIC_STRICT_IDENTITY=true
+Le serveur réessaie automatiquement toutes les 15 secondes lorsque MySQL est
+configuré. Le bouton « Relancer (administrateur) » n'est visible qu'avec une
+session AURA privée et n'écrase aucune donnée. Corriger l'environnement en
+premier si MySQL est absent : une relance ne peut pas créer les identifiants.
 
-VÉRIFICATION APRÈS DÉPLOIEMENT
-1. GET / doit afficher l'INTERFACE UNIQUE :
-   AURA / Cerveau opérationnel · Cartographie cognitive d'AURA.
-   GET /cerveau affiche exactement la même interface.
-   GET /cerveau/anatomie redirige vers /cerveau.
+INTERFACE UNIQUE
+- / et /cerveau servent la même interface.
+- Le chat public borné ne nécessite pas le jeton administrateur.
+- Les missions privilégiées et relances manuelles restent protégées.
+- La carte affiche les modules du code séparément des transitions brain-hop.
+- Une requête enregistrée corrèle son trajet, sa décision et les variations
+  homéostatiques ; pas de fausse animation d'outil.
+- En cas d'absence de base de traces, les compteurs affichent « — »,
+  et non « 0 » prétendant qu'il n'y a eu aucune activité.
+- Les indices émotionnels sont des états logiciels, pas des émotions humaines.
 
-2. GET /__aura_gateway doit retourner :
-   "gateway_ready": true
-   "gateway_port": 3000
+CONFIRMATION
+1. Après redémarrage, vérifier /healthz -> ready:true, db:true.
+2. Ouvrir /cerveau et vérifier le badge « Noyau joignable ».
+3. Envoyer une question simple ; vérifier la réponse et son identifiant de trajet.
+4. Vérifier la dernière mutation et, lorsque disponible, la corrélation
+   « Signal → décision → état ».
+5. Vérifier le retour au repos après une action échouée et sa preuve de trace.
+6. Ne pas conclure « réparé en production » si une de ces preuves manque.
 
-3. GET /api/bootstrap/status doit retourner :
-   "product": "AURA Cloud"
-   "version": "2.2.1"
-   "server_ready": true
-
-4. GET /api/auth/session peut retourner authenticated:false :
-   c'est normal en accès direct et cela ne doit pas bloquer le chat.
-
-5. POST /api/chat doit répondre sans Authorization Bearer lorsque le runtime est prêt.
-
-6. GET /api/voice/status doit indiquer Mairaiy / aura-voice-fabric lorsque le service voix est joignable.
-
-7. GET /api/command-center/status doit exposer :
-   "portfolio"
-   "recent_receipts"
-   "company_readiness"
-   et un score "overall" calculé sur des preuves runtime.
-
-8. Vérifier dans /api/bootstrap/status :
-   "bridge_token_configured": true
-   "product_identity_tokens_configured": au moins 9
-   "legacy_bridge_admin_token_allowed": false
-   "legacy_product_admin_token_allowed": false
-
-DIAGNOSTIC D'UN ANCIEN DÉPLOIEMENT
-- Si la page affiche "Accès privé", AURA_CLOUD_TOKEN à saisir, ou un badge antérieur à 2.2.1 :
-  Hostinger sert encore un ancien paquet ou un ancien processus.
-- Redéployer l'artefact aura-cloud-hostinger et redémarrer l'application.
-
-INTERFACE NEURONALE UNIQUE — VALIDATION APRÈS INSTALLATION
-- Redémarrer l'application Node.js après remplacement de l'ancienne version.
-- Se rendre à / : constater le graphe et le champ « Requête AURA » dans la MÊME page.
-- Renseigner la clé propriétaire via l'interface pour observer les trajets privés en direct.
-- Envoyer « Salut AURA ». Le tracé doit suivre les événements brain-hop réellement persistés : entrée → CognitiveKernel → homéostasie → mémoire → cognition → langage → fournisseur → cohérence → réponse.
-- Le réseau reste immobile sans événements brain-hop ; cela n'est pas un bug d'animation.
-- Sélectionner le trajet enregistré pour son replay unique. Un ancien trajet n'est pas une tâche en cours.
-- Les modules visibles dans le code sans preuve récente restent indiqués « disponibles / non observés ».
-- Ne jamais traiter les valeurs du Trading Lab papier comme des profits encaissés.
-- Un moteur français non configuré peut empêcher une réponse parlée malgré le graphe fonctionnel : vérifier le diagnostic Groq Free et les clés serveur.
-- Si / affiche encore Company OS ou un ancien tableau de bord, Hostinger exécute l'ancien code ou cache une ancienne page.
-
-CONTRAINTES DE RÉALITÉ
-- La page ne mesure ni conscience ni émotions biologiques ; elle montre des modules logiciels et des traces.
-- L'archive est testée en CI, mais seul un déploiement Hostinger et une requête sur le serveur réel peuvent confirmer son fonctionnement en production.
+COÛTS
+Aucun VPS, service payant supplémentaire ou fournisseur IA obligatoire.
+Le mode AURA_ZERO_COST_MODE=true reste recommandé. Un fournisseur distant
+ne doit être activé que si son plan gratuit est confirmé dans sa configuration.
