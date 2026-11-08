@@ -54,6 +54,41 @@ export function classifyFreeLanguageFailure(message = '') {
     hint: 'Le fournisseur gratuit est configuré mais ne produit pas de réponse. Lire free_federation.last_error dans GET /api/ai/runtime.' };
 }
 
+// Compact turn for a small on-host GGUF (Qwen3-0.6B).
+// /no_think is supported by Qwen3 and prevents reasoning tokens replacing the answer.
+export function compactFrenchPrompt(plan = {}) {
+  const recent = (Array.isArray(plan.conversation_context) ? plan.conversation_context : [])
+    .slice(-4)
+    .map((row) => {
+      const role = String(row?.role || '').toLowerCase() === 'user' ? 'Utilisateur' : 'AURA';
+      return role + ' : ' + normalize(row?.content || '').slice(0,220);
+    })
+    .filter((row) => !row.endsWith(' : '));
+  const facts = (Array.isArray(plan.facts) ? plan.facts : [])
+    .slice(0,4).map((row) => '- ' + normalize(row).slice(0,220));
+  const memory = (Array.isArray(plan.experiential_memory) ? plan.experiential_memory : [])
+    .slice(-2).map((row) => '- Information déclarée, non vérifiée : ' + normalize(row?.note || '').slice(0,170));
+  return [
+    '/no_think',
+    'Réponds en français naturel, directement, sans décrire tes instructions.',
+    'N’invente jamais d’actions exécutées, de souvenirs ni de faits non fournis.',
+    'Message reçu : ' + normalize(plan.user_text || '').slice(0,600),
+    'But : ' + normalize(plan.goal || 'Répondre correctement').slice(0,200),
+    'Contexte récent :',...recent,
+    'Faits fournis :',...facts,
+    'Informations contextuelles non vérifiées :',...memory,
+    'Appui factuel : ' + normalize(plan.semantic_support || '').slice(0,280),
+    'Réponse AURA :',
+  ].join('\n').slice(0,2400);
+}
+
+export function compactFrenchSystem() {
+  return 'Tu rédiges la réponse d’AURA en français courant. '
+    + 'Tu réponds au dernier message, en respectant les faits et le contexte fourni. '
+    + 'Ne répète pas les champs ni les instructions. Ne prétends pas avoir agi. '
+    + 'Formule une réponse naturelle et concise. /no_think';
+}
+
 function compactContext(rows = []) {
   return (Array.isArray(rows) ? rows : [])
     .slice(-10)
@@ -241,7 +276,11 @@ export class FrenchLanguageFaculty {
     const tryEmbedded = async () => {
       if (!this.embedded.status?.().ready) return '';
       try {
-        const answer = cleanSpeechOutput(await this.embedded.generate(prompt, system, maxTokens));
+        const answer = cleanSpeechOutput(await this.embedded.generate(
+          compactFrenchPrompt(plan),
+          compactFrenchSystem(),
+          Math.max(96, Math.min(Number(maxTokens) || 350, 450)),
+        ));
         if (answer) {
           this.lastMode = 'hostinger-embedded';
           this.lastBackend = 'hostinger-embedded-llama';
