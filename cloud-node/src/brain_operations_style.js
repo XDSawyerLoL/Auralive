@@ -357,4 +357,22 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
 .somatic-sensors span{color:#abc3cf}
 .somatic-sensors strong{color:#b9ffed;font-variant-numeric:tabular-nums}
 .somatic-sensors small{color:#88a6b5;font-size:9px;line-height:1.45}
+
+/* Outage comes before the decorative topology. No invented activity. */
+.runtime-incident{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;align-items:center;
+  margin:9px 0 4px;padding:12px 15px;border:1px solid rgba(252,158,110,.58);border-radius:13px;
+  background:linear-gradient(110deg,rgba(66,26,36,.96),rgba(21,15,32,.98));box-shadow:0 0 20px rgba(239,125,92,.09)}
+.runtime-incident[hidden],#runtimeRetry[hidden]{display:none!important}
+.incident-icon{width:28px;height:28px;border:1px solid #f0a27d;background:#512329;border-radius:50%;
+  color:#ffd7bc;display:grid;place-items:center;font-weight:800}
+.incident-main strong{font-size:14px;color:#ffe0c2}
+.incident-main p{margin:5px 0 3px;color:#f2c3b7;font-size:12px;line-height:1.5}
+.incident-main small{display:block;color:#ba9ea9;font-size:10px;line-height:1.45}
+#runtimeFeedback:not(:empty){color:#a4f6de;padding-top:6px}
+.incident-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:end}
+.incident-actions button{border:1px solid rgba(246,173,143,.48);background:rgba(74,35,51,.85);
+ color:#ffe4cd;border-radius:8px;padding:9px 12px;font-size:11px;cursor:pointer}
+.incident-actions button:hover{background:#754054}
+.incident-actions button:disabled{opacity:.38;cursor:not-allowed}
+@media(max-width:760px){.runtime-incident{grid-template-columns:26px minmax(0,1fr)}.incident-actions{grid-column:1/-1;justify-content:start}}
 `;
