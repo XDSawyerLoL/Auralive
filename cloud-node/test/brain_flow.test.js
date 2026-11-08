@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {BRAIN_NODES,buildBrainFlowGraph} from '../src/brain_flow.js';
+import {BRAIN_NODES,buildBrainFlowGraph,toPublicBrainFlowGraph} from '../src/brain_flow.js';
 import {BRAIN_OPERATIONS_HTML} from '../src/brain_operations_console.js';
 import {BRAIN_OPERATIONS_SCRIPT} from '../src/brain_operations_runtime.js';
 import {BRAIN_OPERATIONS_CSS} from '../src/brain_operations_style.js';
@@ -92,7 +92,7 @@ test('tool logs appear as recorded evidence, not invented route edges',()=>{
 });
 test('new /cerveau actually is a functional operational observatory, not a static illustration',()=>{
  for(const id of ['graphCanvas','moduleList','nodeSource','nodeEvidence','flowList',
-  'eventList','metricList','chatInput','chatSend','ownerKey','ownerSignIn','onlineState']){
+  'eventList','metricList','chatInput','chatSend','onlineState']){
   assert.match(BRAIN_OPERATIONS_HTML,new RegExp('id="'+id+'"'),id+' missing');
  }
  assert.match(BRAIN_OPERATIONS_HTML,/Connexions déclarées/);
@@ -105,14 +105,14 @@ test('new /cerveau actually is a functional operational observatory, not a stati
  assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/brain\/graph'/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/signal_recent/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/age>=0&&age<20000/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.data\?\.authorized/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/auth\/session'/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/state\.data\?\.authorized/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_HTML,/id="ownerSignIn"|id="ownerKey"/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/const endpoint=mission\?'\/api\/kernel\/operator':'\/api\/chat'/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\(endpoint,/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/setInterval\(\(\)=>random|simulateFlow|fakeActivity/);
 });
-test('server presents one operating interface at / and /cerveau and protects real traces',()=>{
+test('server presents one operating interface at / and /cerveau and exposes redacted telemetry',()=>{
  const src=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
  assert.match(src,/app\.get\('\/cerveau'/);
  assert.match(src,/send\(BRAIN_OPERATIONS_HTML\)/);
@@ -124,8 +124,10 @@ test('server presents one operating interface at / and /cerveau and protects rea
  const e=src.indexOf("\n});",s)+4;
  assert.ok(s>0&&e>s);
  const route=src.slice(s,e);
- assert.match(route,/authorized=isPrivate\(request\)/);
- assert.match(route,/if\(authorized && bootstrap\.dbReady\)/);
+ assert.doesNotMatch(route,/authorized=isPrivate\(request\)/);
+ assert.match(route,/if\(bootstrap\.dbReady\)/);
+ assert.match(route,/toPublicBrainFlowGraph\(buildBrainFlowGraph/);
+ assert.match(route,/observation_access:'public-redacted'/);
  assert.match(route,/aura_cognitive_traces/);
  assert.match(route,/aura_command_events/);
  assert.match(route,/aura_organism_events/);
@@ -206,4 +208,30 @@ test('a real chat route passes through the central Kernel, never a fake decorati
  assert.equal(graph.nodes.find(x=>x.id==='kernel').activity_verified,true);
  assert.ok(graph.edges.find(x=>x.from==='input'&&x.to==='kernel').signal_recent);
  assert.ok(graph.edges.find(x=>x.from==='kernel'&&x.to==='homeostasis').signal_recent);
+});
+
+test('anonymous neural projection exposes actual counts and steps without leaking secrets',()=>{
+ const realFlow='550e8400-e29b-41d4-a716-446655440000';
+ const rows=[
+  hop(1,realFlow,'input','kernel',2500,'ok','token=PRIVATE-API-KEY'),
+  hop(2,realFlow,'kernel','homeostasis',1300,'ok','groq-free'),
+  {id:3,kind:'agent',title:'secret customer record',created_at:at(900),context:'{"api_key":"SECRET"}'},
+ ];
+ const original=buildBrainFlowGraph({telemetry,traceRows:rows,commandRows:[
+  {id:44,kind:'password=SECRET_KEY',created_at:at(900)},
+ ],organismRows:[{id:45,kind:'contact=jane@example.com',created_at:at(800)}]},now);
+ const visible=toPublicBrainFlowGraph(original);
+ assert.equal(visible.observed_hop_count,2);
+ assert.equal(visible.flows.length,1);
+ assert.equal(visible.flows[0].id,realFlow);
+ assert.equal(visible.flows[0].steps.length,2);
+ assert.equal(visible.flows[0].steps[0].provider,'');
+ assert.equal(visible.flows[0].steps[1].provider,'groq-free');
+ assert.equal(visible.observed_tools.length,0);
+ assert.ok(visible.events.some(e=>e.label==='Commande enregistrée'));
+ assert.ok(visible.events.some(e=>e.label==='Événement de l’organisme'));
+ const json=JSON.stringify(visible);
+ for(const secret of ['PRIVATE-API-KEY','SECRET_KEY','jane@example.com','secret customer record','"api_key"'])assert.ok(!json.includes(secret),secret);
+ assert.ok(visible.events.every(ev=>!String(ev.id).includes('44')));
+ assert.equal(visible.edges.find(e=>e.from==='input'&&e.to==='kernel').signal_recent,true);
 });
