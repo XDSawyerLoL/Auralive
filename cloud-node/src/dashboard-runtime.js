@@ -952,6 +952,18 @@ async function playVoiceSegment(payload){
 }
 async function speakAura(text,ticket){
   if(!text)return;
+  // Explicitly chosen local mode: never send the text to a billable TTS API.
+  // Aoede remains the primary/default voice when local mode is disabled.
+  if(localVoiceOptIn){
+    try{
+      await speakLocalFrench(text);
+      $('chatState').textContent='Lecture locale française (0 €), différente d’Aoede.';
+    }catch(error){
+      $('chatState').textContent=String(error&&error.message||error).slice(0,170);
+      $('voiceText').textContent='AURA · voix locale indisponible';
+    }
+    return;
+  }
   try{
     if(!ticket)throw new Error('Ticket vocal absent');
     const out=await api('/api/voice/speak',{
@@ -969,15 +981,6 @@ async function speakAura(text,ticket){
     $('voiceText').textContent='Mairaiy · en ligne';
   }catch(error){
     document.body.classList.remove('aura-speaking');
-    if(localVoiceOptIn){
-      try{
-        await speakLocalFrench(text);
-        $('chatState').textContent='Réponse prononcée avec la voix locale 0 € (pas Aoede).';
-        return;
-      }catch(localError){
-        $('chatState').textContent=String(localError&&localError.message||localError).slice(0,170);
-      }
-    }
     $('voiceText').textContent='Mairaiy · indisponible';
     $('voiceText').title='Aoede indisponible · la voix locale 0 € reste facultative';
     const reason=String(error&&error.message||'');
