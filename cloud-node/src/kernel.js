@@ -277,6 +277,10 @@ export class CognitiveKernel {
       'INSERT INTO aura_cognitive_traces(kind,title,content,context,created_at) VALUES(?,?,?,?,?)',
       [String(kind).slice(0, 80), String(title).slice(0, 240), String(content).slice(0, 4000), JSON.stringify(context).slice(0, 12000), now()],
     );
+    // A journalled agent result is not proof of an external operation.
+    // Never promote an unverified operator request to a successful action.
+    try { this.autonomyTelemetry?.recordOperation(String(kind), context?.executed === true); }
+    catch (_) { /* Telemetry never breaks the cognitive database trace. */ }
   }
 
   async observeEvent(type, payload = {}, source = 'cloud') {
