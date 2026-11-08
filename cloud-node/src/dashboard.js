@@ -122,6 +122,9 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .engine-panel[data-state="blocked"]{border-color:rgba(255,145,127,.29)}
 .engine-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#8f7f85;font-size:10px}
 .engine-foot button{border:1px solid rgba(255,255,255,.11);background:rgba(255,255,255,.035);color:#edddd9;border-radius:10px;padding:8px 11px;font-size:11px}
+.engine-controls{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+#engineStart{border-color:rgba(158,221,188,.34);color:#d2f2db;background:rgba(102,185,128,.08)}
+#engineStart:disabled{opacity:.42;cursor:not-allowed}
 .language-card{padding:17px;gap:10px}
 .language-head strong{font-size:13px}.language-score{font-size:20px}
 .language-details{font-size:11px}
@@ -206,7 +209,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
         <div class="engine-description" id="engineDescription">Lecture de l’installation et de sa disponibilité réelle sur le serveur.</div>
         <div class="engine-progress" aria-label="Installation des fichiers uniquement, pas apprentissage du français"><span id="engineProgress"></span></div>
         <div class="engine-row"><span id="engineStage">État en attente</span><span id="engineCost">Modèle libre · aucun coût par requête</span></div>
-        <div class="engine-foot"><span id="engineRevision">Révision moteur —</span><button type="button" id="engineRefresh">Actualiser l’état</button></div>
+        <div class="engine-foot"><span id="engineRevision">Révision moteur —</span><div class="engine-controls"><button type="button" id="engineStart" title="Démarrer et vérifier le modèle installé · authentification privée requise · aucune API payante">Démarrer / vérifier</button><button type="button" id="engineRefresh">Actualiser l’état</button></div></div>
       </section>
       <section class="panel language-card" aria-label="Évaluation mesurée du français">
         <div class="language-head"><strong>Qualité du français · tests réels</strong><span class="language-score" id="languageScore">—</span></div>
