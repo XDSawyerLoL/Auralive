@@ -136,6 +136,17 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 @media(max-width:640px){.local-voice-btn{font-size:10px;padding:7px}.chat-head{flex-wrap:wrap}.chat-head-state{flex-basis:100%;margin-left:0}.shell{padding:8px}.topbar{height:62px;padding:9px 12px;top:5px;border-radius:19px}.brand-name{font-size:19px}.aura-intro{padding:22px 6px 15px}.aura-intro h1{font-size:30px}.intro-copy{font-size:12px}.build-version{display:none}.status-rail{grid-template-columns:1fr 1fr;gap:8px}.rail-item{min-height:70px;padding:11px}.rail-item:last-child{grid-column:1 / -1}.rail-value{font-size:12px}.main{gap:9px}.chat{min-height:calc(100svh - 68px)}.chat-head{padding:16px}.messages{padding:14px;gap:12px}.msg{font-size:15px;max-width:92%;padding:13px 15px}.composer{padding:10px}.composer textarea{font-size:16px}.chat-hint{padding:0 12px 10px}.side{grid-template-columns:1fr;gap:9px}.map-wrap{height:250px}.organism-hud,.map-badge{display:flex}.map-foot{font-size:10px}.engine-panel{padding:15px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 
+
+/* Operational paper-trading lab: no fabricated yields or broker controls. */
+.trading-lab{padding:16px;display:grid;gap:12px;border-color:rgba(116,218,192,.17);background:linear-gradient(150deg,rgba(9,28,26,.91),rgba(11,13,17,.96))}
+.trading-head{display:flex;justify-content:space-between;align-items:center;gap:10px}.trading-head strong{display:block;font-size:17px;letter-spacing:-.015em}.trading-kicker{font-size:9px;letter-spacing:.17em;color:#8bd9c4;margin-bottom:5px}
+.trading-chip{font-size:9px;letter-spacing:.05em;color:#b8f4d5;border:1px solid rgba(116,218,192,.2);background:rgba(116,218,192,.065);padding:7px;border-radius:8px;white-space:nowrap}
+.trading-controls{display:flex;gap:8px;align-items:center}.trading-controls label{font-size:11px;color:#aaa}.trading-controls select{min-width:0;background:#101d1c;border:1px solid rgba(116,218,192,.22);padding:10px;border-radius:10px;color:#e7faf5;font-size:12px;flex:1}
+.trading-controls button{background:linear-gradient(135deg,#81e8d1,#2b9b91);border:0;border-radius:10px;color:#062322;font-weight:700;padding:10px 12px;font-size:11px}.trading-controls button:disabled{opacity:.45;cursor:not-allowed}
+.trading-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.trading-stats>div{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.055);border-radius:11px;padding:11px}.trading-stats span{display:block;color:#9bb2ad;font-size:10px}.trading-stats strong{display:block;font-size:19px;color:#f3fffc;margin-top:5px;font-variant-numeric:tabular-nums}
+.trading-chart{display:block;width:100%;height:90px;background:linear-gradient(180deg,rgba(116,218,192,.045),transparent);border-bottom:1px solid rgba(116,218,192,.12);border-radius:8px}
+.trading-status{color:#c7ded9;font-size:11px;line-height:1.5;min-height:20px}.trading-activity{display:grid;gap:5px;max-height:105px;overflow:auto}.trade-event{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#b1c1be;border-bottom:1px solid rgba(255,255,255,.045);padding:5px 0}.trading-disclaimer{color:#849c95;line-height:1.5;font-size:9px}
+@media(max-width:500px){.trading-head{flex-wrap:wrap}.trading-chip{font-size:8px}.trading-controls{flex-wrap:wrap}.trading-controls button{width:100%}.trading-stats strong{font-size:16px}}
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -218,7 +229,30 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
         <p class="language-help" id="languageSetupHelp" hidden></p>
       </section>
 
-      <section class="panel mini-card">
+      <section class="panel trading-lab" aria-label="AURA Trading Lab — simulation sans argent réel">
+         <div class="trading-head">
+           <div><div class="trading-kicker">AURA // TRADING LAB</div><strong>Marchés · Simulation</strong></div>
+           <span class="trading-chip">PAPER ONLY · 0 € INVESTI</span>
+         </div>
+         <div class="trading-controls">
+           <label for="tradePair">Marché</label>
+           <select id="tradePair" aria-label="Paire de marché">
+             <option value="XBTEUR">BTC / EUR</option><option value="ETHEUR">ETH / EUR</option>
+           </select>
+           <button id="tradeBacktest" type="button">Tester la stratégie</button>
+         </div>
+         <div class="trading-stats">
+           <div><span>Capital fictif</span><strong>1 000 €</strong></div>
+           <div><span>Résultat simulé</span><strong id="tradePnl">—</strong></div>
+           <div><span>Drawdown maximal</span><strong id="tradeDrawdown">—</strong></div>
+           <div><span>Transactions closes</span><strong id="tradeCount">—</strong></div>
+         </div>
+         <svg id="tradeChart" class="trading-chart" viewBox="0 0 400 86" role="img" aria-label="Courbe du capital virtuel"><path id="tradeChartPath" d="" fill="none" stroke="#78ddc8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+         <div id="tradeStatus" class="trading-status">Aucune opération financière réelle. Lancer une simulation pour obtenir des mesures.</div>
+         <div id="tradeTrades" class="trading-activity"></div>
+         <div class="trading-disclaimer">Cours publics Kraken · EMA 12/48 · pas de levier · frais et glissement estimés · performance passée non prédictive.</div>
+       </section>
+       <section class="panel mini-card">
         <div class="mini-label">Ce qu’elle fait</div>
         <div id="nextAction" class="mini-value">Lecture de l’activité…</div>
         <div class="mini-copy">Priorité / confiance : <span id="confidenceValue">—</span></div>
