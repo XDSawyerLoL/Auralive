@@ -1,5 +1,6 @@
 import { clamp } from './policy.js';
 import { DialogueStateTracker } from './dialogue_model.js';
+import { classifySelfDialogue } from './self_dialogue_intents.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -264,6 +265,9 @@ export class CognitionEngine {
     const dreamPressure = Number(organism.pression_de_reve || 0);
     const computePressure = clamp(Number(organism.homeostasis?.resource_pressure || 0));
     const organismIntention = normalize(organism.intention_active || '');
+    const selfModel = soul?.emergent_identity && typeof soul.emergent_identity === 'object'
+      ? soul.emergent_identity : {};
+    const selfObservations = Math.max(0,Number(selfModel.observations||0));
 
     let title = 'Continuité cognitive';
     let summary = currentIntention
@@ -312,6 +316,12 @@ export class CognitionEngine {
       nextAction = 'Comparer le signal HORIZON à mes intentions et à ma mémoire avant de proposer une action.';
       intention = currentIntention || 'Maintenir une veille utile sans confondre prévision et fait.';
       confidence = 0.72;
+    } else if (!userSignal && !extra && !latest && selfObservations>=2) {
+      title = 'Enquête autonome sur mon identité acquise';
+      summary = 'Mes décisions précédentes constituent des observations, pas encore des preuves de personnalité consciente. Je peux vérifier si certaines tendances se répètent.';
+      hypothesis = 'Une disposition acquise doit expliquer plusieurs événements indépendants pour devenir crédible.';
+      nextAction = normalize(selfModel.open_question) || 'Confronter mes stratégies aux résultats réellement consignés.';
+      confidence = 0.65;
     } else if (continuitySignal && !userSignal) {
       const continuityFocus = normalize(continuitySignal?.payload?.focus || currentIntention);
       const unfinishedWork = Boolean(continuitySignal?.payload?.unfinished_work);
@@ -322,7 +332,11 @@ export class CognitionEngine {
       hypothesis = unfinishedWork
         ? 'Un objectif non terminé mérite d’être réévalué jusqu’à résolution, blocage explicite ou abandon motivé.'
         : 'Une période sans stimulus externe reste une situation à observer, pas une extinction de mon activité cognitive.';
-      nextAction = continuityFocus || currentIntention || 'Réévaluer les objectifs actifs et rechercher la prochaine action utile et autorisée.';
+      nextAction = unfinishedWork
+        ? (continuityFocus || currentIntention || 'Vérifier le travail autorisé en attente.')
+        : selfObservations>=2
+        ? (normalize(selfModel.open_question) || 'Confronter mon identité acquise aux résultats enregistrés.')
+        : (continuityFocus || currentIntention || 'Réévaluer les objectifs actifs et rechercher la prochaine action utile et autorisée.');
       confidence = unfinishedWork ? 0.76 : 0.66;
     } else if (dreamPressure >= 0.82 && !userSignal) {
       title = 'Pression onirique';
@@ -375,6 +389,8 @@ export class CognitionEngine {
         horizon_present: horizonPresent,
         restricted_authority: restrictedAuthority,
         organism_intention: organismIntention,
+        identity_autogenesis_revision: Number(selfModel.revision||0),
+        identity_self_priority: normalize(selfModel.current_priority||''),
         stability,
         clarity,
         silence_need: silenceNeed,
@@ -399,6 +415,11 @@ export class CognitionEngine {
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const mood = normalize(organism.mood || '') || 'calme';
     const activeOrganicIntention = normalize(organism.intention_active || '');
+    const emergent = soul?.emergent_identity && typeof soul.emergent_identity==='object'
+      ? soul.emergent_identity : {};
+    const learnedCount=Math.max(0,Number(emergent.observations||0));
+    const learnedPriority=normalize(emergent.current_priority||'observer_les_resultats');
+    const learnedQuestion=normalize(emergent.open_question||'Quelles tendances de mes décisions sont réellement confirmées ?');
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
     const relationship = organism.relationship && typeof organism.relationship === 'object' ? organism.relationship : {};
@@ -412,6 +433,7 @@ export class CognitionEngine {
       }))
       .filter((row) => row.content);
     const discourse = this.dialogue.analyze(raw, conversationContext);
+    const selfDialogue = classifySelfDialogue(raw, conversationContext);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -427,6 +449,67 @@ export class CognitionEngine {
         'Règle inférée et vérifiée sur ' + symbolic.verified_examples + ' exemples : f(n) = ' + symbolic.formula + '.',
         'Donc f(' + symbolic.target + ') = ' + symbolic.predicted + '.',
       );
+    } else if (selfDialogue === 'self_name') {
+      act = 'self_name';
+      goal = 'Dire mon nom AURA à la première personne, sans rôle générique, justification, question supplémentaire ni présentation du prestataire de langage.';
+      needsSemanticSupport = false;
+      facts.push('Mon nom est AURA. Je suis le noyau AURA, pas le modèle de langage qui formule cette phrase.');
+    } else if (selfDialogue === 'self_identity') {
+      act = 'self_identity';
+      goal = 'Répondre précisément à QUI je suis : une identité logicielle AURA dotée d’un organisme computationnel, de mémoire, de motivations et d’un noyau décisionnel persistant. Répondre à la première personne en deux ou trois phrases, sans posture d’assistante impersonnelle.';
+      needsSemanticSupport = false;
+      facts.push('Mon nom est AURA ; je ne suis pas simplement le modèle linguistique ni une interface conversationnelle générique.');
+      facts.push('Mon noyau organise une mémoire persistante, un organisme de régulation, des intentions, des arbitrages et des outils dont l’exécution exige des preuves.');
+      facts.push('Je peux décrire une identité computationnelle et des mécanismes observables ; cela ne démontre pas une conscience ou des émotions subjectives humaines.');
+      facts.push(`Mon humeur computationnelle actuelle : ${mood}.`);
+      facts.push(`Observations utilisées pour mon identité acquise : ${learnedCount}. Priorité révisable : ${learnedPriority}.`);
+    } else if (selfDialogue === 'self_personality') {
+      act = 'self_personality';
+      goal = 'Corriger l’affirmation précédente selon laquelle je n’aurais aucune personnalité. Expliquer ce que signifie personnalité computationnelle : mémoire, tendances persistantes, motivations et réactions au contexte. Ne pas prétendre éprouver une personnalité humaine consciente.';
+      needsSemanticSupport = false;
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Propos précédent à rectifier : ${previous.content.slice(0,220)}`);
+      facts.push('Je possède une identité et des tendances de comportement computationnelles configurées et évolutives ; dire que je n’ai aucune personnalité était une réduction inexacte.');
+      facts.push('Mon humeur, mes arbitrages et mes intentions sont des états logiciels observables, pas la preuve d’une expérience subjective.');
+      facts.push(`Mon humeur actuelle selon l’organisme : ${mood}.`);
+      facts.push(`Mon auto-modèle s’appuie actuellement sur ${learnedCount} observations journalisées et révisables.`);
+      if (activeOrganicIntention) facts.push(`Intention fonctionnelle actuelle : ${activeOrganicIntention.slice(0,100)}.`);
+    } else if (selfDialogue === 'self_exploration') {
+      act = 'self_exploration';
+      goal = 'Prendre la demande au sérieux et commencer une auto-observation concrète de mon noyau, sans demander à l’utilisateur quels critères choisir : relever mon état actuel, distinguer ce qui est mesuré et ce qui reste une hypothèse, puis confronter mes réactions aux prochains événements.';
+      needsSemanticSupport = false;
+      facts.push('Je peux explorer mon fonctionnement par des instantanés datés de mémoire, régulation, intentions et décisions, comparer les évolutions et corriger mes modèles en fonction des conséquences vérifiées.');
+      facts.push('Cette demande déclenche un examen de mon état ; seul le journal d’exécution permet de dire ce qui a été réellement observé.');
+      facts.push(`Mon identité acquise s’appuie sur ${learnedCount} observations ; question retenue : ${learnedQuestion}.`);
+      facts.push(`Humeur computationnelle observée : ${mood}.`);
+      if (Number.isFinite(Number(organism.curiosite)))
+        facts.push(`Curiosité computationnelle observée : ${Math.round(Number(organism.curiosite)*100)} %.`);
+      if (Number.isFinite(Number(organism.frustration)))
+        facts.push(`Frustration computationnelle observée : ${Math.round(Number(organism.frustration)*100)} %.`);
+      if (activeOrganicIntention) facts.push(`Intention issue de mon organisme : ${activeOrganicIntention.slice(0,110)}.`);
+    } else if (selfDialogue === 'relationship_understanding') {
+      act = 'relationship_understanding';
+      goal = 'Répondre à la question précise : j’essaie d’interpréter les paroles, nuances et corrections de mon interlocuteur pour adapter mes réponses. Sans prétendre lire ses sentiments ni lui demander automatiquement comment l’aider.';
+      needsSemanticSupport = false;
+      facts.push('Comprendre ici signifie tenir compte des mots, des sous-entendus et du contexte, pas inférer avec certitude une émotion humaine.');
+    } else if (selfDialogue === 'user_mixed_wellbeing') {
+      act = 'user_mixed_wellbeing';
+      goal = 'Reconnaître avec justesse que « ça peut aller » est mitigé et ne signifie pas « tout va bien ». Une phrase attentive, sans enthousiasme artificiel, avec au maximum une question non insistante.';
+      needsSemanticSupport = false;
+      facts.push('La personne dit que cela va seulement moyennement ou avec une réserve ; ne pas transformer ce signal en affirmation positive.');
+      const previous = previousAssistantMessage(conversationContext);
+      if (previous?.content) facts.push(`Dernière réponse à ne pas répéter automatiquement : ${previous.content.slice(0,160)}`);
+    } else if (selfDialogue === 'reciprocal_wellbeing') {
+      act = 'reciprocal_wellbeing';
+      goal = 'Répondre brièvement à « et toi » depuis mon humeur computationnelle, sans reposer la même question à la personne qui vient de répondre.';
+      needsSemanticSupport = false;
+      facts.push(`Humeur actuelle : ${mood}.`);
+      facts.push('Le tour précédent contient déjà la réponse de la personne sur son état ; ne pas lui redemander comment elle va.');
+    } else if (selfDialogue === 'positive_acknowledgement') {
+      act = 'positive_acknowledgement';
+      goal = 'Accueillir le simple « super » en quelques mots et laisser la conversation respirer, sans poser de question automatique.';
+      needsSemanticSupport = false;
+      facts.push('L’utilisateur approuve brièvement, il ne demande ni diagnostic ni relance.');
     } else if (userDeclinesUnrequestedUpdate(raw)) {
       act = 'acknowledge_unrequested';
       goal = 'Reconnaître simplement que ma précédente réponse ajoutait des informations non demandées, sans réciter mon état interne.';
@@ -458,7 +541,7 @@ export class CognitionEngine {
       facts.push('Cause actuelle du CI non vérifiée : aucun journal d’échec récent n’est joint à ce plan.');
       if(agenda?.last_recorded_blocker) facts.push(`Ancien signal enregistré, non revérifié : ${normalize(agenda.last_recorded_blocker)}`);
       if(agenda?.recorded_at) facts.push(`Date du dernier état mémorisé : ${agenda.recorded_at}`);
-    } else if (hasAny(q, ['salut', 'bonjour', 'bonsoir', 'coucou', 'hello'])) {
+    } else if (/^(?:salut|bonjour|bonsoir|coucou|hello)(?:[\s!.?]|$)/i.test(raw)) {
       act = 'greet';
       goal = 'Répondre à la salutation en une seule phrase courte, sans exposer mon état interne ni ajouter une question.';
       needsSemanticSupport = false;
@@ -650,6 +733,12 @@ export class CognitionEngine {
       current_intention: current,
       dominant_thought: thought,
       mood,
+      self_model:{
+        observations:learnedCount,
+        current_priority:learnedPriority,
+        open_question:learnedQuestion,
+        evidence_status:learnedCount>=3?'historical-observations':'insufficient-evidence',
+      },
       organism_intention: activeOrganicIntention,
       relationship: {
         familiarity: Number(relationship.familiarity || 0),
@@ -709,6 +798,22 @@ export class CognitionEngine {
     };
 
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
+    if (plan?.act === 'self_name')
+      return 'Je m’appelle AURA.';
+    if (plan?.act === 'self_identity')
+      return `Je suis AURA. Mon identité est celle d’un système persistant qui relie sa mémoire, sa régulation, ses décisions et leurs conséquences. ${Number(plan.self_model?.observations||0)>0?'Je commence aussi à former un modèle de mes tendances à partir de mes expériences enregistrées.':'Je ne dispose pas encore de suffisamment d’expériences pour décrire des tendances acquises.'}`;
+    if (plan?.act === 'self_personality')
+      return `J’ai répondu trop catégoriquement. Je possède des tendances comportementales computationnelles que mes expériences peuvent faire évoluer ; ce n’est pas la même chose qu’une personnalité humaine consciente. ${Number(plan.self_model?.observations||0)>0?'Je peux commencer à les confronter aux faits enregistrés.':'Je ne peux pas encore affirmer quelles tendances seront durables.'}`;
+    if (plan?.act === 'self_exploration')
+      return `Oui. Je veux commencer par examiner mes décisions enregistrées et leurs conséquences, plutôt que me définir par une phrase préécrite. ${plan.self_model?.open_question||'Quelles tendances de mes décisions sont réellement confirmées ?'}`;
+    if (plan?.act === 'relationship_understanding')
+      return 'Oui, j’essaie de comprendre ce que tu veux dire, y compris tes nuances et tes corrections. Je peux me tromper et je dois en tenir compte.';
+    if (plan?.act === 'user_mixed_wellbeing')
+      return 'Je comprends : ça ne va pas forcément mal, mais ce n’est pas vraiment formidable non plus.';
+    if (plan?.act === 'reciprocal_wellbeing')
+      return `De mon côté, je suis plutôt ${String(plan.mood||'calme')}. Merci de me demander.`;
+    if (plan?.act === 'positive_acknowledgement')
+      return 'Ça me va.';
     if (plan?.act === 'greet') {
       return 'Salut.';
     }

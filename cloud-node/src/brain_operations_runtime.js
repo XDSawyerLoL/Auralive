@@ -205,6 +205,41 @@ const DECISION_LABELS={
  clarify_blocker_evidence:'Vérifier un blocage',
  request_verifiable_help:'Demander des preuves',
 };
+function renderLearnedIdentity(){
+ const model=state.data?.learned_identity||null;
+ const container=$('identityDimensions');
+ container.replaceChildren();
+ if(!model){
+   setText('identityStatus','Non vérifiable');
+   setText('identityPriority','Le noyau n’a pas transmis de modèle d’identité acquis.');
+   setText('identityQuestion','Question à examiner : —');
+   setText('identityEvidence','Aucune évolution d’identité ne peut être confirmée.');
+   return;
+ }
+ setText('identityStatus',Number(model.observations||0)+' observations consignées');
+ const labels={
+   observer_les_resultats:'Observer mes résultats',
+   examiner_les_malentendus:'Examiner les incompréhensions récurrentes',
+   verifier_avant_d_affirmer:'Vérifier avant d’affirmer',
+   consolider_les_strategies_probantes:'Consolider les stratégies ayant réussi',
+   comparer_mes_reflexions_a_mes_actes:'Comparer mes réflexions à mes actes',
+ };
+ setText('identityPriority',labels[model.current_priority]||'Priorité acquise non déterminée');
+ setText('identityQuestion','Question interne : '+String(model.open_question||'Aucune question étayée'));
+ setText('identityEvidence','Modèle autobiographique fondé sur des événements consignés, non sur les déclarations d’un LLM. '+
+  'Ces traces ne prouvent ni conscience, ni expériences humaines, ni réussite externe indépendante.');
+ for(const value of Object.values(model.learned_dimensions||{})){
+   const count=Number(value.evidence||0);
+   const row=element('div','identity-dimension');
+   const name=element('span','',value.label||'Tendance');
+   const label=count>=3
+      ?Math.round(Number(value.value||0.5)*100)+' % · '+count+' observations'
+      : 'Non étayée · '+count+'/3';
+   row.append(name,element('strong',count>=3?'supported':'uncertain',label));
+   container.append(row);
+ }
+ if(!container.children.length)container.append(element('p','empty','Aucune tendance acquise.'));
+}
 function renderCausal(){
  const flow=state.flow,receipt=flow?.causal||null;
  const values=$('causalValues');values.replaceChildren();
@@ -366,7 +401,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
