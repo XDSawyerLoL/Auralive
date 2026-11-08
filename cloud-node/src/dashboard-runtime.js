@@ -1171,8 +1171,13 @@ async function sendMessage(text){
       renderCognitiveGraph();
     }
     await refreshCognitiveTrace();
-    const unavailable=/faculté de français naturel est indisponible|aucun moteur linguistique opérationnel/i.test(String(out.answer||''));
-    $('messages').insertAdjacentHTML('beforeend','<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">AURA</span>'+escapeHtml(out.answer||'')+'</div>');
+    const unavailable=out.response_mode==='natural-language-unavailable'
+      || (out.language_generated!==true
+        && /faculté de français naturel est indisponible|aucun moteur linguistique opérationnel|aucune réponse générée/i.test(String(out.answer||'')));
+    const roleLabel=unavailable?'SERVICE · NON EXÉCUTÉ':'AURA';
+    $('messages').insertAdjacentHTML('beforeend',
+      '<div class="msg aura'+(unavailable?' service-msg':'')+'"><span class="who">'+roleLabel+'</span>'
+      +escapeHtml(out.answer||'')+'</div>');
     $('messages').scrollTop=$('messages').scrollHeight;
     if(!unavailable)speakAura(out.answer||'',out.voice_ticket||'');
     if(unavailable)void refreshEnginePanel();
