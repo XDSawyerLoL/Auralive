@@ -149,6 +149,17 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 @media(max-width:500px){.trading-head{flex-wrap:wrap}.trading-chip{font-size:8px}.trading-controls{flex-wrap:wrap}.trading-controls button{width:100%}.trading-stats strong{font-size:16px}}
 
 /* AURA 3.2 — fixed dialogue dock, readable operational hierarchy. */
+/* Compact dashboard chrome so the composer is visible above the fold. */
+.aura-intro{padding:14px 6px 12px}
+.aura-intro h1{font-size:clamp(27px,2.8vw,35px);margin:5px 0 7px}
+.status-rail{margin-bottom:11px}
+.rail-item{min-height:61px;padding:9px 13px}
+@media(min-width:901px) and (max-height:740px){
+ .aura-intro,.status-rail{display:none}
+ .main{margin-top:12px}
+ .chat{height:calc(100dvh - 110px);min-height:360px}
+}
+
 :root{--bg:#080d13;--panel:rgba(11,20,28,.95);--line:rgba(161,199,218,.14);--text:#eef7ff;--muted:#a5bbc9;--gold:#f5c18d;--violet:#ab9cff;--green:#75dfbe}
 body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),transparent 68%),radial-gradient(800px 630px at 4% 54%,rgba(74,79,161,.10),transparent 67%),#070c12;background-attachment:fixed}
 .topbar{background:rgba(8,17,26,.92);border:1px solid rgba(143,184,206,.18);box-shadow:0 10px 36px rgba(0,0,0,.35)}
@@ -156,7 +167,7 @@ body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),tr
 .intro-caption{color:#94c8ed}.intro-copy{color:#a7bed0}
 .panel{background:linear-gradient(145deg,rgba(18,29,42,.96),rgba(8,15,25,.97) 80%);border:1px solid rgba(166,193,220,.13);box-shadow:inset 0 1px rgba(250,255,255,.055),0 18px 55px rgba(0,0,0,.21)}
 .main{align-items:start;grid-template-columns:minmax(0,1fr) minmax(360px,445px);gap:17px}
-.chat{position:sticky;top:96px;height:calc(100dvh - 110px);min-height:500px;max-height:1050px;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto auto;z-index:8;overscroll-behavior:contain}
+.chat{position:sticky;top:96px;height:calc(100dvh - 260px);min-height:470px;max-height:800px;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto auto;z-index:8;overscroll-behavior:contain}
 .chat-head{background:rgba(10,23,34,.95);padding:17px 20px;min-height:77px;flex-wrap:wrap}.chat-title{color:#f3fdff}.chat-sub{color:#86a1b4}.chat-head-state{color:#adcad7}
 .messages{flex:initial;min-height:0;min-width:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#365267 transparent;padding:24px;background:radial-gradient(ellipse at 50% 0%,rgba(85,167,191,.052),transparent 65%)}
 .msg{max-width:min(86%,780px);font-size:14px;line-height:1.62;border-radius:17px;background:rgba(245,251,255,.035);border-color:rgba(184,220,241,.085);color:#e5f2fa}
