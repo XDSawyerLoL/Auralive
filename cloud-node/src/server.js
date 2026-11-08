@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
-import { embeddedLanguageRuntime } from './embedded_language.js';
+import { embeddedLanguageRuntime, shouldWarmInstalledLanguage } from './embedded_language.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -2217,8 +2217,7 @@ function startMaintenance() {
 export function startRuntimeLoop() {
   // Installed local inference is independent of MySQL initialization.
   // Do not download weights here: no unmanaged bandwidth or cost at startup.
-  if(process.env.CI!=='true' && process.env.NODE_ENV==='production'
-    && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false'
+  if(shouldWarmInstalledLanguage()
     && embeddedLanguageRuntime.installed()){
     void embeddedLanguageRuntime.start({allowProvision:false}).catch(error=>{
       app.log.warn({code:String(error?.code||'embedded-start-failed')},
