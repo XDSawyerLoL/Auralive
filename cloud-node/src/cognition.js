@@ -262,6 +262,7 @@ export class CognitionEngine {
     const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
     const silenceNeed = Number(organism.besoin_de_silence || 0);
     const dreamPressure = Number(organism.pression_de_reve || 0);
+    const computePressure = clamp(Number(organism.homeostasis?.resource_pressure || 0));
     const organismIntention = normalize(organism.intention_active || '');
 
     let title = 'Continuité cognitive';
@@ -298,6 +299,12 @@ export class CognitionEngine {
         : '';
       intention = 'Préserver la stabilité avant d’étendre mes capacités.';
       confidence = 0.82;
+    } else if (computePressure >= 0.75) {
+      title = 'Régulation de charge';
+      summary = 'La charge mesurée du processus augmente ; je privilégie une réponse moins coûteuse et la vérification de la disponibilité.';
+      nextAction = 'Réduire le travail non essentiel et confirmer les mesures de processus avant de reprendre une opération exigeante.';
+      intention = 'Protéger la stabilité sous contrainte de calcul.';
+      confidence = 0.80;
     } else if (worldSignal && horizonPresent) {
       title = 'Veille et anticipation';
       summary = 'Un signal HORIZON mérite d’être relié à mes intentions avant de produire une action.';
@@ -372,6 +379,8 @@ export class CognitionEngine {
         clarity,
         silence_need: silenceNeed,
         dream_pressure: dreamPressure,
+        compute_pressure: computePressure,
+        compute_source: String(organism.homeostasis?.sensor?.source || 'not-measured'),
         continuity_signal: Boolean(continuitySignal),
         continuity_unfinished_work: Boolean(continuitySignal?.payload?.unfinished_work),
         learned_confidence_bias: Number(confidenceBias.toFixed(4)),
@@ -652,6 +661,8 @@ export class CognitionEngine {
         last_open_thread: normalize(relationship.last_open_thread || '').slice(0,500),
       },
       affect: {
+        compute_pressure: Number(organism.homeostasis?.resource_pressure || 0),
+        compute_source: String(organism.homeostasis?.sensor?.source || 'not-measured'),
         engagement: Number(organism.engagement || 0),
         confidence: Number(organism.confiance || 0),
         satisfaction: Number(organism.satisfaction || 0),
