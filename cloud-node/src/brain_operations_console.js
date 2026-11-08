@@ -129,13 +129,9 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 
     <aside class="rail inspector">
       <div class="inspector-scroll">
-        <section class="owner" id="ownerArea">
-          <label id="authState">Accès aux traces : vérification…</label>
-          <div id="ownerFields" class="owner-form">
-            <input id="ownerKey" type="password" placeholder="Clé privée AURA" autocomplete="off" aria-label="Clé propriétaire AURA">
-            <button id="ownerSignIn" type="button">Ouvrir</button>
-          </div>
-          <p>Les trajets détaillés sont privés. La carte n’expose pas le contenu des conversations ; elle expose uniquement les modules traversés et leurs preuves.</p>
+        <section class="owner" aria-label="Accès aux observations">
+          <label>OBSERVATIONS PUBLIQUES · LECTURE SEULE</label>
+          <p>Trajets, outils et journal consultables sans connexion. Seules les métadonnées d’exécution sont affichées ; aucun texte de conversation ni secret n’est publié.</p>
         </section>
 
         <section class="detail-card">
