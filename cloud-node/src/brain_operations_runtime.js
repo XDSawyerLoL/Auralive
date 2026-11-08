@@ -2,7 +2,7 @@ export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
 const $=id=>document.getElementById(id);
 const GROUPS={conversation:'Conversation',core:'Noyau et décision',memory:'Mémoire',language:'Langage',provider:'Modèles',security:'Contrôles',tools:'Outils',execution:'Exécution',research:'Recherche'};
-const COLORS={conversation:'#f0bb88',core:'#eea7a1',memory:'#c2a0ff',language:'#6ae3d8',provider:'#7ecbff',security:'#e5b086',tools:'#9bd9f1',execution:'#ef9cab',research:'#c8c59b'};
+const COLORS={conversation:'#ffbb8a',core:'#ffa26e',memory:'#ed80ff',language:'#67fafa',provider:'#ff6e9b',security:'#ff9a9b',tools:'#af77fb',execution:'#ffa866',research:'#69f3f4'};
 const POS={
  input:[90,385],kernel:[560,380],homeostasis:[290,470],memory:[310,245],knowledge:[175,162],journal:[110,245],
  cognition:[480,270],attention:[430,122],inference:[485,565],semantic:[680,146],language:[760,295],
@@ -12,14 +12,14 @@ const POS={
  trading:[1040,570],audit:[1005,664],voice:[1084,488],peer:[190,566]
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
-const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false};
+const state={data:null,selected:'kernel',flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
 const canvas=$('graphCanvas'),ctx=canvas.getContext('2d'),view=$('graphViewport');
 const reduced=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=s=>{const n=Date.parse(String(s||''));return Number.isFinite(n)?new Date(n).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'medium'}):'—';};
 const shortTime=s=>{const n=Date.parse(String(s||''));return Number.isFinite(n)?new Date(n).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';};
 const tone=n=>COLORS[n?.group]||'#b8c6d0';
-const GROUP_CLOUDS=[['memory',[280,250],200,'150,112,225'],['core',[550,360],250,'196,94,109'],['language',[825,300],230,'74,196,186'],['execution',[660,620],250,'190,126,126'],['research',[390,70],150,'158,152,98']];
+const GROUP_CLOUDS=[['memory',[280,250],220,'217,68,244'],['core',[550,360],265,'245,89,116'],['language',[825,300],240,'23,218,232'],['execution',[660,620],250,'255,137,66'],['research',[390,70],170,'163,74,248']];
 
 function element(name,cls,text){const e=document.createElement(name);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
 function setText(id,val){const el=$(id);if(el)el.textContent=String(val??'—');}
@@ -162,6 +162,78 @@ function renderTools(){
  }
 }
 
+function renderSourceCallouts(){
+ const d=state.data;
+ if(!d)return;
+ const memory=d.telemetry?.memory||[];
+ const memValue=memory.reduce((sum,m)=>Number.isFinite(m.value)?sum+m.value:sum,0);
+ const any=memory.some(m=>Number.isFinite(m.value));
+ setText('niMemoryCount',any?memValue.toLocaleString('fr-FR'):'—');
+ const setNode=(id,timeId,stateId,detailId)=>{
+   const n=findNode(id);
+   const last=n?.last_observed_at;
+   setText(timeId,shortTime(last));
+   const mark=$(stateId);
+   if(mark){mark.textContent=n?.activity_verified?'OBSERVÉ':'NON VÉRIFIÉ';mark.classList.toggle('recent',n?.activity_verified===true);}
+   if(detailId)setText(detailId,n?.activity_verified?'Transition effectivement persistée':'Aucune exécution récente constatée');
+ };
+ setNode('memory','niMemoryTime','niMemoryState');
+ setNode('web','niWebTime','niWebState');
+ setNode('kernel','niKernelTime','niKernelState','niKernelInfo');
+}
+
+function renderMemory(){
+ const root=$('memoryStats');root.replaceChildren();
+ const items=state.data?.telemetry?.memory||[];
+ if(!items.length){root.append(element('p','empty','Aucune mesure publique de mémoire disponible.'));return;}
+ for(const item of items){
+  const row=element('div','memory-row');
+  row.append(element('span','',item.label),element('strong','',
+   Number.isFinite(item.value)?item.value.toLocaleString('fr-FR'):'—'));
+  root.append(row);
+ }
+}
+
+function renderActivity(){
+ const root=$('activityStats');root.replaceChildren();
+ if(!state.data?.authorized){
+   root.append(element('p','empty','Les traces d’exécution nécessitent la session propriétaire.'));
+   return;
+ }
+ const flows=state.data.flows||[];
+ if(!flows.length){
+   root.append(element('p','empty','Aucune mission ou réponse corrélée attestée sur la période.'));
+   return;
+ }
+ for(const flow of flows.slice(0,7)){
+   const row=element('div','activity-entry');
+   row.append(element('strong','',flow.step_count+' transitions enregistrées · '+(flow.state==='completed'?'réponse finalisée':'chemin partiel')));
+   row.append(element('small','',shortTime(flow.updated_at)+' · identifiant '+flow.id.slice(0,12)));
+   root.append(row);
+ }
+}
+
+function renderToolMirror(){
+ const root=$('toolMirror');root.replaceChildren();
+ if(!state.data?.authorized){
+   root.append(element('p','empty','Connexion propriétaire requise : aucun appel privé n’est divulgué.'));
+   return;
+ }
+ const tools=state.data?.observed_tools||[];
+ if(!tools.length){
+   root.append(element('p','empty','Aucun outil invoqué dans les traces consultées.'));
+   return;
+ }
+ for(const t of tools.slice(0,12)){
+   const row=element('div','event-row');
+   row.append(element('i'));
+   const info=element('div');
+   info.append(element('strong','',t.label));
+   info.append(element('small','',shortTime(t.observed_at)+' · '+t.source+' · statut : '+t.status));
+   row.append(info);root.append(row);
+ }
+}
+
 function renderKPIs(){
  const d=state.data;if(!d)return;
  setText('kModules',d.nodes?.length||0);
@@ -180,8 +252,8 @@ function renderKPIs(){
  $('ownerFields').hidden=d.authorized;$('ownerArea').hidden=d.authorized;
 }
 
-function renderAll(){renderKPIs();renderModules();renderInspect();renderRoute();renderFlows();renderEvents();renderTools();renderMetrics();draw();}
-function selectNode(id){state.selected=id;renderModules();renderInspect();draw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
+function selectNode(id){state.selected=id;renderModules();renderInspect();scheduleDraw();}
 
 let canvasW=1000,canvasH=700,scale=1;
 function sizeCanvas(){
@@ -263,7 +335,27 @@ canvas.addEventListener('pointermove',e=>{if(!state.drag)return;const r=canvas.g
 canvas.addEventListener('pointerup',e=>{const drag=state.drag;state.drag=null;if(!drag||drag.moved)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const hit=[...state.screen].reverse().find(item=>inside(item,x,y));if(hit)selectNode(hit.id);});
 canvas.addEventListener('wheel',e=>{e.preventDefault();state.zoom=Math.min(3,Math.max(.6,state.zoom*(e.deltaY>0?.92:1.08)));draw();},{passive:false});
 $('graphMore').onclick=()=>{state.zoom=Math.min(3,state.zoom*1.15);draw();};$('graphLess').onclick=()=>{state.zoom=Math.max(.6,state.zoom/1.15);draw();};$('graphReset').onclick=()=>{state.zoom=1;state.panX=0;state.panY=0;draw();};
-window.addEventListener('resize',draw,{passive:true});$('moduleSearch').addEventListener('input',renderModules);
+window.addEventListener('resize',scheduleDraw,{passive:true});$('moduleSearch').addEventListener('input',renderModules);
+
+document.querySelectorAll('[data-focus]').forEach(button=>{
+ button.addEventListener('click',()=>{
+   const target=button.getAttribute('data-focus');
+   const node=$(target);
+   if(!node)return;
+   if(target==='chatInput')node.focus();
+   else node.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+   document.querySelectorAll('[data-focus]').forEach(x=>
+     x.classList.toggle('scene-active',x===button));
+ });
+});
+document.querySelectorAll('[data-inspect]').forEach(panel=>{
+ const open=()=>selectNode(panel.getAttribute('data-inspect'));
+ panel.addEventListener('click',open);
+ panel.addEventListener('keydown',ev=>{
+  if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open();}
+ });
+});
+
 
 async function poll(){
  if(state.pollInFlight)return;
