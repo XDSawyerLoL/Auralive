@@ -414,7 +414,10 @@ async function startRuntime() {
     // Always non-blocking: the first verified GGUF install can take minutes.
     // Production-only to avoid downloading model weights during CI/test runs.
     if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
-      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false') {
+      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false'
+      && !embeddedLanguageRuntime.installed()) {
+      // The independent startup loop handles already installed files, even if
+      // the database is unavailable; this path only provisions missing files.
       void embeddedLanguageRuntime.start().catch((error) => {
         app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
           'AURA: local French engine warmup failed');
@@ -1294,6 +1297,30 @@ app.get('/api/language/embedded/status', async () => ({
   // Public, path-free diagnostics. Does not disclose server folders or secrets.
   ...kernel.expression.language.embedded.status(),
 }));
+
+// Manually verify an installed model. No download, cloud API or user text involved.
+// Never wait for a 150-second native startup in an HTTP request on shared hosting.
+app.post('/api/language/embedded/start', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  const engine=kernel.expression.language.embedded;
+  if (process.env.AURA_EMBEDDED_LANGUAGE_ENABLED === 'false')
+    return reply.code(409).send({error:'Moteur local désactivé'});
+  if (!engine.installed())
+    return reply.code(409).send({error:'Les fichiers du modèle ou du moteur sont absents. Aucun téléchargement lancé.'});
+  const before=engine.status();
+  if (before.ready) return {started:false,already_ready:true,status:before};
+  if (engine.booting) return reply.code(202).send({started:false,already_starting:true,status:before});
+  if (Date.now()<engine.cooldownUntil)
+    return reply.code(429).send({error:'Temporisation après échec; consulter le diagnostic.',status:before});
+  const budget=before.memory_preflight;
+  if (budget && budget.safe_to_start===false)
+    return reply.code(409).send({error:'Mémoire insuffisante pour démarrer Qwen3 Q8 sans risque.',status:before});
+  void engine.start({allowProvision:false}).catch(error=>{
+    app.log.warn({code:String(error?.code||'embedded-start-failed')},'AURA: manual local engine verification failed');
+  });
+  return reply.code(202).send({started:true,external_api_calls:0,paid_cost_eur:0,
+    status:engine.status(),message:'Démarrage local demandé. Actualiser le diagnostic pour la preuve d’inférence.'});
+});
 
 app.get('/api/language/progress', async () => {
   if (!bootstrap.runtimeReady) return { status: 'not-evaluated', score: null, delta: null, evaluated_at: null };
@@ -2188,6 +2215,16 @@ function startMaintenance() {
 }
 
 export function startRuntimeLoop() {
+  // Installed local inference is independent of MySQL initialization.
+  // Do not download weights here: no unmanaged bandwidth or cost at startup.
+  if(process.env.CI!=='true' && process.env.NODE_ENV==='production'
+    && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false'
+    && embeddedLanguageRuntime.installed()){
+    void embeddedLanguageRuntime.start({allowProvision:false}).catch(error=>{
+      app.log.warn({code:String(error?.code||'embedded-start-failed')},
+        'AURA: independent local French warmup failed');
+    });
+  }
   startRuntime().catch((error) => {
     bootstrap.startupError = safeError(error);
   });
