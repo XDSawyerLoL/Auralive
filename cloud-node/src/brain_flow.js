@@ -191,3 +191,42 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
   warning:'Un chemin lumineux correspond à un événement brain-hop réellement persisté. Les connexions grises sont seulement architecturales. Aucun indicateur ne prouve une conscience vécue.',
  };
 }
+
+/**
+ * Public, read-only projection of verifiable module telemetry.
+ * Never ship trace context, titles, SQL IDs, user prompts, command details,
+ * secret-bearing provider labels, or raw non-UUID correlation identifiers.
+ */
+const PUBLIC_FLOW_UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const PUBLIC_PROVIDERS=new Set(['groq-free','groq','openrouter','openrouter-free','local','llama.cpp','embedded','qwen3']);
+export function toPublicBrainFlowGraph(graph){
+ return {
+  ...graph,
+  flows:(graph.flows||[]).map((flow,index)=>({
+   id:PUBLIC_FLOW_UUID.test(flow.id)?flow.id:'trajet-'+String(index+1).padStart(2,'0'),
+   started_at:flow.started_at,
+   updated_at:flow.updated_at,
+   step_count:flow.step_count,
+   state:flow.state,
+   running_verified:false,
+   steps:(flow.steps||[]).map(step=>({
+    from:step.from,to:step.to,at:step.at,status:step.status,
+    provider:PUBLIC_PROVIDERS.has(step.provider)?step.provider:'',
+   })),
+  })),
+  events:(graph.events||[]).map((event,index)=>({
+   id:'event-'+(index+1),
+   at:event.at,
+   type:event.type,
+   label:event.type==='command-event'?'Commande enregistrée':
+    event.type==='organism-event'?'Événement de l’organisme':
+    CATEGORIES[event.type]||'Événement enregistré',
+   source:event.source,
+   execution_verified:false,
+  })),
+  observed_tools:(graph.observed_tools||[]).map(tool=>({
+   id:tool.id,label:tool.label,observed_at:tool.observed_at,
+   source:tool.source,status:tool.status,execution_verified:false,
+  })),
+ };
+}
