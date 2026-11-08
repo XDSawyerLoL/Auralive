@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 const STAGES = new Set([
   'request', 'input', 'homeostasis', 'stimulus', 'context', 'decision',
   'research', 'semantic', 'expression', 'homeostasis_post', 'persistence',
+  'cycle', 'regulation', 'context_auto', 'reflection_auto', 'execution_auto', 'commit_auto',
 ]);
 const STATES = new Set(['running', 'done', 'skipped', 'error']);
 const ALLOWED_DETAILS = new Set([
@@ -12,7 +13,8 @@ const ALLOWED_DETAILS = new Set([
   'memory_items', 'research_evidence', 'answer_chars', 'token_budget',
   'semantic_requested', 'semantic_available', 'external_required',
   'confidence', 'delta_stability', 'delta_curiosity', 'delta_frustration',
-  'decision_act', 'language_mode',
+  'decision_act', 'language_mode', 'stimuli_count', 'lessons_count',
+  'cycle_reflected', 'execution_confirmed', 'operation_kind', 'trigger_kind',
 ]);
 const LIMIT = 120;
 const TTL_MS = 20 * 60_000;
@@ -23,6 +25,10 @@ const cleanDetails = (details = {}) => {
     if (typeof value === 'boolean') result[key] = value;
     else if (typeof value === 'number' && Number.isFinite(value)) {
       result[key] = Math.max(-100000, Math.min(100000, Math.round(value * 1000) / 1000));
+    } else if (key === 'trigger_kind' && typeof value === 'string') {
+      result[key] = ['ambient', 'manual', 'continuity', 'scheduled', 'event', 'other'].includes(value) ? value : 'other';
+    } else if (key === 'operation_kind' && typeof value === 'string') {
+      result[key] = ['agent', 'swarm', 'operator'].includes(value) ? value : 'other';
     } else if (key === 'language_mode' && typeof value === 'string') {
       const modes = ['french-language-faculty', 'natural-language-unavailable', 'deterministic-emergency-fallback'];
       result[key] = modes.includes(value) ? value : 'unknown';
@@ -47,18 +53,30 @@ export class CognitiveTraceLedger {
     while (this.runs.size > LIMIT) this.runs.delete(this.runs.keys().next().value);
   }
 
-  start(sessionId) {
+  start(sessionId, kind = 'conversation') {
     this.prune();
     const id = randomUUID();
     const started = this.clock();
     const run = {
-      id, session_id: String(sessionId || ''), started_ms: started,
+      id, session_id: String(sessionId || ''), kind: kind === 'autonomy' ? 'autonomy' : 'conversation', started_ms: started,
       started_at: new Date(started).toISOString(), state: 'running', events: [],
     };
     this.runs.set(id, run);
-    this.mark(id, 'request', 'running');
+    this.mark(id, run.kind === 'autonomy' ? 'cycle' : 'request', 'running');
     this.prune();
     return id;
+  }
+
+  startAutonomy(trigger = 'ambient') {
+    const id = this.start('__internal_autonomy__', 'autonomy');
+    const bucket = /^continuity:/.test(String(trigger)) ? 'continuity'
+      : ['ambient', 'manual', 'scheduled', 'event'].includes(String(trigger)) ? String(trigger) : 'other';
+    this.mark(id, 'cycle', 'running', { trigger_kind: bucket });
+    return id;
+  }
+
+  snapshotAutonomy(requestedId = '') {
+    return this.snapshot('__internal_autonomy__', requestedId);
   }
 
   mark(id, stage, status = 'done', details = {}) {
@@ -82,7 +100,7 @@ export class CognitiveTraceLedger {
     run.finished_at = new Date(stamp).toISOString();
     run.duration_ms = Math.max(0, stamp - run.started_ms);
     run.events.push({
-      stage: 'request', status: run.state, at: run.finished_at,
+      stage: run.kind === 'autonomy' ? 'cycle' : 'request', status: run.state, at: run.finished_at,
       elapsed_ms: run.duration_ms, details: {},
     });
     return true;
@@ -99,6 +117,7 @@ export class CognitiveTraceLedger {
     return {
       available: true,
       id: run.id,
+      kind: run.kind,
       state: run.state,
       started_at: run.started_at,
       finished_at: run.finished_at || null,
