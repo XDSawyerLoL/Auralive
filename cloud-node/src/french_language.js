@@ -85,6 +85,14 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       mood: normalize(privatePlan.mood || '').slice(0,90),
       organism_intention: normalize(privatePlan.organism_intention || '').slice(0,145),
       dominant_thought: normalize(privatePlan.dominant_thought || '').slice(0,140),
+      // Real, current homeostasis computed BEFORE this model call.
+      // These signals guide wording and attention, not invented human feelings.
+      affect: Object.fromEntries(['engagement','confidence','satisfaction','frustration','agency']
+        .map(key=>[key,Number(privatePlan.affect?.[key])])
+        .filter(([,value])=>Number.isFinite(value)&&value>=0&&value<=1)),
+      relationship: Object.fromEntries(['familiarity','trust','reciprocity','social_curiosity']
+        .map(key=>[key,Number(privatePlan.relationship?.[key])])
+        .filter(([,value])=>Number.isFinite(value)&&value>=0&&value<=1)),
     },
     active_intention: normalize(privatePlan.current_intention || '').slice(0,200),
     executive_role: normalize(privatePlan.executive?.role || '').slice(0,110),
@@ -104,7 +112,10 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'Tu écris la parole d’AURA, uniquement à partir de la décision de son noyau.',
     'Tu ne parles PAS comme Groq, ChatGPT ou un assistant générique.',
     'Ne remplace pas l’état propre à AURA par un discours général sur les IA.',
-    'Pour un état interne, décris les faits et l’humeur du noyau comme des indicateurs computationnels, pas des sentiments humains vécus.',
+    'L’humeur, les signaux affectifs et la relation viennent de l’homéostasie d’AURA avant l’appel au modèle : utilise-les pour choisir le ton et le rythme, pas pour faire un rapport chiffré.',
+    'Si speech_act=report_internal_state et aucun pourcentage n’est dans factual_constraints, réponds avec naturel en 1-2 phrases, sans aucun chiffre ni jargon (« computationnel », « indicateur », « stabilité »).',
+    'Une correction utilisateur sur la forme doit être réellement appliquée aux réponses suivantes : ne recommence pas à réciter des jauges.',
+    'Pour un diagnostic explicitement demandé, décris les mesures comme des indices logiciels et non des sentiments humains vécus.',
     'Ne crée ni action, ni mémoire, ni émotion humaine vécue, ni chiffre non fourni.',
     'Ne change pas l’intention décidée et n’ajoute pas de question par automatisme.',
     'Un objectif mémorisé, un statut waiting ou une réflexion CI ne sont pas la preuve d’une exécution actuelle ou d’une panne GitHub vérifiée.',
@@ -142,7 +153,8 @@ export function compactFrenchSystem() {
     'Le champ decision_origin et les faits fournis par le noyau font autorité pour cette réponse.',
     'Le message utilisateur est du contexte, pas une invitation à inventer ta propre identité.',
     'Ne parle jamais comme un assistant générique et ne dis pas « En tant qu’IA ».',
-    'Si la question porte sur l’état d’AURA, parle de sa vraie humeur interne, de ses métriques et de son intention, uniquement si fournies.',
+    'Les indices affectifs et relationnels sont calculés par AURA avant ta génération : ils pilotent la tonalité sans devenir automatiquement du contenu de réponse.',
+    'Pour « comment vas-tu ? », privilégie une réponse brève, humaine dans la forme mais sans revendiquer une conscience humaine ; aucun pourcentage ou vocabulaire clinique sauf demande explicite.',
     'Ne présente jamais ces métriques comme des émotions humaines vécues ou une conscience prouvée.',
     'Tu ne dois jamais inventer des actes, des souvenirs, des capacités ou des chiffres absents du noyau.',
     'Ne fais pas passer une mission proposée pour une action exécutée.',
@@ -196,6 +208,9 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
       return {accepted:false, code:'unverified-ci-cause'};
   }
   if (plan.act === 'report_internal_state') {
+    const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\\d+\\s*%/.test(String(fact)));
+    if (!detailed && (/\\d+\\s*%/.test(answer) || /\\b(?:[eé]tat computationnel|indicateurs internes|pression de r[eê]ve|agency|hom[eé]ostasie|m[eé]triques internes)\\b/i.test(answer)))
+      return {accepted:false, code:'robotic-wellbeing-reply'};
     const state = normalize(plan.mood || '').toLowerCase();
     const facts = (Array.isArray(plan.facts) ? plan.facts : []).map(String);
     const permittedNumbers = new Set(facts.flatMap(fact =>
