@@ -1,4 +1,5 @@
 import {BRAIN_OPERATIONS_CSS} from './brain_operations_style.js';
+import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
 import {BRAIN_OPERATIONS_SCRIPT} from './brain_operations_runtime.js';
 
 export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
@@ -9,6 +10,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <meta name="theme-color" content="#06080d">
 <title>AURA — Interface neuronale réelle</title>
 <style>__OPS_CSS__</style>
+<style>__REFERENCE_CSS__</style>
 </head>
 <body>
 <div class="shell">
@@ -200,4 +202,5 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 </body>
 </html>`
 .replace('__OPS_CSS__', BRAIN_OPERATIONS_CSS)
+.replace('__REFERENCE_CSS__', BRAIN_REFERENCE_THEME)
 .replace('__OPS_SCRIPT__', BRAIN_OPERATIONS_SCRIPT);
