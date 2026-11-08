@@ -111,12 +111,14 @@ test('new /cerveau actually is a functional operational observatory, not a stati
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/setInterval\(\(\)=>random|simulateFlow|fakeActivity/);
 });
-test('server routes public anatomy separately, logs private observations only for owner',()=>{
+test('server presents one operating interface at / and /cerveau and protects real traces',()=>{
  const src=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
  assert.match(src,/app\.get\('\/cerveau'/);
  assert.match(src,/send\(BRAIN_OPERATIONS_HTML\)/);
  assert.match(src,/app\.get\('\/cerveau\/anatomie'/);
- assert.match(src,/send\(BRAIN_HTML\)/);
+ assert.match(src,/reply\.redirect\('\/cerveau', 302\)/);
+ assert.match(src,/app\.get\('\/'/);
+ assert.equal((src.match(/send\(BRAIN_OPERATIONS_HTML\)/g)||[]).length,2);
  const s=src.indexOf("app.get('/api/brain/graph'");
  const e=src.indexOf("\n});",s)+4;
  assert.ok(s>0&&e>s);
