@@ -65,8 +65,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 
   <section class="kpis" aria-label="Mesures provenant exclusivement du serveur">
     <div class="kpi"><label>Modules présents dans le code</label><strong id="kModules">—</strong></div>
-    <div class="kpi"><label>Transitions observées (24 h)</label><strong id="kHops">—</strong></div>
-    <div class="kpi"><label>Trajets identifiables</label><strong id="kFlows">—</strong></div>
+    <div class="kpi"><label>Transitions conservées (max. 160)</label><strong id="kHops">—</strong></div>
+    <div class="kpi"><label>Trajets visibles (max. 12)</label><strong id="kFlows">—</strong></div>
     <div class="kpi"><label>Signaux récents (20 s)</label><strong id="kSignals">—</strong></div>
     <div class="kpi"><label>Outils observés</label><strong id="kTools">—</strong></div>
     <div class="kpi"><label>Dernière mutation organisme</label><strong id="kOrganism">—</strong></div>
@@ -102,7 +102,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           </div>
           <div class="neural-inspector memory-inspector" role="button" tabindex="0" data-inspect="memory">
             <div class="ni-heading"><span class="ni-icon">▤</span> Mémoire <span id="niMemoryState" class="ni-state">NON VÉRIFIÉE</span></div>
-            <div class="ni-meta">Éléments référencés</div><strong id="niMemoryCount">—</strong><small id="niMemoryTime">Dernier événement : —</small>
+            <div class="ni-meta">Réflexions enregistrées</div><strong id="niMemoryCount">—</strong><small id="niMemoryTime">Dernier événement : —</small>
           </div>
           <div class="neural-inspector web-inspector" role="button" tabindex="0" data-inspect="web">
             <div class="ni-heading"><span class="ni-icon">◎</span> Recherche web <span id="niWebState" class="ni-state">NON VÉRIFIÉE</span></div>
