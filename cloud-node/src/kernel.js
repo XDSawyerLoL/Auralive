@@ -1300,6 +1300,12 @@ export class CognitiveKernel {
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
+      nucleus_plan_origin: 'AURA.nucleus.CognitionEngine.planReply',
+      nucleus_verbalization_validated:
+        Boolean(answer && this.expression.language.lastNucleusContract?.accepted),
+      nucleus_verbalization_code:
+        this.expression.language.lastNucleusContract?.code || 'not-checked',
+      language_provider: this.expression.language.lastBackend || '',
       semantic_support_used: Boolean(plan.semantic_support),
       external_research: externalResearch ? {
         session_id: externalResearch.session_id,
