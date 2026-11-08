@@ -301,20 +301,27 @@ export class FrenchLanguageFaculty {
 
     if (this.federation?.enabled) {
       try {
-        const result = await this.federation.generate(
-          prompt,
-          system,
-          Math.max(120, Math.min(Number(maxTokens) || 700, 1200)),
+        // The full semantic JSON is appropriate for larger models, but the
+        // free router may select a small or reasoning-heavy model. Use a
+        // bounded French conversation prompt so output tokens remain usable.
+        const freePrompt=compactFrenchPrompt(plan);
+        const freeSystem=compactFrenchSystem();
+        let result = await this.federation.generate(
+          freePrompt,
+          freeSystem,
+          Math.max(500, Math.min(Number(maxTokens) || 700, 1000)),
           taskRole,
         );
         let answer = cleanSpeechOutput(result?.answer || '');
         if (!answer && result?.answer) {
-          const retry = await this.federation.generate(
-            prompt + '\nIMPORTANT : écris uniquement la réponse finale en français, jamais ton analyse ou des instructions.',
-            system + ' Réponds uniquement en français, directement, sans explication du processus.',
-            Math.min(360, Math.max(120, Number(maxTokens) || 250)), taskRole,
+          // One bounded retry is only for an actual reasoning/instruction
+          // leak, never for a provider error or billing restriction.
+          result = await this.federation.generate(
+            freePrompt + '\nDonne seulement la phrase de réponse finale, sans analyse.',
+            freeSystem,
+            700, taskRole,
           );
-          answer = cleanSpeechOutput(retry?.answer || '');
+          answer = cleanSpeechOutput(result?.answer || '');
           if (!answer) this.lastError = 'speech-reasoning-leak-rejected';
         }
         if (answer) {
