@@ -1155,14 +1155,35 @@ export class CognitiveKernel {
         };
 
     observe('context', 'running');
+    // Actual concurrent retrievals, with independent start/completion events.
+    // The visualization cannot infer these timings from Promise.all alone.
+    const measuredLookup = (stage, execute, metric = '') => {
+      observe(stage, 'running');
+      return Promise.resolve().then(execute).then((rows) => {
+        const details = metric && Array.isArray(rows) ? { [metric]: rows.length } : {};
+        observe(stage, 'done', details);
+        return rows;
+      }, (error) => {
+        observe(stage, 'error');
+        throw error;
+      });
+    };
+    const skippedLookup = (stage, value) => {
+      observe(stage, 'skipped');
+      return Promise.resolve(value);
+    };
     const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages] = await Promise.all([
-      privateView ? this.intentions(6) : Promise.resolve([]),
-      privateView ? this.lessons(6) : Promise.resolve([]),
-      privateView ? this.reflections(4) : Promise.resolve([]),
-      privateView ? this.workItems(5) : this.publicWorkItems(5),
-      privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot(),
-      privateView ? this.activitySinceLastConversation(conversationSession) : Promise.resolve({}),
-      query(
+      privateView ? measuredLookup('context_intentions', () => this.intentions(6), 'intentions')
+        : skippedLookup('context_intentions', []),
+      privateView ? measuredLookup('context_lessons', () => this.lessons(6), 'lessons')
+        : skippedLookup('context_lessons', []),
+      privateView ? measuredLookup('context_reflections', () => this.reflections(4), 'reflections')
+        : skippedLookup('context_reflections', []),
+      measuredLookup('context_work', () => privateView ? this.workItems(5) : this.publicWorkItems(5), 'work_items'),
+      measuredLookup('context_agenda', () => privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot()),
+      privateView ? measuredLookup('context_continuity', () => this.activitySinceLastConversation(conversationSession))
+        : skippedLookup('context_continuity', {}),
+      measuredLookup('context_messages', () => query(
         privateView
           ? `SELECT author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id IN ('private-founder','')
@@ -1171,7 +1192,7 @@ export class CognitiveKernel {
              WHERE session_id=?
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
-      ).catch(() => []),
+      ), 'messages').catch(() => []),
     ]);
 
     observe('context', 'done', {
