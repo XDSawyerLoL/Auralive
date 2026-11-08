@@ -27,14 +27,15 @@ test('only evidence-based transitions move, and one-pass replay is explicitly se
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/simulateFlow|fakeEvent|fakeUsage/);
 });
 test('request is sent to true AURA API and graph polls while model response is pending',()=>{
- assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/chat'/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/const endpoint=mission\?'\/api\/kernel\/operator':'\/api\/chat'/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\(endpoint,/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/brain\/graph'/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(state\.busy&&!document\.hidden\)void poll\(\)/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/leur association précise à ta requête sera vérifiée/i);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/Réponse reçue, mais aucun trajet corrélé|Connexion propriétaire/i);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.flow=null;state\.replayStarted=0/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.pollInFlight/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/Réponse en cours/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/Message envoyé. Lecture des transitions réellement enregistrées/i);
 });
 test('missing or unauthorized observations never become fabricated successful work',()=>{
  const graph=buildBrainFlowGraph({telemetry:{runtime_ready:false},traceRows:[]},Date.now());
@@ -44,5 +45,17 @@ test('missing or unauthorized observations never become fabricated successful wo
  assert.ok(graph.nodes.every(n=>n.activity_verified===false));
  assert.match(BRAIN_OPERATIONS_SCRIPT,/aucune utilisation récente n’est prouvée/i);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/Connexion propriétaire requise/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/Le moteur de langage n’a pas fourni de réponse vérifiable/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/Aucun texte vérifiable généré|Le noyau n’a pas confirmé le traitement/);
+});
+
+
+test('the ONE page distinguishes conversation from explicit owner-only operator missions',()=>{
+ assert.match(BRAIN_OPERATIONS_HTML,/id="chatMode"/);
+ assert.match(BRAIN_OPERATIONS_HTML,/<option value="mission">Mission \/ outils<\/option>/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(mission&&!state\.data\?\.authorized\)/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/allowed_risks:\[\]/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/\/api\/kernel\/operator/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/plan seul|PLAN SEUL/i);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/brain_flow_id/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/database_observations_available===false/);
 });
