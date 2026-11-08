@@ -192,6 +192,10 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <div id="chatHistory" role="log" aria-live="polite"></div>
     <div class="chat-main">
       <strong>✦ AURA</strong>
+      <select id="chatMode" aria-label="Type de requête" title="Dialogue ou mission réelle via opérateur">
+        <option value="chat">Dialogue</option>
+        <option value="mission">Mission / outils</option>
+      </select>
       <input id="chatInput" placeholder="Pose une requête à AURA et observe en direct les modules traversés…" aria-label="Message à AURA">
       <button type="button" id="chatSend">Envoyer</button>
       <button id="chatExpand" type="button" class="secondary" aria-expanded="false">Conversation</button>
