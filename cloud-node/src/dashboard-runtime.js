@@ -680,7 +680,11 @@ async function refresh(){
       }else if(nativeDialogueReady){
         $('languageDot').className='live-dot warn';
         const strict=String(language.mode||'')==='natural-language-unavailable';
-        $('languageText').textContent=strict?'Français · indisponible':'Français · dégradé';
+        const configuredButUntested=Boolean(language.groq_free?.enabled)
+          || ['zero-cost-federation','hostinger-embedded'].includes(String(language.provider||''));
+        $('languageText').textContent=strict
+          ? (configuredButUntested?'Français · non vérifié':'Français · indisponible')
+          : 'Français · dégradé';
         $('languageText').title=strict
           ? String(language.setup_hint || 'Aucun modèle libre disponible : vérifier /api/ai/runtime.') + ' AURA refuse de simuler une conversation pré-écrite tant que le modèle manque.'
           : 'La faculté de langue libre est indisponible : mode de secours explicitement activé.';
