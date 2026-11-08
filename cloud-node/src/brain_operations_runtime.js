@@ -607,7 +607,17 @@ async function poll(){
    if(!res.ok)throw new Error('HTTP '+res.status);
    const data=await res.json();
    if(data.version!=='brain-flow-v1'||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Schéma réseau invalide');
-   state.data=data;if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;if(!findNode(state.selected))state.selected='kernel';state.lastError='';renderAll();
+   state.data=data;
+   if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
+   // Select once the latest persisted route, but do NOT replay it and never
+   // present a historical route as an event happening right now.
+   if(!state.initialRouteSelected&&!state.busy){
+     state.initialRouteSelected=true;
+     state.flow=data.flows.find(f=>f.causal?.phase==='completed')||data.flows[0]||null;
+     state.replayStarted=0;
+   }
+   if(!findNode(state.selected))state.selected='kernel';
+   state.lastError='';renderAll();
  }catch(err){
    state.lastError=String(err&&err.message||err).slice(0,120);
    $('onlineState').dataset.state='error';
