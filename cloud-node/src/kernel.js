@@ -1055,6 +1055,15 @@ export class CognitiveKernel {
       : String(sessionId || '').trim().slice(0, 96);
     if (!conversationSession) throw new Error('Session de conversation manquante');
 
+    // Only actual, completed transitions create brain-flow events.
+    // Flow ID is random and contains neither text nor user identity.
+    const brainFlowId = randomUUID();
+    const brainHop = async (from,to,stage,status='ok',provider='') =>
+      this.trace('brain-hop', from+' -> '+to, '', {
+        flow_id:brainFlowId,from,to,stage,status,
+        provider:String(provider||'').slice(0,70),at:now(),
+      });
+
     await query(
       "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES(?,'user',?,?,?)",
       [
@@ -1088,6 +1097,7 @@ export class CognitiveKernel {
       dream: pre.dream || null,
     });
     await this.saveSoul();
+    await brainHop('input','homeostasis','beforeInteraction');
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
     await this.observeEvent(
@@ -1136,6 +1146,7 @@ export class CognitiveKernel {
       privateView ? this.knowledge.search(content, { limit: 5 }).catch(() => []) : Promise.resolve([]),
     ]);
 
+    await brainHop('homeostasis','memory','retrieval');
     let plan = this.cognition.planReply({
       text: content,
       soul: privateView ? privateSoul : publicSoul,
@@ -1149,6 +1160,7 @@ export class CognitiveKernel {
       privateView,
     });
 
+    await brainHop('memory','cognition','planReply');
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
       sessionId: conversationSession, discourse: plan.discourse, userText: content,
@@ -1213,6 +1225,7 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
+        await brainHop('cognition','web','web-research');
         await this.trace(
           'web-research',
           'Mémoire externe',
@@ -1234,6 +1247,7 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: '',
         };
+        await brainHop('cognition','web','web-research','failed');
         await this.trace(
           'web-research-error',
           'Vérification externe indisponible',
@@ -1255,14 +1269,19 @@ export class CognitiveKernel {
         },
       );
       plan = this.cognition.integrateSemanticSupport(plan, support);
+      await brainHop(externalResearch?'web':'cognition','semantic','semantic-support');
     }
 
+    await brainHop('cognition','language','request-formulation','attempted');
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
     });
     const languageUnavailable = !answer
       && this.expression.lastMode === 'natural-language-unavailable';
+    const languageProvider = String(this.expression.language.lastBackend||this.expression.lastMode||'').slice(0,70);
+    await brainHop('language','coherence','response-validation',
+      answer?'ok':'unavailable',languageProvider);
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
@@ -1283,6 +1302,7 @@ export class CognitiveKernel {
         [conversationSession, String(answer).slice(0, 12000), now()],
       );
     }
+    if(answer)await brainHop('coherence','output','reply-committed','ok',languageProvider);
     await this.trace('expression', plan.act, String(answer).slice(0, 2000), {
       author: String(author).slice(0, 120),
       cognition_version: CognitionEngine.VERSION,
@@ -1294,6 +1314,7 @@ export class CognitiveKernel {
     return {
       ok: Boolean(answer),
       answer,
+      brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
       response_kind: languageUnavailable ? 'model-unavailable' : 'model-generated',
       retryable: languageUnavailable,
