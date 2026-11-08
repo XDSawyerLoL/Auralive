@@ -253,4 +253,12 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
 @media(max-width:850px){.workspace{grid-template-columns:1fr}.modules-list{grid-template-columns:repeat(3,minmax(0,1fr));display:grid}.module-row{min-width:0}.module-row .state{display:none}.modules-panel{min-height:0}.graph-canvas{height:620px}.inspector .inspector-scroll{grid-template-columns:1fr 1fr}.top{position:relative;top:0}}
 @media(max-width:600px){.shell{padding:6px 6px 132px}.logo strong{font-size:14px}.logo small{display:none}.top-actions{gap:4px}.build-mark{display:none}.scene-nav{margin:5px 0}.scene-nav button{padding:7px 10px;font-size:10px}.hero-card{padding:9px}.hero-card h1{font-size:16px}.hero-note{display:none}.kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.kpi{min-height:49px;padding:7px}.kpi label{font-size:8px}.kpi strong{font-size:15px}.modules-list{grid-template-columns:repeat(2,minmax(0,1fr))}.graph-canvas{height:530px}.neural-inspector{width:min(140px,43%);padding:5px 6px}.ni-heading{font-size:9px}.ni-state{font-size:7px}.ni-meta,.neural-inspector small{font-size:8px}.neural-inspector strong{font-size:11px}.neural-inspector.memory-inspector{top:49px;left:5px}.neural-inspector.web-inspector{top:49px;right:5px}.neural-inspector.kernel-inspector{left:5px;bottom:20px}.lower{grid-template-columns:1fr}.inspector .inspector-scroll{grid-template-columns:1fr}.top .live{font-size:9px;padding:6px}.chat-main button.secondary{grid-column:auto}.chat-main input{font-size:16px}}
 
+
+.chat-main{grid-template-columns:auto 135px minmax(0,1fr) auto auto}
+#chatMode{border:1px solid rgba(200,114,239,.50);border-radius:9px;background:#190e22;color:#f2dcff;padding:9px 8px;font-size:11px;outline:0;cursor:pointer}
+#chatMode:focus-visible{outline:2px solid #dca0fa;outline-offset:2px}
+#chatMode option{background:#160b20;color:#f2dcff}
+@media(max-width:920px){.chat-main{grid-template-columns:115px minmax(0,1fr) auto auto}.chat-main strong{display:none}}
+@media(max-width:640px){.chat-main{grid-template-columns:100px minmax(0,1fr) auto}.chat-main button.secondary{grid-column:1/-1}.chat-main input{font-size:16px}.chat-main strong{display:none}#chatMode{font-size:10px;padding:8px 3px}}
+
 `;
