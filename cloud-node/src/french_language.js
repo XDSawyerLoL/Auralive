@@ -208,8 +208,8 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
       return {accepted:false, code:'unverified-ci-cause'};
   }
   if (plan.act === 'report_internal_state') {
-    const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\\d+\\s*%/.test(String(fact)));
-    if (!detailed && (/\\d+\\s*%/.test(answer) || /\\b(?:[eé]tat computationnel|indicateurs internes|pression de r[eê]ve|agency|hom[eé]ostasie|m[eé]triques internes)\\b/i.test(answer)))
+    const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\d+\s*%/.test(String(fact)));
+    if (!detailed && (/\d+\s*%/.test(answer) || /\b(?:[eé]tat computationnel|indicateurs internes|pression de r[eê]ve|agency|hom[eé]ostasie|m[eé]triques internes)\b/i.test(answer)))
       return {accepted:false, code:'robotic-wellbeing-reply'};
     const state = normalize(plan.mood || '').toLowerCase();
     const facts = (Array.isArray(plan.facts) ? plan.facts : []).map(String);
