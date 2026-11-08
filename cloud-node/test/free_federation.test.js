@@ -260,3 +260,35 @@ test('startup does not waste nine free requests on the language benchmark', asyn
   assert.doesNotMatch(server,/setImmediate\(\(\) => \{ void kernel\.language\.evaluate/);
   assert.match(server,/post\('\/api\/language\/evaluate'/);
 });
+
+
+test('French free routing avoids mandatory hidden-reasoning models when verified text models exist',()=>{
+  const script=[
+    "process.env.AURA_ZERO_COST_MODE='true';",
+    "process.env.AI_MODE='off';",
+    "process.env.AURA_FREE_FEDERATION_ENABLED='true';",
+    "process.env.AURA_FREE_FEDERATION_DISCOVER_MODELS='true';",
+    "process.env.AURA_OPENROUTER_API_KEY='fake-free-key';",
+    "process.env.AURA_OPENROUTER_FREE_MODELS='openrouter/free';",
+    "let requested=null;",
+    "global.fetch=async(url,opts={})=>{",
+    "  if(String(url).endsWith('/models')) return new Response(JSON.stringify({data:[",
+    "    {id:'trial/mandatory:free',name:'Multilingual French conversation Qwen reasoning',context_length:128000,pricing:{prompt:'0',completion:'0'},architecture:{output_modalities:['text']},reasoning:{mandatory:true,supported_efforts:['minimal']}},",
+    "    {id:'trial/regular:free',name:'Plain instruction model',context_length:32000,pricing:{prompt:'0',completion:'0'},architecture:{output_modalities:['text']},reasoning:{mandatory:false,supported_efforts:['none']}},",
+    "  ]}),{status:200});",
+    "  requested=JSON.parse(opts.body);",
+    "  return new Response(JSON.stringify({model:requested.model,choices:[{message:{content:'Bonjour, je vous réponds.'}}],usage:{cost:0,completion_tokens:16}}),{status:200});",
+    "};",
+    "const {ZeroCostFederation}=await import('./src/free_federation.js');",
+    "const result=await new ZeroCostFederation().generate('Bonjour','Réponds en français',650,'french');",
+    "console.log(JSON.stringify({requested,result}));",
+  ].join('\n');
+  const result=run(script);
+  assert.equal(result.status,0,result.stderr||result.stdout);
+  const payload=JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
+  assert.equal(payload.requested.model,'trial/regular:free');
+  assert.equal(payload.requested.reasoning.effort,'none');
+  assert.ok(payload.requested.max_tokens>=900);
+  assert.match(payload.result.answer,/Bonjour/);
+  assert.equal(payload.result.costMicrounits,0);
+});
