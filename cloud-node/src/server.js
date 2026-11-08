@@ -1437,7 +1437,12 @@ function openCognitiveEventStream(request, reply, session, currentSnapshot) {
   const send = (payload) => {
     if (closed || raw.destroyed || raw.writableEnded) return;
     try {
-      raw.write('event: trace\ndata: ' + JSON.stringify(payload) + '\n\n');
+      // A slow client must not accumulate unbounded response buffers.
+      // Browsers will reconnect; REST polling remains a safe fallback.
+      if (!raw.write('event: trace\ndata: ' + JSON.stringify(payload) + '\n\n')) {
+        cleanup();
+        raw.end();
+      }
     } catch (_) { cleanup(); }
   };
   const unsubscribe = cognitiveTrace.subscribe(session, send);
