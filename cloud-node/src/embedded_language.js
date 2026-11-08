@@ -8,6 +8,15 @@ import { embeddedProvisioner } from './embedded_provisioner.js';
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const errorText = e => String(e?.message || e || '').slice(0, 2500);
 const safePath = value => path.resolve(String(value || ''));
+// Some managed Node hosts do not set NODE_ENV=production. This decision
+// depends on explicit switches, never on a production label alone.
+export function shouldWarmInstalledLanguage(env=process.env) {
+  return env.CI!=='true'
+    && env.NODE_ENV!=='test'
+    && env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
+    && env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false';
+}
+
 export function classifyEmbeddedFailure(error) {
   const reason = errorText(error).toLowerCase();
   if (/eacces|eperm|permission denied|noexec|operation not permitted/.test(reason))
