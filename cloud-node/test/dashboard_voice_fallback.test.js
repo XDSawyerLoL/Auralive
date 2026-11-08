@@ -48,7 +48,8 @@ test('only local French voices are eligible',()=>{
 
 test('spoken text removes markdown, code and raw URLs before pronunciation',()=>{
   const clean=new Function(functionBody('spokenFrenchText')+';return spokenFrenchText;')();
-  const value=clean('**Bonjour**. [Guide](https://example.org) \\x60\\x60\\x60js\\nconst secret = 1;\\n\\x60\\x60\\x60 Consulte https://example.org');
+  const fence=String.fromCharCode(96).repeat(3);
+  const value=clean('**Bonjour**. [Guide](https://example.org) '+fence+'js\nconst secret = 1;\n'+fence+' Consulte https://example.org');
   assert.match(value,/Bonjour/);
   assert.match(value,/Guide/);
   assert.doesNotMatch(value,/https:|const secret|\\*\\*/);
