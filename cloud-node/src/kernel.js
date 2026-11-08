@@ -6,6 +6,7 @@ import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
 import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
+import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
@@ -98,6 +99,7 @@ export class CognitiveKernel {
     this.expression = new ExpressionLayer(ai, this.cognition);
     this.language = new LanguageFaculty({ ai, cognition: this.cognition, expression: this.expression, soul: () => this.soulCache });
     this.organism = new AuraOrganism();
+    this.autogenesis = new IdentityAutogenesis();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
@@ -139,6 +141,7 @@ export class CognitiveKernel {
         autonomy_mode: 'proactive-by-default',
       },
       organism,
+      emergent_identity: this.autogenesis.defaultState(),
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -237,6 +240,7 @@ export class CognitiveKernel {
     this.soulCache.kernel_version = CognitiveKernel.VERSION;
     this.soulCache.organism = this.organism.migrate(this.soulCache);
     this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
+    this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -735,6 +739,18 @@ export class CognitiveKernel {
         'INSERT INTO aura_reflections(id,trigger_name,title,summary,hypothesis,next_action,confidence,context,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
         [id, String(effectiveTrigger).slice(0, 160), title, summary, hypothesis, nextAction, confidence, JSON.stringify(context), timestamp],
       );
+      // Independent, persisted reflections are autobiographical evidence,
+      // not feelings or imagined personal memories. A direct user command
+      // does not count as an autonomous reflection.
+      if(!force && !String(text).trim()){
+        this.soulCache.emergent_identity = this.autogenesis.observe(
+          this.soulCache.emergent_identity, {kind:'autonomous_reflection',at:timestamp},
+        );
+        await this.trace('identity-autogenesis','autonomous-reflection-stored','',{
+          reflection_id:id,identity_revision:this.soulCache.emergent_identity.revision,
+          evidence:'aura_reflections',at:timestamp,
+        });
+      }
       this.lastReflectionAtMs = Date.now();
       if (continuity.due) {
         this.lastContinuityReflectionAtMs = Date.now();
@@ -818,6 +834,11 @@ export class CognitiveKernel {
       },
     );
     const nativeLearning = this.nativeLearning.diagnostic(this.soulCache.native_learning);
+    // A logged outcome is evidence of a stored report, not independent proof
+    // of the external action. It may change learned dispositions modestly.
+    this.soulCache.emergent_identity = this.autogenesis.observe(
+      this.soulCache.emergent_identity, {kind:ok?'outcome_success':'outcome_failure',at:timestamp},
+    );
     const learnedSkill = await this.skillLearning.observe({ ...payload, ok }).catch(() => null);
     await this.recordOrganismEvent('outcome', ok ? 'action réussie' : 'action échouée', {
       automation_id: automationId,
@@ -1172,6 +1193,7 @@ export class CognitiveKernel {
           organism: this.organism.publicState(
             this.organism.migrate(this.soulCache || {}),
           ),
+          emergent_identity: this.autogenesis.publicState(this.soulCache.emergent_identity),
         };
 
     const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages, knowledgeNotes] = await Promise.all([
@@ -1209,6 +1231,23 @@ export class CognitiveKernel {
     });
 
     await brainHop('memory','cognition','planReply');
+    if (plan.act==='self_exploration' && privateView) {
+      // Founder can request a self-audit; asking alone does not increase
+      // learned trait scores or prove that AURA has discovered anything.
+      this.soulCache.emergent_identity = this.autogenesis.observe(
+        this.soulCache.emergent_identity,{kind:'self_inquiry',privateFounder:true},
+      );
+      await this.saveSoul();
+    }
+    if (plan.discourse?.move==='correction' && privateView) {
+      this.soulCache.emergent_identity = this.autogenesis.observe(
+        this.soulCache.emergent_identity,{kind:'founder_correction',privateFounder:true},
+      );
+      await this.saveSoul();
+    }
+    // These properties always originate in persisted kernel state, never from
+    // the externally generated wording. Providers receive a read-only view.
+    plan.self_model = this.autogenesis.publicState(this.soulCache.emergent_identity);
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
       sessionId: conversationSession, discourse: plan.discourse, userText: content,
@@ -1416,6 +1455,7 @@ export class CognitiveKernel {
       } : null,
       compute: inference,
       organism: this.organism.publicState(this.organism.migrate(this.soulCache || {})),
+      emergent_identity: this.autogenesis.publicState(this.soulCache.emergent_identity),
     };
   }
 
