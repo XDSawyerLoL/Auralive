@@ -1161,6 +1161,35 @@ $('tradeBacktest').onclick=async function(){
       :'Simulation indisponible : '+String(error.message||error).slice(0,170);
   }finally{button.disabled=false;button.textContent='Tester la stratégie';}
 };
+// Founder's operator. Real execution is reported distinctly from a plan-only result.
+$('autonomyRun').onclick=async function(){
+  const task=String($('autonomyTask').value||'').trim();
+  if(task.length<8){
+    $('autonomyStatus').textContent='Décrire une mission concrète avant de la lancer.';
+    return;
+  }
+  const button=$('autonomyRun');button.disabled=true;
+  $('autonomyResult').textContent='';
+  $('autonomyStatus').textContent='Mission soumise au moteur AURA. Aucune permission de risque supplémentaire accordée.';
+  try{
+    const result=await api('/api/kernel/operator',{
+      method:'POST',
+      body:JSON.stringify({task:task.slice(0,1500),allowed_risks:[]}),
+    });
+    const executed=result?.executed===true;
+    const mode=String(result?.execution_mode||'indéterminé');
+    $('autonomyStatus').textContent=executed
+      ?'Exécution signalée par AURA ('+mode+'). Examiner les preuves et résultats ci-dessous.'
+      :'Aucune exécution confirmée ('+mode+'). Seul un plan ou un refus a été retourné.';
+    const details=executed?(result?.result||result):(result?.plan||result?.error||result);
+    $('autonomyResult').textContent=typeof details==='string'
+      ?details.slice(0,3000) :JSON.stringify(details,null,2).slice(0,3000);
+  }catch(error){
+    $('autonomyStatus').textContent=error.status===401||error.status===403
+      ?'Connexion administrateur AURA requise pour exécuter une mission.'
+      :'Mission non réalisée : '+String(error?.message||error).slice(0,170);
+  }finally{button.disabled=false;}
+};
 // Genuine, bounded AURA audit. Revenue is "not connected" until verified receipts.
 let auditReport=null;
 function renderAuditReport(report){
