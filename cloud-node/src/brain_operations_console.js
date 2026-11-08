@@ -20,7 +20,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       <span><strong>AURA / Cerveau opérationnel</strong><small>Noyau · Mémoire · Outils · Exécution · Homéostasie</small></span>
     </div>
     <div class="top-actions">
-      <span id="onlineState" class="live" data-state="unknown"><i></i>Connexion au noyau…</span>
+      <span id="onlineState" class="live" data-state="unknown"><i></i><span id="onlineLabel">Connexion au noyau…</span></span>
       <button id="refreshMap" class="top-btn primary" type="button">Actualiser</button>
       <span class="build-mark">NEURAL OBSERVATORY · V1</span>
     </div>
@@ -136,6 +136,21 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 
     <aside class="rail inspector">
       <div class="inspector-scroll">
+        <section class="detail-card live-conversation" id="conversation-panel" aria-label="Conversation avec AURA">
+          <div class="inline-head"><h3>Dialogue avec AURA</h3><span class="truth-chip">Cette session</span></div>
+          <div id="chatHistory" role="log" aria-live="polite" aria-label="Échanges de la session"></div>
+        </section>
+        <section class="detail-card causal-card" id="causal-panel">
+          <div class="inline-head"><h3>Cause → décision → conséquence</h3><span id="causalStatus" class="truth-chip">Non observé</span></div>
+          <p id="causalEvidence" class="causal-evidence">Envoie une requête pour relier son trajet à un bilan homéostatique enregistré par le noyau.</p>
+          <div class="causal-digest">
+            <div><span>Décision du noyau</span><strong id="causalDecision">—</strong></div>
+            <div><span>Expression</span><strong id="causalLanguage">—</strong></div>
+            <div><span>Action métier exécutée</span><strong id="causalExecution">Non attestée</strong></div>
+          </div>
+          <div class="causal-values" id="causalValues"></div>
+          <p class="causal-footnote" id="causalProvenance">Les états sont des indices calculés ; la charge est mesurée uniquement dans le processus Node.</p>
+        </section>
         <section class="owner" aria-label="Accès aux observations">
           <label>OBSERVATIONS PUBLIQUES · LECTURE SEULE</label>
           <p>Trajets, outils et journal consultables sans connexion. Seules les métadonnées d’exécution sont affichées ; aucun texte de conversation ni secret n’est publié.</p>
@@ -195,7 +210,6 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   </section>
 
   <div id="chatDock" class="chat" aria-label="Console de requête AURA">
-    <div id="chatHistory" role="log" aria-live="polite"></div>
     <div class="chat-main">
       <strong>✦ AURA</strong>
       <select id="chatMode" aria-label="Type de requête" title="Dialogue ou mission réelle via opérateur">
@@ -204,7 +218,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       </select>
       <input id="chatInput" placeholder="Pose une requête à AURA et observe en direct les modules traversés…" aria-label="Message à AURA">
       <button type="button" id="chatSend">Envoyer</button>
-      <button id="chatExpand" type="button" class="secondary" aria-expanded="false">Conversation</button>
+      <button id="chatExpand" type="button" class="secondary" aria-controls="conversation-panel">Voir dialogue</button>
     </div>
   </div>
 </div>
