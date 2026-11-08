@@ -97,7 +97,7 @@ test('new /cerveau actually is a functional operational observatory, not a stati
  }
  assert.match(BRAIN_OPERATIONS_HTML,/Connexions déclarées/);
  assert.match(BRAIN_OPERATIONS_HTML,/Transition enregistrée récemment/);
- assert.match(BRAIN_OPERATIONS_HTML,/aura_cognitive_traces/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/fetch\('\/api\/brain\/graph'/);
  assert.match(BRAIN_OPERATIONS_HTML,/Aucun mouvement n’est simulé/);
  assert.ok(BRAIN_OPERATIONS_HTML.includes(BRAIN_OPERATIONS_SCRIPT));
  assert.ok(BRAIN_OPERATIONS_HTML.includes(BRAIN_OPERATIONS_CSS));
