@@ -11,7 +11,7 @@ test('one site page has integrated request, graph, modules, tools, metrics and e
    'toolList','flowList','eventList','metricList','ownerKey','ownerSignIn']){
    assert.ok(BRAIN_OPERATIONS_HTML.includes('id="'+id+'"'),id);
  }
- assert.match(BRAIN_OPERATIONS_HTML,/une seule interface/);
+ assert.match(BRAIN_OPERATIONS_HTML,/interface unique/i);
  assert.ok(BRAIN_OPERATIONS_HTML.includes(BRAIN_OPERATIONS_CSS));
  assert.ok(BRAIN_OPERATIONS_HTML.includes(BRAIN_OPERATIONS_SCRIPT));
  assert.ok(BRAIN_NODES.length>=30);
