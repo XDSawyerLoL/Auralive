@@ -1042,7 +1042,7 @@ app.post('/api/skills/plan', async (request, reply) => {
 
 app.get('/api/kernel/architecture', async () => ({
   identity_owner: 'AURA Soul + homeostatic organism + persistent memory + intentions',
-  organism: 'homeostasie_v9_unified',
+  organism: 'homeostasie_v10_somatic_feedback',
   cognition_owner: 'AURA native cognitive kernel v2 + dialogue state + active-inference allocator',
   dialogue_state: 'multi-turn referent/correction/clarification tracker independent from language model',
   skill_learning: 'cross-context outcomes -> candidate skill -> evidence gate -> safe zero-cost Fabric capability',
