@@ -118,7 +118,7 @@ test('server routes public anatomy separately, logs private observations only fo
  assert.match(src,/app\.get\('\/cerveau\/anatomie'/);
  assert.match(src,/send\(BRAIN_HTML\)/);
  const s=src.indexOf("app.get('/api/brain/graph'");
- const e=src.indexOf("app.get('/brain'",s);
+ const e=src.indexOf("\n});",s)+4;
  assert.ok(s>0&&e>s);
  const route=src.slice(s,e);
  assert.match(route,/authorized=isPrivate\(request\)/);
