@@ -336,9 +336,19 @@ export function locateEmbeddedRuntime({
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
-  const candidates=[path.join(root,'.aura-language-runtime'),
+  // Provisioner stores its GGUF in ~/.cache/aura-language-runtime by default.
+  // On a Node restart its in-memory "paths" are lost. Discover the persistent
+  // cache rather than downloading the same 639 MB model again.
+  const override=String(process.env.AURA_EMBEDDED_CACHE_DIR||'').trim();
+  const candidates=[
+    ...(override ? [safePath(override)] : []),
+    path.join(root,'.aura-language-runtime'),
     path.join(root,'aura-language-runtime'),
-    ...(home ? [path.join(home,'.aura-language-runtime')] : [])];
+    ...(home ? [
+      path.join(home,'.cache','aura-language-runtime'),
+      path.join(home,'.aura-language-runtime'),
+    ] : []),
+  ];
   const queue=candidates.filter(fs.existsSync).map(dir=>({dir,depth:0}));
   let scanned=0;
   while (queue.length && scanned<300 && (!executable || !gguf)) {
