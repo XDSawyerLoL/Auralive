@@ -835,6 +835,8 @@ let cogSelected='';
 let cogTraceId='';
 let cogAwaitingReply=false;
 let cogAutonomyForbidden=false;
+let cogReplayVersion=0;
+let cogReplaying=false;
 const cogElements=new Map();
 const cogEdges=[];
 function cogSvgNode(tag,attrs,parent){
@@ -900,6 +902,7 @@ function renderCognitiveGraph(){
     edge.el.classList.toggle('error',Boolean(b&&b.status==='error'));
   });
   const available=Boolean(cogTrace&&cogTrace.available);
+  $('cogReplay').disabled=!available||cogReplaying;
   const runState=String(cogTrace&&cogTrace.state||'idle');
   const hasError=events.some(function(event){return event.status==='error';});
   const baseState=!available?'Aucun traitement enregistré'
@@ -939,10 +942,51 @@ function renderCognitiveGraph(){
     list.appendChild(el);
   });
 }
+function replayCognitiveTrace(){
+  if(!cogTrace?.available||cogReplaying)return;
+  const events=(cogTrace.events||[]).filter(function(entry){
+    return entry.status!=='running'&&entry.stage!=='request'&&entry.stage!=='cycle';
+  });
+  if(!events.length)return;
+  const token=++cogReplayVersion;
+  const mode=cogMode;
+  const traceId=cogTrace.id;
+  cogReplaying=true;
+  $('cogReplay').disabled=true;
+  // This is replay of timestamped server events, not invented neural activity.
+  events.forEach(function(entry,index){
+    setTimeout(function(){
+      if(cogReplayVersion!==token||cogMode!==mode||cogTrace?.id!==traceId)return;
+      const node=cogElements.get(entry.stage);
+      if(node){
+        node.classList.remove('just-verified');
+        void node.getBoundingClientRect(); // restart CSS pulse on an actual event
+        node.classList.add('just-verified');
+      }
+      cogEdges.forEach(function(edge){
+        if(edge.b!==entry.stage)return;
+        const predecessor=(cogTrace.events||[]).find(function(e){
+          return e.stage===edge.a&&e.status==='done'&&e.elapsed_ms<=entry.elapsed_ms;
+        });
+        if(!predecessor)return;
+        edge.el.classList.add('just-verified');
+        setTimeout(function(){edge.el.classList.remove('just-verified');},500);
+      });
+      setTimeout(function(){if(node)node.classList.remove('just-verified');},600);
+      if(index===events.length-1){
+        setTimeout(function(){
+          if(cogReplayVersion===token){cogReplaying=false;renderCognitiveGraph();}
+        },650);
+      }
+    },index*155);
+  });
+}
 function switchCognitiveMode(next){
   const mode=next==='autonomy'?'autonomy':'dialogue';
   if(cogMode===mode)return;
   cogMode=mode;
+  cogReplayVersion++;
+  cogReplaying=false;
   cogAutonomyForbidden=false;
   cogSelected='';
   cogTrace=null;
@@ -1103,6 +1147,8 @@ async function sendMessage(text){
   if(cogMode!=='dialogue')switchCognitiveMode('dialogue');
   cogAwaitingReply=true;
   cogTraceId='';
+  cogReplayVersion++;
+  cogReplaying=false;
   cogTrace=null;
   cogTraceOrigin='poll';
   renderCognitiveGraph();
@@ -1150,6 +1196,7 @@ $('voiceBtn').onclick=function(){
 };
 $('cogModeDialogue').onclick=function(){switchCognitiveMode('dialogue');};
 $('cogModeAutonomy').onclick=function(){switchCognitiveMode('autonomy');};
+$('cogReplay').onclick=replayCognitiveTrace;
 initCognitiveGraph();void loopCognitiveTrace();
 updateClock();refresh();setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
