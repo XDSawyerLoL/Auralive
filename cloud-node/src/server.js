@@ -1412,11 +1412,45 @@ app.post('/api/toolbox/research', async (request, reply) => {
 // Strict simulation: no broker keys, order-placement endpoints or investment account.
 let tradingLabBusy=false;
 let tradingLabLastRun=0;
+let paperAutoTimer=null;
+let paperAutoInitialTimer=null;
+const PAPER_AUTO_INTERVAL_MS=6*60*60*1000;
+const paperAutoState={running:false,last_checked_at:null,last_error:null,latest:null,
+  live_orders_enabled:false,real_money_traded:false,real_profit_eur:0,mode:'paper-auto-scan'};
+async function runAutomaticPaperScan(){
+  if(tradingLabBusy||paperAutoState.running)return;
+  paperAutoState.running=true;
+  try{
+    // Public data only. Does not contact a brokerage account or place orders.
+    const result=await runPaperBacktest({pair:'XBTEUR'});
+    paperAutoState.latest=result;
+    paperAutoState.last_error=null;
+    paperAutoState.last_checked_at=new Date().toISOString();
+  }catch(error){
+    paperAutoState.last_error=String(error?.message||error).replace(/https?:\/\/\S+/g,'[URL]').slice(0,150);
+    paperAutoState.last_checked_at=new Date().toISOString();
+  }finally{paperAutoState.running=false;}
+}
+function startAutomaticPaperScan(){
+  if(process.env.CI==='true'||process.env.NODE_ENV==='test'
+    ||process.env.AURA_PAPER_MONITOR_ENABLED==='false'||paperAutoTimer)return;
+  paperAutoInitialTimer=setTimeout(()=>{void runAutomaticPaperScan();},20000);
+  paperAutoInitialTimer.unref?.();
+  paperAutoTimer=setInterval(()=>{void runAutomaticPaperScan();},PAPER_AUTO_INTERVAL_MS);
+  paperAutoTimer.unref?.();
+}
+
 app.get('/api/trading/mode', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
   return {mode:'paper-only',live_orders_enabled:false,real_money_traded:false,
     real_profit_eur:0,external_paid_apis:0,available_pairs:['XBTEUR','ETHEUR'],
     note:'Simulation historique sans engagement financier. Pas de garantie de bénéfice.'};
+});
+app.get('/api/trading/paper/status', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return { ...paperAutoState,latest:paperAutoState.latest||null,
+    scan_interval_hours:6,
+    caution:'Surveillance d’une simulation historique. Ce n’est ni un forward test certifié ni du trading réel.' };
 });
 app.post('/api/trading/paper/backtest', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
@@ -2242,6 +2276,9 @@ function startMaintenance() {
 }
 
 export function startRuntimeLoop() {
+  // AURA observes a fictitious trading strategy automatically every 6h;
+  // zero-cost public data only, no account or live orders.
+  startAutomaticPaperScan();
   // Installed local inference is independent of MySQL initialization.
   // Do not download weights here: no unmanaged bandwidth or cost at startup.
   if(shouldWarmInstalledLanguage()
@@ -2266,6 +2303,8 @@ export function startRuntimeLoop() {
 }
 
 export async function stopAura() {
+  if(paperAutoTimer){clearInterval(paperAutoTimer);paperAutoTimer=null;}
+  if(paperAutoInitialTimer){clearTimeout(paperAutoInitialTimer);paperAutoInitialTimer=null;}
   if (retryTimer) {
     clearInterval(retryTimer);
     retryTimer = null;
