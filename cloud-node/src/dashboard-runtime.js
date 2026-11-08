@@ -1207,6 +1207,6 @@ $('cogDiagnostics').onclick=function(){
   this.setAttribute('aria-expanded',String(visible));
   this.textContent=visible?'Masquer les diagnostics':'Diagnostics';
 };
-initCognitiveGraph();void loopCognitiveTrace();
+try{initCognitiveGraph();void loopCognitiveTrace();}catch(error){console.warn('AURA cognitive graph unavailable; dialogue and metrics continue.',error);}
 updateClock();refresh();setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
