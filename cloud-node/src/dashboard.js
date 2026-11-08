@@ -147,6 +147,56 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .trading-chart{display:block;width:100%;height:90px;background:linear-gradient(180deg,rgba(116,218,192,.045),transparent);border-bottom:1px solid rgba(116,218,192,.12);border-radius:8px}
 .trading-status{color:#c7ded9;font-size:11px;line-height:1.5;min-height:20px}.trading-activity{display:grid;gap:5px;max-height:105px;overflow:auto}.trade-event{display:flex;justify-content:space-between;gap:8px;font-size:10px;color:#b1c1be;border-bottom:1px solid rgba(255,255,255,.045);padding:5px 0}.trading-disclaimer{color:#849c95;line-height:1.5;font-size:9px}
 @media(max-width:500px){.trading-head{flex-wrap:wrap}.trading-chip{font-size:8px}.trading-controls{flex-wrap:wrap}.trading-controls button{width:100%}.trading-stats strong{font-size:16px}}
+
+/* AURA 3.2 — fixed dialogue dock, readable operational hierarchy. */
+:root{--bg:#080d13;--panel:rgba(11,20,28,.95);--line:rgba(161,199,218,.14);--text:#eef7ff;--muted:#a5bbc9;--gold:#f5c18d;--violet:#ab9cff;--green:#75dfbe}
+body{background:radial-gradient(1100px 680px at 82% -18%,rgba(45,113,144,.16),transparent 68%),radial-gradient(800px 630px at 4% 54%,rgba(74,79,161,.10),transparent 67%),#070c12;background-attachment:fixed}
+.topbar{background:rgba(8,17,26,.92);border:1px solid rgba(143,184,206,.18);box-shadow:0 10px 36px rgba(0,0,0,.35)}
+.aura-intro h1{font-size:clamp(29px,3.3vw,46px);max-width:850px}.aura-intro h1 em{color:#88dec3}
+.intro-caption{color:#94c8ed}.intro-copy{color:#a7bed0}
+.panel{background:linear-gradient(145deg,rgba(18,29,42,.96),rgba(8,15,25,.97) 80%);border:1px solid rgba(166,193,220,.13);box-shadow:inset 0 1px rgba(250,255,255,.055),0 18px 55px rgba(0,0,0,.21)}
+.main{align-items:start;grid-template-columns:minmax(0,1fr) minmax(360px,445px);gap:17px}
+.chat{position:sticky;top:96px;height:calc(100dvh - 110px);min-height:500px;max-height:1050px;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto auto;z-index:8;overscroll-behavior:contain}
+.chat-head{background:rgba(10,23,34,.95);padding:17px 20px;min-height:77px;flex-wrap:wrap}.chat-title{color:#f3fdff}.chat-sub{color:#86a1b4}.chat-head-state{color:#adcad7}
+.messages{flex:initial;min-height:0;min-width:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#365267 transparent;padding:24px;background:radial-gradient(ellipse at 50% 0%,rgba(85,167,191,.052),transparent 65%)}
+.msg{max-width:min(86%,780px);font-size:14px;line-height:1.62;border-radius:17px;background:rgba(245,251,255,.035);border-color:rgba(184,220,241,.085);color:#e5f2fa}
+.msg.user{background:linear-gradient(135deg,rgba(51,125,147,.28),rgba(46,74,112,.20));border-color:rgba(94,184,197,.22)}
+.msg.aura .who{color:#8de9cf}.who{color:#9ab6c8}
+.msg.service-msg{max-width:100%;border:1px solid rgba(255,192,115,.32);background:rgba(255,183,110,.075);color:#f5dfc8}
+.service-card-title{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;color:#ffe5c3;margin-bottom:5px}
+.service-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.service-actions button{border:1px solid rgba(255,202,150,.35);border-radius:9px;background:rgba(255,202,150,.10);padding:7px 10px;color:#ffe9d2;font-size:11px}
+.composer{background:#0c1823;border-top-color:rgba(171,213,230,.1);padding:12px 16px}
+.composer textarea{background:#101e2b;color:#edf8ff;border-color:rgba(160,205,228,.15);min-height:56px;max-height:120px;border-radius:13px}
+.composer textarea:focus{border-color:rgba(120,230,191,.58);box-shadow:0 0 0 3px rgba(120,230,191,.065)}
+.composer .send{background:linear-gradient(130deg,#80edc4,#52aebb);box-shadow:0 7px 25px rgba(99,212,188,.15);color:#062024}
+.composer button:disabled{opacity:.45;cursor:wait}
+.chat-hint{background:#0c1823;color:#8ca5b5;padding:0 16px 10px}
+.side{min-width:0;gap:13px}
+.revenue-panel{padding:20px;display:grid;gap:13px;border-color:rgba(104,226,184,.3);background:linear-gradient(137deg,rgba(15,49,51,.95),rgba(9,24,34,.97) 57%,rgba(9,17,29,.98))}
+.revenue-topline{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:10px;letter-spacing:.13em;color:#82d6bf}
+.revenue-tag{letter-spacing:.04em;color:#d8fcef;border-radius:7px;border:1px solid rgba(129,235,198,.26);padding:6px 9px;background:rgba(129,235,198,.075);font-size:9px}
+.revenue-heading{font-size:26px;font-weight:720;letter-spacing:-.045em;line-height:1.15;margin:0}.revenue-heading em{color:#9aefd2;font-style:normal}
+.revenue-copy{margin:0;font-size:12px;line-height:1.6;color:#a9c9c8}
+.revenue-kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.revenue-kpi{min-height:81px;border:1px solid rgba(158,233,209,.13);background:rgba(8,20,27,.6);border-radius:13px;padding:12px}
+.revenue-kpi span{display:block;font-size:10px;color:#a4c1bd;line-height:1.35}.revenue-kpi strong{display:block;font-size:15px;margin-top:8px;color:#e8fcf7;line-height:1.3}
+.revenue-workflow{display:flex;flex-wrap:wrap;gap:7px}.revenue-workflow span{font-size:9px;padding:6px 8px;border:1px solid rgba(255,255,255,.11);border-radius:8px;color:#9ab2b8}.revenue-workflow .on{border-color:rgba(129,235,198,.27);color:#b7f4de}
+.revenue-field-label{font-size:11px;color:#c3e9e2;font-weight:650}
+.revenue-form{display:flex;gap:7px;min-width:0}.revenue-form input{min-width:0;flex:1;width:100%;border:1px solid rgba(146,220,197,.19);border-radius:10px;padding:12px;background:rgba(7,17,23,.82);color:#f2fffa;outline:none;font-size:12px}
+.revenue-form input:focus{border-color:#7cdfbe}
+.revenue-form button,.revenue-export{border:0;border-radius:10px;background:#86e3c5;color:#092924;padding:10px 12px;font-size:11px;font-weight:760;white-space:nowrap}
+.revenue-form button:disabled,.revenue-export:disabled{opacity:.4;cursor:not-allowed}
+.revenue-export{background:rgba(128,227,194,.10);color:#c8f3e2;border:1px solid rgba(128,227,194,.22)}
+.revenue-result-status{font-size:11px;color:#a1c1ba;line-height:1.5}
+.revenue-results{display:grid;gap:6px}
+.audit-check{font-size:11px;display:flex;justify-content:space-between;gap:9px;align-items:start;padding:8px 9px;border-radius:8px;background:rgba(255,255,255,.025);color:#c2dcd6}
+.audit-check .good{color:#87e5c2}.audit-check .review{color:#f2c398}
+.status-rail .rail-item{background:linear-gradient(135deg,rgba(28,41,56,.85),rgba(9,18,28,.88))}
+@media(max-width:1100px){.main{grid-template-columns:minmax(0,1fr) 355px}}
+@media(max-width:900px){.main{grid-template-columns:1fr}.chat{position:sticky;top:79px;height:calc(100dvh - 91px);min-height:420px;max-height:900px}.side{grid-template-columns:1fr 1fr}.revenue-panel{grid-column:1/-1}}
+@media(max-width:640px){.topbar{top:5px}.shell{padding:8px}.chat{top:72px;height:calc(100dvh - 79px);min-height:370px;border-radius:17px}.chat-head{padding:11px 13px;min-height:66px}.chat-title{font-size:16px}.chat-head-state{font-size:10px}.messages{padding:12px;gap:10px}.msg{max-width:94%;padding:11px 13px;font-size:14px}.composer{padding:8px;gap:6px}.composer textarea{min-height:47px;padding:10px;font-size:16px}.composer button{width:43px;height:43px;border-radius:11px}.chat-hint{font-size:9px;padding:0 10px 7px}.revenue-panel{padding:15px}.revenue-form{flex-direction:column}.revenue-form button{width:100%}.revenue-kpis{grid-template-columns:1fr 1fr}.revenue-heading{font-size:24px}.side{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body data-aura-ui="immersive-cognition-v3">
@@ -170,8 +220,8 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 
   <section class="aura-intro" aria-label="Présentation AURA 3.1">
     <div><span class="intro-caption">Intelligence native · Quantic Sillage</span>
-      <h1>Une présence qui <em>réfléchit.</em></h1>
-      <p class="intro-copy">Mémoire, missions et raisonnement continus. Capacités vérifiées en temps réel.</p>
+      <h1>Une intelligence qui <em>agit et se vérifie.</em></h1>
+      <p class="intro-copy">Conversation, missions et résultats. Une action sans preuve reste une action à vérifier.</p>
     </div>
     <span id="serverRevision" class="build-version">Version serveur : vérification…</span>
   </section>
@@ -183,7 +233,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
   <main class="main">
     <section class="panel chat">
       <div class="chat-head"><div><div class="chat-title">Parler à AURA</div><div class="chat-sub">Conversation principale</div></div><button id="localVoiceBtn" class="local-voice-btn" type="button" aria-pressed="false" title="Activer une voix française hors ligne, différente d’Aoede, sans API et sans coût">Voix locale : OFF</button><div id="chatState" class="chat-head-state">Connexion…</div></div>
-      <div class="messages" id="messages"><div class="msg aura"><span class="who">AURA</span>Je charge mon état, ma mémoire et mes intentions.</div></div>
+      <div class="messages" id="messages"><div class="msg aura"><span class="who">AURA</span>Connexion au moteur de français en cours…</div></div>
       <div class="composer">
         <button id="voiceBtn" title="Dicter">◉</button>
         <textarea id="message" rows="2" placeholder="Écris à AURA…"></textarea>
@@ -194,6 +244,21 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
     </section>
 
     <aside class="side">
+      <section class="panel revenue-panel" aria-label="Poste de revenus et prestations AURA">
+        <div class="revenue-topline"><span>01 / PRIORITÉ ÉCONOMIQUE</span><span id="revenueMode" class="revenue-tag">MESURE RÉELLE</span></div>
+        <h2 class="revenue-heading">Revenus <em>vérifiables.</em></h2>
+        <p class="revenue-copy">AURA peut produire un audit technique immédiatement. La vente et les paiements ne sont pas encore reliés : aucun gain fictif n'est présenté comme encaissé.</p>
+        <div class="revenue-kpis">
+          <div class="revenue-kpi"><span>Recettes confirmées par AURA</span><strong id="revenueVerified">Non connectées</strong></div>
+          <div class="revenue-kpi"><span>Ventes automatiques</span><strong id="revenueSales">Non activées</strong></div>
+        </div>
+        <div class="revenue-workflow" aria-label="Étapes de monétisation"><span class="on">Audit opérationnel</span><span>Vente à connecter</span><span>Paiement à vérifier</span></div>
+        <label class="revenue-field-label" for="auditUrl">Tester la prestation · adresse du site public</label>
+        <div class="revenue-form"><input id="auditUrl" type="url" inputmode="url" autocomplete="url" placeholder="https://www.exemple.fr/" aria-label="Adresse HTTPS de la page d'accueil à auditer"/><button id="auditRun" type="button">Analyser</button></div>
+        <div id="auditState" class="revenue-result-status" role="status" aria-live="polite">Analyse limitée à la page d’accueil. Aucune modification du site audité.</div>
+        <div id="auditResults" class="revenue-results" aria-live="polite"></div>
+        <button id="auditExport" class="revenue-export" type="button" disabled>Exporter le rapport</button>
+      </section>
       <section class="panel aura-card">
         <div class="side-head"><strong>AURA vivante</strong><span id="organismMood">réveil</span><div class="top-spacer"></div><button id="refreshMap" class="icon-btn">↺</button></div>
         <div class="map-wrap" id="livingMap">
