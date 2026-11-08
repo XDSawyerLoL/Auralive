@@ -135,6 +135,11 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 
 
 /* AURA Cognitive Trace — genuine instrumented events, no synthetic neural activity. */
+.main{grid-template-columns:minmax(0,1fr)}
+.side{display:none;grid-column:1;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.side.diagnostics-open{display:grid}
+@media(max-width:720px){.side.diagnostics-open{grid-template-columns:1fr}}
+
 .side>.aura-card{display:none} /* Avoid showing the legacy synthetic particle scene beside measured activity. */
 .cog-panel{border-bottom:1px solid rgba(132,199,219,.18);background:radial-gradient(ellipse at 45% 40%,rgba(20,90,110,.22),transparent 58%),radial-gradient(circle at 85% 80%,rgba(125,65,124,.15),transparent 45%),#060a12;overflow:hidden}
 .cog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 20px 4px}
@@ -222,6 +227,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
           <button type="button" id="cogModeDialogue" aria-pressed="true">Conversation</button>
           <button type="button" id="cogModeAutonomy" aria-pressed="false" title="Activité réelle du noyau, accès fondateur privé">Autonomie</button>
           <button type="button" id="cogReplay" disabled title="Rejouer uniquement les événements effectivement enregistrés">Revoir la trace</button>
+          <button type="button" id="cogDiagnostics" aria-expanded="false" aria-controls="auraDiagnostics">Diagnostics</button>
         </div>
         <div class="cog-viewport" tabindex="0" aria-label="Carte cognitive, faire défiler horizontalement sur les petits écrans"><svg id="cogGraph" class="cog-svg" viewBox="0 0 1050 405" role="group" aria-label="Étapes mesurées du traitement; sélectionner un nœud pour les détails"></svg></div>
         <div class="cog-lower"><div id="cogDetail" class="cog-description" aria-live="polite">En attente d'une requête. Aucun événement simulé.</div><div id="cogDuration" class="cog-duration">—</div></div>
@@ -238,7 +244,7 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
       <div class="quick"></div>
     </section>
 
-    <aside class="side">
+    <aside class="side" id="auraDiagnostics">
       <section class="panel aura-card">
         <div class="side-head"><strong>AURA vivante</strong><span id="organismMood">réveil</span><div class="top-spacer"></div><button id="refreshMap" class="icon-btn">↺</button></div>
         <div class="map-wrap" id="livingMap">
