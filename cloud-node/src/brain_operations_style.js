@@ -295,4 +295,59 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
 @media(max-width:1450px){#graphLens{min-width:114px;max-width:160px}.graph-controls{gap:3px}.graph-controls button{padding:7px}}
 @media(max-width:850px){.graph-controls{flex-wrap:wrap}.graph-hud{flex-wrap:wrap}#graphHover{max-width:54%}.module-description small{font-size:8px}}
 @media(max-width:600px){.graph-controls{justify-content:flex-end}#graphLens{width:115px}.graph-hud .graph-floating:nth-child(3){display:none}#graphHover{max-width:48%}.node-connections{grid-template-columns:1fr}}
+
+/* One operating screen: conversation + causal receipts + topology coexist. */
+@media(min-width:1181px){
+ .workspace{grid-template-columns:220px minmax(0,1fr) 318px;align-items:stretch}
+ .workspace>.rail{min-height:0;max-height:760px}
+ .modules-panel,.inspector{height:760px;min-height:0}
+ .modules-panel{overflow:hidden}
+ .modules-list{min-height:0;flex:1;overflow:auto;align-content:start}
+ .inspector-scroll{height:100%;min-height:0;overflow-y:auto;align-content:start;display:flex;flex-direction:column;gap:8px}
+ .graph-canvas{height:706px}
+ .neural-inspector{width:min(190px,35%)}
+}
+.live-conversation,.causal-card{border-color:rgba(82,195,194,.32);background:linear-gradient(180deg,#111525,#0b101b)}
+.inline-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.inline-head h3{font-size:12px;line-height:1.3;letter-spacing:0;margin:0;color:#ebdff8}
+.truth-chip{font-size:9px;color:#99d6d8;border:1px solid rgba(95,201,200,.26);border-radius:6px;padding:4px 6px;white-space:nowrap}
+#chatHistory,#chatHistory.open{display:flex;flex-direction:column;gap:6px;max-height:188px;min-height:92px;overflow-y:auto;scrollbar-width:thin;padding:10px 2px 2px}
+#chatHistory:empty::before{content:"Aucun échange envoyé depuis cette page. La conversation de ce navigateur ne reconstitue pas d’anciens messages privés.";color:#91a2b9;font-size:10px;line-height:1.5}
+#chatHistory .chat-message{max-width:98%;width:max-content;font-size:10px;line-height:1.5;align-self:flex-start}
+#chatHistory .chat-message.user{align-self:flex-end}
+.causal-card{display:grid;gap:9px}
+.causal-evidence,.causal-footnote{font-size:10px;line-height:1.5;color:#a5b9c7;margin:0}
+.causal-evidence{border-left:2px solid #5aafac;padding-left:9px}
+.causal-digest{display:grid;gap:4px}
+.causal-digest>div,.causal-value{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid rgba(122,153,173,.17)}
+.causal-digest span,.causal-value span{font-size:10px;color:#b5abc2}
+.causal-digest strong,.causal-value strong{font-size:10px;color:#e0ecef;text-align:right;overflow-wrap:anywhere}
+.causal-values{max-height:168px;overflow:auto;scrollbar-width:thin}
+.causal-value .positive{color:#7de5ce}
+.causal-value .negative{color:#f5b6af}
+.causal-value .neutral{color:#b5c4d4}
+.causal-footnote{font-size:9px;color:#7f9eac}
+#causalStatus{white-space:normal;text-align:right}
+.chat{bottom:7px;padding:8px}
+#chatExpand{white-space:nowrap}
+.graph-floating{max-width:34%}
+@media(max-width:1180px){
+ .workspace{grid-template-columns:220px minmax(0,1fr)}
+ .workspace>.rail:last-child{grid-column:1/-1}
+ .inspector .inspector-scroll{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:none}
+ .live-conversation,.causal-card{min-height:220px}
+}
+@media(max-width:850px){
+ .workspace{grid-template-columns:1fr}
+ .inspector .inspector-scroll{grid-template-columns:1fr}
+ .graph-canvas{height:clamp(480px,65vh,650px)}
+ .graph-floating{max-width:46%}
+}
+@media(max-width:600px){
+ .neural-inspector{max-width:140px}
+ .graph-floating{max-width:49%}
+ .live-conversation,.causal-card{min-height:0}
+ .chat-main{grid-template-columns:90px minmax(0,1fr) auto}
+ #chatExpand{grid-column:1/-1}
+}
 `;
