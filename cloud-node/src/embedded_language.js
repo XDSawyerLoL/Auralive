@@ -511,7 +511,7 @@ export class EmbeddedLanguageRuntime {
     if(this.booting)return this.booting;
     if(Date.now()<this.cooldownUntil)return false;
     // Only constrain real production Hostinger processes, never CI mocks.
-    if(process.env.NODE_ENV==='production' && process.env.CI!=='true'){
+    if(process.env.CI!=='true' && process.env.NODE_ENV!=='test'){
       const budget=embeddedStartupBudget();
       if(!budget.safe_to_start){
         this.failureStage='memory-preflight';
@@ -546,7 +546,7 @@ export class EmbeddedLanguageRuntime {
     if(!this.repairExecutable())return false;
     this.repairedLibraryAliases=repairLlamaLibraryAliases(this.inspect().executable);
     const budget=embeddedStartupBudget();
-    const startLow=process.env.NODE_ENV==='production' && process.env.CI!=='true'
+    const startLow=process.env.CI!=='true' && process.env.NODE_ENV!=='test'
       && budget.recommended_low_memory;
     let success=await this.boot(false,startLow);
     if(success)return true;
