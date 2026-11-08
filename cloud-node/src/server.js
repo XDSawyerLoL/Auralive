@@ -29,6 +29,8 @@ import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
 import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
+import { RESOURCE_CATALOG, discoverResources } from './toolbox_resources.js';
+import { searchPublicResources } from './toolbox_research.js';
 import { CognitionEngine } from './cognition.js';
 import { RuntimeMetrics } from './metrics.js';
 import { PeerMesh } from './peer_mesh.js';
@@ -1320,6 +1322,40 @@ app.get('/api/kernel/lessons', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.lessons(request.query?.limit)
     : undefined);
+
+// Offline-curated directory. Links are informational, not external actions.
+app.get('/api/toolbox/resources', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  const category = String(request.query?.category || '').trim().slice(0,40);
+  const includeBlocked = String(request.query?.include_blocked || '') === 'true';
+  const resources = RESOURCE_CATALOG.filter((item) =>
+    (!category || item.category===category) && (includeBlocked || !item.blocked));
+  return { count:resources.length, resources, automatic_execution:false };
+});
+
+app.get('/api/toolbox/recommend', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  const q = String(request.query?.q || '').slice(0,600);
+  return { query:q, resources:discoverResources(q, {
+    category:String(request.query?.category||''),
+    limit:request.query?.limit,
+  }), automatic_execution:false };
+});
+
+// Only human-requested searches for public titles. No crawler or arbitrary URLs.
+app.post('/api/toolbox/research', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  if (!requireRateLimit(request, reply, 'toolbox-research', 5, 60)) return;
+  try {
+    return await searchPublicResources(request.body?.provider, request.body?.query, {
+      allowExternal:request.body?.allow_external === true,
+    });
+  } catch (error) {
+    const message = String(error?.message || error);
+    const unavailable = /indisponible|timeout|fetch failed/i.test(message);
+    return reply.code(unavailable ? 503 : 422).send({ error:message.slice(0,220) });
+  }
+});
 
 // Founder-only knowledge endpoints. No public-chat access or implicit ingestion.
 app.get('/api/knowledge/notes', async (request, reply) => {
