@@ -15,6 +15,8 @@ const ALLOWED_DETAILS = new Set([
   'confidence', 'delta_stability', 'delta_curiosity', 'delta_frustration',
   'decision_act', 'language_mode', 'stimuli_count', 'lessons_count',
   'cycle_reflected', 'execution_confirmed', 'operation_kind', 'trigger_kind',
+  'state_stability', 'state_clarity', 'state_curiosity', 'state_confidence',
+  'state_frustration', 'state_engagement', 'state_mood',
 ]);
 const LIMIT = 120;
 const TTL_MS = 20 * 60_000;
@@ -24,7 +26,12 @@ const cleanDetails = (details = {}) => {
     if (!ALLOWED_DETAILS.has(key)) continue;
     if (typeof value === 'boolean') result[key] = value;
     else if (typeof value === 'number' && Number.isFinite(value)) {
-      result[key] = Math.max(-100000, Math.min(100000, Math.round(value * 1000) / 1000));
+      const bounded = key.startsWith('state_') ? Math.max(0, Math.min(1, value))
+        : Math.max(-100000, Math.min(100000, value));
+      result[key] = Math.round(bounded * 1000) / 1000;
+    } else if (key === 'state_mood' && typeof value === 'string') {
+      const allowed = ['calme','fragile','frustrée','préoccupée','satisfaite','déterminée','intriguée','curieuse','lumineuse','claire','engagée'];
+      result[key] = allowed.includes(value) ? value : 'inconnu';
     } else if (key === 'trigger_kind' && typeof value === 'string') {
       result[key] = ['ambient', 'manual', 'continuity', 'scheduled', 'event', 'other'].includes(value) ? value : 'other';
     } else if (key === 'operation_kind' && typeof value === 'string') {
