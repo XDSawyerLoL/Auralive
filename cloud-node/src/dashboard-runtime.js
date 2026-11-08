@@ -1072,6 +1072,27 @@ function renderTradingSimulation(report){
     '</span><span>'+escapeHtml(event.type==='buy'?tradingEuro(event.invested_eur):tradingEuro(event.pnl_eur))+'</span></div>'
   ).join('');
 }
+let tradeLastReportStamp='';
+async function refreshAutoPaperStatus(){
+  try{
+    const status=await api('/api/trading/paper/status');
+    if(status&&status.latest&&status.latest.checked_at!==tradeLastReportStamp){
+      tradeLastReportStamp=status.latest.checked_at;
+      renderTradingSimulation(status.latest);
+      $('tradeStatus').textContent='Surveillance automatique toutes les 6 h · dernier calcul : '+
+        new Date(status.last_checked_at).toLocaleString('fr-FR')+
+        ' · capital et gains totalement fictifs.';
+    } else if(status?.running) {
+      $('tradeStatus').textContent='Surveillance automatique : analyse des prix publics en cours…';
+    } else if(status?.last_error&&!status.latest) {
+      $('tradeStatus').textContent='Données publiques indisponibles : '+String(status.last_error).slice(0,120);
+    }
+  }catch(error){
+    if(error.status===401||error.status===403){
+      $('tradeStatus').textContent='Connexion privée requise pour suivre les simulations automatiques.';
+    }
+  }
+}
 $('tradeBacktest').onclick=async function(){
   const button=$('tradeBacktest');
   button.disabled=true;button.textContent='Analyse…';
@@ -1142,5 +1163,5 @@ $('voiceBtn').onclick=function(){
   rec.onresult=function(e){$('message').value=e.results[0][0].transcript;};
   rec.start();
 };
-updateClock();refresh();try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
+updateClock();refresh();void refreshAutoPaperStatus();setInterval(refreshAutoPaperStatus,120000);try{initLivingAuraScene();}catch(error){console.warn('AURA visual scene disabled; live data remains active.',error);}setInterval(updateClock,1000);setInterval(refresh,8000);
 `;
