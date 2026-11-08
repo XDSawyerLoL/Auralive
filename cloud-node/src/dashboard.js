@@ -141,6 +141,10 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
 .cog-heading h2{font-size:17px;line-height:1.3;letter-spacing:.015em;margin:0;color:#f2f8ff}
 .cog-kicker{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#78bed1;margin-bottom:3px}
 .cog-state{font-size:12px;color:#a3beca;text-align:right;max-width:40%}
+.cog-switch{display:flex;gap:7px;padding:9px 20px 0;align-items:center}
+.cog-switch button{background:rgba(39,66,77,.46);color:#b7d5df;border:1px solid rgba(139,196,216,.19);padding:8px 15px;font-size:12px;font-weight:650;border-radius:10px;min-height:34px}
+.cog-switch button[aria-pressed="true"]{color:#f8feff;border-color:rgba(111,218,234,.68);background:rgba(47,115,131,.34)}
+.cog-switch button:focus-visible{outline:2px solid #a0ecfd;outline-offset:3px}
 .cog-viewport{overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;scrollbar-color:rgba(130,204,219,.5) transparent}
 .cog-svg{min-width:810px;width:100%;height:auto;max-height:405px;display:block;background-image:radial-gradient(rgba(122,192,220,.13) 1px,transparent 1px);background-size:24px 24px}
 .cog-edge{fill:none;stroke:rgba(103,155,183,.27);stroke-width:1.5;transition:stroke .25s}
@@ -209,6 +213,10 @@ body{background:radial-gradient(960px 760px at 73% -10%,rgba(193,94,148,.15),tra
         <div class="cog-heading">
           <div><div class="cog-kicker">OBSERVABILITÉ COGNITIVE · DONNÉES RÉELLES</div><h2>Le chemin d'une décision</h2></div>
           <div id="cogState" class="cog-state" aria-live="polite">Aucune requête instrumentée</div>
+        </div>
+        <div class="cog-switch" role="group" aria-label="Choix des événements à observer">
+          <button type="button" id="cogModeDialogue" aria-pressed="true">Conversation</button>
+          <button type="button" id="cogModeAutonomy" aria-pressed="false" title="Activité réelle du noyau, accès fondateur privé">Autonomie</button>
         </div>
         <div class="cog-viewport" tabindex="0" aria-label="Carte cognitive, faire défiler horizontalement sur les petits écrans"><svg id="cogGraph" class="cog-svg" viewBox="0 0 1050 405" role="group" aria-label="Étapes mesurées du traitement; sélectionner un nœud pour les détails"></svg></div>
         <div class="cog-lower"><div id="cogDetail" class="cog-description" aria-live="polite">En attente d'une requête. Aucun événement simulé.</div><div id="cogDuration" class="cog-duration">—</div></div>
