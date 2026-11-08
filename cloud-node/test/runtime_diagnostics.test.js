@@ -73,7 +73,7 @@ test('server does not let optional CapabilityFabric block a healthy kernel',()=>
  assert.match(init,/try\s*\{\s*await fabric\.start\(\);\s*\} catch/);
  assert.match(init,/await kernel\.start\(\)/);
  assert.match(init,/bootstrap\.runtimeReady = true/);
- assert.match(init,/bootstrap\.failureCode = classifyRuntimeFailure/);
+ assert.match(init,/classifyRuntimeFailure\(error\)/);
  assert.match(init,/kernel\.stop\(\)/);
  const retry=source.slice(source.indexOf("app.post('/api/bootstrap/retry'"),
   source.indexOf("app.get('/api/kernel/status'"));
