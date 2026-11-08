@@ -373,8 +373,14 @@ export class ZeroCostFederation {
 
     if (!candidates.length) return 'openrouter/free';
 
-    const learned = await this.#learnedScores(role, candidates.map((row) => row.id));
-    const ranked = candidates.map((row) => {
+    // Interactive French should produce an actual answer, not spend its
+    // entire free completion budget in mandatory internal reasoning.
+    const nonMandatory=INTERACTIVE_ROLES.has(roleName(role))
+      ? candidates.filter((row)=>row?.reasoning?.mandatory!==true)
+      : [];
+    const speechCandidates=nonMandatory.length?nonMandatory:candidates;
+    const learned = await this.#learnedScores(role, speechCandidates.map((row) => row.id));
+    const ranked = speechCandidates.map((row) => {
       const stats = learned.get(row.id);
       const calls = Number(stats?.calls || 0);
       const successes = Number(stats?.successes || 0);
