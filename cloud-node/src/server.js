@@ -338,6 +338,8 @@ const horizon = new HorizonBridge(async (type, payload, source) => {
   }
 });
 kernel = new CognitiveKernel(ai, horizon, bridge, webSubstrate, fabric);
+// Optional, non-blocking observability of genuine autonomous kernel cycles.
+kernel.autonomyTelemetry = cognitiveTrace;
 const evolution = new EvolutionLab(ai, kernel, bridge);
 const commandCenter = new CommandCenter(
   kernel,
@@ -1416,6 +1418,13 @@ app.post('/api/kernel/operator', async (request, reply) => {
     ? request.body.allowed_risks.map((item) => String(item))
     : [];
   return kernel.operate(task, risks);
+});
+
+// The autonomous stream is founder-only: it may reveal operational rhythms.
+app.get('/api/cognition/autonomy', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  reply.header('Cache-Control', 'private, no-store');
+  return cognitiveTrace.snapshotAutonomy(String(request.query?.id || '').slice(0, 64));
 });
 
 // A private-by-session read-only trace feed. No raw prompts, retrieved text or model internals.
