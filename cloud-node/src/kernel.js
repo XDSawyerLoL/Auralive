@@ -1327,6 +1327,7 @@ export class CognitiveKernel {
     const languageGenerated = languageMode === 'french-language-faculty';
     observe('expression', languageMode === 'natural-language-unavailable' ? 'error' : 'done', {
       answer_chars: String(answer || '').length, language_mode: languageMode,
+      language_backend: String(this.expression.language?.lastBackend || 'unavailable'),
     });
     observe('homeostasis_post', 'running');
     const post = this.organism.afterReply(
