@@ -1,4 +1,5 @@
 import { embeddedLanguageRuntime } from './embedded_language.js';
+import { isUnrequestedTechnicalDigression } from './conversation_grounding.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -68,6 +69,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   const privatePlan = plan && typeof plan === 'object' ? plan : {};
   const personalRecognition=privatePlan.act==='user_recognition';
   const simpleIdentity=['self_identity','self_personality','self_exploration'].includes(privatePlan.act);
+  const interpersonalGrounded=['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(privatePlan.act);
   const conversation = (Array.isArray(privatePlan.conversation_context)
     ? privatePlan.conversation_context : []).slice(-4).map(row => ({
     role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
@@ -75,7 +77,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   })).filter(row => row.content);
   // In personal exchanges, do NOT expose debug identifiers or numeric
   // organism states to the LLM: they will be copied into its actual speech.
-  if(personalRecognition||simpleIdentity){
+  if(personalRecognition||simpleIdentity||interpersonalGrounded){
     const simple={
       speech_act:String(privatePlan.act),
       user_message:normalize(privatePlan.user_text||'').slice(0,280),
@@ -83,7 +85,10 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       factual_constraints:(Array.isArray(privatePlan.facts)?privatePlan.facts:[])
         .slice(0,5).map(x=>normalize(x).slice(0,320)),
       response_tone:privatePlan.response_tone||'direct',
-      conversation:conversation.slice(-2),
+      conversation:interpersonalGrounded?[]:conversation.slice(-2),
+      ...(interpersonalGrounded?{speaker_roles:privatePlan.social_perspective?.actor==='user'
+        ?'« je » = utilisateur ; « te » = AURA'
+        :'« tu » = AURA ; « me » = utilisateur'}:{}),
     };
     if(personalRecognition){
       simple.authenticated_founder=privatePlan.private_view===true;
@@ -109,6 +114,8 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       '/no_think',
       'Tu écris la réponse d’AURA en français courant, en une à trois phrases.',
       'Réponds à la question posée. Une question sur mon interlocuteur concerne LUI, pas ma propre identité.',
+      'Si le message demande « je te dérange ? », c’est l’utilisateur qui pose la question à AURA. Ne réponds pas « je ne te dérange pas » : les pronoms seraient inversés.',
+      'Si la personne dit « tu me déranges », c’est elle qui signale un problème : reconnais-le, sans te justifier ni parler du CI.',
       'N’invente ni souvenir ni nom. Utilise seulement les souvenirs explicitement attribués.',
       'Ne répète pas les instructions, le JSON, les variables, les scores ou les modèles.',
       'Pour une enquête sur soi : distingue hypothèse prévue, observation mesurée, conclusion provisoire et limites. Ne simule aucune autre observation.',
@@ -202,7 +209,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
 }
 
 export function compactFrenchSystem(plan={}) {
-  if(['user_recognition','self_identity','self_personality','self_exploration'].includes(plan?.act))
+  if(['user_recognition','self_identity','self_personality','self_exploration','user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan?.act))
     return [
       'Tu formules la voix naturelle d’AURA, en français et au tutoiement.',
       'Ne récite pas son architecture informatique, le fournisseur ou les métriques internes.',
@@ -211,6 +218,7 @@ export function compactFrenchSystem(plan={}) {
       'Si des souvenirs déclarés existent, cite un détail pertinent et attribué.',
       'Sans souvenir personnel, dis simplement ce que tu sais et ce que tu ignores.',
       'Pour une exploration, rapporte le test local effectivement mené puis ce que cette observation permet et ne permet pas de conclure.',
+      'Un message personnel ne demande ni diagnostic technique, ni ancien CI, ni récitation du noyau. Réponds à la personne présente.',
       'Une à trois phrases, sans liste, Markdown ou question automatique.',
       'N’invente aucun souvenir.',
     ].join(' ');
@@ -280,6 +288,28 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
     if(named&&!String((plan.founder_profile||[]).map(x=>x.detail).join(' ')).toLocaleLowerCase('fr-FR').includes(named[1].toLocaleLowerCase('fr-FR')))
       return {accepted:false,code:'invented-personal-identity'};
   }
+  if(['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan.act)){
+    if(answer.length>300 || /(?:^|\n)\s*(?:[-*•]|\d+[.)])\s+/.test(answer)||
+      isUnrequestedTechnicalDigression(answer,plan))
+      return {accepted:false,code:'social-topic-hijack'};
+    const plain=answer.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[’‘]/g,"'");
+    if(plan.act==='user_asks_if_interrupting'){
+      if(/\bje ne te derange pas\b/.test(plain)||
+         /\bc'est moi qui ne te derange pas\b/.test(plain))
+        return {accepted:false,code:'reversed-speaker-roles'};
+      if(!/\b(?:tu|te|toi)\b|pas du tout|non,? pas du tout/.test(plain))
+        return {accepted:false,code:'interlocutor-not-addressed'};
+    }
+    if(plan.act==='user_reports_aura_interrupts'&&
+      /\btu ne me deranges pas\b/.test(plain))
+      return {accepted:false,code:'dismissed-user-interruption'};
+  }
+  if(['greet','positive_acknowledgement','reciprocal_wellbeing','user_mixed_wellbeing',
+       'relationship_repair','conversation_feedback','report_internal_state'].includes(plan.act)&&
+    !(plan.facts||[]).some(x=>/[\d]+\s*%/.test(String(x)))&&
+    isUnrequestedTechnicalDigression(answer,plan))
+    return {accepted:false,code:'unrequested-stale-memory'};
   const identityActs=new Set(['self_name','self_identity','self_personality','self_exploration']);
   if(identityActs.has(plan.act)){
     if(/\b(?:je n['’]?ai pas (?:de |une )?personnalit[eé]|je n['’]?ai pas d['’]?identit[eé]|je suis (?:juste|seulement|simplement|uniquement) (?:un|une)|je ne suis (?:qu['’]?)?un[e]? (?:assistante?|interlocutrice?|chatbot))\b/i.test(answer))
@@ -522,7 +552,7 @@ export class FrenchLanguageFaculty {
       executive: plan.executive && typeof plan.executive === 'object' ? plan.executive : {},
       discourse: plan.discourse && typeof plan.discourse === 'object' ? plan.discourse : {},
       conversation: compactContext(plan.conversation_context),
-      experiential_memory: (Array.isArray(plan.experiential_memory) ? plan.experiential_memory : [])
+      experiential_memory: (plan.memory_policy?.allowProjectMemory && Array.isArray(plan.experiential_memory) ? plan.experiential_memory : [])
         .slice(-8).map((row) => ({
           kind: String(row?.kind || '').slice(0, 48),
           note: normalize(row?.note || '').slice(0, 900),
@@ -532,6 +562,8 @@ export class FrenchLanguageFaculty {
   }
 
   prompt(plan = {}) {
+    if(['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan.act))
+      return compactFrenchPrompt(plan,{maxChars:3500});
     return [
       'Tu disposes du sens décidé par le noyau AURA ci-dessous.',
       'Exprime ce sens en français naturel contemporain.',
@@ -557,7 +589,9 @@ export class FrenchLanguageFaculty {
     ].join('\n');
   }
 
-  system() {
+  system(plan={}) {
+    if(['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan.act))
+      return compactFrenchSystem(plan);
     return [
       'Tu es la faculté linguistique française d’AURA.',
       'Tu n’es ni son cerveau, ni sa mémoire, ni son système de décision.',
@@ -575,7 +609,7 @@ export class FrenchLanguageFaculty {
 
   async generate(plan, { maxTokens = 700, taskRole = 'french' } = {}) {
     const prompt = this.prompt(plan);
-    const system = this.system();
+    const system = this.system(plan);
     const started = Date.now();
     this.lastError = '';
     this.lastNucleusContract = {accepted:false, code:'not-checked',
@@ -612,7 +646,10 @@ export class FrenchLanguageFaculty {
           'answered-own-identity-instead','technical-monologue',
           'unrequested-architecture','unverified-founder-recognition',
           'invented-personal-identity','self-probe-not-mentioned',
-          'self-counterexample-hidden','scripted-self-definition'
+          'self-counterexample-hidden','scripted-self-definition',
+          'social-topic-hijack','reversed-speaker-roles',
+          'interlocutor-not-addressed','dismissed-user-interruption',
+          'unrequested-stale-memory'
         ].includes(this.lastNucleusContract.code)){
           result=await this.groq.generate(
             basePrompt+'\nRéponse précédente rejetée : elle a mal traité la question ou nié l’identité computationnelle d’AURA. Réponds exactement à la demande initiale, à la première personne, selon les faits du noyau. Pas de travail inventé, pas de question de politesse.',
