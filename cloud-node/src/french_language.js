@@ -81,6 +81,8 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     speech_act: normalize(privatePlan.act || 'respond').slice(0,85),
     factual_constraints: (Array.isArray(privatePlan.facts) ? privatePlan.facts : [])
       .slice(0,18).map(item => normalize(item).slice(0,210)).filter(Boolean),
+    response_tone:['direct','attentive','curious','cautious','calm'].includes(privatePlan.response_tone)
+      ?privatePlan.response_tone:'direct',
     self_model: {
       observations:Math.max(0,Number(privatePlan.self_model?.observations||0)),
       priority:normalize(privatePlan.self_model?.current_priority||'').slice(0,85),
@@ -118,6 +120,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     'Réponds précisément à la question posée ; pour identité, nom ou personnalité, dis « je », jamais « AURA est ».',
     'AURA possède un modèle acquis révisable ; ne dis jamais « je n’ai pas de personnalité », et ne prétends pas être consciente.',
     'Les états internes guident le ton, sans chiffres ou jargon sauf demande ; les faits doivent venir des traces.',
+    'Le champ response_tone indique la tonalité retenue par le noyau après arbitrage émotionnel, pas une émotion humaine ressentie.',
     'N’invente ni actions, ni souvenirs, ni émotions humaines, ni succès, ni activité CI actuelle.',
     'N’injecte pas un rapport de CI ou une question automatique dans une réponse sociale.',
     'Sur l’auto-exploration, indique la question interne choisie et les preuves, sans feindre une découverte.',
@@ -398,6 +401,8 @@ export class FrenchLanguageFaculty {
       external_research_summary: normalize(plan.external_research_summary || ''),
       active_intention: normalize(plan.current_intention || ''),
       dominant_thought: normalize(plan.dominant_thought || ''),
+      response_tone:['direct','attentive','curious','cautious','calm'].includes(plan.response_tone)
+        ?plan.response_tone:'direct',
       self_model:plan.self_model&&typeof plan.self_model==='object'?{
         observations:Number(plan.self_model.observations||0),
         current_priority:normalize(plan.self_model.current_priority||'').slice(0,100),
@@ -434,6 +439,7 @@ export class FrenchLanguageFaculty {
       'Une réponse sociale, une opinion explicitement présentée comme telle ou une explication générale ne requiert pas de preuve opérationnelle AURA.',
       'Pour ces actes, appuie-toi sur le message utilisateur et le contexte conversationnel, sans inventer des événements ou des expériences.',
       'Une absence de faits externes ne doit jamais produire un refus de conversation sociale : réponds de manière appropriée et concise.',
+      'La tonalité découle du champ response_tone calculé par l’organisme et sa délibération fonctionnelle. Une question personnelle nuancée demande de l’attention ; l’incertitude exige de la prudence. Ne transforme pas ces signaux en affirmations de sentiments humains.',
       'Seules les affirmations sur les actions exécutées, souvenirs réels, métriques, résultats, accès et capacités d’AURA exigent des traces fiables.',
 
       'N’invente aucun souvenir, état, action, résultat ou capacité.',
