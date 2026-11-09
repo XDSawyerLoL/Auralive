@@ -744,10 +744,13 @@ async function applyMigrations(db) {
       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     await db.query("CREATE TABLE IF NOT EXISTS aura_history_hypotheses ("+
       "id BIGINT AUTO_INCREMENT PRIMARY KEY,statement TEXT NOT NULL,"+
-      "scope_context VARCHAR(120) NOT NULL,confidence DOUBLE NOT NULL,"+
+      "scope_context VARCHAR(120) NOT NULL,predicted_action VARCHAR(32) NOT NULL,"+
+      "expected_success TINYINT NOT NULL,confidence DOUBLE NOT NULL,"+
       "status VARCHAR(24) NOT NULL DEFAULT 'candidate',created_ts VARCHAR(40) NOT NULL,"+
       "updated_ts VARCHAR(40) NOT NULL,INDEX idx_aura_history_hyp_context(scope_context,status),"+
       "CONSTRAINT chk_aura_history_hyp_conf CHECK (confidence BETWEEN 0 AND 1),"+
+      "CONSTRAINT chk_aura_history_prediction CHECK (predicted_action IN ('respond','verify','clarify','attentive','task_first')),"+
+      "CONSTRAINT chk_aura_history_expectation CHECK (expected_success IN (0,1)),"+
       "CONSTRAINT chk_aura_history_hyp_status CHECK (status IN ('candidate','promoted','refuted','ablated'))"+
       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     await db.query("CREATE TABLE IF NOT EXISTS aura_history_hypothesis_evidence ("+
@@ -769,6 +772,7 @@ async function applyMigrations(db) {
       "id BIGINT AUTO_INCREMENT PRIMARY KEY,ts VARCHAR(40) NOT NULL,"+
       "run_id VARCHAR(120) NOT NULL,situation_id VARCHAR(120) NOT NULL,"+
       "chosen_action VARCHAR(32) NOT NULL,confidence DOUBLE NULL,raw_output LONGTEXT NULL,"+
+      "retrieval_snapshot LONGTEXT NULL,"+
       "INDEX idx_aura_history_decision_run(run_id,situation_id)"+
       ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     await db.query("CREATE TABLE IF NOT EXISTS aura_history_decision_provenance ("+
