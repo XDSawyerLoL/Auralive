@@ -1389,6 +1389,9 @@ app.get('/api/brain/graph', async (request, reply) => {
     lived_identity: bootstrap.runtimeReady
       ? kernel.livedExperience.publicState(kernel.soulCache?.lived_experience)
       : null,
+    epistemic_self: bootstrap.runtimeReady
+      ? kernel.selfInquiry.publicState(kernel.soulCache?.epistemic_self)
+      : null,
     inner_dialogue: bootstrap.runtimeReady
       ? kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue)
       : null,
@@ -1463,7 +1466,11 @@ app.get('/api/brain/experience', async (request, reply) => {
     evidence_status:'reported-founder-feedback-not-independent-verification',
     lived_identity:kernel.livedExperience.publicState(
       kernel.soulCache?.lived_experience,{includeEvidence:true}),
-    source:'aura_soul_state.lived_experience',
+    epistemic_self:{
+      ...kernel.selfInquiry.publicState(kernel.soulCache?.epistemic_self),
+      observations:kernel.selfInquiry.migrate(kernel.soulCache?.epistemic_self).observations,
+    },
+    source:'aura_soul_state.lived_experience_and_epistemic_self',
   };
 });
 
