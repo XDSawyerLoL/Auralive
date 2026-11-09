@@ -1557,6 +1557,11 @@ export class CognitiveKernel {
     // Allocation adaptative : le noyau choisit combien de calcul externe
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
     const inference = this.inferenceAssessment();
+    if(privateView&&inference.execution_preference==='verify-failures'&&substantiveRequest(content)){
+      plan.goal+=' Les échecs récents de mes opérations demandent une vérification supplémentaire. Ne pas présenter un compte rendu comme une réussite indépendante.';
+      plan.needs_semantic_support=true;
+      plan.semantic_query=content;
+    }
     if(privateView&&inference.organ_regulation?.action!=='unchanged'){
       await this.trace('organ-regulation',inference.organ_regulation.action,'',{
         flow_id:brainFlowId,at:now(),
