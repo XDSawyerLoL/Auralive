@@ -64,6 +64,43 @@ export class HistoryLedger {
       await conn.commit();return {id:r.insertId,hash,prev_hash};
     }catch(error){await conn.rollback();throw error;}finally{conn.release();}
   }
+
+  async verifyChain({maxEpisodes=100000}={}){
+    const conn=await this.db.getConnection();
+    try{
+      await conn.beginTransaction();
+      const [heads]=await conn.execute(
+        'SELECT last_hash,last_episode_id FROM aura_history_head WHERE id=1');
+      let previous='GENESIS',lastId=null,count=0;
+      const cap=Math.max(1,Math.min(1000000,Number(maxEpisodes)||100000));
+      while(count<cap){
+        const size=Math.min(500,cap-count);
+        const [episodes]=await conn.execute(
+          'SELECT id,ts,mission_id,kind,context_tag,action,prediction,confidence,prev_hash,hash '+
+          'FROM aura_history_episodes WHERE id>? ORDER BY id LIMIT ?',
+          [lastId??0,size]);
+        if(!episodes.length)break;
+        for(const e of episodes){
+          if(e.prev_hash!==previous||e.hash!==episodeDigest(previous,e)){
+            await conn.rollback();
+            return {verified:false,reason:'broken-chain',episode_id:e.id,checked:count};
+          }
+          previous=e.hash;lastId=e.id;count++;
+        }
+      }
+      // A partial scan is not full chain verification.
+      const [more]=await conn.execute(
+        'SELECT id FROM aura_history_episodes WHERE id>? ORDER BY id LIMIT 1',
+        [lastId??0]);
+      const full=more.length===0;
+      const headMatches=full&&heads[0]?.last_hash===previous&&
+        (heads[0]?.last_episode_id??null)===(lastId??null);
+      await conn.commit();
+      return {verified:Boolean(full&&headMatches),
+        reason:!full?'truncated':headMatches?'full-chain':'head-mismatch',
+        checked:count,last_episode_id:lastId};
+    }catch(error){await conn.rollback();throw error;}finally{conn.release();}
+  }
   async recordOutcome(episodeId,{outcome,success=null,source='external-report'}={}){
     if(!Number.isSafeInteger(Number(episodeId))||Number(episodeId)<=0||
        !SOURCES.has(source)||(success!==null&&success!==0&&success!==1)||!outcome||
