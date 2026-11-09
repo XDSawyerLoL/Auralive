@@ -66,6 +66,13 @@ test('social requests discard stale tasks, thoughts, CI memory and active-intent
   assert.doesNotMatch(JSON.stringify(payload),/CI défaillant|noyau persistant|Relance du CI|0\.8/i);
   assert.match(compactFrenchSystem(plan),/interlocuteur|personnel/);
  }
+ for(const shift of ['Et sinon ?', 'Sinon ?', 'À part ça ?']){
+  const p=planFor(shift,previous);
+  assert.equal(p.act,'topic_shift',shift);
+  assert.equal(p.memory_policy.allowProjectMemory,false);
+  assert.doesNotMatch(JSON.stringify(p.facts),/Relancer le CI|Foyer opérationnel/i);
+  assert.doesNotMatch(compactFrenchPrompt(p,{maxChars:4500}),/Relancer le CI défaillant|pensée dominante/i);
+ }
  const continuation=planFor('Et sinon ?',previous);
  assert.equal(continuation.memory_policy.allowProjectMemory,false);
  assert.doesNotMatch(continuation.facts.join(' '),/CI défaillant|Intention actuelle/);
