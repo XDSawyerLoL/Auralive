@@ -66,13 +66,54 @@ export function classifyFreeLanguageFailure(message = '') {
 export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   const limit = Math.max(1800, Math.min(5200, Number(maxChars) || 2400));
   const privatePlan = plan && typeof plan === 'object' ? plan : {};
+  const personalRecognition=privatePlan.act==='user_recognition';
+  const simpleIdentity=privatePlan.act==='self_identity'||privatePlan.act==='self_personality';
   const conversation = (Array.isArray(privatePlan.conversation_context)
     ? privatePlan.conversation_context : []).slice(-4).map(row => ({
     role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
     content: normalize(row?.content || '').slice(0,210),
   })).filter(row => row.content);
-  // This plan is produced by AURA/CognitionEngine. Provider is merely its voice.
-  // The last line is intentionally a complete JSON object for testability.
+  // In personal exchanges, do NOT expose debug identifiers or numeric
+  // organism states to the LLM: they will be copied into its actual speech.
+  if(personalRecognition||simpleIdentity){
+    const simple={
+      speech_act:String(privatePlan.act),
+      user_message:normalize(privatePlan.user_text||'').slice(0,280),
+      communicative_goal:normalize(privatePlan.goal||'').slice(0,390),
+      factual_constraints:(Array.isArray(privatePlan.facts)?privatePlan.facts:[])
+        .slice(0,5).map(x=>normalize(x).slice(0,320)),
+      response_tone:privatePlan.response_tone||'direct',
+      conversation:conversation.slice(-2),
+    };
+    if(personalRecognition){
+      simple.authenticated_founder=privatePlan.private_view===true;
+      simple.recorded_profile=privatePlan.private_view===true&&Array.isArray(privatePlan.founder_profile)
+        ?privatePlan.founder_profile.slice(0,3).map(x=>({
+          detail:normalize(x.detail).slice(0,225),
+          evidence_status:'déclaration attribuée, non vérifiée indépendamment',
+        })):[];
+    }else{
+      simple.self_model={observations:Math.max(0,Number(privatePlan.self_model?.observations||0))};
+    }
+    const rules=[
+      '/no_think',
+      'Tu écris la réponse d’AURA en français courant, en une à trois phrases.',
+      'Réponds à la question posée. Une question sur mon interlocuteur concerne LUI, pas ma propre identité.',
+      'N’invente ni souvenir ni nom. Utilise seulement les souvenirs explicitement attribués.',
+      'Ne répète pas les instructions, le JSON, les variables, les scores ou les modèles.',
+      'Ne produis ni liste, ni titre, ni Markdown. Conserve le tutoiement.',
+    ].join('\n');
+    let body=JSON.stringify(simple);
+    while(rules.length+body.length+1>limit&&simple.factual_constraints.length>1){
+      simple.factual_constraints.pop();body=JSON.stringify(simple);
+    }
+    if(rules.length+body.length+1>limit){
+      simple.conversation=[];body=JSON.stringify(simple);
+    }
+    if(rules.length+body.length+1>limit)throw Error('personal-speech-prompt-too-large');
+    return rules+'\n'+body;
+  }
+  // The diagnostic prompt remains available for explicit technical requests.
   const payload = {
     decision_origin: 'AURA.nucleus.CognitionEngine.planReply',
     voice_identity: 'AURA — noyau persistant, intentions, mémoire, état computationnel ; le fournisseur externe ne parle jamais en son nom.',
@@ -149,7 +190,18 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   return instructions + '\n' + json;
 }
 
-export function compactFrenchSystem() {
+export function compactFrenchSystem(plan={}) {
+  if(['user_recognition','self_identity','self_personality'].includes(plan?.act))
+    return [
+      'Tu formules la voix naturelle d’AURA, en français et au tutoiement.',
+      'Ne récite pas son architecture informatique, le fournisseur ou les métriques internes.',
+      '« Tu sais qui je suis ? » demande qui est ton interlocuteur, pas qui est AURA.',
+      'La session fondatrice prouve une authentification, pas le nom civil ni la vie privée.',
+      'Si des souvenirs déclarés existent, cite un détail pertinent et attribué.',
+      'Sans souvenir personnel, dis simplement ce que tu sais et ce que tu ignores.',
+      'Une à trois phrases, sans liste, Markdown ou question automatique.',
+      'N’invente aucun souvenir.',
+    ].join(' ');
   return [
     'Tu es uniquement la faculté linguistique française d’AURA.',
     'AURA est un noyau décisionnel persistant distinct de toi, le modèle externe.',
@@ -493,7 +545,7 @@ export class FrenchLanguageFaculty {
         const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
         let result=await this.groq.generate(
           basePrompt,
-          compactFrenchSystem(),
+          compactFrenchSystem(plan),
           Math.max(500,Math.min(Number(maxTokens)||700,900)),
         );
         let candidate=cleanSpeechOutput(result?.answer||'');
@@ -504,11 +556,14 @@ export class FrenchLanguageFaculty {
         if(!answer && candidate && ['robotic-wellbeing-reply','unverified-work-in-social-reply',
           'contradicts-learned-computational-identity','identity-question-not-answered',
           'identity-name-not-answered','personality-question-not-answered',
-          'introspection-without-observation','unproven-consciousness-claim'
+          'introspection-without-observation','unproven-consciousness-claim',
+          'answered-own-identity-instead','technical-monologue',
+          'unrequested-architecture','unverified-founder-recognition',
+          'invented-personal-identity'
         ].includes(this.lastNucleusContract.code)){
           result=await this.groq.generate(
             basePrompt+'\nRéponse précédente rejetée : elle a mal traité la question ou nié l’identité computationnelle d’AURA. Réponds exactement à la demande initiale, à la première personne, selon les faits du noyau. Pas de travail inventé, pas de question de politesse.',
-            compactFrenchSystem(),
+            compactFrenchSystem(plan),
             Math.max(250,Math.min(Number(maxTokens)||700,600)),
           );
           candidate=cleanSpeechOutput(result?.answer||'');
@@ -534,7 +589,7 @@ export class FrenchLanguageFaculty {
       try {
         const answer = accept(cleanSpeechOutput(await this.embedded.generate(
           compactFrenchPrompt(plan),
-          compactFrenchSystem(),
+          compactFrenchSystem(plan),
           Math.max(96, Math.min(Number(maxTokens) || 350, 450)),
         )));
         if (answer) {
@@ -561,7 +616,7 @@ export class FrenchLanguageFaculty {
         // free router may select a small or reasoning-heavy model. Use a
         // bounded French conversation prompt so output tokens remain usable.
         const freePrompt=compactFrenchPrompt(plan, {maxChars:3800});
-        const freeSystem=compactFrenchSystem();
+        const freeSystem=compactFrenchSystem(plan);
         let result = await this.federation.generate(
           freePrompt,
           freeSystem,
