@@ -107,8 +107,8 @@ export class HistoryLedger {
       throw new Error('Invalid hypothesis');
     const [existing]=await this.db.execute(
       "SELECT id FROM aura_history_hypotheses WHERE scope_context=? AND predicted_action=? "+
-      "AND status IN ('candidate','promoted') ORDER BY id DESC LIMIT 1",
-      [context_tag,predicted_action]);
+      "AND expected_success=? AND status IN ('candidate','promoted') ORDER BY id DESC LIMIT 1",
+      [context_tag,predicted_action,expected_success]);
     if(existing.length)return {id:existing[0].id,created:false};
     const ts=utc(this.clock());
     const statement='Dans '+context_tag+', '+predicted_action+
@@ -119,6 +119,34 @@ export class HistoryLedger {
       "VALUES(?,?,?,?,?,'candidate',?,?)",
       [statement,context_tag,predicted_action,expected_success,.5,ts,ts]);
     return {id:r.insertId,created:true,status:'candidate'};
+  }
+
+  // Pattern discovery draws its ideas from independent evidence, rather
+  // than a hard-coded list of introspective identity claims.
+  // Retrospective data may create CANDIDATES only; never promoted policies.
+  async discoverHypotheses({context_tag,limit=3}={}){
+    if(!context_tag||typeof context_tag!=='string'||context_tag.length>120)
+      throw new Error('Context required');
+    const [rows]=await this.db.execute(
+      'SELECT e.action,COUNT(DISTINCT e.mission_id) AS independent_runs,'+
+      'SUM(o.success=1) AS successes,SUM(o.success=0) AS failures '+
+      'FROM aura_history_episodes e JOIN aura_history_outcomes o ON o.episode_id=e.id '+
+      "WHERE e.context_tag=? AND e.kind='action' AND e.ablated=0 "+
+      "AND o.source='machine-verified' AND e.mission_id IS NOT NULL "+
+      'GROUP BY e.action ORDER BY successes DESC,e.action LIMIT 12',[context_tag]);
+    const viable=rows.filter(row=>ACTIONS.has(row.action)&&
+      Number(row.successes)>=2&&Number(row.independent_runs)>=2);
+    const proposals=[];
+    for(const row of viable.slice(0,Math.max(0,Math.min(3,Math.trunc(limit)||1)))){
+      proposals.push({
+        ...await this.proposeHypothesis({
+          context_tag,predicted_action:row.action,expected_success:1,
+        }),predicted_action:row.action,
+        retrospective_support:Number(row.successes),
+        prospective_evidence_required:true,
+      });
+    }
+    return proposals;
   }
   async evaluateHypothesis(hypothesisId){
     const conn=await this.db.getConnection();
@@ -172,6 +200,8 @@ export class HistoryLedger {
     }catch(error){await conn.rollback();throw error;}finally{conn.release();}
   }
   async decide({context_tag,baseline='respond',run_id,situation_id,excludedEpisodes=[]}={}){
+    if(!run_id||!situation_id||!context_tag)
+      throw new Error('Decision provenance requires run, situation and context');
     const rows=await this.retrieve(context_tag);
     const choice=historyChoice({context:context_tag,baseline,rows,excludedEpisodes});
     const conn=await this.db.getConnection();
