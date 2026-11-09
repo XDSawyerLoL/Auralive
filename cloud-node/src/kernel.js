@@ -1597,7 +1597,7 @@ export class CognitiveKernel {
       language_provider: this.expression.language.lastBackend || '',
       inner_dialogue:plan.inner_dialogue,
       experience_guidance:plan.experience_guidance,
-      lived_experience:this.livedExperience.publicState(this.soulCache.lived_experience),
+      lived_experience:this.livedExperience.publicState(this.soulCache.lived_experience,{includeEvidence:privateView}),
       semantic_support_used: Boolean(plan.semantic_support),
       activity_evidence: {
         evidence_status: plan.activity_evidence?.evidence_status || 'unverified',
