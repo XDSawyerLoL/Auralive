@@ -364,4 +364,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
  .graph-panel{min-height:850px;height:860px}
  .graph-canvas{min-height:330px}
 }
+
+.graph-focus-summary{border:1px solid rgba(118,166,187,.24);border-radius:9px;padding:9px 11px;background:rgba(12,29,42,.73);display:grid;gap:4px;max-width:100%;margin:7px 0}
+.graph-focus-top{display:flex;justify-content:space-between;align-items:baseline;gap:11px}
+.graph-focus-top span{font-size:9px;color:#91b7c8;letter-spacing:.15em}
+.graph-focus-top strong{color:#e8f8fa;font-size:12px;text-align:right}
+.graph-focus-info{color:#abccda;font-size:10px;line-height:1.5}
+.graph-focus-proof{color:#899fb5;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.graph-bottom{display:block;min-height:auto;padding:8px 12px 10px}
+.graph-panel.graph-expanded .graph-focus-summary{padding:6px 10px;gap:2px}
+@media(min-width:1300px){
+ .graph-bottom>div:first-child{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,370px);gap:7px 18px;align-items:start}
+ .graph-bottom .graph-focus-summary{grid-column:2;grid-row:1 / 3;margin:0}
+ .graph-bottom .graph-caption{grid-column:1}
+}
 `;
