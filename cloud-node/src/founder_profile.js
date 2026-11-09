@@ -33,3 +33,28 @@ export function selectFounderProfile(notes,{authenticated=false,limit=3}={}){
  }
  return chosen;
 }
+
+// Read-only derivation from existing authenticated founder chat records.
+// It does not introduce automatic background storage or accept arbitrary
+// project narratives as personal facts. Name is a self-declaration only.
+export function founderIdentityDeclarations(rows,{authenticated=false}={}){
+ if(!authenticated||!Array.isArray(rows))return [];
+ const excluded=new Set(['aura','assistant','assistant(e)','personne','utilisateur','recherche','personnage','pas','dans','mon']);
+ for(const row of rows.slice(0,40)){
+  const message=String(row?.content||'').trim().slice(0,900);
+  if(!message)continue;
+  // Only direct first-person statements; never "X said that I am Y".
+  const match=message.match(/\b(?:je m['’]appelle|mon pr[eé]nom est|mon nom est)\s+([\p{L}][\p{L}'’-]{1,34})/iu);
+  if(!match)continue;
+  const name=match[1].replace(/[’'-]+$/,'');
+  if(excluded.has(fold(name)))continue;
+  if(/\b(?:fiction|roman|personnage|exemple|imaginons|supposons|citation)\b/i.test(message.slice(0,100)))continue;
+  return [{
+   title:'Profil du fondateur · prénom déclaré',
+   project:'profil personnel',tags:['profil du fondateur'],kind:'fact',
+   status:'active',source:'fondateur:conversation',
+   body:'Dans une conversation, tu m’as dit que ton prénom ou nom d’usage est '+name+'.',
+  }];
+ }
+ return [];
+}
