@@ -1348,6 +1348,14 @@ export class CognitiveKernel {
       plan.needs_semantic_support=true;
       plan.semantic_query=content;
     }
+    if(advice.changed && advice.strategy==='clarify'){
+      plan.goal+=' Vérifier avec tact le sens de la demande avant de conclure. Éviter de répéter la même interprétation erronée.';
+      plan.needs_semantic_support=true;
+      plan.semantic_query=content;
+    }
+    if(advice.changed && advice.strategy==='attentive'){
+      plan.goal+=' Tenir compte explicitement des nuances de cet échange et ne pas imposer une lecture positive.';
+    }
     // These properties always originate in persisted kernel state, never from
     // the externally generated wording. Providers receive a read-only view.
     plan.self_model = this.autogenesis.publicState(this.soulCache.emergent_identity);
