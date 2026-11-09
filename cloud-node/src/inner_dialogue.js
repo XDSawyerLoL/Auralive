@@ -86,6 +86,7 @@ export class InnerDialogueEngine {
     if(situation==='mixed_or_negative' && harm<.85)selected='respond';
     let tone=situation==='mixed_or_negative'?'attentive'
       :situation==='self_identity'?'direct'
+      :contextualStrategy==='attentive'||selected==='clarify'?'attentive'
       :selected==='verify'?'cautious'
       :inquiry>.63?'curious'
       :pressure>.73?'calm':'direct';
