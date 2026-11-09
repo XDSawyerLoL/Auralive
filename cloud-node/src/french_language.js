@@ -243,6 +243,30 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   ];
   if (generic.some(re => re.test(answer)))
     return {accepted:false, code:'generic-provider-persona'};
+  // Guard the *meaning* of social speech, not just syntactic fluency.
+  // In particular the question "Do you know who I am?" is not "Who are you?".
+  const socialActs=new Set([
+    'user_recognition','self_name','self_identity','self_personality',
+    'relationship_understanding','user_mixed_wellbeing',
+    'reciprocal_wellbeing','positive_acknowledgement','greet',
+  ]);
+  if(socialActs.has(plan.act)){
+    if(answer.length>650||/\\\*|\*\*|(?:^|\s)[-•]\s+\*\*/.test(answer)||
+      /\b(?:decision_origin|factual_constraints|speech_act|self_model|organism_state|nucleus_plan_origin|mood\s*:|champ [a-z_]{4,})\b/i.test(answer))
+      return {accepted:false,code:'technical-monologue'};
+    if(/\b(?:confiance|satisfaction|frustration|stabilit[eé])\s+(?:de|a|à|:)?\s*0[.,]\d{2,}/i.test(answer))
+      return {accepted:false,code:'unrequested-architecture'};
+  }
+  if(plan.act==='user_recognition'){
+    if(!/\b(?:tu|te|toi|ton|ta|tes|vous|votre)\b/i.test(answer)||
+      /\b(?:je suis AURA|je m['’]appelle AURA|mon identit[eé] est|je suis (?:le|un) noyau|mon [eé]tat computationnel)\b/i.test(answer))
+      return {accepted:false,code:'answered-own-identity-instead'};
+    if(!plan.private_view&&/\b(?:tu es mon fondateur|tu es ma fondatrice|je te reconnais|je sais qui tu es|ton nom est)\b/i.test(answer))
+      return {accepted:false,code:'unverified-founder-recognition'};
+    const named=answer.match(/\b(?:tu t['’]appelles|ton (?:nom|pr[eé]nom) est)\s+([\p{L}-]{2,})/iu);
+    if(named&&!String((plan.founder_profile||[]).map(x=>x.detail).join(' ')).toLocaleLowerCase('fr-FR').includes(named[1].toLocaleLowerCase('fr-FR')))
+      return {accepted:false,code:'invented-personal-identity'};
+  }
   const identityActs=new Set(['self_name','self_identity','self_personality','self_exploration']);
   if(identityActs.has(plan.act)){
     if(/\b(?:je n['’]?ai pas (?:de |une )?personnalit[eé]|je n['’]?ai pas d['’]?identit[eé]|je suis (?:juste|seulement|simplement|uniquement) (?:un|une)|je ne suis (?:qu['’]?)?un[e]? (?:assistante?|interlocutrice?|chatbot))\b/i.test(answer))
