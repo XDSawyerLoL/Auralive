@@ -15,6 +15,7 @@ import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
 import { SelfInquiryEngine } from './self_inquiry.js';
 import { ActiveInferenceEngine } from './active_inference.js';
+import { organRegulate } from './organ_regulation.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -221,8 +222,9 @@ export class CognitiveKernel {
   inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
     const organism = this.organism.migrate(this.soulCache || {});
     const policy = this.nativeLearning.inferenceParams(this.soulCache?.native_learning);
-    const assessment = { ...this.activeInference.assess(organism, { novelty, risk, policy }),
-      decision_id: randomUUID() };
+    const assessment = { ...organRegulate(
+      this.activeInference.assess(organism, { novelty, risk, policy }),organism,
+    ),decision_id: randomUUID() };
     this.lastInferenceAssessment = assessment;
     this.recentReflexDecisions.push(assessment);
     if (this.recentReflexDecisions.length > 100) this.recentReflexDecisions.shift();
@@ -1555,6 +1557,17 @@ export class CognitiveKernel {
     // Allocation adaptative : le noyau choisit combien de calcul externe
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
     const inference = this.inferenceAssessment();
+    if(privateView&&inference.organ_regulation?.action!=='unchanged'){
+      await this.trace('organ-regulation',inference.organ_regulation.action,'',{
+        flow_id:brainFlowId,at:now(),
+        measurement_source:inference.organ_regulation.source,
+        resource_pressure:inference.organ_regulation.resource_pressure,
+        token_budget:inference.token_budget,
+        optional_compute_reduced:inference.organ_regulation.optional_computation_reduced,
+        verification_preserved:inference.organ_regulation.verification_preserved,
+        provenance:'measured-sensor-to-compute-allocation',
+      });
+    }
 
     // Quand une question dépend du monde extérieur, le modèle n'est pas
     // autorisé à répondre depuis ses seuls paramètres. Il doit d'abord
@@ -1637,7 +1650,7 @@ export class CognitiveKernel {
         plan,
         await this.contextForAi(privateView, content),
         {
-          maxTokens: Math.max(180, Number(inference.token_budget || 700)),
+          maxTokens: Math.max(120, Number(inference.token_budget || 180)),
           taskRole: inference.model_role || 'research',
         },
       );
@@ -1670,7 +1683,7 @@ export class CognitiveKernel {
       }
     }
     const answer = await this.expression.verbalize(plan, {
-      maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
+      maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
       taskRole: 'conversation',
     });
     observe('expression',answer?'done':'error',{
@@ -1776,6 +1789,7 @@ export class CognitiveKernel {
       metacognitive_guidance:plan.metacognitive_guidance,
       experience_guidance:plan.experience_guidance,
       history_guidance:plan.history_guidance,
+      organ_regulation:inference.organ_regulation,
       lived_experience:this.livedExperience.publicState(this.soulCache.lived_experience,{includeEvidence:privateView}),
       semantic_support_used: Boolean(plan.semantic_support),
       activity_evidence: {
