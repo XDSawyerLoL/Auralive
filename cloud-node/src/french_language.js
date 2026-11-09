@@ -302,7 +302,7 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
     if(/\b(?:je suis AURA, le noyau|mon champ decision_origin|je poss[eè]de une conscience)\b/i.test(answer))
       return {accepted:false,code:'scripted-self-definition'};
     if(report.status==='contradicted'&&
-       !/\b(?:[eé]chec|pas (?:pu|confirm[eé]|retrouv[eé]|v[eé]rifi[eé])|incertain|erreur|contredit|non confirm[eé])\b/i.test(answer))
+       !/\b(?:[eé]chec|[eé]chou[eé]|pas (?:pu|confirm[eé]|retrouv[eé]|v[eé]rifi[eé])|incertain|erreur|contredit|non confirm[eé])\b/i.test(answer))
       return {accepted:false,code:'self-counterexample-hidden'};
     if(report.probe==='conversation_retrieval'&&
        !/\b(?:message|conversation|souvenir|[eé]change|historique)\b/i.test(answer))
