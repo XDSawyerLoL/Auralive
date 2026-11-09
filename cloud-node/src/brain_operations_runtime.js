@@ -18,7 +18,7 @@ const POS={
  runtime:[605,465],voicefabric:[1050,535],expert:[754,728],horizon:[955,738]
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
-const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false,activityOnly:false};
+const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false,activityOnly:false,replayPlaying:false,replayOffset:0,replaySpeed:1,replayRendered:-1,initialReplayShown:false};
 const ANCHORS=new Set(['kernel','homeostasis','memory','cognition','language','output','web','command']);
 const LENSES=Object.entries(GROUPS);
 for(const [group,label] of LENSES){
@@ -129,12 +129,97 @@ function renderRoute(){
  }
 }
 
-function chooseFlow(id){
- state.flow=(state.data?.flows||[]).find(f=>f.id===id)||null;
- state.replayStarted=performance.now();
- if(state.flow?.steps?.length)state.selected=state.flow.steps[state.flow.steps.length-1].to;
- renderAll();
+const REPLAY_STEP_MS=680;
+function replayPosition(){
+ const steps=state.flow?.steps||[],count=steps.length;
+ if(!count)return {steps,index:0,elapsed:0,phase:0,replaying:false};
+ const total=count*REPLAY_STEP_MS;
+ let elapsed=state.replayOffset;
+ if(state.replayPlaying){
+  elapsed+=Math.max(0,performance.now()-state.replayStarted)*state.replaySpeed;
+  if(elapsed>=total){
+   elapsed=Math.max(0,total-1);
+   state.replayOffset=elapsed;state.replayPlaying=false;state.replayStarted=0;
+  }
+ }
+ return {steps,elapsed,index:Math.min(count-1,Math.floor(elapsed/REPLAY_STEP_MS)),
+  phase:(elapsed%REPLAY_STEP_MS)/REPLAY_STEP_MS,replaying:state.replayPlaying};
 }
+function setReplayIndex(index){
+ const count=state.flow?.steps?.length||0;
+ if(!count)return;
+ state.replayPlaying=false;state.replayStarted=0;
+ state.replayOffset=Math.max(0,Math.min(count-1,Math.floor(index)))*REPLAY_STEP_MS+REPLAY_STEP_MS*.5;
+ state.replayRendered=-1;
+ syncTraceConsole();scheduleDraw();
+}
+function chooseFlow(id,{autoplay=false}={}){
+ state.flow=(state.data?.flows||[]).find(f=>f.id===id)||null;
+ state.replayPlaying=false;state.replayStarted=0;state.replayOffset=0;state.replayRendered=-1;
+ if(state.flow?.steps?.length){
+   state.selected=state.flow.steps[0].from;
+   if(autoplay&&!reduced){state.replayPlaying=true;state.replayStarted=performance.now();}
+ }
+ syncTraceConsole();renderAll();
+}
+function syncTraceConsole(){
+ const flows=state.data?.flows||[],select=$('traceSelect'),selectedId=state.flow?.id||'';
+ // Rebuild only when archived IDs change to avoid resetting a user selection.
+ const ids=flows.map(x=>x.id).join('|');
+ if(select.dataset.ids!==ids){
+  select.dataset.ids=ids;select.replaceChildren();
+  if(!flows.length){const o=element('option','',"Aucun trajet confirmé");o.value='';select.append(o);}
+  for(const f of flows.slice(0,12)){
+   const option=element('option','',
+      shortTime(f.updated_at)+' · '+f.step_count+' étapes · '+(f.state==='completed'?'réponse':'partiel'));
+   option.value=f.id;select.append(option);
+  }
+ }
+ select.value=selectedId;
+ const p=replayPosition(),step=p.steps[p.index],count=p.steps.length;
+ const has=count>0;
+ for(const id of ['tracePlay','tracePrev','traceNext','traceScrub'])$(id).disabled=!has;
+ $('traceScrub').max=String(Math.max(0,count-1));
+ $('traceScrub').value=String(p.index);
+ $('tracePlay').textContent=p.replaying?'Ⅱ Pause':'▶ Revoir';
+ $('tracePosition').textContent=has?(p.index+1)+' / '+count:'0 / 0';
+ $('traceSignal').dataset.mode=p.replaying?'replay':state.busy?'live':'idle';
+ const status=has?'ARCHIVE · '+shortTime(state.flow.updated_at)+
+   (p.replaying?' · RELECTURE EN COURS':' · EN PAUSE') :state.busy?
+   'Requête en cours · attente de preuves':'Aucun trajet archivé disponible';
+ setText('traceStatus',status);
+ setText('traceDetail',!has?
+   'Les impulsions n’apparaissent que pour des événements enregistrés. Aucun signal synthétique.':
+   (STAGES[step.from]||findNode(step.from)?.label||step.from)+' → '+
+   (STAGES[step.to]||findNode(step.to)?.label||step.to)+' · '+
+   shortTime(step.at)+' · état : '+String(step.status||'non précisé')+
+   (step.provider?' · moteur : '+String(step.provider).slice(0,40):'')+
+   ' · relecture d’une transition enregistrée, pas activité en direct.');
+ if(state.replayRendered!==p.index){
+   state.replayRendered=p.index;
+   if(step?.to&&findNode(step.to))state.selected=step.to;
+ }
+}
+$('traceSelect').addEventListener('change',e=>chooseFlow(e.target.value,{autoplay:false}));
+$('tracePlay').addEventListener('click',()=>{
+ const count=state.flow?.steps?.length||0;if(!count)return;
+ if(state.replayPlaying){
+  const p=replayPosition();state.replayOffset=p.elapsed;
+  state.replayPlaying=false;state.replayStarted=0;
+ }else{
+  if(state.replayOffset>=count*REPLAY_STEP_MS-REPLAY_STEP_MS*.2)state.replayOffset=0;
+  state.replayPlaying=true;state.replayStarted=performance.now();
+ }
+ syncTraceConsole();scheduleDraw();
+});
+$('tracePrev').addEventListener('click',()=>setReplayIndex(replayPosition().index-1));
+$('traceNext').addEventListener('click',()=>setReplayIndex(replayPosition().index+1));
+$('traceScrub').addEventListener('input',e=>setReplayIndex(Number(e.target.value)));
+$('traceSpeed').addEventListener('change',e=>{
+ const p=replayPosition();state.replayOffset=p.elapsed;
+ state.replayStarted=performance.now();state.replaySpeed=Math.max(.5,Math.min(2,Number(e.target.value)||1));
+ syncTraceConsole();scheduleDraw();
+});
 
 function renderFlows(){
  const root=$('flowList');root.replaceChildren();
@@ -475,7 +560,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
@@ -648,6 +733,11 @@ async function poll(){
      state.initialRouteSelected=true;
      state.flow=data.flows.find(f=>f.causal?.phase==='completed')||data.flows[0]||null;
      state.replayStarted=0;
+     state.replayPlaying=false;state.replayOffset=0;
+     if(state.flow?.steps?.length&&!reduced){
+       // One explicit ARCHIVE-labeled playback on first load, never a fabricated live pulse.
+       state.replayPlaying=true;state.replayStarted=performance.now();state.initialReplayShown=true;
+     }
    }
    if(!findNode(state.selected))state.selected='kernel';
    state.lastError='';renderAll();
@@ -713,7 +803,7 @@ $('chatSend').onclick=async()=>{
  if(!msg||state.busy)return;
  const mission=$('chatMode').value==='mission';
  state.busy=true;
- state.flow=null;state.replayStarted=0;
+ state.flow=null;state.replayStarted=0;state.replayPlaying=false;state.replayOffset=0;
  $('chatSend').disabled=true;field.value='';
  state.lastPrompt=msg;setText('requestPreview',msg);
  chatLine('VOUS · '+(mission?'MISSION':'DIALOGUE'),msg,'user');
@@ -801,7 +891,7 @@ $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e
 
 // Low-rate ambient redraw makes the diagram feel alive without manufacturing tool calls.
 // Persisted events alone create travelling pulses; honor reduced-motion and hidden tabs.
-if(!reduced)setInterval(()=>{if(!document.hidden&&state.data&&!state.drawScheduled)scheduleDraw();},125);
+if(!reduced)setInterval(()=>{if(!document.hidden&&state.data&&!state.drawScheduled&&state.replayPlaying)scheduleDraw();},70);
 const apiUrl=path=>path;
 async function api(path){
  const response=await fetch(path,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
