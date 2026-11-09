@@ -56,7 +56,7 @@ export function organRegulate(inference={},organism={},{
   // Never disable verification on a critical or high-risk request. Existing
   // safety checks and tool permissions are unchanged.
   const highStakes=tier==='verified'||risk>=.6;
-  const optionalComputation=resourcePressure>=.45&&!highStakes;
+  const optionalComputation=resourcePressure>=.45&&!highStakes&&baselineBudget>0;
   const saving=optionalComputation
     ?resourcePressure>=.75?.58:.78:1;
   const minimum=tierMin[tier]??0;
