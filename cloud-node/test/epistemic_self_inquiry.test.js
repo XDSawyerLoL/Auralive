@@ -6,6 +6,8 @@ import {CognitionEngine} from '../src/cognition.js';
 import {SelfInquiryEngine} from '../src/self_inquiry.js';
 import {InnerDialogueEngine} from '../src/inner_dialogue.js';
 import {compactFrenchPrompt,compactFrenchSystem,validateNucleusSpeech} from '../src/french_language.js';
+import {BRAIN_OPERATIONS_HTML} from '../src/brain_operations_console.js';
+import {BRAIN_OPERATIONS_SCRIPT} from '../src/brain_operations_runtime.js';
 
 const self=new SelfInquiryEngine();
 const cognition=new CognitionEngine();
@@ -121,4 +123,20 @@ test('the kernel actually persists a self-probe instead of logging pure speech',
  assert.match(source,/self-inquiry','bounded-functional-probe/);
  assert.match(source,/SELECT state FROM aura_soul_state WHERE id=1/);
  assert.match(source,/COUNT\(\*\) AS total FROM aura_cloud_messages/);
+});
+
+test('the Observatory exposes aggregate epistemic truth and protects owner-only evidence',()=>{
+ const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ for(const id of ['epistemicHistoryDetails','epistemicHistoryList','epistemicStatus']){
+  assert.equal((BRAIN_OPERATIONS_HTML.match(new RegExp('id="'+id+'"','g'))||[]).length,1,id);
+ }
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/loadEpistemicHistory/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/epistemic\.probe_counts/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/response\.status===401\|\|response\.status===403/);
+ assert.match(server,/epistemic_self: bootstrap\.runtimeReady/);
+ const route=server.slice(server.indexOf("app.get('/api/brain/experience'"),
+  server.indexOf("app.get('/api/kernel/soul'"));
+ assert.match(route,/requirePrivate\(request, reply\)/);
+ assert.match(route,/kernel\.selfInquiry\.migrate/);
+ assert.doesNotThrow(()=>new Function(BRAIN_OPERATIONS_SCRIPT));
 });
