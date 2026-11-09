@@ -24,6 +24,11 @@ function fold(value){
  return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
  .toLowerCase().replace(/[’']/g,"'").replace(/\s+/g,' ');
 }
+export function isExplicitApproval(text){
+ const q=fold(text);
+ if(/\b(?:pas du tout|c'est faux|ce n'est pas|c'est pas ca|non tu|tu n'as pas)\b/.test(q))return false;
+ return /\b(?:tu as raison|c'est exactement ca|tu as bien compris|c'est la bonne reponse|bonne reponse|bien vu|c'est ce que je voulais|oui c'est ca|tu as compris|merci c'est juste)\b/.test(q);
+}
 export function isExplicitCorrection(text){
  const q=fold(text);
  return /\b(?:ce n'est pas ce que|c'est pas ce que|tu n'as pas compris|tu m'as mal compris|tu te trompes|c'est faux|c'est incorrect|pas ce que j'ai dit|je voulais dire|je parle plutot|tu as mal compris|ca n'a rien a voir|non, je parle|non je parle)\b/.test(q);
@@ -68,7 +73,7 @@ export class LivedExperience {
   for(const row of (Array.isArray(input.events)?input.events:[]).slice(-48)){
    if(!contextSet.has(row?.context))continue;
    const source=String(row.source||'');
-   if(!['founder-correction','reported-outcome','machine-verified'].includes(source))continue;
+   if(!['founder-correction','founder-approval','reported-outcome','machine-verified'].includes(source))continue;
    result.events.push({id:/^[\da-f-]{36}$/i.test(String(row.id||''))?row.id:randomUUID(),
     context:row.context,strategy:validStrategy(row.strategy),
     result:row.result==='success'?'success':'failure',source,
@@ -98,7 +103,7 @@ export class LivedExperience {
    privateFounder=false,at=new Date().toISOString()}={}){
   const state=this.migrate(input);
   if(!privateFounder||!contextSet.has(context)||!STRATEGIES.includes(strategy))return state;
-  if(!['founder-correction','reported-outcome','machine-verified'].includes(source))return state;
+  if(!['founder-correction','founder-approval','reported-outcome','machine-verified'].includes(source))return state;
   if(!['success','failure'].includes(result))return state;
   const item=state.cases[context]||{
     strategies:Object.fromEntries(STRATEGIES.map(name=>[name,{good:0,bad:0,verified:0}])),
@@ -107,7 +112,7 @@ export class LivedExperience {
   const entry=item.strategies[strategy];
   // A person's negative feedback deserves attention but is not a ground
   // truth measurement. Reported external outcomes are even weaker.
-  const weight=source==='machine-verified'?1:source==='founder-correction'?.65:.3;
+  const weight=source==='machine-verified'?1:source==='founder-correction'?.65:source==='founder-approval'?.5:.3;
   entry[result==='success'?'good':'bad']=num(entry[result==='success'?'good':'bad']+weight);
   if(source==='machine-verified')entry.verified=num(entry.verified+1);
   item.observations=num(item.observations+1);
@@ -117,6 +122,13 @@ export class LivedExperience {
   state.events.push({id:randomUUID(),context,strategy,result,source,at:state.last_change_at});
   state.events=state.events.slice(-48);
   return state;
+ }
+ observeFounderApproval(input,{at=new Date().toISOString()}={}){
+  const state=this.migrate(input);
+  const p=state.pending;state.pending=null;
+  if(!p||Math.abs(Date.parse(at)-Date.parse(p.at))>2*3600*1000)return state;
+  return this.observe(state,{context:p.context,strategy:p.strategy,
+   result:'success',source:'founder-approval',privateFounder:true,at});
  }
  observeFounderCorrection(input,{at=new Date().toISOString()}={}){
   const state=this.migrate(input);
