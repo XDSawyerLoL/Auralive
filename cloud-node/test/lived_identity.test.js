@@ -132,6 +132,29 @@ test('40 self-reported reflections do not prove self-observation improved',()=>{
  assert.equal(engine.publicState(state).learned_dimensions.auto_examen.status,'insufficient-evidence');
 });
 
+test('legacy inflated autobiography is corrected without destroying history',()=>{
+ const learner=new IdentityAutogenesis();
+ const old={
+  ...learner.defaultState(),version:'aura-emergent-identity-v1',
+  observations:40,revision:40,
+  dimensions:{
+   prudence:{value:.63,evidence:5},initiative:{value:.57,evidence:6},
+   auto_examen:{value:.92,evidence:40},adaptation:{value:.90,evidence:30},
+  },
+  counters:{outcome_success:7,outcome_failure:4,corrections_received:30,
+   autonomous_reflections:40,inquiries_requested:0},
+ };
+ const migrated=learner.migrate(old);
+ assert.equal(migrated.version,'aura-emergent-identity-v2');
+ assert.equal(migrated.dimensions.auto_examen.value,.5);
+ assert.equal(migrated.dimensions.auto_examen.evidence,0);
+ assert.equal(migrated.dimensions.adaptation.value,.5);
+ assert.equal(migrated.dimensions.adaptation.evidence,0);
+ assert.equal(migrated.dimensions.prudence.value,.63);
+ assert.equal(migrated.observations,40);
+ assert.equal(migrated.counters.autonomous_reflections,40);
+});
+
 test('kernel learns only from a previous actual founder episode and exposes an owner-only audit',()=>{
  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
