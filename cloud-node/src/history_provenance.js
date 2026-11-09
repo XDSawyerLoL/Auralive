@@ -42,8 +42,9 @@ export function ablationComparison(input){
       withHistory.action!==withoutEpisodes.action};
 }
 export class HistoryLedger {
-  constructor({db,clock=()=>new Date().toISOString()}={}){
-    if(!db)throw new Error('Database adapter required');this.db=db;this.clock=clock;
+  constructor({db,clock=()=>new Date().toISOString(),verifyOutcome=async()=>false}={}){
+    if(!db)throw new Error('Database adapter required');
+    this.db=db;this.clock=clock;this.verifyOutcome=verifyOutcome;
   }
   async beginEpisode({mission_id=null,kind='action',context_tag,action,prediction=null,confidence=null}={}){
     if(!KINDS.has(kind)||!context_tag||!action||
@@ -65,14 +66,18 @@ export class HistoryLedger {
   }
   async recordOutcome(episodeId,{outcome,success=null,source='external-report'}={}){
     if(!Number.isSafeInteger(Number(episodeId))||Number(episodeId)<=0||
-       !SOURCES.has(source)||(success!==null&&success!==0&&success!==1)||!outcome)
+       !SOURCES.has(source)||(success!==null&&success!==0&&success!==1)||!outcome||
+       (source==='machine-verified'&&success===null))
       throw new Error('Invalid outcome');
     // Feedback evaluates an interaction, not the success of an external task.
     const verified=source==='machine-verified'?success:null,at=utc(this.clock());
-    const receipt=digest(JSON.stringify({episode_id:Number(episodeId),outcome,success:verified,source,at}));
+    if(source==='machine-verified'&&!await this.verifyOutcome({episodeId,outcome,success}))
+      throw new Error('Independent machine verification required');
+    const text=String(outcome).slice(0,4000);
+    const receipt=digest(JSON.stringify({episode_id:Number(episodeId),outcome:text,success:verified,source,at}));
     await this.db.execute(
       'INSERT INTO aura_history_outcomes (episode_id,outcome,success,source,observed_at,hash) VALUES(?,?,?,?,?,?)',
-      [episodeId,String(outcome).slice(0,4000),verified,source,at,receipt]);
+      [episodeId,text,verified,source,at,receipt]);
     return {episode_id:episodeId,source,calibrated:verified!==null};
   }
   async retrieve(context_tag){
@@ -93,6 +98,79 @@ export class HistoryLedger {
         .map(e=>({...e,ablated:Number(e.ablated)})),
     }));
   }
+
+  // AURA can propose a new falsifiable claim. It must predict an outcome
+  // before later independent observations are linked to that claim.
+  async proposeHypothesis({context_tag,predicted_action,expected_success=1}={}){
+    if(typeof context_tag!=='string'||!context_tag||context_tag.length>120||
+      !ACTIONS.has(predicted_action)||![0,1].includes(expected_success))
+      throw new Error('Invalid hypothesis');
+    const [existing]=await this.db.execute(
+      "SELECT id FROM aura_history_hypotheses WHERE scope_context=? AND predicted_action=? "+
+      "AND status IN ('candidate','promoted') ORDER BY id DESC LIMIT 1",
+      [context_tag,predicted_action]);
+    if(existing.length)return {id:existing[0].id,created:false};
+    const ts=utc(this.clock());
+    const statement='Dans '+context_tag+', '+predicted_action+
+      ' prédit '+(expected_success===1?'une réussite':'un échec')+' vérifiable';
+    const [r]=await this.db.execute(
+      'INSERT INTO aura_history_hypotheses '+
+      '(statement,scope_context,predicted_action,expected_success,confidence,status,created_ts,updated_ts) '+
+      "VALUES(?,?,?,?,?,'candidate',?,?)",
+      [statement,context_tag,predicted_action,expected_success,.5,ts,ts]);
+    return {id:r.insertId,created:true,status:'candidate'};
+  }
+  async evaluateHypothesis(hypothesisId){
+    const conn=await this.db.getConnection();
+    try{
+      await conn.beginTransaction();
+      const [hs]=await conn.execute(
+        'SELECT * FROM aura_history_hypotheses WHERE id=? FOR UPDATE',[hypothesisId]);
+      const h=hs[0];
+      if(!h||h.status==='refuted'||h.status==='ablated'){
+        await conn.commit();return {status:h?.status||'unknown'};
+      }
+      // Only prospective tests are eligible: after the hypothesis was formed.
+      const [observed]=await conn.execute(
+        'SELECT e.id AS episode_id,e.mission_id,o.success FROM aura_history_episodes e '+
+        'JOIN aura_history_outcomes o ON o.episode_id=e.id '+
+        "WHERE e.context_tag=? AND e.action=? AND e.ts>? AND e.ablated=0 "+
+        "AND e.kind='action' AND o.source='machine-verified' AND o.success IS NOT NULL "+
+        'ORDER BY e.id LIMIT 2000',
+        [h.scope_context,h.predicted_action,h.created_ts]);
+      for(const e of observed){
+        await conn.execute(
+          'INSERT IGNORE INTO aura_history_hypothesis_evidence (hypothesis_id,episode_id,polarity) VALUES(?,?,?)',
+          [h.id,e.episode_id,Number(e.success)===Number(h.expected_success)?'support':'contradict']);
+      }
+      const support=observed.filter(e=>Number(e.success)===Number(h.expected_success));
+      const contradict=observed.filter(e=>Number(e.success)!==Number(h.expected_success));
+      const independentRuns=new Set(support.map(e=>e.mission_id).filter(Boolean)).size;
+      const confidence=Number(((support.length+1)/(observed.length+2)).toFixed(4));
+      const status=contradict.length>=2?'refuted':
+        independentRuns>=3&&contradict.length===0&&confidence>=.8?'promoted':'candidate';
+      await conn.execute(
+        'UPDATE aura_history_hypotheses SET confidence=?,status=?,updated_ts=? WHERE id=?',
+        [confidence,status,utc(this.clock()),h.id]);
+      if(status==='promoted'){
+        const [prior]=await conn.execute(
+          'SELECT id FROM aura_history_policies WHERE hypothesis_id=? LIMIT 1',[h.id]);
+        if(!prior.length)
+          await conn.execute(
+            'INSERT INTO aura_history_policies '+
+            '(hypothesis_id,rule_text,rule_action,active,created_ts) VALUES(?,?,?,?,?)',
+            [h.id,'Prioriser '+h.predicted_action+' dans '+h.scope_context+
+             ' sous réserve des permissions et contrôles de sécurité',
+             h.predicted_action,1,utc(this.clock())]);
+      }else if(status==='refuted'){
+        await conn.execute('UPDATE aura_history_policies SET active=0 WHERE hypothesis_id=?',[h.id]);
+      }
+      await conn.commit();
+      return {id:h.id,status,confidence,support:support.length,
+        contradict:contradict.length,independent_runs:independentRuns,
+        prospective_only:true};
+    }catch(error){await conn.rollback();throw error;}finally{conn.release();}
+  }
   async decide({context_tag,baseline='respond',run_id,situation_id,excludedEpisodes=[]}={}){
     const rows=await this.retrieve(context_tag);
     const choice=historyChoice({context:context_tag,baseline,rows,excludedEpisodes});
@@ -100,9 +178,14 @@ export class HistoryLedger {
     try{
       await conn.beginTransaction();
       const confidence=rows.find(x=>x.policy_id===choice.provenance[0]?.item_id)?.confidence??null;
+      const snapshot=JSON.stringify({
+        context_tag,baseline,action:choice.action,
+        eligible_policy_ids:rows.map(p=>p.policy_id),
+        provenance:choice.provenance,
+      });
       const [r]=await conn.execute(
-        'INSERT INTO aura_history_decisions (ts,run_id,situation_id,chosen_action,confidence,raw_output) VALUES(?,?,?,?,?,NULL)',
-        [utc(this.clock()),String(run_id),String(situation_id),choice.action,confidence]);
+        'INSERT INTO aura_history_decisions (ts,run_id,situation_id,chosen_action,confidence,raw_output,retrieval_snapshot) VALUES(?,?,?,?,?,NULL,?)',
+        [utc(this.clock()),String(run_id),String(situation_id),choice.action,confidence,snapshot]);
       for(const item of choice.provenance)
         await conn.execute(
           'INSERT INTO aura_history_decision_provenance (decision_id,item_type,item_id,retrieval_rank) VALUES(?,?,?,?)',
