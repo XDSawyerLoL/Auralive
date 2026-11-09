@@ -13,7 +13,7 @@ const when=t=>{const n=Date.parse(String(t||''));return Number.isFinite(n)?new D
 const clampInt=(v,max=1000000)=>Math.max(0,Math.min(max,Math.floor(Number(v)||0)));
 
 export class IdentityAutogenesis {
-  static VERSION='aura-emergent-identity-v1';
+  static VERSION='aura-emergent-identity-v2';
 
   defaultState(){
     return {
@@ -50,6 +50,14 @@ export class IdentityAutogenesis {
         value:rounded(bounded(v.value??0.5,0.08,0.92)),
         evidence:clampInt(v.evidence),
       };
+    }
+    // v1 treated the NUMBER of inner monologues and user corrections as
+    // proof of improved self-understanding and adaptation. On migration
+    // preserve history, but invalidate these unsupported trait scores.
+    if(input.version==='aura-emergent-identity-v1'){
+      for(const key of ['auto_examen','adaptation']){
+        state.dimensions[key]={value:0.5,evidence:0};
+      }
     }
     for(const key of Object.keys(d.counters))
       state.counters[key]=clampInt(input.counters?.[key]);
@@ -93,8 +101,13 @@ export class IdentityAutogenesis {
     const effects={
       outcome_success:{initiative:+0.035,prudence:-0.012},
       outcome_failure:{prudence:+0.042,initiative:-0.025},
-      autonomous_reflection:{auto_examen:+0.030},
-      founder_correction:{adaptation:+0.026,prudence:+0.014},
+      // Creating a reflection proves activity, not improved self-knowledge.
+      // This dimension requires a later independently correlated outcome;
+      // no score inflation from repeated internal narration.
+      autonomous_reflection:{},
+      // A correction is a valuable episode, not proof that behavior
+      // has adapted; LivedExperience now learns context-specific policies.
+      founder_correction:{},
       self_inquiry:{},
     };
     if(!Object.hasOwn(effects,kind))return state;

@@ -210,6 +210,10 @@ const DECISION_LABELS={
 };
 function renderLearnedIdentity(){
  const model=state.data?.learned_identity||null;
+ const lived=state.data?.lived_identity||null;
+ if(lived)setText('livedHistoryStatus',Number(lived.observations||0)+
+   ' retours enregistrés dans '+Number(lived.pattern_count||0)+
+   ' contextes · ouvrir pour examiner les preuves (session fondatrice).');
  const container=$('identityDimensions');
  container.replaceChildren();
  if(!model){
@@ -243,6 +247,50 @@ function renderLearnedIdentity(){
  }
  if(!container.children.length)container.append(element('p','empty','Aucune tendance acquise.'));
 }
+async function loadLivedHistory(){
+ const root=$('livedHistoryList');root.replaceChildren();
+ setText('livedHistoryStatus','Lecture des observations privées…');
+ try{
+  const res=await fetch('/api/brain/experience',{
+   credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
+  });
+  if(res.status===401||res.status===403){
+   setText('livedHistoryStatus','Détails accessibles uniquement depuis la session fondatrice.');
+   return;
+  }
+  if(!res.ok)throw new Error('HTTP '+res.status);
+  const body=await res.json(),model=body?.lived_identity||{};
+  const patterns=Array.isArray(model.patterns)?model.patterns:[];
+  setText('livedHistoryStatus',Number(model.observations||0)+' retours consignés · '
+   +patterns.length+' types de situations étudiées');
+  const contexts={
+   task_with_greeting:'Demande technique introduite par une salutation',
+   task_technical:'Diagnostic technique',task_general:'Demande concrète',
+   dialogue_ambivalent:'Message émotionnel nuancé',dialogue_identity:'Identité et introspection',
+   dialogue_correction:'Correction d’une incompréhension',
+   dialogue_social:'Échange social',dialogue_general:'Dialogue général'
+  };
+  const actions={respond:'Répondre',task_first:'Traiter la tâche en priorité',
+   verify:'Vérifier',clarify:'Clarifier',attentive:'Répondre avec attention'};
+  if(!patterns.length)root.append(element('p','empty',
+   'Aucune habitude contextualisée n’est encore étayée par des retours associés à des décisions.'));
+  for(const p of patterns.slice(0,12)){
+   const row=element('div','lived-row');
+   row.append(element('strong','',contexts[p.context]||'Situation non catégorisée'),
+    element('span','',(actions[p.suggested_strategy]||'Observer')+
+      ' · '+Number(p.observations||0)+' retour(s)'),
+    element('small','',Number(p.independently_verified||0)
+      ?Number(p.independently_verified)+' vérification(s) enregistrée(s)'
+      :'Aucune validation indépendante'));
+   root.append(row);
+  }
+ }catch{
+  setText('livedHistoryStatus','Impossible de récupérer l’historique privé du noyau.');
+ }
+}
+$('livedHistoryDetails').addEventListener('toggle',()=>{
+ if($('livedHistoryDetails').open)void loadLivedHistory();
+});
 function renderInnerDialogue(){
  const m=state.data?.inner_dialogue;
  const drives=$('innerDriveScores');drives.replaceChildren();

@@ -1,6 +1,7 @@
 import { clamp } from './policy.js';
 import { DialogueStateTracker } from './dialogue_model.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
+import { substantiveRequest } from './composite_intent.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -449,6 +450,14 @@ export class CognitionEngine {
         'Règle inférée et vérifiée sur ' + symbolic.verified_examples + ' exemples : f(n) = ' + symbolic.formula + '.',
         'Donc f(' + symbolic.target + ') = ' + symbolic.predicted + '.',
       );
+    } else if (substantiveRequest(raw)) {
+      // A greeting or a negated greeting must not hijack the actual instruction.
+      // The semantic module may suggest an interpretation, not modify AURA's
+      // identity, execution authority or memories.
+      act='analyze_substantive_request';
+      goal='Traiter la demande concrète plutôt que saluer seulement. Distinguer faits vérifiés, hypothèses et contrôles à réaliser ; ne pas prétendre avoir exécuté une action.';
+      needsSemanticSupport=true;
+      facts.push('Le message contient une instruction substantielle qui reste prioritaire même après une salutation ou une correction de politesse.');
     } else if (selfDialogue === 'self_name') {
       act = 'self_name';
       goal = 'Dire mon nom AURA à la première personne, sans rôle générique, justification, question supplémentaire ni présentation du prestataire de langage.';

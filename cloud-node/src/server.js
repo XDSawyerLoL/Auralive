@@ -1386,6 +1386,9 @@ app.get('/api/brain/graph', async (request, reply) => {
     learned_identity: bootstrap.runtimeReady
       ? kernel.autogenesis.publicState(kernel.soulCache?.emergent_identity)
       : null,
+    lived_identity: bootstrap.runtimeReady
+      ? kernel.livedExperience.publicState(kernel.soulCache?.lived_experience)
+      : null,
     inner_dialogue: bootstrap.runtimeReady
       ? kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue)
       : null,
@@ -1451,6 +1454,17 @@ app.post('/api/scout/run', async (request, reply) => {
   } catch (error) {
     return reply.code(502).send({ error: String(error?.message || error) });
   }
+});
+
+app.get('/api/brain/experience', async (request, reply) => {
+  if(!requirePrivate(request, reply) || !requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  return {
+    evidence_status:'reported-founder-feedback-not-independent-verification',
+    lived_identity:kernel.livedExperience.publicState(
+      kernel.soulCache?.lived_experience,{includeEvidence:true}),
+    source:'aura_soul_state.lived_experience',
+  };
 });
 
 app.get('/api/kernel/soul', async (request, reply) => {

@@ -317,4 +317,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
  .graph-hud #graphClock{max-width:85%;display:block}
  .graph-hud #graphHover{position:absolute;bottom:0;right:0;max-width:68%}
 }
+
+.lived-history{border:1px solid rgba(118,151,181,.30);border-radius:10px;overflow:hidden;background:rgba(7,19,32,.45)}
+.lived-history>summary{padding:11px 12px;cursor:pointer;color:#dbecf7;font-size:12px;font-weight:650;line-height:1.5}
+.lived-history>summary:hover,.lived-history>summary:focus-visible{background:rgba(69,107,136,.22);outline-offset:-3px}
+.lived-history>p{margin:0;padding:9px 12px;color:#b9c6dd;font-size:12px;line-height:1.5;border-top:1px solid rgba(118,151,181,.22)}
+.lived-history>small{display:block;padding:8px 12px;color:#889bad;line-height:1.5}
+#livedHistoryList{display:grid;gap:3px;padding:0 10px 10px}
+.lived-row{padding:10px 8px;border-bottom:1px solid rgba(115,160,180,.20);display:grid;gap:3px}
+.lived-row strong{font-size:12px;color:#e2f6f5;font-weight:650}
+.lived-row span{font-size:12px;color:#c8d3e7}
+.lived-row small{font-size:11px;color:#8ca0b3}
 `;
