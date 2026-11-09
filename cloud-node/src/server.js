@@ -1386,6 +1386,10 @@ app.get('/api/brain/graph', async (request, reply) => {
     learned_identity: bootstrap.runtimeReady
       ? kernel.autogenesis.publicState(kernel.soulCache?.emergent_identity)
       : null,
+    inner_dialogue: bootstrap.runtimeReady
+      ? kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue)
+      : null,
+    atlas_v3:{available:true,stages:18,source:'instrumented-kernel-events',session_isolated:true},
     runtime_diagnostic: publicRuntimeDiagnostic(bootstrap, {
       gatewayOnly: process.env.AURA_GATEWAY_ONLY === 'true',
     }),
