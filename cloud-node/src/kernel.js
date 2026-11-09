@@ -8,6 +8,8 @@ import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { InnerDialogueEngine } from './inner_dialogue.js';
+import { LivedExperience, contextForExperience, isExplicitCorrection } from './lived_experience.js';
+import { substantiveRequest } from './composite_intent.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
@@ -63,8 +65,8 @@ export function requiresExternalKnowledge(value) {
   // Casual / relational turns must never launch Web research merely because
   // they contain words such as "aujourd'hui" or "actuellement".
   if (
-    /\b(comment\s+(vas|va)[- ]?tu|comment\s+(ça|ca)\s+va|ça\s+va|ca\s+va|tu\s+te\s+sens)\b/.test(text)
-    || /\b(salut|bonjour|bonsoir|coucou|hello)\b/.test(text)
+    !substantiveRequest(value) && /\b(comment\s+(vas|va)[- ]?tu|comment\s+(ça|ca)\s+va|ça\s+va|ca\s+va|tu\s+te\s+sens)\b/.test(text)
+    || (!substantiveRequest(value) && /\b(salut|bonjour|bonsoir|coucou|hello)\b/.test(text))
   ) {
     return false;
   }
@@ -102,6 +104,7 @@ export class CognitiveKernel {
     this.organism = new AuraOrganism();
     this.autogenesis = new IdentityAutogenesis();
     this.innerDialogue = new InnerDialogueEngine();
+    this.livedExperience = new LivedExperience();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
@@ -145,6 +148,7 @@ export class CognitiveKernel {
       organism,
       emergent_identity: this.autogenesis.defaultState(),
       inner_dialogue: null,
+      lived_experience: this.livedExperience.defaultState(),
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -244,6 +248,7 @@ export class CognitiveKernel {
     this.soulCache.organism = this.organism.migrate(this.soulCache);
     this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
+    this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -1297,6 +1302,46 @@ export class CognitiveKernel {
       );
       await this.saveSoul();
     }
+    // Relational feedback is applied to the PREVIOUS authenticated interaction,
+    // not to a free-floating global metric. A reported correction is not a
+    // validated claim about the world or evidence that an alternative works.
+    if(privateView && (plan.discourse?.move==='correction'||isExplicitCorrection(content))){
+      const before=this.livedExperience.migrate(this.soulCache.lived_experience);
+      const after=this.livedExperience.observeFounderCorrection(before);
+      this.soulCache.lived_experience=after;
+      if(after.revision>before.revision){
+        await this.trace('lived-learning','correction-associated','',{
+          flow_id:brainFlowId,at:now(),revision:after.revision,
+          source:'authenticated-founder-feedback',
+          evidence_kind:'reported-correction-not-verified-outcome',
+        });
+        await this.saveSoul();
+      }
+    }
+    // The same categories can acquire different policies in different lived
+    // histories. The nucleus remains the sole authority over execution.
+    const experiencedContext=contextForExperience(content,plan);
+    const advice=privateView
+      ?this.livedExperience.select(this.soulCache.lived_experience,experiencedContext,'respond')
+      :{strategy:'respond',changed:false,basis:'public-conversation',context:experiencedContext};
+    plan.learned_strategy=advice.strategy;
+    plan.experience_guidance={
+      context:experiencedContext,strategy:advice.strategy,
+      historical_revision:Number(advice.revision||0),
+      changed_by_history:Boolean(advice.changed),
+      evidence_kind:advice.basis,
+    };
+    if(advice.changed && advice.strategy==='verify' &&
+        !['self_name','self_identity','self_personality','self_exploration'].includes(plan.act)){
+      plan.needs_semantic_support=true;
+      plan.semantic_query=content;
+      plan.goal+=' Vérifier les ambiguïtés pertinentes avant d’affirmer, sans inventer de résultat.';
+    }
+    if(advice.changed && advice.strategy==='task_first' && substantiveRequest(content)){
+      plan.act='analyze_substantive_request';
+      plan.needs_semantic_support=true;
+      plan.semantic_query=content;
+    }
     // These properties always originate in persisted kernel state, never from
     // the externally generated wording. Providers receive a read-only view.
     plan.self_model = this.autogenesis.publicState(this.soulCache.emergent_identity);
@@ -1473,6 +1518,15 @@ export class CognitiveKernel {
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
+    if(privateView&&answer){
+      // Only the last actual founder reply can receive a future contextual
+      // correction. Its pending receipt stores NO words from either speaker.
+      this.soulCache.lived_experience=this.livedExperience.createPending(
+        this.soulCache.lived_experience,{
+          text:content,plan,privateFounder:true,
+        },
+      );
+    }
     await this.recordOrganismEvent('interaction-post', post.state.last_reason || 'expression', {
       author: String(author).slice(0,120),
       act: plan.act || 'respond',
@@ -1536,6 +1590,8 @@ export class CognitiveKernel {
         this.expression.language.lastNucleusContract?.code || 'not-checked',
       language_provider: this.expression.language.lastBackend || '',
       inner_dialogue:plan.inner_dialogue,
+      experience_guidance:plan.experience_guidance,
+      lived_experience:this.livedExperience.publicState(this.soulCache.lived_experience),
       semantic_support_used: Boolean(plan.semantic_support),
       activity_evidence: {
         evidence_status: plan.activity_evidence?.evidence_status || 'unverified',
