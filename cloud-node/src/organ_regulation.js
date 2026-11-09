@@ -69,7 +69,7 @@ export function organRegulate(inference={},organism={},{
     :verifyRecentFailures?'verify_repeated_failures':'unchanged';
   return {...inference,token_budget:budget,
     organ_regulation:{
-      enabled,action,compute_state:actual.compute_state,
+      enabled,action,recorded_at:new Date(nowMs).toISOString(),compute_state:actual.compute_state,
       source:actual.source,resource_pressure:actual.resource_pressure,
       effective_pressure:resourcePressure,
       failure_ema:actual.observed_failure_ema,
