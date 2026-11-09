@@ -53,6 +53,24 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
       ?Number(organism.homeostasis.steps):null,
     evidence:'Mesures de processus, pas mesures corporelles ni preuve de sentiments.',
   };
+  const decisionOrgan=extra.organ_regulation||null;
+  const organFreshness=evaluateTelemetryFreshness(decisionOrgan?.recorded_at,nowMs);
+  const organDecision=organFreshness.status==='recent'&&decisionOrgan&&typeof decisionOrgan==='object'
+    ?{
+      action:safeText(decisionOrgan.action||'unchanged',45),
+      freshness:organFreshness,
+      process_source:safeText(decisionOrgan.source||'unknown',45),
+      pressure:boundedMetric(decisionOrgan.resource_pressure),
+      effective_pressure:boundedMetric(decisionOrgan.effective_pressure),
+      computation_reduced:decisionOrgan.optional_computation_reduced===true,
+      verification_preserved:decisionOrgan.verification_preserved===true,
+      token_budget:Number.isSafeInteger(extra.organ_budget)?extra.organ_budget:null,
+      trace_kind:'organ-regulation',
+      origin:'CognitiveKernel.inferenceAssessment',
+      causal_status:decisionOrgan.action!=='unchanged'
+        ?'code-modulates-allocation; runtime-effect-not-benchmarked'
+        :'no-regulatory-decision',
+    }:null;
   const counts=publicState.kernel_status?.counts||{};
   const number=(v)=>v===null||v===undefined||v===''?null:
     Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
@@ -82,6 +100,14 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
          ?'État logiciel : '+source.updated_at+' · capteurs processus : '+processFreshness.status
          :'Pas de télémétrie d’organisme vérifiable.',
       source:'AuraOrganism.publicState'},
+    {id:'organ-regulation',title:'Régulation des organes fonctionnels',
+      state:live&&organDecision?'instrumented':'not-observed',
+      detail:organDecision
+        ?'Allocation '+safeText(organDecision.action,45)+
+          ' · pression mesurée '+String(organDecision.pressure??'indisponible')+
+          '% · budget '+String(organDecision.token_budget??'indisponible')
+        :'Aucune décision de régulation mesurée sur ce processus.',
+      source:'CognitiveKernel.inferenceAssessment / organ_regulation'},
     {id:'cognition',title:'CognitionEngine',state:live?'available':'unavailable',
       detail:'Le noyau calcule des plans de réponse. Le nombre d’opérations en cours n’est pas mesuré ici.',
       source:'CognitiveKernel.status'},
@@ -105,7 +131,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     version:'brain-telemetry-v1',
     sampled_at:new Date(nowMs).toISOString(),
     runtime_ready:live,
-    source, metrics, somatic,
+    source, metrics, somatic, organ_decision:live?organDecision:null,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
