@@ -263,7 +263,8 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
       return {accepted:false,code:'answered-own-identity-instead'};
     if(!plan.private_view&&/\b(?:tu es mon fondateur|tu es ma fondatrice|je te reconnais|je sais qui tu es|ton nom est)\b/i.test(answer))
       return {accepted:false,code:'unverified-founder-recognition'};
-    const named=answer.match(/\b(?:tu t['’]appelles|ton (?:nom|pr[eé]nom) est)\s+([\p{L}-]{2,})/iu);
+    const named=answer.match(/\b(?:tu t['’]appelles|ton (?:nom|pr[eé]nom) est)\s+([\p{L}-]{2,})/iu)
+      ||answer.match(/\bTu es ([A-ZÀ-ÖØ-Þ][\p{L}-]{2,})/u);
     if(named&&!String((plan.founder_profile||[]).map(x=>x.detail).join(' ')).toLocaleLowerCase('fr-FR').includes(named[1].toLocaleLowerCase('fr-FR')))
       return {accepted:false,code:'invented-personal-identity'};
   }
