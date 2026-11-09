@@ -1351,11 +1351,14 @@ export class CognitiveKernel {
     // transformer le Web en mémoire de travail externe, puis passer par
     // la boucle de corroboration/contradiction du Web Substrate.
     let externalResearch = null;
+    let researchAttempted = false;
     if (
       plan.needs_semantic_support
       && this.webSubstrate?.enabled
       && requiresExternalKnowledge(content)
     ) {
+      researchAttempted = true;
+      observe('research','running');
       try {
         if (this.fabric?.enabled !== false && this.fabric?.registry?.has('web.research')) {
           const routed = await this.fabric.execute(
@@ -1379,6 +1382,10 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
+        observe('research','done',{
+          research_evidence:Number(externalResearch?.evidence_count||0),
+          confidence:Number(externalResearch?.confidence||0),
+        });
         await brainHop('cognition','web','web-research');
         await this.trace(
           'web-research',
@@ -1392,6 +1399,7 @@ export class CognitiveKernel {
           },
         );
       } catch (error) {
+        observe('research','error');
         plan = {
           ...plan,
           external_evidence_required: true,
@@ -1429,7 +1437,7 @@ export class CognitiveKernel {
     }
 
     if(!plan.needs_semantic_support)observe('semantic','skipped');
-    if(!externalResearch)observe('research','skipped');
+    if(!researchAttempted)observe('research','skipped');
     observe('expression','running');
     await brainHop(plan.semantic_support?'semantic':'cognition','language','request-formulation','attempted');
     // This hop means a real organism-derived affect/relationship signal is
