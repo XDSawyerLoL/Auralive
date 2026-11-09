@@ -69,7 +69,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   const privatePlan = plan && typeof plan === 'object' ? plan : {};
   const personalRecognition=privatePlan.act==='user_recognition';
   const simpleIdentity=['self_identity','self_personality','self_exploration'].includes(privatePlan.act);
-  const interpersonalGrounded=['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(privatePlan.act);
+  const interpersonalGrounded=['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(privatePlan.act);
   const conversation = (Array.isArray(privatePlan.conversation_context)
     ? privatePlan.conversation_context : []).slice(-4).map(row => ({
     role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
@@ -86,7 +86,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
         .slice(0,5).map(x=>normalize(x).slice(0,320)),
       response_tone:privatePlan.response_tone||'direct',
       conversation:interpersonalGrounded?[]:conversation.slice(-2),
-      ...(interpersonalGrounded?{speaker_roles:privatePlan.social_perspective?.actor==='user'
+      ...(interpersonalGrounded&&privatePlan.act!=='topic_shift'?{speaker_roles:privatePlan.social_perspective?.actor==='user'
         ?'« je » = utilisateur ; « te » = AURA'
         :'« tu » = AURA ; « me » = utilisateur'}:{}),
     };
@@ -288,7 +288,7 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
     if(named&&!String((plan.founder_profile||[]).map(x=>x.detail).join(' ')).toLocaleLowerCase('fr-FR').includes(named[1].toLocaleLowerCase('fr-FR')))
       return {accepted:false,code:'invented-personal-identity'};
   }
-  if(['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan.act)){
+  if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(plan.act)){
     if(answer.length>300 || /(?:^|\n)\s*(?:[-*•]|\d+[.)])\s+/.test(answer)||
       isUnrequestedTechnicalDigression(answer,plan))
       return {accepted:false,code:'social-topic-hijack'};
@@ -566,7 +566,7 @@ export class FrenchLanguageFaculty {
   }
 
   prompt(plan = {}) {
-    if(['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan.act))
+    if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(plan.act))
       return compactFrenchPrompt(plan,{maxChars:3500});
     return [
       'Tu disposes du sens décidé par le noyau AURA ci-dessous.',
@@ -594,7 +594,7 @@ export class FrenchLanguageFaculty {
   }
 
   system(plan={}) {
-    if(['user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan.act))
+    if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(plan.act))
       return compactFrenchSystem(plan);
     return [
       'Tu es la faculté linguistique française d’AURA.',
