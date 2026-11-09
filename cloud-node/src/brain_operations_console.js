@@ -195,6 +195,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
               <span><i class="legend-line route"></i> Requête sélectionnée</span>
               <span><i class="legend-dot"></i> Module observé &lt; 60 s</span>
             </div>
+            <div class="graph-focus-summary" aria-label="Données du module sélectionné">
+              <div class="graph-focus-top"><span>MODULE INSPECTÉ</span><strong id="graphFocusName">CognitiveKernel</strong></div>
+              <div id="graphFocusInfo" class="graph-focus-info">Aucune observation confirmée.</div>
+              <div id="graphFocusProof" class="graph-focus-proof">Origine du code non chargée.</div>
+            </div>
             <div class="graph-caption" id="graphCaption">Les points correspondent aux modules réels du code ; les filaments représentent uniquement leurs connexions déclarées. Seules les transitions enregistrées créent des impulsions lumineuses. Aucune activité neuronale cachée du modèle n’est inventée.</div>
           </div>
         </div>
