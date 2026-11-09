@@ -1,3 +1,5 @@
+import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
+
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
 const $=id=>document.getElementById(id);
@@ -240,6 +242,29 @@ function renderLearnedIdentity(){
  }
  if(!container.children.length)container.append(element('p','empty','Aucune tendance acquise.'));
 }
+function renderInnerDialogue(){
+ const m=state.data?.inner_dialogue;
+ const drives=$('innerDriveScores');drives.replaceChildren();
+ if(!m){
+   setText('innerStatus','Non vérifiée');
+   setText('innerFocus','Aucune délibération enregistrée par le noyau pour cette session.');
+   setText('innerScope','Aucune preuve de boucle interne récente.');
+   return;
+ }
+ const focusLabels={confirm_evidence:'Vérifier les preuves',reduce_ambiguity:'Clarifier une ambiguïté',
+   protect_resources:'Préserver les ressources',respond_to_user:'Répondre à la situation'};
+ const toneLabels={attentive:'Attentionnée',cautious:'Prudente',curious:'Curieuse',direct:'Directe',calm:'Apaisée'};
+ setText('innerStatus','Évaluation · '+shortTime(m.at));
+ setText('innerFocus',(focusLabels[m.focus]||'Évaluation en cours')+
+   ' · ton choisi : '+(toneLabels[m.tone]||'Direct'));
+ for(const [key,label] of [['initiative','Initiative'],['care','Attention'],['curiosity','Curiosité'],['caution','Vérification']]){
+  const v=Number(m.competition?.[key]);
+  if(!Number.isFinite(v))continue;
+  const row=element('div','identity-dimension');
+  row.append(element('span','',label),element('strong','',Math.round(v*100)+' %'));drives.append(row);
+ }
+ setText('innerScope','Concurrence de tendances calculée dans le noyau. Influence le ton, jamais les permissions ou les faits. Aucune expérience consciente démontrée.');
+}
 function renderCausal(){
  const flow=state.flow,receipt=flow?.causal||null;
  const values=$('causalValues');values.replaceChildren();
@@ -401,7 +426,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
@@ -728,6 +753,7 @@ $('chatSend').onclick=async()=>{
  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),65000);
  try{
    void poll();
+   if(!mission)cogAwaitingReply=true;
    const endpoint=mission?'/api/kernel/operator':'/api/chat';
    const body=mission?{task:msg,allowed_risks:[]}:{text:msg,author:'Utilisateur'};
    const res=await fetch(endpoint,{
@@ -772,6 +798,10 @@ $('chatSend').onclick=async()=>{
      }
    }
    await poll();
+   if(!mission && out?.trace?.available && out?.trace_id){
+     cogTrace=out.trace;cogTraceId=out.trace_id;cogTraceOrigin='reply';cogAwaitingReply=false;
+     if($('atlas-v3').open)renderCognitiveGraph();
+   }
    if(out?.brain_flow_id){
      let flow=state.data?.flows?.find(f=>f.id===out.brain_flow_id);
      if(!flow){
@@ -790,7 +820,7 @@ $('chatSend').onclick=async()=>{
      error?.name==='AbortError'?'Délai dépassé. Le traitement peut déjà être enregistré ; vérifie le trajet avant de renvoyer. Ton message est conservé.':
      'Connexion impossible : '+String(error?.message||error).slice(0,220));
  }finally{
-   clearTimeout(timer);state.busy=false;
+   clearTimeout(timer);state.busy=false;cogAwaitingReply=false;
    $('chatSend').disabled=false;field.focus();
  }
 };
@@ -799,5 +829,27 @@ $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e
 // Low-rate ambient redraw makes the diagram feel alive without manufacturing tool calls.
 // Persisted events alone create travelling pulses; honor reduced-motion and hidden tabs.
 if(!reduced)setInterval(()=>{if(!document.hidden&&state.data&&!state.drawScheduled)scheduleDraw();},125);
+const apiUrl=path=>path;
+async function api(path){
+ const response=await fetch(path,{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+ if(!response.ok){const err=new Error('Échec de télémétrie HTTP '+response.status);err.status=response.status;throw err;}
+ return response.json();
+}
+${COGNITIVE_ATLAS_SCRIPT}
+let atlasInitialized=false;
+const atlasDetails=$('atlas-v3');
+$('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
+$('cogModeAutonomy').onclick=()=>switchCognitiveMode('autonomy');
+$('cogReplay').onclick=replayCognitiveTrace;
+$('cogDiagnostics').onclick=()=>{$('diagnostics-details').open=true;$('diagnostics-details').scrollIntoView({behavior:reduced?'auto':'smooth'});};
+atlasDetails.addEventListener('toggle',()=>{
+ if(atlasDetails.open){
+   if(!atlasInitialized){atlasInitialized=true;try{initCognitiveGraph();}catch(error){setText('cogState','Atlas indisponible');return;}}
+   void refreshCognitiveTrace().then(()=>{if(cogGraphReady)connectCognitiveEventStream();});
+ }else closeCognitiveEventStream();
+});
+setInterval(()=>{if(atlasDetails.open&&!document.hidden&&(!cogStreamReady||cogAwaitingReply))
+ void refreshCognitiveTrace();},3000);
+
 poll();
 })();`;
