@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 17;
+export const LATEST_SCHEMA_VERSION = 18;
 
 export function getDb() {
   if (pool) return pool;
@@ -717,6 +717,94 @@ async function applyMigrations(db) {
     );
     current = 17;
   }
+  if (current < 18) {
+    // Immutable episodes and results are separate: predictions precede the
+    // action, outcomes are committed at most once after observation.
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_head ("+
+      "id TINYINT PRIMARY KEY, last_hash VARCHAR(64) NOT NULL,"+
+      "last_episode_id BIGINT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("INSERT IGNORE INTO aura_history_head(id,last_hash,last_episode_id) VALUES(1,'GENESIS',NULL)");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_episodes ("+
+      "id BIGINT AUTO_INCREMENT PRIMARY KEY,ts VARCHAR(40) NOT NULL,"+
+      "mission_id VARCHAR(120) NULL,kind VARCHAR(24) NOT NULL,"+
+      "context_tag VARCHAR(120) NOT NULL,action VARCHAR(120) NOT NULL,"+
+      "prediction TEXT NULL,confidence DOUBLE NULL,prev_hash VARCHAR(64) NOT NULL,"+
+      "hash CHAR(64) NOT NULL UNIQUE,ablated TINYINT NOT NULL DEFAULT 0,"+
+      "UNIQUE KEY uq_aura_history_prev(prev_hash),"+
+      "INDEX idx_aura_history_context(context_tag,ts),"+
+      "CONSTRAINT chk_aura_ep_conf CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),"+
+      "CONSTRAINT chk_aura_ep_kind CHECK (kind IN ('action','misunderstanding','observation')),"+
+      "CONSTRAINT chk_aura_ep_live CHECK (ablated=0)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_outcomes ("+
+      "episode_id BIGINT PRIMARY KEY,outcome TEXT NOT NULL,success TINYINT NULL,"+
+      "source VARCHAR(32) NOT NULL,observed_at VARCHAR(40) NOT NULL,hash CHAR(64) NOT NULL UNIQUE,"+
+      "CONSTRAINT fk_aura_history_outcome_episode FOREIGN KEY(episode_id) REFERENCES aura_history_episodes(id),"+
+      "CONSTRAINT chk_aura_history_success CHECK (success IS NULL OR success IN (0,1)),"+
+      "CONSTRAINT chk_aura_history_source CHECK (source IN ('machine-verified','founder-feedback','external-report'))"+
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_hypotheses ("+
+      "id BIGINT AUTO_INCREMENT PRIMARY KEY,statement TEXT NOT NULL,"+
+      "scope_context VARCHAR(120) NOT NULL,confidence DOUBLE NOT NULL,"+
+      "status VARCHAR(24) NOT NULL DEFAULT 'candidate',created_ts VARCHAR(40) NOT NULL,"+
+      "updated_ts VARCHAR(40) NOT NULL,INDEX idx_aura_history_hyp_context(scope_context,status),"+
+      "CONSTRAINT chk_aura_history_hyp_conf CHECK (confidence BETWEEN 0 AND 1),"+
+      "CONSTRAINT chk_aura_history_hyp_status CHECK (status IN ('candidate','promoted','refuted','ablated'))"+
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_hypothesis_evidence ("+
+      "hypothesis_id BIGINT NOT NULL,episode_id BIGINT NOT NULL,"+
+      "polarity VARCHAR(16) NOT NULL,PRIMARY KEY(hypothesis_id,episode_id),"+
+      "FOREIGN KEY(hypothesis_id) REFERENCES aura_history_hypotheses(id),"+
+      "FOREIGN KEY(episode_id) REFERENCES aura_history_episodes(id),"+
+      "CONSTRAINT chk_aura_history_polarity CHECK (polarity IN ('support','contradict'))"+
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_policies ("+
+      "id BIGINT AUTO_INCREMENT PRIMARY KEY,hypothesis_id BIGINT NOT NULL,"+
+      "rule_text TEXT NOT NULL,rule_action VARCHAR(32) NOT NULL,"+
+      "active TINYINT NOT NULL DEFAULT 1,created_ts VARCHAR(40) NOT NULL,"+
+      "FOREIGN KEY(hypothesis_id) REFERENCES aura_history_hypotheses(id),"+
+      "CONSTRAINT chk_aura_history_rule CHECK (rule_action IN ('respond','verify','clarify','attentive','task_first')),"+
+      "CONSTRAINT chk_aura_history_active CHECK (active IN (0,1))"+
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_decisions ("+
+      "id BIGINT AUTO_INCREMENT PRIMARY KEY,ts VARCHAR(40) NOT NULL,"+
+      "run_id VARCHAR(120) NOT NULL,situation_id VARCHAR(120) NOT NULL,"+
+      "chosen_action VARCHAR(32) NOT NULL,confidence DOUBLE NULL,raw_output LONGTEXT NULL,"+
+      "INDEX idx_aura_history_decision_run(run_id,situation_id)"+
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE TABLE IF NOT EXISTS aura_history_decision_provenance ("+
+      "decision_id BIGINT NOT NULL,item_type VARCHAR(16) NOT NULL,"+
+      "item_id BIGINT NOT NULL,retrieval_rank INT NULL,"+
+      "PRIMARY KEY(decision_id,item_type,item_id),"+
+      "FOREIGN KEY(decision_id) REFERENCES aura_history_decisions(id),"+
+      "CONSTRAINT chk_aura_history_provenance_type CHECK (item_type IN ('episode','hypothesis','policy'))"+
+      ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await db.query("CREATE OR REPLACE VIEW v_aura_history_calibration AS "+
+      "SELECT e.context_tag,ROUND(e.confidence,1) AS conf_bin,COUNT(*) AS n,"+
+      "AVG(o.success) AS observed_rate FROM aura_history_episodes e "+
+      "JOIN aura_history_outcomes o ON o.episode_id=e.id "+
+      "WHERE e.kind='action' AND e.confidence IS NOT NULL AND o.success IS NOT NULL "+
+      "AND o.source='machine-verified' AND e.ablated=0 "+
+      "GROUP BY e.context_tag,ROUND(e.confidence,1)");
+    // Deny UPDATE and DELETE even if an application bug issues those queries.
+    for (const [name,table,operation] of [
+      ['trg_aura_hist_episode_update','aura_history_episodes','UPDATE'],
+      ['trg_aura_hist_episode_delete','aura_history_episodes','DELETE'],
+      ['trg_aura_hist_outcome_update','aura_history_outcomes','UPDATE'],
+      ['trg_aura_hist_outcome_delete','aura_history_outcomes','DELETE'],
+    ]) {
+      const [existing] = await db.query(
+        'SELECT TRIGGER_NAME FROM INFORMATION_SCHEMA.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME=?',[name]);
+      if (!existing.length)
+        await db.query('CREATE TRIGGER '+name+' BEFORE '+operation+' ON '+table+
+          " FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='AURA history is append-only'");
+    }
+    await db.query(
+      'INSERT IGNORE INTO aura_schema_migrations(version,name,applied_at) VALUES(18,?,?)',
+      ['immutable-autobiography-causal-provenance', new Date().toISOString()],
+    );
+    current = 18;
+  }
+
 }
 
 export async function initSchema() {
