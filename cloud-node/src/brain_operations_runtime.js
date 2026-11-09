@@ -538,6 +538,17 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerleave',()=>{state.hovered=null;setText('graphHover','Survole un point pour identifier son module.');scheduleDraw();});
 canvas.addEventListener('pointerup',e=>{const drag=state.drag;state.drag=null;if(!drag||drag.moved)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const hit=[...state.screen].reverse().find(item=>inside(item,x,y));if(hit)selectNode(hit.id);});
 canvas.addEventListener('wheel',e=>{e.preventDefault();state.zoom=Math.min(3,Math.max(.6,state.zoom*(e.deltaY>0?.92:1.08)));scheduleDraw();},{passive:false});
+$('graphFullscreen').onclick=()=>{
+ const expanded=$('brain').classList.toggle('graph-expanded');
+ $('graphFullscreen').setAttribute('aria-pressed',String(expanded));
+ $('graphFullscreen').textContent=expanded?'Réduire':'Plein écran';
+ window.requestAnimationFrame(scheduleDraw);
+};
+window.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&$('brain').classList.contains('graph-expanded')){
+  $('graphFullscreen').click();
+ }
+});
 $('graphActivityOnly').onclick=()=>{
  state.activityOnly=!state.activityOnly;
  $('graphActivityOnly').setAttribute('aria-pressed',String(state.activityOnly));
