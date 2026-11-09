@@ -1383,6 +1383,11 @@ export class CognitiveKernel {
         run_id:brainFlowId,situation_id:experiencedContext,
       }).catch(()=>null)
       :null;
+    if(historyDecision){
+      await brainHop('memory','history','provenance-retrieval-committed');
+      if(historyDecision.provenance.length)
+        await brainHop('history','cognition','eligible-policy-evaluated');
+    }
     const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
       .includes(plan.act);
     const historyChanged=Boolean(historyPermitted&&historyDecision?.changed);
@@ -1557,6 +1562,10 @@ export class CognitiveKernel {
     // Allocation adaptative : le noyau choisit combien de calcul externe
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
     const inference = this.inferenceAssessment();
+    if(inference.organ_regulation?.source==='node-process')
+      await brainHop('homeostasis','interoception','measured-process-signal-read');
+    if(inference.organ_regulation?.action!=='unchanged')
+      await brainHop('interoception','inference','regulation-influenced-inference');
     if(privateView&&inference.execution_preference==='verify-failures'&&substantiveRequest(content)){
       plan.goal+=' Les échecs récents de mes opérations demandent une vérification supplémentaire. Ne pas présenter un compte rendu comme une réussite indépendante.';
       plan.needs_semantic_support=true;
