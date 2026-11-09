@@ -81,7 +81,8 @@ function fakeDb(){
  }};
 }
 test('one transaction appends the episode before its separate result',async()=>{
- const db=fakeDb(),history=new HistoryLedger({db,clock:()=>date});
+ const db=fakeDb(),history=new HistoryLedger({db,clock:()=>date,
+   verifyOutcome:async({success})=>success===1});
  const first=await history.beginEpisode({context_tag:context,action:'respond',confidence:.5});
  const second=await history.beginEpisode({context_tag:context,action:'clarify'});
  assert.equal(first.prev_hash,'GENESIS');
@@ -93,6 +94,12 @@ test('one transaction appends the episode before its separate result',async()=>{
  assert.equal((await history.recordOutcome(second.id,{
    outcome:'independent test',success:1,source:'machine-verified'})).calibrated,true);
  assert.deepEqual(db.transactions,['begin','commit','release','begin','commit','release']);
+});
+test('a forged machine verification fails closed',async()=>{
+ const db=fakeDb(),history=new HistoryLedger({db,clock:()=>date});
+ await assert.rejects(()=>history.recordOutcome(1,{
+   outcome:'unverified claim',success:1,source:'machine-verified'}),/Independent machine verification/);
+ assert.equal(db.outcomes.length,0);
 });
 test('chosen decision and actual retrieval provenance commit in same transaction',async()=>{
  const db=fakeDb(),history=new HistoryLedger({db,clock:()=>date});
