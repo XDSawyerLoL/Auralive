@@ -454,6 +454,11 @@ export class CognitionEngine {
         'Règle inférée et vérifiée sur ' + symbolic.verified_examples + ' exemples : f(n) = ' + symbolic.formula + '.',
         'Donc f(' + symbolic.target + ') = ' + symbolic.predicted + '.',
       );
+    } else if(interpersonal?.act==='topic_shift'){
+      act='topic_shift';
+      goal='La personne change de sujet. Accueillir cette ouverture sans réintroduire une tâche ou un ancien CI mémorisé, sans réciter mon système.';
+      needsSemanticSupport=false;
+      facts.push('Ce message ne contient aucune demande de reprise du travail passé.');
     } else if (interpersonal?.act==='user_asks_if_interrupting'){
       act='user_asks_if_interrupting';
       goal='La personne demande si ELLE dérange AURA. Répondre à sa question, à propos d’elle (« tu ne me déranges pas »), brièvement, sans état du CI, projet ou explication de mon architecture. Ni soumission automatique, ni rapport technique.';
@@ -754,10 +759,16 @@ export class CognitionEngine {
     }
 
     const memoryPolicy=conversationMemoryPolicy({act,message:raw});
+    // Some older discourse routines populated facts from agenda and stale CI
+    // before memory relevance was checked. Never allow these into a purely
+    // social turn, regardless of which intent branch supplied them.
+    const relevantFacts=memoryPolicy.allowProjectMemory?facts:facts.filter(fact=>
+      !/^(?:Foyer opérationnel|Travail prioritaire|Prochaine action|Intention actuelle|Intention prioritaire|Pensée dominante|Blocage|Ancien signal|Statut du suivi|Date du statut|Fil relationnel actif|Fil de conversation actif|Leçon utile|Hypothèse récente|Vie intérieure récente)\s*:/i.test(String(fact))
+    );
     return {
       act,
       goal,
-      facts,
+      facts:relevantFacts,
       memory_policy:memoryPolicy,
       social_perspective:interpersonal,
       needs_semantic_support: needsSemanticSupport,
@@ -831,6 +842,8 @@ export class CognitionEngine {
     };
 
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
+    if (plan?.act === 'topic_shift')
+      return 'Tu veux changer de sujet ? Je t’écoute.';
     if (plan?.act === 'user_asks_if_interrupting')
       return 'Non, tu ne me déranges pas. Tu peux me parler, je t’écoute.';
     if (plan?.act === 'user_reports_aura_interrupts')
