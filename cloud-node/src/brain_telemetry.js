@@ -54,9 +54,11 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     evidence:'Mesures de processus, pas mesures corporelles ni preuve de sentiments.',
   };
   const decisionOrgan=extra.organ_regulation||null;
-  const organDecision=decisionOrgan&&typeof decisionOrgan==='object'
+  const organFreshness=evaluateTelemetryFreshness(decisionOrgan?.recorded_at,nowMs);
+  const organDecision=organFreshness.status==='recent'&&decisionOrgan&&typeof decisionOrgan==='object'
     ?{
       action:safeText(decisionOrgan.action||'unchanged',45),
+      freshness:organFreshness,
       process_source:safeText(decisionOrgan.source||'unknown',45),
       pressure:boundedMetric(decisionOrgan.resource_pressure),
       effective_pressure:boundedMetric(decisionOrgan.effective_pressure),
