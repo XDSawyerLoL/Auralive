@@ -60,7 +60,7 @@ const CORE_EDGES=Object.freeze([
  ['command','fabric'],['command','audit'],['command','trading'],
  ['kernel','curiosity'],['kernel','scout'],['kernel','evolution'],
  ['kernel','peer'],['output','voice'],['kernel','journal'],
- ['homeostasis','interoception'],['interoception','inference'],
+ ['homeostasis','interoception'],['interoception','inference'],['inference','cognition'],
  ['memory','history'],['history','cognition'],
  // A verified 'affect-context-provided' hop is persisted by CognitiveKernel.chat.
  ['homeostasis','language'],
