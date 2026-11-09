@@ -211,6 +211,12 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <div id="identityDimensions" class="identity-dimensions"></div>
           <p id="identityQuestion" class="identity-question">Question à examiner : —</p>
           <p id="identityEvidence" class="causal-footnote">Aucune personnalité humaine ou conscience n’est déduite des indices logiciels.</p>
+          <details class="lived-history" id="livedHistoryDetails">
+            <summary>Apprentissages issus de nos échanges</summary>
+            <p id="livedHistoryStatus">En attente des retours consignés par le noyau.</p>
+            <div id="livedHistoryList" aria-label="Règles révisables issues des expériences"></div>
+            <small>Retours déclarés ≠ résultats indépendamment vérifiés. Détails privés uniquement en session fondatrice.</small>
+          </details>
         </section>
         <section class="detail-card inner-voice-card" id="inner-dialogue-panel">
           <div class="inline-head"><h3>Délibération intérieure</h3><span id="innerStatus" class="truth-chip">Non observée</span></div>
