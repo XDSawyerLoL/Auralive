@@ -26,7 +26,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <div class="top-actions">
       <span id="onlineState" class="live" data-state="unknown"><i></i><span id="onlineLabel">Connexion au noyau…</span></span>
       <button id="refreshMap" class="top-btn primary" type="button">Actualiser</button>
-      <span class="build-mark">NEURAL OBSERVATORY · V1</span>
+      <span class="build-mark">AURA · CONNECTOME 4 / AUDITABLE</span>
     </div>
   </header>
 
@@ -123,23 +123,30 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <section class="panel graph-panel" id="brain" aria-label="Réseau neuronal opérationnel d’AURA">
       <div class="graph-top">
         <div>
-          <h2>Réseau neuronal · architecture et exécution</h2>
-          <p>Régions = fonctions réelles d’AURA · Traits discrets = architecture · Impulsions = transitions persistées.</p>
+          <h2>Connectome vivant <span class="v4-edition">/ 04</span></h2>
+          <p>Topologie logicielle authentique · modules persistants · impulsions issues des événements réels.</p>
         </div>
         <div class="graph-controls">
           <select id="graphLens" aria-label="Isoler une famille de modules"><option value="all">Tout le réseau</option></select>
           <button id="graphLabels" type="button" aria-pressed="false" title="Afficher davantage de noms de modules">Tous les noms</button>
+          <button id="graphActivityOnly" type="button" aria-pressed="false" title="Atténuer les liaisons sans observation enregistrée">Activité vérifiée</button>
           <button id="graphLess" type="button" title="Dézoomer">−</button>
           <button id="graphReset" type="button" title="Recentrer">◎</button>
           <button id="graphMore" type="button" title="Zoomer">+</button>
         </div>
+      </div>
+      <div class="graph-v4-readout" aria-label="Mesures du réseau depuis la source serveur">
+        <span><i class="v4-mark network"></i><strong id="graphV4Nodes">—</strong><small>Source : registre des modules</small></span>
+        <span><i class="v4-mark links"></i><strong id="graphV4Links">—</strong><small>Topologie déclarée</small></span>
+        <span><i class="v4-mark observed"></i><strong id="graphV4Events">—</strong><small>Événements persistés</small></span>
+        <span><i class="v4-mark heartbeat"></i><strong id="graphV4Live" data-active="no">—</strong><small>Événements récents</small></span>
       </div>
       <div class="graph-stage">
         <div id="graphViewport" class="graph-canvas">
           <canvas id="graphCanvas" role="img" aria-label="Carte neuronale interactive des modules réels et de leurs transitions observées"></canvas>
           <div class="graph-hud">
             <div class="graph-floating" id="graphClock">Aucun relevé disponible pour le moment.</div>
-            <div class="graph-floating" id="graphHover" aria-live="off">Survole un point : module, statut et dernière observation.</div>
+            <div class="graph-floating" id="graphHover" aria-live="off">Sélectionne un module pour inspecter ses preuves.</div>
             <div class="graph-floating">Glisser · Zoomer · Cliquer sur un module · Rejouer un trajet enregistré</div>
           </div>
           <div class="neural-inspector memory-inspector" role="button" tabindex="0" data-inspect="memory">
@@ -163,7 +170,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
               <span><i class="legend-line route"></i> Requête sélectionnée</span>
               <span><i class="legend-dot"></i> Module observé &lt; 60 s</span>
             </div>
-            <div class="graph-caption" id="graphCaption">Aucun mouvement n’est simulé : le graphe est silencieux lorsqu’aucune transition n’est enregistrée.</div>
+            <div class="graph-caption" id="graphCaption">Les points correspondent aux modules réels du code ; les filaments représentent uniquement leurs connexions déclarées. Seules les transitions enregistrées créent des impulsions lumineuses. Aucune activité neuronale cachée du modèle n’est inventée.</div>
           </div>
         </div>
       </div>
