@@ -11,6 +11,7 @@ import { InnerDialogueEngine } from './inner_dialogue.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
+import { founderIdentityDeclarations } from './founder_profile.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
@@ -1273,8 +1274,23 @@ export class CognitiveKernel {
     // Only authenticated founder requests that explicitly ask "who am I?"
     // retrieve manually attributed personal-profile notes. Do not turn project
     // notes or public chats into purported facts about a user's identity.
-    const founderProfileNotes=privateView&&classifySelfDialogue(content)==='user_recognition'
+    const recognitionQuery=privateView&&classifySelfDialogue(content)==='user_recognition';
+    const founderProfileNotes=recognitionQuery
       ?await this.knowledge.list({limit:160}).catch(()=>[]):[];
+    const founderIdentityMessages=recognitionQuery
+      ?await query(
+        `SELECT content FROM aura_cloud_messages
+         WHERE session_id='private-founder' AND role='user'
+           AND (content LIKE ? OR content LIKE ? OR content LIKE ? OR content LIKE ?)
+         ORDER BY id DESC LIMIT 40`,
+        ["%m'appelle%","%m’appelle%","%prénom est%","%nom est%"],
+      ).catch(()=>[]):[];
+    // Historical self-declarations stay attributed and are never treated as
+    // independently verified identity. No cross-session lookup for visitors.
+    const recognizedProfileNotes=[
+      ...founderProfileNotes,
+      ...founderIdentityDeclarations(founderIdentityMessages,{authenticated:privateView}),
+    ];
     await brainHop('homeostasis','memory','retrieval');
     observe('decision','running');
     let plan = this.cognition.planReply({
@@ -1287,7 +1303,7 @@ export class CognitiveKernel {
       agenda,
       continuityReport,
       recentMessages: [...recentMessages].reverse(),
-      privateView,founderProfileNotes,
+      privateView,founderProfileNotes:recognizedProfileNotes,
     });
 
     await brainHop('memory','cognition','planReply');
