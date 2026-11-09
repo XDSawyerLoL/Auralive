@@ -162,8 +162,14 @@ export class LivedExperience {
    evidence_count:item.observations,
    independently_verified:STRATEGIES.some(k=>item.strategies[k].verified>0)};
  }
- publicState(input){
+ publicState(input,{includeEvidence=false}={}){
   const state=this.migrate(input);
+  if(!includeEvidence)return {
+    version:state.version,revision:state.revision,
+    observations:state.observations,pattern_count:Object.keys(state.cases).length,
+    evidence_status:'reported-feedback-not-independent-verification',
+    subjective_experience_proven:false,
+  };
   return {
    version:state.version,revision:state.revision,observations:state.observations,
    patterns:Object.entries(state.cases).map(([key,val])=>({
