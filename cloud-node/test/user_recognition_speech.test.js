@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {classifySelfDialogue} from '../src/self_dialogue_intents.js';
 import {CognitionEngine} from '../src/cognition.js';
-import {selectFounderProfile} from '../src/founder_profile.js';
+import {selectFounderProfile,founderIdentityDeclarations} from '../src/founder_profile.js';
 import {FrenchLanguageFaculty,compactFrenchPrompt,compactFrenchSystem,validateNucleusSpeech} from '../src/french_language.js';
 const engine=new CognitionEngine();
 const soul={name:'AURA',organism:{mood:'intriguée',confiance:.7176,satisfaction:.6107,
@@ -49,6 +49,23 @@ test('personal knowledge only comes from attributed notes in founder session',()
  assert.deepEqual(publicPlan.founder_profile,[]);
  assert.doesNotMatch(JSON.stringify(publicPlan),/Camille/);
  assert.match(engine.deterministicReply(publicPlan),/Je ne peux pas te reconnaître/);
+});
+
+test('a prior explicit name declaration can be recovered from archived founder chat only',()=>{
+ const rows=[
+  {content:'Je m’appelle Camille, et je développe AURA.'},
+  {content:'Je m’appelle un personnage de roman, exemple fictif.'},
+ ];
+ const found=founderIdentityDeclarations(rows,{authenticated:true});
+ assert.equal(found.length,1);
+ const profile=selectFounderProfile(found,{authenticated:true});
+ assert.match(profile[0].detail,/Camille/);
+ assert.deepEqual(founderIdentityDeclarations(rows,{authenticated:false}),[]);
+ const unnamed=founderIdentityDeclarations([{content:'Je parle de la personnalité d’AURA'}],{authenticated:true});
+ assert.deepEqual(unnamed,[]);
+ const plan=engine.planReply({text:'Tu te souviens de moi ?',soul,
+  privateView:true,founderProfileNotes:found});
+ assert.match(engine.deterministicReply(plan),/Camille/);
 });
 
 test('short interpersonal voice payload excludes telemetry, internal fields and verbose identity instructions',()=>{
