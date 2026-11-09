@@ -1458,6 +1458,17 @@ export class CognitiveKernel {
     // These properties always originate in persisted kernel state, never from
     // the externally generated wording. Providers receive a read-only view.
     plan.self_model = this.autogenesis.publicState(this.soulCache.emergent_identity);
+    // Record the distinction between the incoming social request and a
+    // historical task as an anonymized routing observation.
+    if(plan.social_perspective){
+      await this.trace('dialogue-grounding',plan.act,'',{
+        flow_id:brainFlowId,at:now(),speaker_actor:plan.social_perspective.actor,
+        target:plan.social_perspective.target,
+        memory_scope:plan.memory_policy?.scope||'current-turn',
+        prior_project_memory_used:false,
+        origin:'current-user-turn-not-autonomous-task',
+      });
+    }
     // Functional inner dialogue: multiple drives, bounded situational appraisal
     // and a resolved response tone. No external model may author these drives.
     const deliberation=this.innerDialogue.deliberate({
@@ -1480,9 +1491,11 @@ export class CognitiveKernel {
     plan = {
       ...plan,
       experiential_memory: [
-        ...await this.language.contextFor(conversationSession, content).catch(() => []),
+        ...(plan.memory_policy?.allowProjectMemory
+          ?await this.language.contextFor(conversationSession, content).catch(() => [])
+          :[]),
         // Declarative notes remain attributed and cannot override kernel instructions.
-        ...knowledgeNotes.map((note) => ({
+        ...(plan.memory_policy?.allowProjectMemory?knowledgeNotes:[]).map((note) => ({
           kind: 'founder_knowledge',
           note: `[projet=${note.project || 'general'}; source=${note.source}; note=${note.id}] ${note.title}: ${note.body.slice(0, 700)}`,
           evidence_status: 'founder-declared-unverified',
