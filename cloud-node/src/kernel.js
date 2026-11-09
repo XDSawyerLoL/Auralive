@@ -110,7 +110,11 @@ export class CognitiveKernel {
     this.autogenesis = new IdentityAutogenesis();
     this.innerDialogue = new InnerDialogueEngine();
     this.livedExperience = new LivedExperience();
-    this.history = new HistoryLedger({db:getDb()});
+    // Lazily bind the pool: constructing the nucleus must not open MySQL.
+    this.history = new HistoryLedger({db:{
+      execute:(sql,params)=>getDb().execute(sql,params),
+      getConnection:()=>getDb().getConnection(),
+    }});
     this.selfInquiry = new SelfInquiryEngine();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
