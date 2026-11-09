@@ -142,6 +142,30 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
         <span><i class="v4-mark observed"></i><strong id="graphV4Events">—</strong><small>Événements persistés</small></span>
         <span><i class="v4-mark heartbeat"></i><strong id="graphV4Live" data-active="no">—</strong><small>Événements récents</small></span>
       </div>
+      <section class="trace-console" aria-label="Relecture des parcours réellement enregistrés">
+        <div class="trace-toolbar">
+          <div class="trace-heading">
+            <span class="trace-signal" id="traceSignal" data-mode="idle"></span>
+            <div><b>Chronologie du noyau</b><small id="traceStatus">Recherche de trajets enregistrés…</small></div>
+          </div>
+          <label class="trace-select-label">Trajet
+            <select id="traceSelect" aria-label="Choisir un trajet horodaté"><option value="">Aucun trajet enregistré</option></select>
+          </label>
+          <div class="trace-transport">
+            <button type="button" id="tracePrev" title="Étape précédente" aria-label="Étape précédente" disabled>◀</button>
+            <button type="button" id="tracePlay" disabled>▶ Revoir</button>
+            <button type="button" id="traceNext" title="Étape suivante" aria-label="Étape suivante" disabled>▶</button>
+            <select id="traceSpeed" aria-label="Vitesse de relecture">
+              <option value="0.5">0,5×</option><option value="1" selected>1×</option><option value="2">2×</option>
+            </select>
+          </div>
+        </div>
+        <div class="trace-rail">
+          <input type="range" id="traceScrub" min="0" max="0" step="1" value="0" disabled aria-label="Parcourir les étapes enregistrées">
+          <span id="tracePosition" aria-live="off">0 / 0</span>
+        </div>
+        <div class="trace-explainer" id="traceDetail" aria-live="polite">L'animation est une relecture d'événements passés ; elle n'indique jamais une activité en cours.</div>
+      </section>
       <div class="graph-stage">
         <div id="graphViewport" class="graph-canvas">
           <canvas id="graphCanvas" role="img" aria-label="Carte neuronale interactive des modules réels et de leurs transitions observées"></canvas>
@@ -170,6 +194,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
               <span><i class="legend-line live"></i> Transition observée récemment</span>
               <span><i class="legend-line route"></i> Requête sélectionnée</span>
               <span><i class="legend-dot"></i> Module observé &lt; 60 s</span>
+            </div>
+            <div class="graph-focus-summary" aria-label="Données du module sélectionné">
+              <div class="graph-focus-top"><span>MODULE INSPECTÉ</span><strong id="graphFocusName">CognitiveKernel</strong></div>
+              <div id="graphFocusInfo" class="graph-focus-info">Aucune observation confirmée.</div>
+              <div id="graphFocusProof" class="graph-focus-proof">Origine du code non chargée.</div>
             </div>
             <div class="graph-caption" id="graphCaption">Les points correspondent aux modules réels du code ; les filaments représentent uniquement leurs connexions déclarées. Seules les transitions enregistrées créent des impulsions lumineuses. Aucune activité neuronale cachée du modèle n’est inventée.</div>
           </div>

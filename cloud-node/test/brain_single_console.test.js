@@ -17,11 +17,11 @@ test('one site page has integrated request, graph, modules, tools, metrics and e
  assert.ok(BRAIN_NODES.length>=30);
  assert.doesNotThrow(()=>new Function(BRAIN_OPERATIONS_SCRIPT));
 });
-test('only evidence-based transitions move, and one-pass replay is explicitly selected',()=>{
+test('only evidence-based transitions move, and archived replay is explicitly labeled',()=>{
  assert.match(BRAIN_OPERATIONS_SCRIPT,/edge\.signal_recent===true&&age>=0&&age<20000/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/recent&&age<1600/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/const replaying=Boolean\(state\.flow/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/elapsed<=steps\.length\*520\+850/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/replaying=replay\.replaying/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/const REPLAY_STEP_MS=680/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/current\.from===edge\.from&&current\.to===edge\.to/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Math\.random\(/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/simulateFlow|fakeEvent|fakeUsage/);
@@ -66,7 +66,7 @@ test('the ONE page distinguishes conversation from explicit owner-only operator 
 
 test('idle graph stays static; observed events and user replay alone can move',()=>{
  assert.match(BRAIN_OPERATIONS_SCRIPT,/v4Base\(\);v4Regions\(\)/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/if\(!reduced\)setInterval/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.replayPlaying\)scheduleDraw\(\)/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/document\.hidden/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/recent&&age<1600/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Math\.random\(/);

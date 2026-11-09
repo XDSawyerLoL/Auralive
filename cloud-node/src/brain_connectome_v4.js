@@ -57,11 +57,12 @@ function draw(){
  ctx.save();v4Base();v4Regions();
  const d=state.data,now=Date.now(),edges=d.edges||[],nodes=d.nodes||[];
  const inLens=id=>state.focusGroup==='all'||findNode(id)?.group===state.focusGroup;
- const steps=state.flow?.steps||[];
- const elapsed=performance.now()-state.replayStarted;
- const replaying=Boolean(state.flow&&state.replayStarted>0&&elapsed<=steps.length*520+850);
- const current=replaying?steps[Math.min(steps.length-1,Math.floor(elapsed/520))]:null;
+ const replay=replayPosition();
+ const steps=replay.steps,elapsed=replay.elapsed,replaying=replay.replaying;
+ const current=steps[replay.index]||null;
  const route=new Set(steps.map(s=>s.from+'>'+s.to));
+ const visited=new Set(steps.slice(0,replay.index).map(s=>s.from+'>'+s.to));
+ if(state.replayRendered!==replay.index)syncTraceConsole();
  for(let i=0;i<edges.length;i++){
   const edge=edges[i];if(!findNode(edge.from)||!findNode(edge.to))continue;
   const a=project(edge.from),b=project(edge.to),c=v4Curve(a,b,i);
@@ -69,14 +70,16 @@ function draw(){
   const age=edge.last_observed_at?now-Date.parse(edge.last_observed_at):Infinity;
   const recent=observed&&edge.signal_recent===true&&age>=0&&age<20000;
   const highlight=Boolean(current&&current.from===edge.from&&current.to===edge.to);
-  const inRoute=route.has(edge.from+'>'+edge.to);
+  const edgeKey=edge.from+'>'+edge.to;
+  const inRoute=route.has(edgeKey),hasBeenVisited=visited.has(edgeKey);
   const suppressed=state.activityOnly&&!observed&&!focused&&!inRoute;
   const alpha=(inLens(edge.from)||inLens(edge.to)?1:.12)*(suppressed?.10:1);
   const hue=V4_COLORS[findNode(edge.from)?.group]||'120,162,220';
   ctx.save();ctx.globalAlpha=alpha;
   ctx.strokeStyle=highlight?'rgba(255,206,135,.98)':recent?'rgba(102,255,227,.93)':
+   hasBeenVisited?'rgba(241,166,100,.66)':inRoute?'rgba(182,174,223,.52)':
    observed?'rgba(170,195,242,.59)':focused?'rgba(168,197,241,.43)':'rgba(103,142,207,.26)';
-  ctx.lineWidth=highlight||recent?2.1:observed?1.4:focused?1.2:.85;
+  ctx.lineWidth=highlight||recent?2.6:hasBeenVisited?1.8:inRoute?1.6:observed?1.4:focused?1.2:.85;
   if(highlight||recent){ctx.shadowBlur=12;ctx.shadowColor=highlight?'#ffc987':'#5cffe2';}
   v4Path(a,b,c);ctx.stroke();ctx.shadowBlur=0;
   if(!suppressed){
@@ -89,8 +92,8 @@ function draw(){
    }
   }
   ctx.restore();
-  if(!reduced&&(highlight||recent&&age<1600)){
-   const t=highlight?Math.min(1,(elapsed%520)/520):Math.min(1,age/1600);
+  if(!reduced&&(highlight&&replaying||recent&&age<1600)){
+   const t=highlight&&replaying?replay.phase:Math.min(1,age/1600);
    const p=v4Point(a,b,c,t),radius=12;
    const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
    const rgb=highlight?'255,196,113':'109,255,221';

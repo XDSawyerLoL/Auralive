@@ -328,4 +328,54 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 .lived-row strong{font-size:12px;color:#e2f6f5;font-weight:650}
 .lived-row span{font-size:12px;color:#c8d3e7}
 .lived-row small{font-size:11px;color:#8ca0b3}
+
+/* Observatoire v6 : navigation temporelle sur des traces enregistrées */
+.trace-console{display:grid;gap:10px;padding:13px 19px 12px;background:linear-gradient(100deg,rgba(15,28,48,.97),rgba(10,20,39,.92));border-bottom:1px solid rgba(102,176,195,.23)}
+.trace-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;min-width:0}
+.trace-heading{display:flex;align-items:center;gap:12px;min-width:180px;margin-right:auto}
+.trace-heading>div{display:grid;gap:3px}
+.trace-heading b{font-size:13px;line-height:1.3;letter-spacing:-.01em;color:#eaf7fd}
+.trace-heading small{color:#9eb7ce;font-size:11px;line-height:1.4}
+.trace-signal{width:10px;height:10px;flex:0 0 10px;border-radius:50%;background:#6e849d;box-shadow:0 0 0 4px rgba(112,146,172,.12)}
+.trace-signal[data-mode=replay]{background:#ffcb7e;box-shadow:0 0 0 4px rgba(255,190,122,.12),0 0 13px rgba(255,180,101,.55)}
+.trace-signal[data-mode=live]{background:#72edd3;box-shadow:0 0 0 4px rgba(101,238,213,.13)}
+.trace-select-label{display:flex;align-items:center;gap:8px;color:#9db3c9;font-size:11px}
+.trace-select-label select{min-width:170px;max-width:248px;height:37px;background:#101c30;color:#e3f2fc;border:1px solid #35536a;border-radius:8px;padding:0 9px;font-size:11px}
+.trace-transport{display:flex;align-items:center;gap:5px}
+.trace-transport button,.trace-transport select{height:37px;border-radius:8px;color:#d8f7f2;border:1px solid #3c6b70;background:#132637;padding:0 11px;font-size:12px;font-weight:600;cursor:pointer}
+.trace-transport button:hover:not(:disabled){background:#225264;border-color:#92e8d9}
+.trace-transport button:disabled,.trace-rail input:disabled{opacity:.45;cursor:default}
+.trace-transport #tracePlay{min-width:92px;border-color:#72d6c8;background:rgba(26,103,100,.22)}
+.trace-transport #traceSpeed{color:#e1eafe;min-width:54px}
+.trace-rail{display:flex;align-items:center;gap:10px;min-width:0}
+.trace-rail input[type=range]{flex:1;min-width:60px;accent-color:#ffc781;height:17px;cursor:pointer}
+.trace-rail span{font-variant-numeric:tabular-nums;color:#f2dbb7;font-size:12px;white-space:nowrap;min-width:51px;text-align:right}
+.trace-explainer{color:#9eacc7;font-size:11px;line-height:1.6;min-height:17px}
+.graph-panel.graph-expanded .trace-console{padding:9px 17px}
+.graph-panel.graph-expanded .trace-explainer{font-size:10px}
+@media(max-width:1200px){.trace-heading{width:100%;margin-right:0}.trace-select-label{flex:1}.trace-transport{margin-left:auto}}
+@media(max-width:600px){
+ .trace-console{padding:11px 10px;gap:8px}
+ .trace-toolbar{gap:9px}.trace-heading{width:100%}
+ .trace-select-label{flex:1 1 100%}.trace-select-label select{flex:1;min-width:0;max-width:none}
+ .trace-transport{width:100%;justify-content:space-between;gap:4px}
+ .trace-transport button{flex:1}.trace-transport #tracePlay{flex:2}
+ .trace-explainer{font-size:10px;min-height:32px}
+ .graph-panel{min-height:850px;height:860px}
+ .graph-canvas{min-height:330px}
+}
+
+.graph-focus-summary{border:1px solid rgba(118,166,187,.24);border-radius:9px;padding:9px 11px;background:rgba(12,29,42,.73);display:grid;gap:4px;max-width:100%;margin:7px 0}
+.graph-focus-top{display:flex;justify-content:space-between;align-items:baseline;gap:11px}
+.graph-focus-top span{font-size:9px;color:#91b7c8;letter-spacing:.15em}
+.graph-focus-top strong{color:#e8f8fa;font-size:12px;text-align:right}
+.graph-focus-info{color:#abccda;font-size:10px;line-height:1.5}
+.graph-focus-proof{color:#899fb5;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.graph-bottom{display:block;min-height:auto;padding:8px 12px 10px}
+.graph-panel.graph-expanded .graph-focus-summary{padding:6px 10px;gap:2px}
+@media(min-width:1300px){
+ .graph-bottom>div:first-child{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,370px);gap:7px 18px;align-items:start}
+ .graph-bottom .graph-focus-summary{grid-column:2;grid-row:1 / 3;margin:0}
+ .graph-bottom .graph-caption{grid-column:1}
+}
 `;

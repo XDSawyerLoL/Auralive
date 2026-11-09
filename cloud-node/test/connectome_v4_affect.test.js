@@ -59,7 +59,7 @@ test('Connectome 04 is a single interactive map of real registry nodes',()=>{
  }
  assert.ok(html.includes('Connectome vivant'));
  assert.ok(src.includes(BRAIN_CONNECTOME_V4));
- assert.match(src,/v4Counters\(\);scheduleDraw\(\)/);
+ assert.match(src,/v4Counters\(\);syncTraceConsole\(\);scheduleDraw\(\)/);
  assert.match(src,/state\.activityOnly/);
  assert.match(src,/state\.flow\?\.steps/);
  assert.match(src,/observed_count/);
