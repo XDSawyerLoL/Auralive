@@ -94,6 +94,13 @@ function renderInspect(){
  setText('nodeSource',n.code);
  setText('nodeLast',stamp(n.last_observed_at));
  setText('nodeEvidence',explainNode(n));
+ setText('graphFocusName',n.label);
+ const source=(n.code||'Code non indiqué').slice(0,140);
+ const connected=(state.data?.edges||[]).filter(e=>e.from===n.id||e.to===n.id);
+ const attested=connected.filter(e=>Number(e.observed_count||0)>0).length;
+ setText('graphFocusInfo',GROUPS[n.group]+' · '+connected.length+
+   ' liaisons · '+attested+' observées · dernière trace : '+shortTime(n.last_observed_at));
+ setText('graphFocusProof','SOURCE · '+source+' · '+nodeStateLabel(n));
  const connections=$('nodeConnections');connections.replaceChildren();
  const edges=(state.data?.edges||[]).filter(e=>e.from===n.id||e.to===n.id);
  if(!edges.length)connections.append(element('small','', 'Aucune dépendance déclarée.'));
@@ -197,7 +204,9 @@ function syncTraceConsole(){
    ' · relecture d’une transition enregistrée, pas activité en direct.');
  if(state.replayRendered!==p.index){
    state.replayRendered=p.index;
-   if(step?.to&&findNode(step.to))state.selected=step.to;
+   if(step?.to&&findNode(step.to)){
+     state.selected=step.to;renderInspect();
+   }
  }
 }
 $('traceSelect').addEventListener('change',e=>chooseFlow(e.target.value,{autoplay:false}));
