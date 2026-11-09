@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
-import { one, query } from './db.js';
+import { one, query, getDb } from './db.js';
+import { HistoryLedger } from './history_provenance.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
@@ -108,6 +109,7 @@ export class CognitiveKernel {
     this.autogenesis = new IdentityAutogenesis();
     this.innerDialogue = new InnerDialogueEngine();
     this.livedExperience = new LivedExperience();
+    this.history = new HistoryLedger({db:getDb()});
     this.selfInquiry = new SelfInquiryEngine();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
@@ -153,6 +155,7 @@ export class CognitiveKernel {
       emergent_identity: this.autogenesis.defaultState(),
       inner_dialogue: null,
       lived_experience: this.livedExperience.defaultState(),
+      history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
@@ -1350,36 +1353,72 @@ export class CognitiveKernel {
         await this.saveSoul();
       }
     }
+    // The authenticated founder's explicit feedback seals the previous
+    // pre-action receipt, but is NOT counted as machine-verified task success.
+    if(privateView&&(isCorrection||isApproval)&&this.soulCache.history_pending_episode_id){
+      try{
+        await this.history.recordOutcome(this.soulCache.history_pending_episode_id,{
+          outcome:isCorrection?'founder-reported-correction':'founder-reported-approval',
+          source:'founder-feedback',
+        });
+        this.soulCache.history_pending_episode_id=null;
+      }catch{
+        // Unavailable history must never turn a dialogue into a service error.
+      }
+    }
     // The same categories can acquire different policies in different lived
     // histories. The nucleus remains the sole authority over execution.
     const experiencedContext=contextForExperience(content,plan);
     const advice=privateView
       ?this.livedExperience.select(this.soulCache.lived_experience,experiencedContext,'respond')
       :{strategy:'respond',changed:false,basis:'public-conversation',context:experiencedContext};
-    plan.learned_strategy=advice.strategy;
+    // Real retrieval influences the plan only if supported by promoted,
+    // active policies and independently verified episodes. The provenance
+    // is stored at decision time, not guessed from AURA's answer afterwards.
+    const historyDecision=privateView
+      ?await this.history.decide({
+        context_tag:experiencedContext,baseline:advice.strategy,
+        run_id:brainFlowId,situation_id:experiencedContext,
+      }).catch(()=>null)
+      :null;
+    const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
+      .includes(plan.act);
+    const historyChanged=Boolean(historyPermitted&&historyDecision?.changed);
+    const strategy=historyChanged?historyDecision.action:advice.strategy;
+    const strategyChanged=Boolean(advice.changed||historyChanged);
+    plan.learned_strategy=strategy;
     plan.experience_guidance={
-      context:experiencedContext,strategy:advice.strategy,
+      context:experiencedContext,strategy,
       historical_revision:Number(advice.revision||0),
-      changed_by_history:Boolean(advice.changed),
-      evidence_kind:advice.basis,
+      changed_by_history:strategyChanged,
+      evidence_kind:historyChanged?'promoted-machine-verified-history':advice.basis,
     };
-    if(advice.changed && advice.strategy==='verify' &&
+    plan.history_guidance=privateView?{
+      eligible:Boolean(historyDecision?.provenance?.length),
+      changed:historyChanged,
+      decision_id:historyDecision?.decision_id??null,
+      retrieval_ids:(historyDecision?.provenance||[]).map(x=>({
+        item_type:x.item_type,item_id:x.item_id,rank:x.rank,
+      })),
+      provenance_source:'pre-decision-retrieval',
+    }:null;
+    if(strategyChanged && strategy==='verify' &&
         !['self_name','self_identity','self_personality','self_exploration'].includes(plan.act)){
       plan.needs_semantic_support=true;
       plan.semantic_query=content;
       plan.goal+=' Vérifier les ambiguïtés pertinentes avant d’affirmer, sans inventer de résultat.';
     }
-    if(advice.changed && advice.strategy==='task_first' && substantiveRequest(content)){
+    if(strategyChanged && strategy==='task_first' && substantiveRequest(content)){
       plan.act='analyze_substantive_request';
       plan.needs_semantic_support=true;
       plan.semantic_query=content;
     }
-    if(advice.changed && advice.strategy==='clarify'){
+    if(strategyChanged && strategy==='clarify'){
       plan.goal+=' Vérifier avec tact le sens de la demande avant de conclure. Éviter de répéter la même interprétation erronée.';
       plan.needs_semantic_support=true;
       plan.semantic_query=content;
     }
-    if(advice.changed && advice.strategy==='attentive'){
+    if(strategyChanged && strategy==='attentive'){
       plan.goal+=' Tenir compte explicitement des nuances de cet échange et ne pas imposer une lecture positive.';
     }
     // A self-question must lead to a genuine verification, not the fixed
@@ -1616,6 +1655,20 @@ export class CognitiveKernel {
     // or a human feeling, and it is not emitted when no state is supplied.
     if (plan.affect && typeof plan.affect === 'object' && Object.keys(plan.affect).length)
       await brainHop('homeostasis','language','affect-context-provided','attempted');
+    // Prediction is committed BEFORE formulation. No dialogue text is placed
+    // in this bounded autobiographical ledger.
+    let pendingHistoryEpisode=null;
+    if(privateView){
+      try{
+        pendingHistoryEpisode=await this.history.beginEpisode({
+          mission_id:brainFlowId,kind:'action',
+          context_tag:experiencedContext,action:strategy,
+          prediction:'awaiting-explicit-founder-feedback',confidence:null,
+        });
+      }catch{
+        // History is optional while v18 is rolling out; never fabricate it.
+      }
+    }
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
@@ -1644,6 +1697,8 @@ export class CognitiveKernel {
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
+    if(privateView&&answer)
+      this.soulCache.history_pending_episode_id=pendingHistoryEpisode?.id??null;
     if(privateView&&answer){
       // Only the last actual founder reply can receive a future contextual
       // correction. Its pending receipt stores NO words from either speaker.
@@ -1720,6 +1775,7 @@ export class CognitiveKernel {
       epistemic_self:this.selfInquiry.publicState(this.soulCache.epistemic_self),
       metacognitive_guidance:plan.metacognitive_guidance,
       experience_guidance:plan.experience_guidance,
+      history_guidance:plan.history_guidance,
       lived_experience:this.livedExperience.publicState(this.soulCache.lived_experience,{includeEvidence:privateView}),
       semantic_support_used: Boolean(plan.semantic_support),
       activity_evidence: {
