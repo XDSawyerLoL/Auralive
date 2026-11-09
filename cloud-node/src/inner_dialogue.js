@@ -13,6 +13,7 @@ function entropy(seed,category){
  return (parseInt(h,16)/0xffffffff-0.5)*0.035; // Tie-break only.
 }
 function circumstance(text='',plan={}){
+ if(plan.act==='self_exploration')return 'self_inquiry';
  const value=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  if(/(?:pas terrible|ca peut aller|bof|j.ai connu mieux|je ne vais pas bien|je vais pas bien|ne suis pas heureux|pas content|malheureu|mal|trist|decu|peur|angoiss|stress)/.test(value))
    return 'mixed_or_negative';
@@ -83,9 +84,11 @@ export class InnerDialogueEngine {
         selected='respond';
     }
     if(situation==='self_identity')selected='respond';
+    if(situation==='self_inquiry'||plan.metacognitive_action==='verify')selected='verify';
     if(situation==='mixed_or_negative' && harm<.85)selected='respond';
     let tone=situation==='mixed_or_negative'?'attentive'
       :situation==='self_identity'?'direct'
+      :situation==='self_inquiry'?'curious'
       :contextualStrategy==='attentive'||selected==='clarify'?'attentive'
       :selected==='verify'?'cautious'
       :inquiry>.63?'curious'
@@ -124,7 +127,7 @@ export class InnerDialogueEngine {
   }
   publicState(input){
     if(!input||typeof input!=='object')return null;
-    const situations=new Set(['mixed_or_negative','self_identity','correction','uncertain_request','positive','ambient','ordinary','external_facts']);
+    const situations=new Set(['mixed_or_negative','self_identity','self_inquiry','correction','uncertain_request','positive','ambient','ordinary','external_facts']);
     return {
       version:InnerDialogueEngine.VERSION,at:input.at,
       situation:situations.has(input.situation)?input.situation:'ordinary',
