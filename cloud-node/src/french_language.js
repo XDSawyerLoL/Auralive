@@ -107,7 +107,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
         interpretation:normalize(r.interpretation||'').slice(0,190),
       };
       if(privatePlan.metacognitive_action==='verify')simple.should_verify=true;
-    }else{
+    }else if(!interpersonalGrounded){
       simple.self_model={observations:Math.max(0,Number(privatePlan.self_model?.observations||0))};
     }
     const rules=[
@@ -306,7 +306,7 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
       return {accepted:false,code:'dismissed-user-interruption'};
   }
   if(['greet','positive_acknowledgement','reciprocal_wellbeing','user_mixed_wellbeing',
-       'relationship_repair','conversation_feedback','report_internal_state'].includes(plan.act)&&
+       'relationship_repair','conversation_feedback'].includes(plan.act)&&
     !(plan.facts||[]).some(x=>/[\d]+\s*%/.test(String(x)))&&
     isUnrequestedTechnicalDigression(answer,plan))
     return {accepted:false,code:'unrequested-stale-memory'};
@@ -373,6 +373,10 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   if (socialStateQuestion && !plan.activity_evidence?.execution_verified &&
       /\b(?:je (?:suis|reste) en train de|je travaille (?:sur|actuellement)|je v[eé]rifie (?:le|les|l['’]|actuellement)|je (?:r[eé]pare|corrige|d[eé]ploie) (?:le|les|l['’])|CI d[eé]faillant|CI en [eé]chec)\b/i.test(answer))
     return {accepted:false,code:'unverified-work-in-social-reply'};
+  if(plan.act==='report_internal_state'&&
+    !(plan.facts||[]).some(x=>/\d+\s*%/.test(String(x)))&&
+    isUnrequestedTechnicalDigression(answer,plan))
+    return {accepted:false,code:'unrequested-stale-memory'};
   if (plan.act === 'report_internal_state') {
     const detailed = (Array.isArray(plan.facts)?plan.facts:[]).some(fact=>/\d+\s*%/.test(String(fact)));
     if (!detailed) {
