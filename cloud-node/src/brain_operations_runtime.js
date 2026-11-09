@@ -1,4 +1,5 @@
 import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
+import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -17,7 +18,7 @@ const POS={
  runtime:[605,465],voicefabric:[1050,535],expert:[754,728],horizon:[955,738]
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
-const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false};
+const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false,activityOnly:false};
 const ANCHORS=new Set(['kernel','homeostasis','memory','cognition','language','output','web','command']);
 const LENSES=Object.entries(GROUPS);
 for(const [group,label] of LENSES){
@@ -426,7 +427,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
@@ -440,9 +441,9 @@ function sizeCanvas(){
  canvas.width=Math.max(1,Math.round(r.width*ratio));
  canvas.height=Math.max(1,Math.round(r.height*ratio));
  ctx.setTransform(ratio,0,0,ratio,0,0);canvasW=r.width;canvasH=r.height;
- scale=Math.min(canvasW/1180,canvasH/790)*state.zoom;
+ scale=Math.min(canvasW/1200,canvasH/615)*state.zoom;
 }
-function project(id){const p=POS[id]||[560,395];return {x:canvasW*.5+(p[0]-590)*scale+state.panX,y:canvasH*.5+(p[1]-395)*scale+state.panY};}
+function project(id){const p=POS[id]||[560,395];return {x:canvasW*.5+(p[0]-590)*scale*1.03+state.panX,y:canvasH*.51+(p[1]-395)*scale*.76+state.panY};}
 function edgeMid(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2-28*scale};}
 function edgePoint(a,b,t){const m=edgeMid(a,b);return{x:(1-t)*(1-t)*a.x+2*(1-t)*t*m.x+t*t*b.x,y:(1-t)*(1-t)*a.y+2*(1-t)*t*m.y+t*t*b.y};}
 function drawEdge(a,b){const m=edgeMid(a,b);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(m.x,m.y,b.x,b.y);}
@@ -513,100 +514,7 @@ function drawNetworkStructure(edges){
  ctx.restore();
 }
 
-function draw(){
- if(!state.data)return;sizeCanvas();ctx.clearRect(0,0,canvasW,canvasH);
- // Ambient breathing is decorative, never represented as observed neural activity.
- const ambient=0; // no decorative animation misread as neural firing
- ctx.save();
- for(const [group,pos,size,color] of GROUP_CLOUDS){
-   const c={x:canvasW*.5+(pos[0]-590)*scale+state.panX,y:canvasH*.5+(pos[1]-395)*scale+state.panY};
-   const grad=ctx.createRadialGradient(c.x,c.y,2,c.x,c.y,size*scale);
-   grad.addColorStop(0,'rgba('+color+','+(.15+.035*ambient)+')');grad.addColorStop(.45,'rgba('+color+',.08)');grad.addColorStop(1,'rgba('+color+',0)');
-   ctx.fillStyle=grad;ctx.fillRect(c.x-size*scale,c.y-size*scale,size*2*scale,size*2*scale);
- }
- const d=state.data;const now=Date.now();
- drawNetworkStructure(d.edges||[]);
- const lens=state.focusGroup;
- const inLens=id=>lens==='all'||findNode(id)?.group===lens;
- const elapsed=performance.now()-state.replayStarted;
- const steps=state.flow?.steps||[];
- const replayWindow=steps.length*520+850;
- const replaying=state.flow&&state.replayStarted>0&&elapsed<=replayWindow;
- const currentReplayStep=replaying?Math.min(steps.length-1,Math.floor(elapsed/520)): -1;
- const selectedEdgeSet=new Set(steps.map(s=>s.from+'>'+s.to));
- const activeReplayEdge=steps[currentReplayStep];
- for(const edge of d.edges||[]){
-   const a=project(edge.from),b=project(edge.to);const key=edge.from+'>'+edge.to;
-   const selected=selectedEdgeSet.has(key);const observed=edge.observed_count>0;const age=edge.last_observed_at?now-Date.parse(edge.last_observed_at):Infinity;const recent=edge.signal_recent===true&&age>=0&&age<20000;
-   ctx.save();ctx.globalAlpha=inLens(edge.from)||inLens(edge.to)?1:.12;ctx.lineCap='round';ctx.setLineDash(selected||recent?[]:[4,7]);
-   const replayActive=Boolean(replaying&&activeReplayEdge&&activeReplayEdge.from===edge.from&&activeReplayEdge.to===edge.to);
-   ctx.lineWidth=replayActive?2.5:recent?1.7:selected?1.3:observed?1:.7;
-   ctx.strokeStyle=replayActive?'rgba(255,194,121,.86)':recent?'rgba(101,255,225,.78)':selected?'rgba(224,166,115,.42)':observed?'rgba(154,164,206,.32)':'rgba(105,125,153,.16)';
-   ctx.shadowBlur=replayActive?13:recent?10:0;ctx.shadowColor=replayActive?'rgba(255,186,104,.72)':'rgba(95,255,229,.62)';
-   drawEdge(a,b);ctx.stroke();ctx.restore();
-   if(!reduced){
-     const replayPulse=Boolean(replaying&&activeReplayEdge&&activeReplayEdge.from===edge.from&&activeReplayEdge.to===edge.to);
-     // Event pulse: one time-bounded traversal after the actual persisted hop.
-     // Replay pulse: explicitly user-selected historical route, once per step.
-     const eventElapsed=age;
-     const livePulse=recent&&eventElapsed>=0&&eventElapsed<1600;
-     if(replayPulse||livePulse){
-       const progress=replayPulse?Math.min(1,(elapsed%520)/520):Math.min(1,eventElapsed/1600);
-       const p=edgePoint(a,b,progress);const halo=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,replayPulse?12:10);
-       const pulseColor=replayPulse?'255,186,104':'94,255,226';
-       halo.addColorStop(0,'rgba(255,255,255,1)');halo.addColorStop(.22,'rgba('+pulseColor+',.95)');halo.addColorStop(1,'rgba('+pulseColor+',0)');
-       ctx.fillStyle=halo;ctx.beginPath();ctx.arc(p.x,p.y,replayPulse?12:10,0,Math.PI*2);ctx.fill();
-     }
-   }
- }
- state.screen=[];
- const labelCandidates=[];
- for(const node of d.nodes||[]){
-   const p=project(node.id);const selected=node.id===state.selected;const active=isRecent(node);const base=selected?16:active?13:6;const r=base*scale;
-   state.screen.push({id:node.id,x:p.x,y:p.y,r:Math.max(r,14)});
-   ctx.save();ctx.globalAlpha=(inLens(node.id)?1:.22)*(selected||active?1:.35);
-   const glow=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,r*3.2);
-   const rgb=selected?'243,180,132':active?'135,244,234':tone(node).replace('#','');
-   glow.addColorStop(0,selected?'rgba(255,191,105,.86)':active?'rgba(94,255,225,.85)':'rgba(221,110,245,.38)');
-   glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(p.x,p.y,r*3.2,0,Math.PI*2);ctx.fill();
-   ctx.beginPath();ctx.shadowBlur=selected?17:active?13:0;ctx.shadowColor=selected?'#ffb768':active?'#71ffe0':tone(node);ctx.fillStyle=selected?'#ffbf78':active?'#78ffe1':tone(node);ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
-   ctx.lineWidth=selected?2.4:1.5;ctx.strokeStyle=selected?'#fff2de':active?'#d7fff8':'rgba(255,222,248,.6)';ctx.stroke();
-   ctx.beginPath();ctx.fillStyle='rgba(255,255,255,.95)';ctx.arc(p.x,p.y,Math.max(1.5,r*.22),0,Math.PI*2);ctx.fill();
-
-   ctx.restore();
-   if(selected||node.id===state.hovered||active||ANCHORS.has(node.id)||state.showAllLabels||state.zoom>1.55)
-     labelCandidates.push({node,p,r,selected,active,priority:selected?100:node.id===state.hovered?90:active?80:ANCHORS.has(node.id)?50:10});
- }
- // Labels are information overlays, not artificial neurons. Avoid overlaps
- // while keeping every underlying node available through the sidebar.
- const placed=[];
- labelCandidates.sort((a,b)=>b.priority-a.priority);
- for(const item of labelCandidates){
-   const {node,p,r,selected,active}=item;
-   if(!inLens(node.id)&&!selected)continue;
-   const label=node.label.length>24?node.label.slice(0,23)+'…':node.label;
-   const font=13;ctx.font='650 '+font+'px system-ui';
-   const tagW=ctx.measureText(label).width+20,tagH=26;
-   const offsets=[[r+8,-tagH/2],[-r-8-tagW,-tagH/2],[r+8,15],[-r-8-tagW,-tagH-12]];
-   let rect=null;
-   for(const [dx,dy] of offsets){
-     const x=p.x+dx,y=p.y+dy;
-     if(x<8||x+tagW>canvasW-8||y<36||y+tagH>canvasH-10)continue;
-     if(placed.some(b=>x<b.x+b.w+4&&x+tagW+4>b.x&&y<b.y+b.h+4&&y+tagH+4>b.y))continue;
-     rect={x,y,w:tagW,h:tagH};break;
-   }
-   if(!rect)continue;
-   placed.push(rect);
-   ctx.fillStyle='rgba(7,11,19,.88)';
-   ctx.strokeStyle=selected?'rgba(255,185,110,.88)':active?'rgba(110,255,239,.70)':'rgba(131,151,186,.34)';
-   ctx.lineWidth=selected?1.4:.8;
-   roundedLabel(rect.x,rect.y,rect.w,rect.h,7);ctx.fill();ctx.stroke();
-   ctx.fillStyle=selected?'#ffdfbd':active?'#bdfdf2':'#cfdeeb';
-   ctx.fillText(label,rect.x+10,rect.y+18);
- }
- ctx.restore();
- if((d.edges||[]).some(e=>e.signal_recent&&Date.now()-Date.parse(e.last_observed_at||'')<1800)||replaying)scheduleDraw();
-}
+${BRAIN_CONNECTOME_V4}
 
 function inside(hit,x,y){const dx=x-hit.x,dy=y-hit.y;return Math.sqrt(dx*dx+dy*dy)<=Math.max(18,hit.r+6);}
 canvas.addEventListener('pointerdown',e=>{const r=canvas.getBoundingClientRect();state.drag={x:e.clientX-r.left,y:e.clientY-r.top,panX:state.panX,panY:state.panY,moved:false};canvas.setPointerCapture(e.pointerId);});
@@ -630,6 +538,23 @@ canvas.addEventListener('pointermove',e=>{
 canvas.addEventListener('pointerleave',()=>{state.hovered=null;setText('graphHover','Survole un point pour identifier son module.');scheduleDraw();});
 canvas.addEventListener('pointerup',e=>{const drag=state.drag;state.drag=null;if(!drag||drag.moved)return;const r=canvas.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const hit=[...state.screen].reverse().find(item=>inside(item,x,y));if(hit)selectNode(hit.id);});
 canvas.addEventListener('wheel',e=>{e.preventDefault();state.zoom=Math.min(3,Math.max(.6,state.zoom*(e.deltaY>0?.92:1.08)));scheduleDraw();},{passive:false});
+$('graphFullscreen').onclick=()=>{
+ const expanded=$('brain').classList.toggle('graph-expanded');
+ $('graphFullscreen').setAttribute('aria-pressed',String(expanded));
+ $('graphFullscreen').textContent=expanded?'Réduire':'Plein écran';
+ window.requestAnimationFrame(scheduleDraw);
+};
+window.addEventListener('keydown',event=>{
+ if(event.key==='Escape'&&$('brain').classList.contains('graph-expanded')){
+  $('graphFullscreen').click();
+ }
+});
+$('graphActivityOnly').onclick=()=>{
+ state.activityOnly=!state.activityOnly;
+ $('graphActivityOnly').setAttribute('aria-pressed',String(state.activityOnly));
+ $('graphActivityOnly').textContent=state.activityOnly?'Voir les liaisons':'Activité vérifiée';
+ scheduleDraw();
+};
 $('graphMore').onclick=()=>{state.zoom=Math.min(3,state.zoom*1.15);scheduleDraw();};$('graphLess').onclick=()=>{state.zoom=Math.max(.6,state.zoom/1.15);scheduleDraw();};$('graphReset').onclick=()=>{state.zoom=1;state.panX=0;state.panY=0;scheduleDraw();};
 window.addEventListener('resize',scheduleDraw,{passive:true});
 $('moduleSearch').addEventListener('input',renderModules);

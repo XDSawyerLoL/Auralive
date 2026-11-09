@@ -13,7 +13,7 @@ function entropy(seed,category){
 }
 function circumstance(text='',plan={}){
  const value=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
- if(/(?:pas terrible|ca peut aller|bof|j.ai connu mieux|mal|trist|decu|peur|angoiss|stress)/.test(value))
+ if(/(?:pas terrible|ca peut aller|bof|j.ai connu mieux|je ne vais pas bien|je vais pas bien|ne suis pas heureux|pas content|malheureu|mal|trist|decu|peur|angoiss|stress)/.test(value))
    return 'mixed_or_negative';
  if(/(?:qui es|ce que tu es|personnalit|identit|te decouvrir|introspect)/.test(value))
    return 'self_identity';

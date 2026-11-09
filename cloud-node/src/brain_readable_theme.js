@@ -240,4 +240,81 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
   .atlas-details .cog-heading{flex-wrap:wrap}
   .atlas-details .cog-switch{padding:10px}
 }
+
+/* CONNECTOME 04 — deliberate visual hierarchy, architecture is not activity */
+.graph-panel{height:clamp(730px,85vh,1040px);min-height:680px;border-color:rgba(105,140,211,.35);background:linear-gradient(145deg,#0d1425 0%,#080e1b 66%,#0b1120 100%);box-shadow:0 18px 65px rgba(0,0,0,.36),0 0 0 1px rgba(148,193,255,.045) inset}
+.graph-top{padding:20px 23px 14px;gap:14px;border-bottom:1px solid rgba(112,151,221,.12)}
+.graph-top h2{font-size:clamp(21px,2vw,29px);letter-spacing:-.035em;color:#f5f7ff;line-height:1.2;font-weight:720}
+.graph-top p{font-size:12px;color:#9fb0cc;max-width:770px;line-height:1.6;margin-top:7px}
+.v4-edition{font-size:13px;letter-spacing:.19em;vertical-align:middle;color:#8ea9d5;font-weight:650}
+.graph-controls{width:auto;display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:7px}
+.graph-controls button,.graph-controls select{font-size:12px;min-height:38px;padding:9px 12px;border:1px solid #334766;background:#111d30;color:#d9e8fa;border-radius:9px;transition:background .18s,border-color .18s}
+.graph-controls button:hover,.graph-controls select:hover{background:#1a2942;border-color:#88b5ec}
+.graph-controls button[aria-pressed=true]{background:rgba(74,121,151,.26);border-color:#6ee3d1;color:#b6fff0}
+.graph-controls button:focus-visible,.graph-controls select:focus-visible{outline:2px solid #8bdfed;outline-offset:3px}
+.graph-controls #graphFullscreen{color:#e4f9f6;border-color:#37776d}
+.graph-v4-readout{padding:11px 21px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;border-bottom:1px solid rgba(105,148,207,.18);background:rgba(5,12,25,.50)}
+.graph-v4-readout>span{display:grid;grid-template-columns:12px minmax(0,1fr);grid-template-rows:auto auto;align-items:center;column-gap:8px;padding:3px 15px;min-width:0;border-right:1px solid rgba(109,152,198,.17)}
+.graph-v4-readout>span:last-child{border-right:0}
+.graph-v4-readout strong{font-weight:680;color:#eef4ff;font-size:14px;letter-spacing:-.02em;white-space:nowrap}
+.graph-v4-readout small{grid-column:2;color:#819bb5;font-size:10px;letter-spacing:.02em;margin-top:2px}
+.v4-mark{width:7px;height:7px;border-radius:50%;display:inline-block;background:#a696eb;box-shadow:0 0 9px rgba(161,151,255,.34)}
+.v4-mark.links{background:#8da8f1}.v4-mark.observed{background:#7ce4d7}.v4-mark.heartbeat{background:#7a8599;box-shadow:none}
+.graph-v4-readout #graphV4Live[data-active=yes]{color:#88ffdb}
+.graph-v4-readout #graphV4Live[data-active=yes]~small{color:#85c6ba}
+.graph-stage{flex:1;min-height:0;padding:10px 13px 11px;display:flex;flex-direction:column}
+.graph-canvas{height:auto;flex:1;min-height:510px;border:1px solid rgba(100,143,208,.32);border-radius:13px;background:#070d19;box-shadow:0 0 38px rgba(37,75,151,.10) inset}
+.graph-canvas::before,.graph-canvas::after{display:none}
+.graph-hud{left:13px;right:13px;top:11px;gap:10px}
+.graph-floating{background:rgba(7,15,30,.86);border-color:rgba(116,160,218,.25);color:#a6bad5;font-size:11px;padding:9px 12px;line-height:1.45;border-radius:9px;max-width:46%}
+.graph-floating#graphClock{color:#d9e7ff}
+.graph-bottom{min-height:65px;padding:10px 10px 0}
+.graph-legend{gap:13px;flex-wrap:wrap;color:#a6b9d0;font-size:11px}
+.graph-caption{font-size:10px;line-height:1.55;color:#7e94af}
+.graph-panel.graph-expanded{position:fixed;inset:10px;z-index:60;width:auto;max-width:none;height:calc(100dvh - 20px)!important;min-height:0;background:#090f1d;box-shadow:0 0 0 9999px rgba(0,0,0,.89),0 20px 100px #000;border-radius:15px}
+.graph-panel.graph-expanded .graph-stage{min-height:0;flex:1}
+.graph-panel.graph-expanded .graph-canvas{min-height:0;flex:1}
+.graph-panel.graph-expanded .graph-bottom{max-height:76px;overflow:auto}
+.graph-panel.graph-expanded .graph-top{padding:14px 22px 12px}
+@media(max-width:1390px){
+ .graph-top{flex-direction:column;align-items:flex-start}
+ .graph-controls{width:100%;justify-content:flex-start}
+ .graph-panel{height:clamp(700px,84vh,930px)}
+}
+@media(max-width:899px){
+ .graph-panel{height:730px;min-height:630px}
+ .graph-v4-readout{grid-template-columns:repeat(2,minmax(0,1fr));padding:8px 12px;row-gap:8px}
+ .graph-v4-readout>span{padding:3px 8px}
+ .graph-v4-readout>span:nth-child(2){border-right:0}
+ .graph-stage{padding:8px}
+ .graph-canvas{min-height:405px}
+ .graph-top h2{font-size:22px}
+ .graph-hud .graph-floating{font-size:10px;max-width:62%}
+}
+@media(max-width:599px){
+ .graph-panel{height:700px;min-height:660px}
+ .graph-top{padding:12px}
+ .graph-top h2{font-size:20px}
+ .graph-controls button,.graph-controls select{min-height:34px;padding:7px;font-size:11px}
+ .graph-v4-readout strong{font-size:12px}
+ .graph-v4-readout small{font-size:9px}
+ .graph-stage{padding:6px}
+ .graph-canvas{min-height:380px}
+ .graph-floating{font-size:9px;padding:7px}
+ .graph-bottom{min-height:86px}
+ .graph-legend{gap:6px;font-size:9px}
+ .graph-caption{font-size:9px}
+ .graph-panel.graph-expanded{inset:3px;height:calc(100dvh - 6px)!important;border-radius:8px}
+}
+
+/* Connectome v4 small-screen controls: no collapsed 37px domain selector */
+@media(max-width:599px){
+ #graphLens{min-width:137px!important;width:137px!important;flex:0 0 137px;max-width:100%}
+ .graph-controls{justify-content:flex-start}
+ .graph-panel{height:665px;min-height:620px}
+ .graph-canvas{min-height:320px}
+ .graph-hud{left:8px;right:8px;top:8px;bottom:8px;display:block}
+ .graph-hud #graphClock{max-width:85%;display:block}
+ .graph-hud #graphHover{position:absolute;bottom:0;right:0;max-width:68%}
+}
 `;
