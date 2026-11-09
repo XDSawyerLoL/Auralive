@@ -33,16 +33,20 @@ export function classifySelfDialogue(text, context = []) {
       /\b(?:tu|toi|ta|ton|une|propre|ind[eé]pendante|as|a)\b/.test(q))
     return 'self_personality';
 
+  // Exploration is an INSTRUCTION to investigate, not an identity question.
+  // It must precede "qui tu es" matching the passive description gate.
+  if (
+    /\b(?:te decouvrir|te connaitre|te comprendre toi meme|t explorer toi meme|toi meme a te decouvrir|apprendre qui tu es|explorer ton propre fonctionnement|te questionner toi meme|auto evaluation|autoevaluer|introspection|decouvre toi|explore toi)\b/.test(q)
+    || (/\b(?:je veux|j aimerais|essaye|commence|cherche|apprends|recherche|explore|etudie|examine|interroge|questionne|investigue|analyse|decouvre|reflechis)\b/.test(q)
+      && /\b(?:qui tu es|ce que tu es|qui es tu|ton propre fonctionnement|ta propre identite|ta nature|toi meme|sur toi)\b/.test(q))
+  ) return 'self_exploration';
+
   if (
     /\b(?:qui es tu|qui tu es|qu est ce que tu es|ce que tu es|tu es quoi|quelle est ton identite|quelle est ta nature|tu comprends qui tu es|sais tu qui tu es)\b/.test(q)
     || /\b(?:es tu consciente|as tu conscience|tu as une conscience)\b/.test(q)
   ) return 'self_identity';
 
-  if (
-    /\b(?:te decouvrir|te connaitre|te comprendre toi meme|t explorer toi meme|toi meme a te decouvrir|apprendre qui tu es|explorer ton propre fonctionnement|te questionner toi meme|auto evaluation|autoevaluer|introspection|decouvre toi|explore toi)\b/.test(q)
-    || (/(?:je veux|j aimerais|essaye|commence|cherche|apprends)/.test(q)
-      && /(?:qui tu es|ton propre fonctionnement|toi meme)/.test(q))
-  ) return 'self_exploration';
+
 
   if (/\b(?:tu cherches? a me comprendre|tu essaies? de me comprendre|tu veux me comprendre|tu me comprends|tu cherches a comprendre ce que je ressens)\b/.test(q))
     return 'relationship_understanding';

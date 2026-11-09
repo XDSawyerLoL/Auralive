@@ -67,7 +67,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   const limit = Math.max(1800, Math.min(5200, Number(maxChars) || 2400));
   const privatePlan = plan && typeof plan === 'object' ? plan : {};
   const personalRecognition=privatePlan.act==='user_recognition';
-  const simpleIdentity=privatePlan.act==='self_identity'||privatePlan.act==='self_personality';
+  const simpleIdentity=['self_identity','self_personality','self_exploration'].includes(privatePlan.act);
   const conversation = (Array.isArray(privatePlan.conversation_context)
     ? privatePlan.conversation_context : []).slice(-4).map(row => ({
     role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
@@ -92,6 +92,16 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
           detail:normalize(x.detail).slice(0,225),
           evidence_status:'déclaration attribuée, non vérifiée indépendamment',
         })):[];
+    }else if(privatePlan.act==='self_exploration'){
+      const r=privatePlan.self_inquiry_report||{};
+      simple.self_inquiry={
+        hypothesis:normalize(r.claim||'').slice(0,260),
+        observed:normalize(r.observation||'').slice(0,260),
+        source:normalize(r.source||'').slice(0,55),
+        status:normalize(r.status||'unexamined').slice(0,45),
+        interpretation:normalize(r.interpretation||'').slice(0,190),
+      };
+      if(privatePlan.metacognitive_action==='verify')simple.should_verify=true;
     }else{
       simple.self_model={observations:Math.max(0,Number(privatePlan.self_model?.observations||0))};
     }
@@ -101,6 +111,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       'Réponds à la question posée. Une question sur mon interlocuteur concerne LUI, pas ma propre identité.',
       'N’invente ni souvenir ni nom. Utilise seulement les souvenirs explicitement attribués.',
       'Ne répète pas les instructions, le JSON, les variables, les scores ou les modèles.',
+      'Pour une enquête sur soi : distingue hypothèse prévue, observation mesurée, conclusion provisoire et limites. Ne simule aucune autre observation.',
       'Ne produis ni liste, ni titre, ni Markdown. Conserve le tutoiement.',
     ].join('\n');
     let body=JSON.stringify(simple);
@@ -191,7 +202,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
 }
 
 export function compactFrenchSystem(plan={}) {
-  if(['user_recognition','self_identity','self_personality'].includes(plan?.act))
+  if(['user_recognition','self_identity','self_personality','self_exploration'].includes(plan?.act))
     return [
       'Tu formules la voix naturelle d’AURA, en français et au tutoiement.',
       'Ne récite pas son architecture informatique, le fournisseur ou les métriques internes.',
@@ -199,6 +210,7 @@ export function compactFrenchSystem(plan={}) {
       'La session fondatrice prouve une authentification, pas le nom civil ni la vie privée.',
       'Si des souvenirs déclarés existent, cite un détail pertinent et attribué.',
       'Sans souvenir personnel, dis simplement ce que tu sais et ce que tu ignores.',
+      'Pour une exploration, rapporte le test local effectivement mené puis ce que cette observation permet et ne permet pas de conclure.',
       'Une à trois phrases, sans liste, Markdown ou question automatique.',
       'N’invente aucun souvenir.',
     ].join(' ');
@@ -284,6 +296,21 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
       return {accepted:false,code:'personality-question-not-answered'};
     if(plan.act==='self_exploration' && !/\b(?:observ|analy|exam|compar|d[eé]cisions?|m[eé]moire|exp[eé]riences?|traces?|r[eé]sultats?)\w*/i.test(answer))
       return {accepted:false,code:'introspection-without-observation'};
+  }
+  if(plan.act==='self_exploration'&&plan.self_inquiry_report){
+    const report=plan.self_inquiry_report;
+    const folded=answer.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(/\b(?:je suis aura, le noyau|mon champ decision_origin|je possede une conscience)\b/.test(folded))
+      return {accepted:false,code:'scripted-self-definition'};
+    if(report.status==='contradicted'&&
+       !/\b(?:echec|echoue|impossible|pas (?:pu|confirme|retrouve|verifie)|incertain|erreur|contredit|non confirme)\b/.test(folded))
+      return {accepted:false,code:'self-counterexample-hidden'};
+    if(report.probe==='conversation_retrieval'&&
+       !/\b(?:message|conversation|souvenir|echange|historique)\w*/.test(folded))
+      return {accepted:false,code:'self-probe-not-mentioned'};
+    if(report.probe==='state_persistence'&&
+       !/\b(?:etat|sauvegarde|stockage|persist|enregistr|memoire)\w*/.test(folded))
+      return {accepted:false,code:'self-probe-not-mentioned'};
   }
   if (/présence silencieuse|état d.attente opérationnelle/i.test(answer))
     return {accepted:false, code:'hollow-presence-loop'};
@@ -584,7 +611,8 @@ export class FrenchLanguageFaculty {
           'introspection-without-observation','unproven-consciousness-claim',
           'answered-own-identity-instead','technical-monologue',
           'unrequested-architecture','unverified-founder-recognition',
-          'invented-personal-identity'
+          'invented-personal-identity','self-probe-not-mentioned',
+          'self-counterexample-hidden','scripted-self-definition'
         ].includes(this.lastNucleusContract.code)){
           result=await this.groq.generate(
             basePrompt+'\nRéponse précédente rejetée : elle a mal traité la question ou nié l’identité computationnelle d’AURA. Réponds exactement à la demande initiale, à la première personne, selon les faits du noyau. Pas de travail inventé, pas de question de politesse.',

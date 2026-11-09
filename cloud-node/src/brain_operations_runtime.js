@@ -307,6 +307,13 @@ const DECISION_LABELS={
 function renderLearnedIdentity(){
  const model=state.data?.learned_identity||null;
  const lived=state.data?.lived_identity||null;
+ const epistemic=state.data?.epistemic_self||null;
+ if(epistemic){
+   const counts=Object.values(epistemic.probe_counts||{});
+   setText('epistemicStatus',Number(epistemic.revision||0)+' enquête(s) · '+
+     counts.filter(x=>x.status==='contradicted').length+
+     ' contre-exemple(s) récents · ouvrir pour les sources');
+ }
  if(lived)setText('livedHistoryStatus',Number(lived.observations||0)+
    ' retours enregistrés dans '+Number(lived.pattern_count||0)+
    ' contextes · ouvrir pour examiner les preuves (session fondatrice).');
@@ -386,6 +393,47 @@ async function loadLivedHistory(){
 }
 $('livedHistoryDetails').addEventListener('toggle',()=>{
  if($('livedHistoryDetails').open)void loadLivedHistory();
+});
+async function loadEpistemicHistory(){
+ const root=$('epistemicHistoryList');root.replaceChildren();
+ setText('epistemicStatus','Lecture des vérifications du noyau…');
+ try{
+  const response=await fetch('/api/brain/experience',{
+    credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}
+  });
+  if(response.status===401||response.status===403){
+   setText('epistemicStatus','Détails disponibles uniquement dans la session fondatrice.');
+   return;
+  }
+  if(!response.ok)throw new Error('HTTP '+response.status);
+  const data=await response.json(),model=data?.epistemic_self||{};
+  const tests=Array.isArray(model.observations)?model.observations:[];
+  const labels={
+   conversation_retrieval:'Retrouver des conversations antérieures',
+   state_persistence:'Relire mon état sauvegardé',
+  };
+  const outcomes={
+   supported:'Opération observée comme possible',
+   counterexample:'Contre-exemple observé',
+   inconclusive:'Résultat non concluant',
+  };
+  setText('epistemicStatus',tests.length+
+    ' vérification(s) conservée(s) · uniquement des preuves locales');
+  if(!tests.length)root.append(element('p','empty',
+    'Pas encore d’enquête exécutée. Une demande de recherche sur elle-même peut déclencher une lecture réelle.'));
+  for(const entry of tests.slice(-12).reverse()){
+    const row=element('div','lived-row');
+    row.append(element('strong','',labels[entry.probe]||'Test inconnu'),
+      element('span','',outcomes[entry.outcome]||'Résultat non étayé'),
+      element('small','',String(entry.at||'').slice(0,19).replace('T',' ')+' · Source : noyau local · Révision '+Number(entry.revision||0)));
+    root.append(row);
+  }
+ }catch{
+  setText('epistemicStatus','Échec de lecture du registre métacognitif.');
+ }
+}
+$('epistemicHistoryDetails').addEventListener('toggle',()=>{
+ if($('epistemicHistoryDetails').open)void loadEpistemicHistory();
 });
 function renderInnerDialogue(){
  const m=state.data?.inner_dialogue;

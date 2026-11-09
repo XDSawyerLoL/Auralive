@@ -240,6 +240,12 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <div id="identityDimensions" class="identity-dimensions"></div>
           <p id="identityQuestion" class="identity-question">Question à examiner : —</p>
           <p id="identityEvidence" class="causal-footnote">Aucune personnalité humaine ou conscience n’est déduite des indices logiciels.</p>
+          <details class="lived-history" id="epistemicHistoryDetails">
+            <summary>Mes hypothèses · vérifications et contre-exemples</summary>
+            <p id="epistemicStatus">Aucune enquête vérifiable encore enregistrée.</p>
+            <div id="epistemicHistoryList" aria-label="Tests réels des hypothèses sur le fonctionnement d’AURA"></div>
+            <small>Origine des hypothèses : programmation. Résultats : lectures effectives du noyau, non expériences subjectives. Les preuves détaillées sont privées.</small>
+          </details>
           <details class="lived-history" id="livedHistoryDetails">
             <summary>Apprentissages issus de nos échanges</summary>
             <p id="livedHistoryStatus">En attente des retours consignés par le noyau.</p>
