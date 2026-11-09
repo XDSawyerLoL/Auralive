@@ -93,7 +93,10 @@ export class IdentityAutogenesis {
     const effects={
       outcome_success:{initiative:+0.035,prudence:-0.012},
       outcome_failure:{prudence:+0.042,initiative:-0.025},
-      autonomous_reflection:{auto_examen:+0.030},
+      // Creating a reflection proves activity, not improved self-knowledge.
+      // This dimension requires a later independently correlated outcome;
+      // no score inflation from repeated internal narration.
+      autonomous_reflection:{},
       founder_correction:{adaptation:+0.026,prudence:+0.014},
       self_inquiry:{},
     };
