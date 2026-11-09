@@ -52,7 +52,8 @@ test('the bounded tie-break is repeatable and exposes no simulated private thoug
  assert.deepEqual(Object.keys(publicState.competition).sort(),['care','caution','curiosity','initiative']);
 });
 test('Atlas v3 18 real stages and single-screen interface compile',()=>{
- const stageCount=(COGNITIVE_ATLAS_SCRIPT.match(/id:'context_[a-z_]+'/g)||[]).length;
+ const contextPart=COGNITIVE_ATLAS_SCRIPT.split('const COG_CONTEXT_CHILDREN=[')[1].split('];')[0];
+ const stageCount=(contextPart.match(/id:'context_[a-z_]+'/g)||[]).length;
  assert.equal(stageCount,7);
  for(const id of ['request','input','homeostasis','stimulus','context','decision',
   'research','semantic','expression','homeostasis_post','persistence']){
