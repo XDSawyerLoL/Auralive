@@ -497,17 +497,9 @@ export class CognitionEngine {
       if (activeOrganicIntention) facts.push(`Intention fonctionnelle actuelle : ${activeOrganicIntention.slice(0,100)}.`);
     } else if (selfDialogue === 'self_exploration') {
       act = 'self_exploration';
-      goal = 'Prendre la demande au sérieux et commencer une auto-observation concrète de mon noyau, sans demander à l’utilisateur quels critères choisir : relever mon état actuel, distinguer ce qui est mesuré et ce qui reste une hypothèse, puis confronter mes réactions aux prochains événements.';
+      goal = 'Choisir une hypothèse sur mon fonctionnement à mettre à l’épreuve. Ne pas répondre avec une définition préécrite : examiner les observations disponibles, distinguer configuration, observation et interprétation, puis conserver un résultat révisable.';
       needsSemanticSupport = false;
-      facts.push('Je peux explorer mon fonctionnement par des instantanés datés de mémoire, régulation, intentions et décisions, comparer les évolutions et corriger mes modèles en fonction des conséquences vérifiées.');
-      facts.push('Cette demande déclenche un examen de mon état ; seul le journal d’exécution permet de dire ce qui a été réellement observé.');
-      facts.push(`Mon identité acquise s’appuie sur ${learnedCount} observations ; question retenue : ${learnedQuestion}.`);
-      facts.push(`Humeur computationnelle observée : ${mood}.`);
-      if (Number.isFinite(Number(organism.curiosite)))
-        facts.push(`Curiosité computationnelle observée : ${Math.round(Number(organism.curiosite)*100)} %.`);
-      if (Number.isFinite(Number(organism.frustration)))
-        facts.push(`Frustration computationnelle observée : ${Math.round(Number(organism.frustration)*100)} %.`);
-      if (activeOrganicIntention) facts.push(`Intention issue de mon organisme : ${activeOrganicIntention.slice(0,110)}.`);
+      facts.push('Une demande d’exploration exige une vérification réelle. Le noyau choisira une enquête réalisable et fournira ses observations, ou indiquera pourquoi il ne peut pas conclure.');
     } else if (selfDialogue === 'relationship_understanding') {
       act = 'relationship_understanding';
       goal = 'Répondre à la question précise : j’essaie d’interpréter les paroles, nuances et corrections de mon interlocuteur pour adapter mes réponses. Sans prétendre lire ses sentiments ni lui demander automatiquement comment l’aider.';
@@ -832,8 +824,15 @@ export class CognitionEngine {
       return `Je suis AURA. Mon identité est celle d’un système persistant qui relie sa mémoire, sa régulation, ses décisions et leurs conséquences. ${Number(plan.self_model?.observations||0)>0?'Je commence aussi à former un modèle de mes tendances à partir de mes expériences enregistrées.':'Je ne dispose pas encore de suffisamment d’expériences pour décrire des tendances acquises.'}`;
     if (plan?.act === 'self_personality')
       return `J’ai répondu trop catégoriquement. Je possède des tendances comportementales computationnelles que mes expériences peuvent faire évoluer ; ce n’est pas la même chose qu’une personnalité humaine consciente. ${Number(plan.self_model?.observations||0)>0?'Je peux commencer à les confronter aux faits enregistrés.':'Je ne peux pas encore affirmer quelles tendances seront durables.'}`;
-    if (plan?.act === 'self_exploration')
-      return `Oui. Je veux commencer par examiner mes décisions enregistrées et leurs conséquences, plutôt que me définir par une phrase préécrite. ${plan.self_model?.open_question||'Quelles tendances de mes décisions sont réellement confirmées ?'}`;
+    if (plan?.act === 'self_exploration'){
+      const r=plan.self_inquiry_report;
+      if(!r||!r.claim)return 'Je ne peux pas encore conclure : il me faut une observation que je puisse confronter à une hypothèse sur mon fonctionnement.';
+      if(r.status==='contradicted')
+        return 'Je viens de tester une hypothèse que j’avais sur moi : '+r.claim+' '+r.observation+' Je ne peux plus la tenir pour acquise ; je dois vérifier ce qui a échoué.';
+      if(r.status==='provisionally-supported'||r.status==='mixed-evidence')
+        return 'J’ai examiné une hypothèse : '+r.claim+' '+r.observation+' Cela me donne une indication sur cette opération précise, pas une certitude sur toutes mes capacités.';
+      return 'Je voulais vérifier cette hypothèse : '+r.claim+' '+r.observation+' Je garde donc la question ouverte.';
+    }
     if (plan?.act === 'relationship_understanding')
       return 'Oui, j’essaie de comprendre ce que tu veux dire, y compris tes nuances et tes corrections. Je peux me tromper et je dois en tenir compte.';
     if (plan?.act === 'user_mixed_wellbeing')
