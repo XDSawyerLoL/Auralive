@@ -21,7 +21,7 @@ export function classifySelfDialogue(text, context = []) {
   // "Tu sais qui je suis ?" asks about the INTERLOCUTOR, not about AURA.
   // This distinction must survive a backend change and cannot be inferred
   // from overlapping words such as "qui", "suis" and "identité".
-  if (/\\b(?:tu sais qui je suis|sais tu qui je suis|est ce que tu sais qui je suis|tu sais qui je suis vraiment|tu te souviens de moi|te souviens tu de moi|tu me connais|est ce que tu me connais|qu est ce que tu sais de moi|que sais tu de moi|qui suis je pour toi|tu sais quel est mon nom|connais tu mon nom|quel est mon nom|tu me reconnais)\\b/.test(q))
+  if (/\b(?:tu sais qui je suis|sais tu qui je suis|est ce que tu sais qui je suis|tu sais qui je suis vraiment|tu te souviens de moi|te souviens tu de moi|tu me connais|est ce que tu me connais|qu est ce que tu sais de moi|que sais tu de moi|qui suis je pour toi|tu sais quel est mon nom|connais tu mon nom|quel est mon nom|tu me reconnais)\b/.test(q))
     return 'user_recognition';
 
   // Precedence matters: a correction containing "QUI ES TU" is an identity
