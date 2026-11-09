@@ -37,6 +37,9 @@ test('personal knowledge only comes from attributed notes in founder session',()
  assert.equal(recognized.length,1);
  assert.match(recognized[0].detail,/Camille/);
  assert.equal(selectFounderProfile([note],{authenticated:false}).length,0);
+ assert.deepEqual(selectFounderProfile([{
+  ...note,title:'Identité AURA',project:'AURA',tags:['identité'],body:'Je suis AURA.',
+ }],{authenticated:true}),[],'an AI identity note is not the founder biography');
  const privatePlan=engine.planReply({text:'Tu sais qui je suis ?',soul,
   privateView:true,founderProfileNotes:[project,note]});
  assert.equal(privatePlan.founder_profile.length,1);
@@ -80,6 +83,7 @@ test('independent response gate blocks exactly the failure seen in production',(
  assert.equal(validateNucleusSpeech(anonymous,'Je te reconnais, tu es mon fondateur.').accepted,false);
  assert.equal(validateNucleusSpeech(anonymous,'Je sais seulement ce que tu me racontes ici, pas qui tu es au-delà.').accepted,true);
  assert.equal(validateNucleusSpeech(plan,'Tu t’appelles Albert.').accepted,false);
+ assert.equal(validateNucleusSpeech(plan,'Tu es Albert, je te reconnais.').accepted,false);
  const withProfile=engine.planReply({text:'Tu sais qui je suis ?',soul,
   privateView:true,founderProfileNotes:[note]});
  assert.equal(validateNucleusSpeech(withProfile,'Tu t’appelles Camille, c’est le nom que tu m’as confié.').accepted,true);
