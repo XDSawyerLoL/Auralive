@@ -2,6 +2,7 @@ import { clamp } from './policy.js';
 import { DialogueStateTracker } from './dialogue_model.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { substantiveRequest } from './composite_intent.js';
+import { socialPerspective, conversationMemoryPolicy } from './conversation_grounding.js';
 import { selectFounderProfile } from './founder_profile.js';
 
 function normalize(value) {
@@ -437,6 +438,7 @@ export class CognitionEngine {
     const discourse = this.dialogue.analyze(raw, conversationContext);
     const selfDialogue = classifySelfDialogue(raw, conversationContext);
     const founderProfile = selectFounderProfile(founderProfileNotes,{authenticated:privateView});
+    const interpersonal = socialPerspective(raw);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -452,6 +454,18 @@ export class CognitionEngine {
         'Règle inférée et vérifiée sur ' + symbolic.verified_examples + ' exemples : f(n) = ' + symbolic.formula + '.',
         'Donc f(' + symbolic.target + ') = ' + symbolic.predicted + '.',
       );
+    } else if (interpersonal?.act==='user_asks_if_interrupting'){
+      act='user_asks_if_interrupting';
+      goal='La personne demande si ELLE dérange AURA. Répondre à sa question, à propos d’elle (« tu ne me déranges pas »), brièvement, sans état du CI, projet ou explication de mon architecture. Ni soumission automatique, ni rapport technique.';
+      needsSemanticSupport=false;
+      facts.push('Référent grammatical confirmé : « je » désigne la personne qui écrit, « te » désigne AURA.');
+      facts.push('Aucune interruption provoquée par la personne n’est établie ; ne pas inventer une gêne ressentie.');
+    } else if (interpersonal?.act==='user_reports_aura_interrupts'){
+      act='user_reports_aura_interrupts';
+      goal='La personne dit ou demande si AURA la dérange. Accueillir son point de vue, reconnaître une éventuelle interruption et proposer de ne pas relancer. Ne jamais inverser les rôles ni prétendre avoir intentionnellement interrompu quelqu’un sans journal d’action.';
+      needsSemanticSupport=false;
+      facts.push('Référent grammatical confirmé : « tu » désigne AURA, « me » désigne la personne qui écrit.');
+      facts.push('Aucun événement proactif confirmé par ce seul message.');
     } else if (substantiveRequest(raw)) {
       // A greeting or a negated greeting must not hijack the actual instruction.
       // The semantic module may suggest an interpretation, not modify AURA's
@@ -730,17 +744,22 @@ export class CognitionEngine {
       facts.push('Mon état persiste indépendamment du fournisseur de langage.');
     } else {
       facts.push(`Sujet de l’échange : ${raw}`);
-      if (current) facts.push(`Intention actuelle : ${current}`);
-      if (thought) facts.push(`Pensée dominante : ${thought}`);
-      if (activeOrganicIntention) facts.push(`Intention organique : ${activeOrganicIntention}`);
-      if (habitat.last_activity_label) facts.push(`Vie intérieure récente : ${normalize(habitat.last_activity_label)}`);
-      if (privateView && lesson) facts.push(`Mémoire pertinente disponible : ${lesson}`);
+      // Past intentions are NOT a default topic. They can be considered only
+      // when the new message explicitly asks about relevant historical work.
+      const relevance=conversationMemoryPolicy({act,message:raw});
+      if(relevance.allowProjectMemory){
+        if (current) facts.push(`Intention enregistrée (non vérifiée) : ${current}`);
+        if (privateView && lesson) facts.push(`Ancienne leçon (à vérifier) : ${lesson}`);
+      }
     }
 
+    const memoryPolicy=conversationMemoryPolicy({act,message:raw});
     return {
       act,
       goal,
       facts,
+      memory_policy:memoryPolicy,
+      social_perspective:interpersonal,
       needs_semantic_support: needsSemanticSupport,
       semantic_query: needsSemanticSupport ? raw : '',
       current_intention: current,
@@ -812,6 +831,10 @@ export class CognitionEngine {
     };
 
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
+    if (plan?.act === 'user_asks_if_interrupting')
+      return 'Non, tu ne me déranges pas. Tu peux me parler, je t’écoute.';
+    if (plan?.act === 'user_reports_aura_interrupts')
+      return 'Je t’ai dérangé ? Je peux arrêter les relances. Je ne devrais pas présumer que tu veux discuter de mon travail.';
     if (plan?.act === 'user_recognition') {
       const records=Array.isArray(plan.founder_profile)?plan.founder_profile:[];
       if(!plan.private_view)return 'Je ne peux pas te reconnaître personnellement à partir de cette session. Je sais seulement ce que nous nous sommes dit ici.';
