@@ -6,8 +6,8 @@ test('public chat receives safe operational activity instead of an empty agenda'
   const kernel = fs.readFileSync(new URL('../src/kernel.js', import.meta.url), 'utf8');
   assert.match(kernel, /async publicAgendaSnapshot\(\)/);
   assert.match(kernel, /async publicWorkItems\(limit = 5\)/);
-  assert.match(kernel, /privateView \? this\.workItems\(5\) : this\.publicWorkItems\(5\)/);
-  assert.match(kernel, /privateView \? this\.agendaSnapshot\(\) : this\.publicAgendaSnapshot\(\)/);
+  assert.match(kernel, /privateView\?this\.workItems\(5\):this\.publicWorkItems\(5\)/);
+  assert.match(kernel, /privateView\?this\.agendaSnapshot\(\):this\.publicAgendaSnapshot\(\)/);
   assert.match(kernel, /kind IN \('github','evolution','research'\)/);
 });
 

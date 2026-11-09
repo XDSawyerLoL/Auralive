@@ -34,6 +34,7 @@ import { EvolutionLab } from './evolution.js';
 import { ExpertBridge } from './expert_bridge.js';
 import { HorizonBridge } from './horizon.js';
 import { CognitiveKernel } from './kernel.js';
+import { CognitiveTraceLedger } from './cognitive_trace.js';
 import { knowledgeVault, toMarkdown, toJsonCanvas } from './knowledge_vault.js';
 import { RESOURCE_CATALOG, discoverResources } from './toolbox_resources.js';
 import { searchPublicResources } from './toolbox_research.js';
@@ -371,6 +372,7 @@ const capabilityScout = new CapabilityScout({
   fabric,
   evolution,
 });
+const cognitiveTrace = new CognitiveTraceLedger();
 const fallbackSoul = kernel.defaultSoul();
 
 const bootstrap = {
@@ -1384,6 +1386,10 @@ app.get('/api/brain/graph', async (request, reply) => {
     learned_identity: bootstrap.runtimeReady
       ? kernel.autogenesis.publicState(kernel.soulCache?.emergent_identity)
       : null,
+    inner_dialogue: bootstrap.runtimeReady
+      ? kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue)
+      : null,
+    atlas_v3:{available:true,stages:18,source:'instrumented-kernel-events',session_isolated:true},
     runtime_diagnostic: publicRuntimeDiagnostic(bootstrap, {
       gatewayOnly: process.env.AURA_GATEWAY_ONLY === 'true',
     }),
@@ -1771,6 +1777,84 @@ app.post('/api/kernel/operator', async (request, reply) => {
   return kernel.operate(task, risks);
 });
 
+function openCognitiveEventStream(request, reply, session, currentSnapshot) {
+  const raw = reply.raw;
+  let closed = false;
+  const send = (payload) => {
+    if (closed || raw.destroyed || raw.writableEnded) return;
+    try {
+      // A slow client must not accumulate unbounded response buffers.
+      // Browsers will reconnect; REST polling remains a safe fallback.
+      if (!raw.write('event: trace\ndata: ' + JSON.stringify(payload) + '\n\n')) {
+        cleanup();
+        raw.end();
+      }
+    } catch (_) { cleanup(); }
+  };
+  const unsubscribe = cognitiveTrace.subscribe(session, send);
+  if (!unsubscribe) {
+    return reply.code(429).send({ error: 'Limite de connexions de télémétrie atteinte' });
+  }
+  let heartbeat;
+  let lifetime;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
+    unsubscribe();
+    clearInterval(heartbeat);
+    clearTimeout(lifetime);
+  };
+  const inherited = reply.getHeaders();
+  reply.hijack();
+  raw.writeHead(200, {
+    ...inherited,
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'private, no-store, no-transform',
+    'X-Accel-Buffering': 'no',
+    Connection: 'keep-alive',
+  });
+  raw.once('close', cleanup);
+  raw.once('error', cleanup);
+  raw.write('retry: 5000\n\n');
+  send(currentSnapshot());
+  heartbeat = setInterval(() => {
+    if (!closed && !raw.destroyed) raw.write(': heartbeat\n\n');
+  }, 15000);
+  heartbeat.unref?.();
+  lifetime = setTimeout(() => {
+    cleanup();
+    if (!raw.destroyed && !raw.writableEnded) raw.end();
+  }, 120000);
+  lifetime.unref?.();
+}
+
+app.get('/api/cognition/events', async (request, reply) => {
+  const session = ensureChatSession(request, reply);
+  return openCognitiveEventStream(request, reply, session,
+    () => cognitiveTrace.snapshot(session));
+});
+
+app.get('/api/cognition/autonomy/events', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  return openCognitiveEventStream(request, reply, '__internal_autonomy__',
+    () => cognitiveTrace.snapshotAutonomy());
+});
+
+// The autonomous stream is founder-only: it may reveal operational rhythms.
+app.get('/api/cognition/autonomy', async (request, reply) => {
+  if (!requirePrivate(request, reply)) return;
+  reply.header('Cache-Control', 'private, no-store');
+  return cognitiveTrace.snapshotAutonomy(String(request.query?.id || '').slice(0, 64));
+});
+
+// A private-by-session read-only trace feed. No raw prompts, retrieved text or model internals.
+app.get('/api/cognition/trace', async (request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  const session = ensureChatSession(request, reply);
+  return cognitiveTrace.snapshot(session, String(request.query?.id || '').slice(0, 64));
+});
+
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
@@ -1787,12 +1871,20 @@ app.post('/api/chat', async (request, reply) => {
   if (!text) return reply.code(422).send({ error: 'Message vide' });
   const privateView = isPrivate(request);
   const chatSessionId = ensureChatSession(request, reply);
-  const response = await kernel.chat(
+  const traceId = cognitiveTrace.start(chatSessionId);
+  let response;
+  try {
+    response = await kernel.chat(
     text,
     String(request.body?.author || 'Utilisateur'),
     privateView,
     chatSessionId,
-  );
+    (stage,status,details)=>cognitiveTrace.mark(traceId,stage,status,details),
+    );
+  }catch(error){
+    cognitiveTrace.finish(traceId,'error');
+    throw error;
+  }
   const baseAnswer = String(response?.answer || '').trim();
   // Never append a curiosity prompt to an empty/unavailable model reply.
   // This distinguishes a real AI answer from a server diagnostic.
@@ -1802,8 +1894,11 @@ app.post('/api/chat', async (request, reply) => {
   const curiosityQuestion = String(curiosityItem?.question || '').trim();
   const answer = unavailable ? ''
     : curiosityQuestion ? `${baseAnswer}\n\n${curiosityQuestion}` : baseAnswer;
+  cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
+    trace_id:traceId,
+    trace:cognitiveTrace.snapshot(chatSessionId,traceId),
     ok: !unavailable,
     answer,
     response_kind: unavailable ? 'model-unavailable' : 'model-generated',

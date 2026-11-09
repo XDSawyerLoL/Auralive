@@ -1,4 +1,5 @@
 import {BRAIN_OPERATIONS_CSS} from './brain_operations_style.js';
+import { COGNITIVE_ATLAS_CSS, COGNITIVE_ATLAS_HTML } from './cognitive_atlas_ui.js';
 import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
 import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
 import {BRAIN_OPERATIONS_SCRIPT} from './brain_operations_runtime.js';
@@ -12,6 +13,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <title>AURA — Interface neuronale réelle</title>
 <style>__OPS_CSS__</style>
 <style>__REFERENCE_CSS__</style>
+<style>__ATLAS_CSS__</style>
 <style>__READABLE_CSS__</style>
 </head>
 <body>
@@ -31,6 +33,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   <nav class="scene-nav" aria-label="Accès aux espaces d’AURA">
     <button class="scene-active" data-focus="conversation-panel" type="button">Dialogue</button>
     <button data-focus="brain" type="button">Réseau</button>
+    <button data-focus="atlas-v3" type="button">Atlas v3 · 18 processus</button>
     <button data-focus="homeostasis-panel" type="button">État interne</button>
     <button data-focus="diagnostics-details" type="button">Historique et outils</button>
   </nav>
@@ -201,6 +204,12 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <p id="identityQuestion" class="identity-question">Question à examiner : —</p>
           <p id="identityEvidence" class="causal-footnote">Aucune personnalité humaine ou conscience n’est déduite des indices logiciels.</p>
         </section>
+        <section class="detail-card inner-voice-card" id="inner-dialogue-panel">
+          <div class="inline-head"><h3>Délibération intérieure</h3><span id="innerStatus" class="truth-chip">Non observée</span></div>
+          <p class="causal-evidence" id="innerFocus">Aucun arbitrage interne encore reçu du noyau.</p>
+          <div class="identity-dimensions" id="innerDriveScores"></div>
+          <p class="causal-footnote" id="innerScope">Évaluation fonctionnelle du logiciel, pas une voix ressentie ni un discours caché du modèle de langage.</p>
+        </section>
         <details class="side-details" id="module-proof-details">
           <summary>Module inspecté, trajet et outils</summary>
         <section class="owner" aria-label="Accès aux observations">
@@ -232,6 +241,10 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     </aside>
   </section>
 
+  <details class="atlas-details" id="atlas-v3">
+    <summary>Atlas Cognitif v3 · 18 opérations et chronologie vérifiées</summary>
+    ${COGNITIVE_ATLAS_HTML}
+  </details>
   <details class="diagnostics-details" id="diagnostics-details">
     <summary>Historique complet · flux, outils, mémoire et journal</summary>
   <section class="lower">
@@ -266,4 +279,5 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 .replace('__OPS_CSS__', BRAIN_OPERATIONS_CSS)
 .replace('__REFERENCE_CSS__', BRAIN_REFERENCE_THEME)
 .replace('__READABLE_CSS__', BRAIN_READABLE_CSS)
+.replace('__ATLAS_CSS__', COGNITIVE_ATLAS_CSS)
 .replace('__OPS_SCRIPT__', BRAIN_OPERATIONS_SCRIPT);

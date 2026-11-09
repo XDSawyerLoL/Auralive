@@ -7,6 +7,7 @@ import { ExpressionLayer } from './expression.js';
 import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { IdentityAutogenesis } from './identity_autogenesis.js';
+import { InnerDialogueEngine } from './inner_dialogue.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
@@ -100,6 +101,7 @@ export class CognitiveKernel {
     this.language = new LanguageFaculty({ ai, cognition: this.cognition, expression: this.expression, soul: () => this.soulCache });
     this.organism = new AuraOrganism();
     this.autogenesis = new IdentityAutogenesis();
+    this.innerDialogue = new InnerDialogueEngine();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
@@ -142,6 +144,7 @@ export class CognitiveKernel {
       },
       organism,
       emergent_identity: this.autogenesis.defaultState(),
+      inner_dialogue: null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -682,6 +685,14 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      // No artificial LLM utterances: re-evaluate competing functional drives
+      // from measured time and the present computation state only.
+      this.soulCache.inner_dialogue=this.innerDialogue.publicState(
+        this.innerDialogue.deliberate({
+          organism:idle.state,identity:this.soulCache.emergent_identity,
+          message:'',now:timestamp,
+        }),
+      );
       if (idle.activity !== 'presence' || idle.dream) {
         await this.recordOrganismEvent('idle-life', idle.activity_label || 'vie intérieure', {
           activity: idle.activity,
@@ -1112,7 +1123,13 @@ export class CognitiveKernel {
     };
   }
 
-  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '') {
+  async chat(text, author = 'Utilisateur', privateView = false, sessionId = '', onTrace = null) {
+    // Atlas v3 instruments actual operations only. This callback carries
+    // bounded measurements; it cannot observe hidden LLM internals.
+    const observe=(stage,status='done',details={})=>{
+      try { if(typeof onTrace==='function') onTrace(stage,status,details); }
+      catch { /* observing must never interrupt the kernel */ }
+    };
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
@@ -1132,6 +1149,7 @@ export class CognitiveKernel {
       });
 
     await brainHop('input','kernel','chat-received');
+    observe('input','running');
 
     await query(
       "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES(?,'user',?,?,?)",
@@ -1143,6 +1161,8 @@ export class CognitiveKernel {
       ],
     );
 
+    observe('input','done');
+    observe('homeostasis','running');
     // L'organisme reçoit l'interaction avant toute formulation.
     const pre = this.organism.beforeInteraction(
       this.organism.migrate(this.soulCache || {}),
@@ -1167,8 +1187,20 @@ export class CognitiveKernel {
     });
     await this.saveSoul();
     await brainHop('kernel','homeostasis','beforeInteraction');
+    observe('homeostasis','done',{
+      state_stability:Number(pre.state.stabilite),
+      state_clarity:Number(pre.state.clarte),
+      state_curiosity:Number(pre.state.curiosite),
+      state_confidence:Number(pre.state.confiance),
+      state_frustration:Number(pre.state.frustration),
+      state_engagement:Number(pre.state.engagement),
+      state_mood:pre.state.mood,
+      delta_stability:Number(pre.impact_delta?.stabilite||0),
+      delta_frustration:Number(pre.impact_delta?.frustration||0),
+    });
 
     // Le message devient ensuite un stimulus du noyau : organisme -> cognition -> expression.
+    observe('stimulus','running');
     await this.observeEvent(
       'aura.cloud.chat',
       privateView
@@ -1183,6 +1215,7 @@ export class CognitiveKernel {
       privateView ? 'cloud-private' : 'cloud-public',
     );
 
+    observe('stimulus','done');
     const privateSoul = privateView
       ? await this.soul({ privateView: true })
       : null;
@@ -1196,14 +1229,25 @@ export class CognitiveKernel {
           emergent_identity: this.autogenesis.publicState(this.soulCache.emergent_identity),
         };
 
+    observe('context','running');
+    const measuredLookup=(stage,fn,metric='')=>{
+      observe(stage,'running');
+      return Promise.resolve().then(fn).then(result=>{
+        observe(stage,'done',metric&&Array.isArray(result)?{[metric]:result.length}:{});
+        return result;
+      },error=>{observe(stage,'error');throw error;});
+    };
+    const skippedLookup=(stage,value)=>{
+      observe(stage,'skipped');return Promise.resolve(value);
+    };
     const [intentions, lessons, reflections, work, agenda, continuityReport, recentMessages, knowledgeNotes] = await Promise.all([
-      privateView ? this.intentions(6) : Promise.resolve([]),
-      privateView ? this.lessons(6) : Promise.resolve([]),
-      privateView ? this.reflections(4) : Promise.resolve([]),
-      privateView ? this.workItems(5) : this.publicWorkItems(5),
-      privateView ? this.agendaSnapshot() : this.publicAgendaSnapshot(),
-      privateView ? this.activitySinceLastConversation(conversationSession) : Promise.resolve({}),
-      query(
+      privateView ? measuredLookup('context_intentions',()=>this.intentions(6),'intentions') : skippedLookup('context_intentions',[]),
+      privateView ? measuredLookup('context_lessons',()=>this.lessons(6),'lessons') : skippedLookup('context_lessons',[]),
+      privateView ? measuredLookup('context_reflections',()=>this.reflections(4),'reflections') : skippedLookup('context_reflections',[]),
+      measuredLookup('context_work',()=>privateView?this.workItems(5):this.publicWorkItems(5),'work_items'),
+      measuredLookup('context_agenda',()=>privateView?this.agendaSnapshot():this.publicAgendaSnapshot()),
+      privateView ? measuredLookup('context_continuity',()=>this.activitySinceLastConversation(conversationSession)) : skippedLookup('context_continuity',{}),
+      measuredLookup('context_messages',()=>query(
         privateView
           ? `SELECT author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id IN ('private-founder','')
@@ -1212,11 +1256,16 @@ export class CognitiveKernel {
              WHERE session_id=?
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
-      ).catch(() => []),
-      privateView ? this.knowledge.search(content, { limit: 5 }).catch(() => []) : Promise.resolve([]),
+      ),'messages').catch(()=>[]),
+      privateView ? this.knowledge.search(content,{limit:5}).catch(()=>[]) : Promise.resolve([]),
     ]);
+    observe('context','done',{
+      messages:recentMessages.length,intentions:intentions.length,
+      lessons:lessons.length,reflections:reflections.length,work_items:work.length,
+    });
 
     await brainHop('homeostasis','memory','retrieval');
+    observe('decision','running');
     let plan = this.cognition.planReply({
       text: content,
       soul: privateView ? privateSoul : publicSoul,
@@ -1231,6 +1280,9 @@ export class CognitiveKernel {
     });
 
     await brainHop('memory','cognition','planReply');
+    observe('decision','done',{
+      decision_act:plan.act,semantic_requested:Boolean(plan.needs_semantic_support),
+    });
     if (plan.act==='self_exploration' && privateView) {
       // Founder can request a self-audit; asking alone does not increase
       // learned trait scores or prove that AURA has discovered anything.
@@ -1248,6 +1300,21 @@ export class CognitiveKernel {
     // These properties always originate in persisted kernel state, never from
     // the externally generated wording. Providers receive a read-only view.
     plan.self_model = this.autogenesis.publicState(this.soulCache.emergent_identity);
+    // Functional inner dialogue: multiple drives, bounded situational appraisal
+    // and a resolved response tone. No external model may author these drives.
+    const deliberation=this.innerDialogue.deliberate({
+      organism:this.organism.migrate(this.soulCache||{}),plan,
+      identity:this.soulCache.emergent_identity,message:content,
+    });
+    plan.inner_dialogue=this.innerDialogue.publicState(deliberation);
+    plan.response_tone=deliberation.tone;
+    this.soulCache.inner_dialogue=plan.inner_dialogue;
+    await this.trace('inner-appraisal',deliberation.situation,'',{
+      flow_id:brainFlowId,at:deliberation.at,
+      tone:deliberation.tone,selected_action:deliberation.selected_action,
+      uncertainty:deliberation.uncertainty,resource_pressure:deliberation.resource_pressure,
+      origin:'kernel-functional-appraisal',
+    });
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
       sessionId: conversationSession, discourse: plan.discourse, userText: content,
@@ -1284,11 +1351,14 @@ export class CognitiveKernel {
     // transformer le Web en mémoire de travail externe, puis passer par
     // la boucle de corroboration/contradiction du Web Substrate.
     let externalResearch = null;
+    let researchAttempted = false;
     if (
       plan.needs_semantic_support
       && this.webSubstrate?.enabled
       && requiresExternalKnowledge(content)
     ) {
+      researchAttempted = true;
+      observe('research','running');
       try {
         if (this.fabric?.enabled !== false && this.fabric?.registry?.has('web.research')) {
           const routed = await this.fabric.execute(
@@ -1312,6 +1382,10 @@ export class CognitiveKernel {
           facts: [...(plan.facts || [])],
           external_research_summary: String(externalResearch?.conclusion || '').slice(0, 5000),
         };
+        observe('research','done',{
+          research_evidence:Number(externalResearch?.evidence_count||0),
+          confidence:Number(externalResearch?.confidence||0),
+        });
         await brainHop('cognition','web','web-research');
         await this.trace(
           'web-research',
@@ -1325,6 +1399,7 @@ export class CognitiveKernel {
           },
         );
       } catch (error) {
+        observe('research','error');
         plan = {
           ...plan,
           external_evidence_required: true,
@@ -1347,6 +1422,7 @@ export class CognitiveKernel {
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
     if (plan.needs_semantic_support) {
+      observe('semantic','running');
       const support = await this.expression.semanticSupport(
         plan,
         await this.contextForAi(privateView, content),
@@ -1356,9 +1432,13 @@ export class CognitiveKernel {
         },
       );
       plan = this.cognition.integrateSemanticSupport(plan, support);
+      observe('semantic','done',{semantic_available:Boolean(support)});
       await brainHop(externalResearch?'web':'cognition','semantic','semantic-support');
     }
 
+    if(!plan.needs_semantic_support)observe('semantic','skipped');
+    if(!researchAttempted)observe('research','skipped');
+    observe('expression','running');
     await brainHop(plan.semantic_support?'semantic':'cognition','language','request-formulation','attempted');
     // This hop means a real organism-derived affect/relationship signal is
     // included in the French faculty's input. It does NOT imply a response
@@ -1368,6 +1448,11 @@ export class CognitiveKernel {
     const answer = await this.expression.verbalize(plan, {
       maxTokens: Math.max(180, Math.min(Number(inference.token_budget || 650), 900)),
       taskRole: 'conversation',
+    });
+    observe('expression',answer?'done':'error',{
+      answer_chars:answer?answer.length:0,
+      language_mode:this.expression.lastMode,
+      language_backend:this.expression.language.lastBackend||'unavailable',
     });
     const languageUnavailable = !answer
       && this.expression.lastMode === 'natural-language-unavailable';
@@ -1380,6 +1465,7 @@ export class CognitiveKernel {
     }
     await brainHop(providerNode||'language','coherence','response-validation',
       answer?'ok':'unavailable',languageProvider);
+    observe('homeostasis_post','running');
     const post = this.organism.afterReply(
       this.organism.migrate(this.soulCache || {}),
       answer,
@@ -1393,7 +1479,16 @@ export class CognitiveKernel {
       post_delta: post.post_delta || {},
     });
     await this.saveSoul();
-
+    observe('homeostasis_post','done',{
+      state_stability:Number(post.state.stabilite),
+      state_clarity:Number(post.state.clarte),
+      state_curiosity:Number(post.state.curiosite),
+      state_confidence:Number(post.state.confiance),
+      state_frustration:Number(post.state.frustration),
+      state_engagement:Number(post.state.engagement),
+      state_mood:post.state.mood,
+    });
+    observe('persistence','running');
     if (answer) {
       await query(
         "INSERT INTO aura_cloud_messages(author,role,session_id,content,created_at) VALUES('AURA','assistant',?,?,?)",
@@ -1401,6 +1496,7 @@ export class CognitiveKernel {
       );
     }
     if(answer)await brainHop('coherence','output','reply-committed','ok',languageProvider);
+    observe('persistence','done');
     // Correlate the conversation's actual input/output states with its recorded
     // hops; no private content, no synthetic success and no model chain of thought.
     await this.trace('brain-causal','verified-causal-receipt','',{
@@ -1439,6 +1535,7 @@ export class CognitiveKernel {
       nucleus_verbalization_code:
         this.expression.language.lastNucleusContract?.code || 'not-checked',
       language_provider: this.expression.language.lastBackend || '',
+      inner_dialogue:plan.inner_dialogue,
       semantic_support_used: Boolean(plan.semantic_support),
       activity_evidence: {
         evidence_status: plan.activity_evidence?.evidence_status || 'unverified',
