@@ -12,6 +12,7 @@ import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicit
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
+import { SelfInquiryEngine } from './self_inquiry.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
@@ -107,6 +108,7 @@ export class CognitiveKernel {
     this.autogenesis = new IdentityAutogenesis();
     this.innerDialogue = new InnerDialogueEngine();
     this.livedExperience = new LivedExperience();
+    this.selfInquiry = new SelfInquiryEngine();
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
@@ -151,6 +153,7 @@ export class CognitiveKernel {
       emergent_identity: this.autogenesis.defaultState(),
       inner_dialogue: null,
       lived_experience: this.livedExperience.defaultState(),
+      epistemic_self: this.selfInquiry.defaultState(),
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -251,6 +254,7 @@ export class CognitiveKernel {
     this.soulCache.native_learning = this.nativeLearning.migrate(this.soulCache.native_learning);
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
+    this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -1378,6 +1382,79 @@ export class CognitiveKernel {
     if(advice.changed && advice.strategy==='attentive'){
       plan.goal+=' Tenir compte explicitement des nuances de cet échange et ne pas imposer une lecture positive.';
     }
+    // A self-question must lead to a genuine verification, not the fixed
+    // definition or the unaudited prose of a language provider.
+    if(plan.act==='self_exploration'){
+      if(privateView){
+        // The external semantic engine may help select WHAT to investigate,
+        // but cannot assert the outcome or create a new identity claim.
+        let proposal='';
+        if(this.ai?.enabled){
+          proposal=await this.expression.semanticSupport({
+            needs_semantic_support:true,
+            semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval ou PROBE:state_persistence. Question : '+content.slice(0,300),
+          },'',{maxTokens:95,taskRole:'conversation'}).catch(()=>'');
+        }
+        const probe=this.selfInquiry.chooseProbe(this.soulCache.epistemic_self,{
+          proposal,topic:content,privateView:true,
+        });
+        let outcome='inconclusive';
+        if(probe==='conversation_retrieval'){
+          try{
+            // Only the count, not the private text, is captured as evidence.
+            // The current message itself cannot prove recall of an earlier one.
+            const saved=await one("SELECT COUNT(*) AS total FROM aura_cloud_messages WHERE session_id='private-founder' AND role IN ('user','assistant')");
+            outcome=Number(saved?.total||0)>1?'supported':'inconclusive';
+          }catch{outcome='counterexample';}
+        }else if(probe==='state_persistence'){
+          try{
+            const row=await one('SELECT state FROM aura_soul_state WHERE id=1');
+            const stored=row?.state?JSON.parse(row.state):null;
+            const current=Number(this.soulCache.emergent_identity?.revision||0);
+            outcome=stored&&Number(stored.emergent_identity?.revision||0)===current
+              ?'supported':'counterexample';
+          }catch{outcome='counterexample';}
+        }
+        this.soulCache.epistemic_self=this.selfInquiry.observe(this.soulCache.epistemic_self,{
+          probe,outcome,source:'kernel-probe',privateView:true,
+        });
+        plan.self_inquiry_report=this.selfInquiry.summary(this.soulCache.epistemic_self,{
+          probe,privateView:true,
+        });
+        plan.goal='Mener une enquête sur une hypothèse de mon propre fonctionnement, rapporter une observation limitée, puis distinguer ce que j’avais supposé de ce que je peux vérifier. Ne pas réciter une définition de moi.';
+        plan.facts=[
+          'Hypothèse à l’origine configurée, sans conclusion imposée : '+plan.self_inquiry_report.claim,
+          'Observation locale : '+plan.self_inquiry_report.observation,
+          'Statut révisable : '+plan.self_inquiry_report.status,
+          'Une vérification du noyau ne constitue pas une expérience subjective.',
+        ];
+        plan.needs_semantic_support=false;
+        await this.trace('self-inquiry','bounded-functional-probe','',{
+          flow_id:brainFlowId,at:now(),probe,outcome,
+          revision:this.soulCache.epistemic_self.revision,
+          provenance:'kernel-probe-no-private-text',
+          external_model_selected_probe:!/^$/.test(proposal)&&/PROBE\s*[:=]/i.test(proposal),
+        });
+        await this.saveSoul();
+      }else{
+        plan.self_inquiry_report={
+          status:'unavailable',observation:'Cette session ne donne pas accès à mes souvenirs fondateurs.',
+          source:'privacy-boundary',
+        };
+        plan.facts=['Je peux examiner des mécanismes accessibles publiquement, mais pas m’attribuer des souvenirs privés.',
+          'Cette session ne permet pas de vérifier des éléments privés de mon histoire.'];
+      }
+    }
+    // A local counterexample must alter the next relevant decision, not merely
+    // decorate its response. This is a bounded verification preference only;
+    // it cannot authorize actions or assert that the world changed.
+    const metacognitive=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
+    plan.metacognitive_guidance=metacognitive;
+    if(metacognitive.verify){
+      plan.metacognitive_action='verify';
+      plan.goal+=' Ne présente pas la mémoire comme certaine tant que cette limite n’a pas été revérifiée.';
+      plan.facts=[...(plan.facts||[]),metacognitive.limitation];
+    }
     // These properties always originate in persisted kernel state, never from
     // the externally generated wording. Providers receive a read-only view.
     plan.self_model = this.autogenesis.publicState(this.soulCache.emergent_identity);
@@ -1626,6 +1703,9 @@ export class CognitiveKernel {
         this.expression.language.lastNucleusContract?.code || 'not-checked',
       language_provider: this.expression.language.lastBackend || '',
       inner_dialogue:plan.inner_dialogue,
+      self_inquiry:plan.self_inquiry_report||null,
+      epistemic_self:this.selfInquiry.publicState(this.soulCache.epistemic_self),
+      metacognitive_guidance:plan.metacognitive_guidance,
       experience_guidance:plan.experience_guidance,
       lived_experience:this.livedExperience.publicState(this.soulCache.lived_experience,{includeEvidence:privateView}),
       semantic_support_used: Boolean(plan.semantic_support),
