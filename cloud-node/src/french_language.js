@@ -299,16 +299,17 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   }
   if(plan.act==='self_exploration'&&plan.self_inquiry_report){
     const report=plan.self_inquiry_report;
-    if(/\b(?:je suis AURA, le noyau|mon champ decision_origin|je poss[eè]de une conscience)\b/i.test(answer))
+    const folded=answer.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    if(/\b(?:je suis aura, le noyau|mon champ decision_origin|je possede une conscience)\b/.test(folded))
       return {accepted:false,code:'scripted-self-definition'};
     if(report.status==='contradicted'&&
-       !/\b(?:[eé]chec|[eé]chou[eé]|pas (?:pu|confirm[eé]|retrouv[eé]|v[eé]rifi[eé])|incertain|erreur|contredit|non confirm[eé])\b/i.test(answer))
+       !/\b(?:echec|echoue|impossible|pas (?:pu|confirme|retrouve|verifie)|incertain|erreur|contredit|non confirme)\b/.test(folded))
       return {accepted:false,code:'self-counterexample-hidden'};
     if(report.probe==='conversation_retrieval'&&
-       !/\b(?:message|conversation|souvenir|[eé]change|historique)\b/i.test(answer))
+       !/\b(?:message|conversation|souvenir|echange|historique)\w*/.test(folded))
       return {accepted:false,code:'self-probe-not-mentioned'};
     if(report.probe==='state_persistence'&&
-       !/\b(?:[eé]tat|sauvegarde|stockage|persist|enregistr|m[eé]moire)\w*/i.test(answer))
+       !/\b(?:etat|sauvegarde|stockage|persist|enregistr|memoire)\w*/.test(folded))
       return {accepted:false,code:'self-probe-not-mentioned'};
   }
   if (/présence silencieuse|état d.attente opérationnelle/i.test(answer))
