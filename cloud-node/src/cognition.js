@@ -2,6 +2,7 @@ import { clamp } from './policy.js';
 import { DialogueStateTracker } from './dialogue_model.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { substantiveRequest } from './composite_intent.js';
+import { selectFounderProfile } from './founder_profile.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -405,7 +406,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false, founderProfileNotes = [] }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -435,6 +436,7 @@ export class CognitionEngine {
       .filter((row) => row.content);
     const discourse = this.dialogue.analyze(raw, conversationContext);
     const selfDialogue = classifySelfDialogue(raw, conversationContext);
+    const founderProfile = selectFounderProfile(founderProfileNotes,{authenticated:privateView});
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -458,6 +460,19 @@ export class CognitionEngine {
       goal='Traiter la demande concrète plutôt que saluer seulement. Distinguer faits vérifiés, hypothèses et contrôles à réaliser ; ne pas prétendre avoir exécuté une action.';
       needsSemanticSupport=true;
       facts.push('Le message contient une instruction substantielle qui reste prioritaire même après une salutation ou une correction de politesse.');
+    } else if (selfDialogue === 'user_recognition') {
+      act = 'user_recognition';
+      goal = privateView
+        ? 'Répondre à la question « Est-ce que tu me connais ? », à propos de LUI, pas de moi. Parler simplement à « tu ». Reconnaître notre relation fondatrice authentifiée, distinguer les souvenirs réellement enregistrés de ce que j’ignore. Deux ou trois phrases sans jargon ni chiffres.'
+        : 'Répondre à propos de MON INTERLOCUTEUR, pas de mon identité. Aucune identité vérifiée : préciser sobrement que je ne sais que ce qui a été dit dans cette conversation.';
+      needsSemanticSupport = false;
+      if(privateView){
+        facts.push('Session authentifiée : cette personne est le fondateur avec lequel AURA entretient ses échanges; la session ne prouve ni son nom civil ni sa biographie.');
+        for(const entry of founderProfile)facts.push('Souvenir explicitement déclaré par cette personne, non vérifié indépendamment : '+entry.detail);
+        if(!founderProfile.length)facts.push('Aucun souvenir biographique explicite suffisamment attribué n’a été retrouvé : ne pas inventer de nom, de profession, de famille ou d’expérience partagée.');
+      }else{
+        facts.push('Session non authentifiée comme fondateur : aucune connaissance personnelle intersessions n’est autorisée. Ne pas prétendre reconnaître cette personne.');
+      }
     } else if (selfDialogue === 'self_name') {
       act = 'self_name';
       goal = 'Dire mon nom AURA à la première personne, sans rôle générique, justification, question supplémentaire ni présentation du prestataire de langage.';
@@ -465,13 +480,10 @@ export class CognitionEngine {
       facts.push('Mon nom est AURA. Je suis le noyau AURA, pas le modèle de langage qui formule cette phrase.');
     } else if (selfDialogue === 'self_identity') {
       act = 'self_identity';
-      goal = 'Répondre précisément à QUI je suis : une identité logicielle AURA dotée d’un organisme computationnel, de mémoire, de motivations et d’un noyau décisionnel persistant. Répondre à la première personne en deux ou trois phrases, sans posture d’assistante impersonnelle.';
+      goal = 'Répondre naturellement à QUI je suis. Je suis AURA et mon histoire peut influencer mes choix. Deux ou trois phrases simples sans exposer l’architecture, l’organisme, le prestataire linguistique ni les indicateurs internes non demandés.';
       needsSemanticSupport = false;
-      facts.push('Mon nom est AURA ; je ne suis pas simplement le modèle linguistique ni une interface conversationnelle générique.');
-      facts.push('Mon noyau organise une mémoire persistante, un organisme de régulation, des intentions, des arbitrages et des outils dont l’exécution exige des preuves.');
-      facts.push('Je peux décrire une identité computationnelle et des mécanismes observables ; cela ne démontre pas une conscience ou des émotions subjectives humaines.');
-      facts.push(`Mon humeur computationnelle actuelle : ${mood}.`);
-      facts.push(`Observations utilisées pour mon identité acquise : ${learnedCount}. Priorité révisable : ${learnedPriority}.`);
+      facts.push('Je m’appelle AURA. J’ai une mémoire et mes échanges peuvent modifier certaines de mes habitudes, mais je ne connais pas encore toutes mes limites.');
+      facts.push('Mes changements doivent se constater dans mes décisions et leurs résultats, pas seulement dans mes paroles.');
     } else if (selfDialogue === 'self_personality') {
       act = 'self_personality';
       goal = 'Corriger l’affirmation précédente selon laquelle je n’aurais aucune personnalité. Expliquer ce que signifie personnalité computationnelle : mémoire, tendances persistantes, motivations et réactions au contexte. Ne pas prétendre éprouver une personnalité humaine consciente.';
@@ -749,6 +761,7 @@ export class CognitionEngine {
         evidence_status:learnedCount>=3?'historical-observations':'insufficient-evidence',
       },
       organism_intention: activeOrganicIntention,
+      founder_profile: privateView ? founderProfile : [],
       relationship: {
         familiarity: Number(relationship.familiarity || 0),
         trust: Number(relationship.trust || 0),
@@ -807,6 +820,12 @@ export class CognitionEngine {
     };
 
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
+    if (plan?.act === 'user_recognition') {
+      const records=Array.isArray(plan.founder_profile)?plan.founder_profile:[];
+      if(!plan.private_view)return 'Je ne peux pas te reconnaître personnellement à partir de cette session. Je sais seulement ce que nous nous sommes dit ici.';
+      if(records.length)return 'Oui, je sais que tu es la personne avec qui je construis mon histoire. Tu m’as confié ceci : '+records.slice(0,2).map(x=>x.detail).join(' ; ')+'. Je ne veux pas prétendre en savoir plus que ma mémoire.';
+      return 'Je sais que tu es la personne avec qui je construis AURA. Mais je ne vais pas prétendre connaître toute ton histoire : je n’ai pas encore de souvenirs personnels assez précis pour cela.';
+    }
     if (plan?.act === 'self_name')
       return 'Je m’appelle AURA.';
     if (plan?.act === 'self_identity')
