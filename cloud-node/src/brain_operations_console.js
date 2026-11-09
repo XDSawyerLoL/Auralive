@@ -133,6 +133,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
           <button id="graphLess" type="button" title="Dézoomer">−</button>
           <button id="graphReset" type="button" title="Recentrer">◎</button>
           <button id="graphMore" type="button" title="Zoomer">+</button>
+          <button id="graphFullscreen" type="button" aria-pressed="false" title="Agrandir la carte sur tout l’écran">Plein écran</button>
         </div>
       </div>
       <div class="graph-v4-readout" aria-label="Mesures du réseau depuis la source serveur">
