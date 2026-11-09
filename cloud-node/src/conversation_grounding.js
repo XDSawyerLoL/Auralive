@@ -7,6 +7,8 @@ const topicStop=new Set('je tu il elle nous vous ils elles mon ma mes ton ta tes
 const tokenize=s=>new Set((fold(s).match(/[a-z0-9]{4,}/g)||[]).filter(x=>!topicStop.has(x)));
 export function socialPerspective(text=''){
  const q=fold(text).replace(/[?!.,:;'-]+/g,' ').replace(/\s+/g,' ').trim();
+ if(/^(?:et sinon|sinon|et autrement|a part ca|et a part ca|autre chose|changeons de sujet)$/.test(q))
+   return {act:'topic_shift',actor:'user',target:'conversation',certainty:'explicit-topic-shift'};
  // First-person subject asks if they are bothering AURA.
  if(/^(?:(?:est ce que|dis moi|dit moi)\s+)?(?:je|j)\s+(?:te|t)\s+(?:derange|embete|gene|interromps)(?:\s+(?:un peu|trop|la|encore|pas))?$/.test(q)||
     /^(?:est ce que )?(?:ca|cela) te derange(?:\s+(?:que je (?:te parle|pose une question)))?$/.test(q)||
@@ -26,6 +28,8 @@ export const CURRENT_TURN_ONLY=new Set([
 ]);
 export function conversationMemoryPolicy({act='',message='',facts=[]}={}){
  if(CURRENT_TURN_ONLY.has(act))return {scope:'current-turn',allowProjectMemory:false,reason:'social-turn'};
+ if(['report_current_activity','clarify_blocker_evidence','report_continuity_history','report_next_step'].includes(act))
+   return {scope:'relevant-history',allowProjectMemory:true,reason:'explicit-activity-intent'};
  const q=fold(message);
  // Explicit requests for continuity may use historical context; still
  // require cited dates and evidence of execution.
