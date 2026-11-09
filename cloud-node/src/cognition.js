@@ -759,6 +759,19 @@ export class CognitionEngine {
     }
 
     const memoryPolicy=conversationMemoryPolicy({act,message:raw});
+    // A short acknowledgment or "c'est-à-dire" can legitimately refer to
+    // the immediately preceding assistant reply. Do not confuse that with a
+    // random old agenda. The reply must literally mention the agenda topic.
+    if(['acknowledge_context','clarify_previous','resolve_reference_followup'].includes(act)){
+      const previous=normalize(previousAssistantMessage(conversationContext)?.content||'');
+      const activeTopic=normalize(agenda?.current||currentWork);
+      if(activeTopic.length>=7&&previous.toLocaleLowerCase('fr-FR')
+        .includes(activeTopic.toLocaleLowerCase('fr-FR'))){
+        memoryPolicy.scope='recent-turn';
+        memoryPolicy.allowProjectMemory=true;
+        memoryPolicy.reason='last-assistant-turn-mentions-topic';
+      }
+    }
     // Some older discourse routines populated facts from agenda and stale CI
     // before memory relevance was checked. Never allow these into a purely
     // social turn, regardless of which intent branch supplied them.
