@@ -306,4 +306,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
  .graph-caption{font-size:9px}
  .graph-panel.graph-expanded{inset:3px;height:calc(100dvh - 6px)!important;border-radius:8px}
 }
+
+/* Connectome v4 small-screen controls: no collapsed 37px domain selector */
+@media(max-width:599px){
+ #graphLens{min-width:137px!important;width:137px!important;flex:0 0 137px;max-width:100%}
+ .graph-controls{justify-content:flex-start}
+ .graph-panel{height:665px;min-height:620px}
+ .graph-canvas{min-height:320px}
+ .graph-hud{left:8px;right:8px;top:8px;bottom:8px;display:block}
+ .graph-hud #graphClock{max-width:85%;display:block}
+ .graph-hud #graphHover{position:absolute;bottom:0;right:0;max-width:68%}
+}
 `;

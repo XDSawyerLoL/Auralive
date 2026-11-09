@@ -4,7 +4,7 @@ const V4_COLORS={conversation:'247,194,135',core:'176,147,249',memory:'210,143,2
 function v4Path(a,b,c){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(c.x,c.y,b.x,b.y);}
 function v4Point(a,b,c,t){const u=1-t;return {x:u*u*a.x+2*u*t*c.x+t*t*b.x,y:u*u*a.y+2*u*t*c.y+t*t*b.y};}
 function v4Curve(a,b,index){const dx=b.x-a.x,dy=b.y-a.y,mag=Math.max(1,Math.hypot(dx,dy));const bend=Math.min(25*scale,mag*.13)*((index%3)-1);return{x:(a.x+b.x)*.5-dy/mag*bend,y:(a.y+b.y)*.5+dx/mag*bend};}
-function v4FitText(text,max=22){return text.length>max?text.slice(0,max-1)+'…':text;}
+function v4FitText(text,max=27){return text.length>max?text.slice(0,max-1)+'…':text;}
 function v4Round(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r);}
 function v4Counters(){
  const d=state.data,edges=d?.edges||[],nodes=d?.nodes||[];
@@ -135,6 +135,9 @@ function draw(){
    ctx.font='600 10px system-ui';const w=ctx.measureText(label).width+20;
    const x=Math.max(7,Math.min(canvasW-w-7,Math.min(...pp.map(p=>p.x))-14));
    const y=Math.max(42,Math.min(canvasH-30,Math.min(...pp.map(p=>p.y))-33));
+   // Region headings are metadata; never overlap a prominent module label.
+   const prominent=nodes.filter(n=>ANCHORS.has(n.id)).map(n=>project(n.id));
+   if(prominent.some(p=>p.x>=x-18&&p.x<=x+w+18&&p.y>=y-26&&p.y<=y+35))continue;
    if(occupied.some(b=>x<b.x+b.w+7&&x+w+7>b.x&&y<b.y+30&&y+30>b.y))continue;
    occupied.push({x,y,w});
    ctx.fillStyle='rgba(6,15,29,.85)';v4Round(x,y,w,24,8);ctx.fill();
