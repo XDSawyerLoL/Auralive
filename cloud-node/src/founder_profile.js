@@ -3,7 +3,7 @@
 // An identity note is a user declaration, NOT independent identification.
 const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLowerCase().replace(/[’']/g,"'").trim();
-const personal=/\b(?:profil|identite|presentation|qui je suis|a propos de moi|mon nom|mon prenom|fondateur|fondatrice)\b/;
+const personal=/\b(?:profil personnel|profil du fondateur|profil fondateur|profil utilisateur|identite du fondateur|identite de l utilisateur|presentation du fondateur|biographie du fondateur|qui je suis|a propos de moi|mon nom|mon prenom)\b/;
 const secret=/\b(?:mot de passe|password|secret|token|cle api|api key|carte bancaire|numero de carte|code pin)\b/;
 const admissibleSource=/^(?:fondateur(?::|\/|-)|founder(?::|\/|-)|utilisateur(?::|\/|-)|user(?::|\/|-))/i;
 const redact=s=>String(s||'').replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'[adresse privée]')
