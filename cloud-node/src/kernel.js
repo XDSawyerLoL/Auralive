@@ -8,7 +8,7 @@ import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { InnerDialogueEngine } from './inner_dialogue.js';
-import { LivedExperience, contextForExperience, isExplicitCorrection } from './lived_experience.js';
+import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { groundAgenda } from './activity_truth.js';
@@ -1305,15 +1305,21 @@ export class CognitiveKernel {
     // Relational feedback is applied to the PREVIOUS authenticated interaction,
     // not to a free-floating global metric. A reported correction is not a
     // validated claim about the world or evidence that an alternative works.
-    if(privateView && (plan.discourse?.move==='correction'||isExplicitCorrection(content))){
+    const isCorrection=plan.discourse?.move==='correction'||isExplicitCorrection(content);
+    const isApproval=!isCorrection&&isExplicitApproval(content);
+    if(privateView&&(isCorrection||isApproval)){
       const before=this.livedExperience.migrate(this.soulCache.lived_experience);
-      const after=this.livedExperience.observeFounderCorrection(before);
+      const after=isCorrection
+        ?this.livedExperience.observeFounderCorrection(before)
+        :this.livedExperience.observeFounderApproval(before);
       this.soulCache.lived_experience=after;
       if(after.revision>before.revision){
-        await this.trace('lived-learning','correction-associated','',{
+        await this.trace('lived-learning',
+          isCorrection?'correction-associated':'approval-associated','',{
           flow_id:brainFlowId,at:now(),revision:after.revision,
           source:'authenticated-founder-feedback',
-          evidence_kind:'reported-correction-not-verified-outcome',
+          evidence_kind:isCorrection?'reported-correction':'reported-approval',
+          external_verification:false,
         });
         await this.saveSoul();
       }
