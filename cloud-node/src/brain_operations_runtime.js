@@ -185,7 +185,9 @@ function syncTraceConsole(){
  select.value=selectedId;
  const p=replayPosition(),step=p.steps[p.index],count=p.steps.length;
  const has=count>0;
- for(const id of ['tracePlay','tracePrev','traceNext','traceScrub'])$(id).disabled=!has;
+ for(const id of ['tracePrev','traceNext','traceScrub'])$(id).disabled=!has;
+ // Respect reduced-motion: keep manual stepping and scrubbing, no autoplay.
+ $('tracePlay').disabled=!has||reduced;
  $('traceScrub').max=String(Math.max(0,count-1));
  $('traceScrub').value=String(p.index);
  $('tracePlay').textContent=p.replaying?'Ⅱ Pause':'▶ Revoir';
