@@ -147,12 +147,40 @@ export class AuraOrganism {
   }
 
   valence(text) {
-    const q = clean(text).toLowerCase();
-    const pos = ['merci','bravo','super','bien','heureux','contente','content','aime','génial','genial','parfait','réussi','reussi']
-      .filter((x)=>q.includes(x)).length;
-    const neg = ['erreur','bug','échec','echec','peur','danger','triste','colère','colere','mauvais','cassé','casse','perdu','problème','probleme','inquiet','menace']
-      .filter((x)=>q.includes(x)).length;
-    return pos > neg ? 'positive' : neg > pos ? 'negative' : 'neutre';
+    // Lexical fallback, NOT a semantic analysis. Treat whole French words and
+    // local negation scopes; never find "heureux" inside "malheureux".
+    const q=clean(text).normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[’']/g,' ');
+    const tokens=q.match(/[a-z]+/g)||[];
+    if(!tokens.length)return 'neutre';
+    const positive=new Set(['merci','bravo','super','bien','heureux','heureuse','content',
+      'contente','contents','aime','adore','genial','parfait','reussi','reussie',
+      'satisfait','satisfaite','excellent','agreable','ravi','ravie']);
+    const negative=new Set(['malheureux','malheureuse','triste','tristes','erreur','erreurs',
+      'bug','bugs','echec','echoue','echouee','peur','angoisse','anxieux','anxieuse',
+      'danger','colere','mauvais','mauvaise','casse','cassee','perdu','perdue',
+      'probleme','problemes','inquiet','inquiete','menace','decu','decue',
+      'mal','stress','stresse','stressante','souffre','souffrance','deprime','deprimee',
+      'fatigue','epuise','epuisee','horrible','nul','nulle']);
+    let good=0,bad=0;
+    for(let i=0;i<tokens.length;i++){
+      const word=tokens[i];
+      if(!positive.has(word)&&!negative.has(word))continue;
+      const prior=tokens.slice(Math.max(0,i-5),i);
+      // "pas" and "jamais" are the operative negators; the preceding "ne"
+      // is not sufficient on its own. "je ne vais pas bien" is negative.
+      const negated=prior.includes('pas')||prior.includes('jamais')||prior.includes('plus')
+        ||prior.includes('aucun')||prior.includes('aucune');
+      if(positive.has(word)){if(negated)bad+=2;else good+=1;}
+      else if(!negated)bad+=1;
+    }
+    // Fixed idioms containing no polar token, and euphemisms that cannot be
+    // evaluated by a bare word counter.
+    if(/\b(?:bof|pas terrible|ca ne va pas|je ne vais pas bien|je vais pas bien|ca va mal|je vais mal|a bout)\b/.test(q))bad+=2;
+    if(/\b(?:pas mal|sans probleme)\b/.test(q)){good+=1;bad=Math.max(0,bad-1);}
+    if(bad>good)return 'negative';
+    if(good>bad)return 'positive';
+    return 'neutre';
   }
 
   noise(state, label) {
@@ -359,14 +387,16 @@ export class AuraOrganism {
 
   afterReply(input, answer, success = true) {
     const state = structuredClone(input);
-    const delta = success
-      ? {clarte:.010,stabilite:.008,risque_assistante:-.008,satisfaction:.006,engagement:.003,agency:.002,frustration:-.004}
-      : {clarte:-.020,stabilite:-.018,risque_assistante:.015,besoin_de_silence:.010,satisfaction:-.012,frustration:.016,confiance:-.006};
+    // A fluent answer is NOT proof of correctness or successful execution.
+    // Reward and confidence require separate verified action outcomes.
+    const delta = success ? {}
+      : {clarte:-.020,stabilite:-.018,risque_assistante:.015,
+         besoin_de_silence:.010,satisfaction:-.012,frustration:.016,confiance:-.006};
     this.apply(state,delta);
     this.regulate(state, success ? 'reply_success' : 'reply_failure', 30);
     state.last_reply=clean(answer).slice(0,1000);
     return {
-      state:this.recompute(state,success?'expression cohérente':'expression dégradée'),
+      state:this.recompute(state,success?'texte généré, qualité non vérifiée':'expression dégradée'),
       post_delta:delta,
     };
   }
