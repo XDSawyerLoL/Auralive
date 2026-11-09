@@ -155,6 +155,35 @@ test('legacy inflated autobiography is corrected without destroying history',()=
  assert.equal(migrated.counters.autonomous_reflections,40);
 });
 
+test('contextual corrections can require clarification, changing actual language tone',()=>{
+ let learned=learner.defaultState();
+ for(let i=0;i<2;i++){
+  learned=learner.observe(learned,{context:'dialogue_general',strategy:'respond',
+   source:'founder-correction',privateFounder:true,result:'failure',at:time});
+ }
+ const advice=learner.select(learned,'dialogue_general');
+ assert.equal(advice.changed,true);
+ assert.equal(advice.strategy,'clarify');
+ const engine=new InnerDialogueEngine();
+ const plan={act:'respond',learned_strategy:advice.strategy,
+  experience_guidance:{changed_by_history:true}};
+ const after=engine.deliberate({organism,message:'Quelle direction prendre ?',plan,now:time});
+ assert.equal(after.selected_action,'clarify');
+ assert.equal(after.tone,'attentive');
+ const before=engine.deliberate({organism,message:'Quelle direction prendre ?',plan:{act:'respond'},now:time});
+ assert.notEqual(after.selected_action,before.selected_action);
+});
+
+test('the cockpit can inspect only authenticated contextual evidence',()=>{
+ const html=readFileSync(new URL('../src/brain_operations_console.js',import.meta.url),'utf8');
+ const runtime=readFileSync(new URL('../src/brain_operations_runtime.js',import.meta.url),'utf8');
+ assert.match(html,/id="livedHistoryDetails"/);
+ assert.match(html,/id="livedHistoryList"/);
+ assert.match(runtime,/fetch\('\/api\/brain\/experience'/);
+ assert.match(runtime,/credentials:'same-origin'/);
+ assert.match(runtime,/res\.status===401\|\|res\.status===403/);
+});
+
 test('kernel learns only from a previous actual founder episode and exposes an owner-only audit',()=>{
  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
