@@ -107,6 +107,7 @@ function v4Regions(){
  }
 }
 function draw(){
+ if($('cortex06'))return; // CORTEX 06 owns the only visible canvas.
  if(!state.data)return;
  sizeCanvas();ctx.clearRect(0,0,canvasW,canvasH);
  ctx.save();v4Base();v5CerebralMorphology();v4Regions();

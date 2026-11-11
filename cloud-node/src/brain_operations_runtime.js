@@ -2,6 +2,7 @@ import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
 import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
 import {BRAIN_ORGANISM_V5_SCRIPT} from './brain_organism_v5_runtime.js';
+import {CORTEX06_SCRIPT} from './cortex06_runtime.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -623,7 +624,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();renderOrganismStage();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();renderOrganismStage();c6Render();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
@@ -791,6 +792,7 @@ async function poll(){
    const earlierState=state.data;
    state.data=data;
    v5IngestEvidence(earlierState,data);
+   c6Ingest(data);
    if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
    // Select once the latest persisted route, but do NOT replay it and never
    // present a historical route as an event happening right now.
@@ -965,6 +967,7 @@ async function api(path){
 ${COGNITIVE_ATLAS_SCRIPT}
 ${BRAIN_SCIENCE_LAB_SCRIPT}
 ${BRAIN_ORGANISM_V5_SCRIPT}
+${CORTEX06_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
