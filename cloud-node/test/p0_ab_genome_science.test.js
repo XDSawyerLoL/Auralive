@@ -72,7 +72,7 @@ test('64 held-out seeded experiments: effect size >.4, placebo <.1, noise floor 
  assert.ok(report.metrics.placebo_shift_A<=.1);
  assert.equal(report.metrics.noise_floor,0);
  assert.equal(report.metrics.B_heldout_accuracy,1);
- assert.equal(report.consciousness_proven,undefined);
+ assert.equal(report.consciousness_proven,false);
  assert.equal(report.scope,'deterministic-sandbox-acceptance-not-production');
 });
 test('task contexts are randomised by stable seed, but verifier remains deterministic',()=>{
