@@ -24,7 +24,7 @@ import { initialViability,evolveViability } from './viability_budget.js';
 import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
-import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop } from './verified_tool_loop.js';
+import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -119,8 +119,15 @@ export class CognitiveKernel {
     this.autogenesis = new IdentityAutogenesis();
     this.innerDialogue = new InnerDialogueEngine();
     this.livedExperience = new LivedExperience();
+    // A verified outcome requires a one-use receipt from a REAL local
+    // filesystem probe, correlated with a specific historical episode.
+    this.pendingMachineReceipts=new Map();
     // Lazily bind the pool: constructing the nucleus must not open MySQL.
-    this.history = new HistoryLedger({db:{
+    this.history = new HistoryLedger({verifyOutcome:async({episodeId,outcome,success})=>{
+      const key=Number(episodeId),receipt=this.pendingMachineReceipts.get(key);
+      return Boolean(receipt&&receipt.outcome===outcome&&
+        receipt.success===success&&receipt.source==='fs-syscall');
+    },db:{
       execute:(sql,params)=>getDb().execute(sql,params),
       getConnection:()=>getDb().getConnection(),
     }});
@@ -1186,22 +1193,48 @@ export class CognitiveKernel {
   }
 
   async verifiedLocalProbe({context='read-only-file-probe',relativePath,root}={}){
+    if(!/^[a-z0-9_-]{3,70}$/i.test(String(context)))
+      throw Error('invalid-safe-probe-context');
     const base=root||new URL('../',import.meta.url).pathname;
+    const runId=randomUUID(),strategy=verifiedLoopDecision(
+      this.soulCache.verified_probe_loop,context);
+    const predicted=this.soulCache.verified_probe_loop.episodes||[];
+    const successes=predicted.filter(x=>x.context===context&&x.outcome==='succeeded').length;
+    const observations=predicted.filter(x=>x.context===context).length;
+    // Commit the expectation BEFORE the actual filesystem syscall.
+    const historyEpisode=await this.history.beginEpisode({
+      mission_id:runId,kind:'action',context_tag:context,
+      action:strategy.verifies_first?'verify':'respond',
+      prediction:'local-probe-readable',confidence:(successes+1)/(observations+2),
+    });
     const result=await runVerifiedProbe(this.soulCache.verified_probe_loop,{
-      root:base,context,relativePath,
+      root:base,context,relativePath,runId,
     });
     if(!replayVerifiedLoop(result.state,context).verified)
       throw Error('verified-probe-ledger-integrity-failed');
+    const verifiedResult={outcome:'verified-fs-probe:'+result.receipt.hash,
+      success:result.receipt.exit_code===0?1:0,source:'fs-syscall'};
+    this.pendingMachineReceipts.set(Number(historyEpisode.id),verifiedResult);
+    try{
+      await this.history.recordOutcome(historyEpisode.id,{
+        outcome:verifiedResult.outcome,success:verifiedResult.success,
+        source:'machine-verified',
+      });
+    }finally{
+      this.pendingMachineReceipts.delete(Number(historyEpisode.id));
+    }
     this.soulCache.verified_probe_loop=result.state;
     await this.saveSoul();
     await this.trace('verified-tool-loop','filesystem-observation','',{
       at:now(),context:String(context).slice(0,80),
       strategy:result.decision.strategy,preflighted:result.action_was_preflighted,
       exit_code:result.receipt.exit_code,
-      episode_id:result.receipt.id,verified:true,raw_file_content_stored:false,
+      episode_id:historyEpisode.id,receipt_hash:result.receipt.hash,
+      verified:true,raw_file_content_stored:false,
     });
     return {verified:result.verified,decision:result.decision,
-      receipt:result.receipt,preflighted:result.action_was_preflighted};
+      receipt:result.receipt,history_episode_id:historyEpisode.id,
+      preflighted:result.action_was_preflighted};
   }
 
   async runAgent(name, task, { missionId = '' } = {}) {
