@@ -14,7 +14,7 @@ def hemisphere(side, lat=200, lon=280):
     f=np.linspace(0,2*np.pi,lon+1)[None,:]
     st=np.sin(t);nx=st*np.cos(f);ny=np.broadcast_to(np.cos(t),(lat+1,lon+1))
     nz=st*np.sin(f)
-    xx=.735+.715*nx;yy=.06+1.05*ny;zz=.02+.83*nz
+    xx=.66+.705*nx;yy=.06+1.05*ny;zz=.02+.83*nz
     folds=(
       .58*np.sin(17.1*t+3.8*np.sin(f*5.3)+2*np.cos(f*8.5))
         *np.sin(10.7*f+2.7*np.sin(t*9))+
@@ -24,7 +24,7 @@ def hemisphere(side, lat=200, lon=280):
         *np.sin(11.7*nz+5.5*nx+4*np.sin(ny*8)))
     delta=.060*folds
     taper=.955+.04*np.sin(t*3)+.04*np.cos(f*2)
-    x=side*np.maximum(.055,xx+delta*nx)
+    x=side*np.maximum(.012,xx+delta*nx)
     y=yy+delta*ny+.06*np.cos(f*1.2)*st
     z=zz*taper+delta*nz+.035*np.sin(t*4+f*.8)
     pos=np.stack([x,y,z],2).astype('float32').reshape(-1,3)
