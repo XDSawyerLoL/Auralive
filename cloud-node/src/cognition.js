@@ -353,10 +353,10 @@ export class CognitionEngine {
       title = unfinishedWork ? 'Continuité autonome' : 'Auto-réévaluation';
       summary = unfinishedWork
         ? `Je poursuis mon activité sans attendre une interaction humaine. Mon foyer actuel est : ${continuityFocus || 'travail autonome en cours'}.`
-        : 'Aucun message humain n’est nécessaire pour maintenir ma continuité : je réévalue spontanément mon état, mes objectifs et le prochain signal utile.';
+        : 'Réévaluation périodique effectuée sans nouveau résultat indépendant à ce stade.';
       hypothesis = unfinishedWork
         ? 'Un objectif non terminé mérite d’être réévalué jusqu’à résolution, blocage explicite ou abandon motivé.'
-        : 'Une période sans stimulus externe reste une situation à observer, pas une extinction de mon activité cognitive.';
+        : 'L’absence de message ne constitue pas une observation nouvelle ni une preuve de progrès.';
       nextAction = unfinishedWork
         ? (continuityFocus || currentIntention || 'Vérifier le travail autorisé en attente.')
         : selfObservations>=2
