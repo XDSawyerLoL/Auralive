@@ -245,9 +245,13 @@ export class CognitiveKernel {
   inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
     const organism = this.organism.migrate(this.soulCache || {});
     const policy = this.nativeLearning.inferenceParams(this.soulCache?.native_learning);
+    const decisionId=randomUUID();
     const assessment = { ...organRegulate(
       this.activeInference.assess(organism, { novelty, risk, policy }),organism,
-    ),decision_id: randomUUID() };
+    ),decision_id: decisionId,
+      outcome_prediction:predictModule(this.soulCache?.prediction_bus,{
+        module:'outcomes',operationId:decisionId,at:now(),
+      }) };
     this.lastInferenceAssessment = assessment;
     this.recentReflexDecisions.push(assessment);
     if (this.recentReflexDecisions.length > 100) this.recentReflexDecisions.shift();
@@ -967,6 +971,13 @@ export class CognitiveKernel {
       item => item.decision_id === String(payload.reflex_decision_id || ''),
     );
     const reflexObservation = reflexOutcomeRecord(matchedDecision, payload);
+    if(reflexObservation&&matchedDecision?.outcome_prediction){
+      const evaluated=observePrediction(this.soulCache.prediction_bus,
+        matchedDecision.outcome_prediction,{success:ok,source:'reported',at:timestamp});
+      if(evaluated.accepted)this.soulCache.prediction_bus=evaluated.state;
+      // A user-reported outcome trains calibration but cannot masquerade
+      // as independent proof or drive the high-salience attention channel.
+    }
     if (reflexObservation) {
       await query(
         'INSERT INTO aura_reflex_observations(id,decision_id,compute_tier,difficulty,risk,novelty,uncertainty,outcome_ok,evidence_level,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
@@ -1624,7 +1635,7 @@ export class CognitiveKernel {
         // The external semantic engine may help select WHAT to investigate,
         // but cannot assert the outcome or create a new identity claim.
         let proposal='';
-        if(this.ai?.enabled){
+        if(this.ai?.enabled&&workspaceHas(workspace,'prefrontal','perception')){
           proposal=await this.expression.semanticSupport({
             needs_semantic_support:true,
             semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval, PROBE:state_persistence ou PROBE:history_integrity. Question : '+content.slice(0,300),
@@ -1875,7 +1886,9 @@ export class CognitiveKernel {
       observe('semantic','running');
       const support = await this.expression.semanticSupport(
         plan,
-        await this.contextForAi(privateView, content),
+        workspaceHas(workspace,'hippocampus','memory')
+          ?semanticWorkspaceContext(await this.contextForAi(privateView, content),workspace)
+          :'',
         {
           maxTokens: Math.max(120, Number(inference.token_budget || 180)),
           taskRole: inference.model_role || 'research',
@@ -1909,10 +1922,32 @@ export class CognitiveKernel {
         // History is optional while v18 is rolling out; never fabricate it.
       }
     }
-    const answer = await this.expression.verbalize(plan, {
-      maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
-      taskRole: 'conversation',
+    const languageGate=languageWorkspaceProjection(plan,workspace,{privateView});
+    if(!languageGate.allowed)
+      await this.trace('workspace-denial','language-not-broadcast','',{
+        flow_id:brainFlowId,at:now(),reason:languageGate.reason,
+      });
+    const languagePrediction=predictModule(this.soulCache.prediction_bus,{
+      module:'language',operationId:brainFlowId,at:now(),
     });
+    const answer=languageGate.allowed
+      ?await this.expression.verbalize(languageGate.plan,{
+        maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
+        taskRole:'conversation',
+      }):'';
+    const languageResult=observePrediction(this.soulCache.prediction_bus,languagePrediction,{
+      success:Boolean(answer),source:'machine-observed',at:now(),
+    });
+    if(languageResult.accepted){
+      this.soulCache.prediction_bus=languageResult.state;
+      await this.trace('prediction-error','language-output-calibration','',{
+        flow_id:brainFlowId,at:now(),module:'language',
+        pre_action_probability:languagePrediction.probability,
+        error:languageResult.error,
+        observation:'response-produced-not-answer-correctness',
+        source:'machine-observed',raw_text_stored:false,
+      });
+    }
     observe('expression',answer?'done':'error',{
       answer_chars:answer?answer.length:0,
       language_mode:this.expression.lastMode,
