@@ -14,6 +14,7 @@ import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
 import { SelfInquiryEngine } from './self_inquiry.js';
+import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
 import { groundAgenda } from './activity_truth.js';
@@ -116,6 +117,10 @@ export class CognitiveKernel {
       getConnection:()=>getDb().getConnection(),
     }});
     this.selfInquiry = new SelfInquiryEngine();
+    this.independentContinuity = new IndependentContinuity({
+      db:{execute:(sql,params)=>getDb().execute(sql,params)},
+      selfInquiry:this.selfInquiry,history:this.history,
+    });
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
@@ -162,6 +167,7 @@ export class CognitiveKernel {
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
+      independent_activity:null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -727,6 +733,32 @@ export class CognitiveKernel {
         ? await this.prepareContinuityStimulus()
         : { due: false, reason: 'direct-or-budgeted-cycle' };
       const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
+      // A bounded measured inquiry runs between conversations, when due.
+      // No LLM, network action or unverified claim is generated.
+      if(continuity.due){
+        const independent=await this.independentContinuity.step({
+          soul:this.soulCache,
+        }).catch(()=>({executed:false,reason:'probe-unavailable'}));
+        if(independent.executed){
+          this.soulCache=independent.soul;
+          await this.trace('independent-self-test',
+            independent.receipt.probe,independent.receipt.outcome,{
+              at:independent.receipt.at,
+              probe:independent.receipt.probe,
+              observation:independent.receipt.outcome,
+              evidence:independent.receipt.basis,
+              autonomous:true,external_action:false,
+            });
+          this.pushStimulus({
+            type:'aura.self_probe.observed',
+            source:'independent-kernel-probe',
+            occurred_at:independent.receipt.at,
+            payload:{probe:independent.receipt.probe,
+              outcome:independent.receipt.outcome,
+              basis:independent.receipt.basis},
+          });
+        }
+      }
       const shouldReflect = force
         || Boolean(String(text).trim())
         || (dueByTime && this.stimuli.length > 0 && underLimit)
