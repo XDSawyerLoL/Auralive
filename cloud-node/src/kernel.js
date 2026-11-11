@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query, getDb } from './db.js';
-import { HistoryLedger } from './history_provenance.js';
+import { HistoryLedger,historyChoice } from './history_provenance.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
@@ -1456,17 +1456,13 @@ export class CognitiveKernel {
     // Real retrieval influences the plan only if supported by promoted,
     // active policies and independently verified episodes. The provenance
     // is stored at decision time, not guessed from AURA's answer afterwards.
-    const historyDecision=privateView
-      ?await this.history.decide({
-        context_tag:experiencedContext,baseline:advice.strategy,
-        run_id:brainFlowId,situation_id:experiencedContext,
-      }).catch(()=>null)
-      :null;
-    if(historyDecision){
-      await brainHop('memory','history','provenance-retrieval-committed');
-      if(historyDecision.provenance.length)
-        await brainHop('history','cognition','eligible-policy-evaluated');
-    }
+    const historyCandidates=privateView
+      ?await this.history.retrieve(experiencedContext).catch(()=>[]):[];
+    const historyPreChoice=historyChoice({
+      context:experiencedContext,baseline:advice.strategy,rows:historyCandidates,
+    });
+    if(historyCandidates.length)
+      await brainHop('memory','history','verified-history-candidates-retrieved');
     // Thalamic-like competition is a real pre-decision gate: even a validated
     // memory policy cannot govern this turn if it lost access to the workspace.
     // The same broadcast reaches distinct receptor functions; a user message
@@ -1474,9 +1470,9 @@ export class CognitiveKernel {
     const attentionMeta=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
     const workspace=competeInWorkspace(workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
-      plan,history:privateView&&historyDecision?.changed?{
-        changed:true,eligible:Boolean(historyDecision?.provenance?.length),
-        action:historyDecision.action,
+      plan,history:privateView&&historyPreChoice?.changed?{
+        changed:true,eligible:Boolean(historyPreChoice?.provenance?.length),
+        action:historyPreChoice.action,
       }:null,metacognition:attentionMeta,
       previous:privateView?this.soulCache.global_workspace:null,
     }),{previous:privateView?this.soulCache.global_workspace:null});
@@ -1484,6 +1480,20 @@ export class CognitiveKernel {
       signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
     const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
       .includes(plan.act);
+    // Commit only after thalamic competition and broadcast. All other
+    // retrieved history was a candidate, not an executed selection.
+    const historyDecision=privateView
+      ?await this.history.decide({
+        context_tag:experiencedContext,baseline:advice.strategy,
+        run_id:brainFlowId,situation_id:experiencedContext,
+        workspacePolicyAllowed:historyPermitted&&memoryBroadcast,
+      }).catch(()=>null)
+      :null;
+    if(historyDecision){
+      await brainHop('history','basal_ganglia','post-workspace-policy-gate');
+      if(historyDecision.provenance?.length)
+        await brainHop('basal_ganglia','cognition','chosen-history-strategy');
+    }
     const historyChanged=Boolean(historyPermitted&&historyDecision?.changed&&memoryBroadcast);
     // E2 bridge: gated memory and metacognitive warning have causal authority.
     // Unselected candidate facts never modify strategy via this gate.
