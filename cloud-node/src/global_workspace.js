@@ -20,7 +20,7 @@ const finiteTime=v=>{
 
 export function workspaceInput({
   userPresent=false,organism={},plan={},history=null,experience=null,metacognition=null,
-  prediction=null,consolidation=null,previous=null,nowMs=Date.now(),
+  prediction=null,consolidation=null,memoryProposals=[],previous=null,nowMs=Date.now(),
 }={}){
   const candidates=[];
   const push=(source,label,salience,confidence,metadata={})=>{
@@ -55,6 +55,15 @@ export function workspaceInput({
     push('memory','verified-consolidated-pattern',.56,.9,{action:'respond'});
   if(metacognition?.verify===true)push('metacognition','memory-check-required',
     .94,.98,{kind:'verify'});
+  // Individual, reference-only candidates. No selected 'memory' category
+  // can authorize a different note or an entire conversation transcript.
+  for(const m of (Array.isArray(memoryProposals)?memoryProposals:[]).slice(0,3)){
+    const ref=String(m.ref||'');
+    if(!/^(?:note|message):[0-9a-f-]{1,40}$/i.test(ref))continue;
+    const label=ref.startsWith('note:')?'retrieved-note':'retrieved-message';
+    push('memory',label,Math.max(.55,Math.min(.87,Number(m.salience)||.62)),
+      .94,{ref,action:'respond'});
+  }
   if(history?.changed&&history?.eligible)
     push('memory','verified-history-changed-policy',.82,.93,
       {action:actions.has(history.action)?history.action:'respond'});
@@ -136,7 +145,11 @@ function parseMetadata(source,metadata={}){
     return {act:actions.has(metadata.act)?metadata.act:'respond'};
   if(source==='interoception')return {pressure:clamp(metadata.pressure)};
   if(source==='prediction_error')return {error:clamp(metadata.error)};
-  if(source==='memory')return {action:actions.has(metadata.action)?metadata.action:'respond'};
+  if(source==='memory')return {
+    action:actions.has(metadata.action)?metadata.action:'respond',
+    ref:/^(?:note|message):[0-9a-f-]{1,40}$/i.test(String(metadata.ref||''))
+      ?String(metadata.ref):'',
+  };
   if(source==='metacognition'||source==='reentry')return {kind:tag(metadata.kind)};
   return {};
 }
