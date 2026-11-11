@@ -159,3 +159,77 @@ test('P0: HistoryLedger refuses uncorrelated machine success even with valid-loo
  assert.equal(ok.calibrated,true);
  assert.equal(called.length,1);
 });
+
+
+test('P0: private-owner canary needs a one-use broadcast and records verified syscall outcome in history',async()=>{
+ const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ const route=server.match(/app\.post\('\/api\/kernel\/verified-probe'[\s\S]*?\n\}\);/);
+ assert.ok(route,'hosted owner-only canary must have a registered endpoint');
+ assert.match(route[0],/requirePrivate\(request, reply\)/);
+ assert.match(route[0],/requireRuntime\(reply\)/);
+ assert.match(route[0],/admitAuthenticatedLocalProbe/);
+ assert.doesNotMatch(route[0],/body\?\.root/);
+ assert.doesNotMatch(route[0],/exec\(|spawn\(|shell/);
+ const {CognitiveKernel}=await import('../src/kernel.js');
+ const root=await mkdtemp(join(tmpdir(),'aura-auth-probe-'));
+ try{
+  await mkdir(join(root,'docs'));
+  const seen=[];
+  const k=Object.create(CognitiveKernel.prototype);
+  k.soulCache={verified_probe_loop:initialVerifiedLoop(),
+   global_workspace:null,viability:{capacity:3},cycles:0};
+  k.organism={migrate:()=>({})};
+  k.pendingOwnerProbePermit=null;
+  k.pendingMachineReceipts=new Map();
+  k.saveSoul=async()=>{};
+  k.trace=async(...args)=>seen.push({trace:args});
+  let episodes=0;
+  k.history={
+    beginEpisode:async args=>{
+      assert.equal(args.prediction,'local-probe-readable');
+      assert.ok(args.confidence>0&&args.confidence<1);
+      return {id:++episodes};
+    },
+    recordOutcome:async (id,row)=>{
+      const permit=k.pendingMachineReceipts.get(id);
+      assert.equal(row.source,'machine-verified');
+      assert.equal(permit.source,'fs-syscall');
+      assert.equal(permit.outcome,row.outcome);
+      assert.equal(permit.success,row.success);
+      seen.push({id,row});
+    },
+  };
+  await assert.rejects(k.verifiedLocalProbe({
+    context:'docs_readability',relativePath:'docs/missing.md',root,permit:'forged',
+  }),/requires-private-owner-broadcast/);
+  for(let i=0;i<3;i++){
+    const permit=await k.admitAuthenticatedLocalProbe();
+    assert.equal(typeof permit,'string');
+    const outcome=await k.verifiedLocalProbe({
+      context:'docs_readability',relativePath:'docs/missing-'+i+'.md',root,permit,
+    });
+    assert.equal(outcome.verified,true);
+    assert.equal(outcome.receipt.exit_code,1);
+    assert.equal(outcome.preflighted,false);
+    await assert.rejects(k.verifiedLocalProbe({
+      context:'docs_readability',relativePath:'docs/missing.md',root,permit,
+    }),/requires-private-owner-broadcast/);
+  }
+  assert.equal(episodes,3);
+  assert.equal(seen.filter(x=>x.row).length,3);
+  // Simulate the persisted snapshot being reloaded into a new kernel process.
+  const saved=JSON.parse(JSON.stringify(k.soulCache));
+  const next=Object.create(CognitiveKernel.prototype);
+  Object.assign(next,{soulCache:saved,organism:k.organism,
+    pendingOwnerProbePermit:null,pendingMachineReceipts:new Map(),
+    history:k.history,saveSoul:async()=>{},trace:async()=>{}});
+  const permit=await next.admitAuthenticatedLocalProbe();
+  next.history.recordOutcome=async()=>{};
+  const after=await next.verifiedLocalProbe({
+    context:'docs_readability',relativePath:'docs/new-failure.md',root,permit,
+  });
+  assert.equal(after.decision.verifies_first,true);
+  assert.equal(after.preflighted,true);
+  assert.equal(after.receipt.exit_code,1);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
