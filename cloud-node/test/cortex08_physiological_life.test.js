@@ -118,7 +118,7 @@ test('one page contains visible status and real-event overlays',()=>{
  ])assert.ok(BRAIN_OPERATIONS_HTML.includes('id="'+id+'"'),id);
  assert.match(BRAIN_OPERATIONS_HTML,/#cortex07Canvas\{display:block!important/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/c8Observe\(data\)/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/\$\{CORTEX08_SCENE_SCRIPT\}/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/function c8Observe\(/);
  const old=readFileSync(new URL('../src/cortex06_runtime.js',import.meta.url),'utf8');
  assert.match(old,/c8DrawAfterglow\(ctx\)/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="chatInput"/);
