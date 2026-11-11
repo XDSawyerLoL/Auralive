@@ -162,6 +162,18 @@ export function workspaceSnapshot(cycle,previous={}){
     attentional_focus:cycle.decision.attention,
     suppressed:cycle.suppressed,
     receivers:cycle.broadcasts.map(x=>x.recipient),
+    receptor_receipts:Object.fromEntries(Object.entries(cycle.processed||{})
+      .filter(([id])=>['prefrontal','insula','hippocampus','basal_ganglia','metacognition'].includes(id))
+      .map(([id,receipt])=>[id,{
+        kind:String(receipt.kind||'').slice(0,40),
+        consumed:Math.max(0,Number(receipt.consumed)||0),
+        output_count:Array.isArray(receipt.references)?receipt.references.length:
+          Array.isArray(receipt.selected_policies)?receipt.selected_policies.length:
+          Array.isArray(receipt.warnings)?receipt.warnings.length:
+          Number(Boolean(receipt.verification_required||
+            receipt.optional_compute_deferred)),
+      }]),
+    ),
   };
   return base;
 }
