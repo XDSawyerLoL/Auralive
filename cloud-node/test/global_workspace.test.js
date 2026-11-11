@@ -53,6 +53,18 @@ test('hippocampal candidate is excluded by competition under pressure, but selec
  }),{nowMs:now});
  assert.equal(quiet.received.basal_ganglia.some(x=>x.source==='memory'),true);
 });
+test('unverified feedback must also win the workspace before it can select a strategy',()=>{
+ const candidates=workspaceInput({userPresent:true,nowMs:now,
+   plan:{act:'respond'},organism:organism(0,0),
+   experience:{changed:true,strategy:'attentive'},
+ });
+ const normal=competeInWorkspace(candidates,{nowMs:now,capacity:3});
+ assert.equal(normal.received.basal_ganglia.some(x=>x.label==='reported-feedback-policy'),true);
+ const narrow=competeInWorkspace(candidates,{nowMs:now,capacity:1});
+ assert.equal(narrow.received.basal_ganglia.some(x=>x.label==='reported-feedback-policy'),false);
+ const ablated=competeInWorkspace(candidates,{nowMs:now,broadcast:false});
+ assert.equal(ablated.received.basal_ganglia.some(x=>x.label==='reported-feedback-policy'),false);
+});
 test('stale interoception cannot force resource scarcity',()=>{
  const stale=workspaceInput({userPresent:false,nowMs:now,
    organism:{homeostasis:{sensor:{source:'node-process',
@@ -131,6 +143,7 @@ test('existing single brain graph contains functional thalamo-cortical routes',(
    'A declared circuit must not fake active neuronal pulses');
  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  assert.match(kernel,/workspacePolicyAllowed:historyPermitted&&memoryBroadcast/);
+ assert.match(kernel,/const chosenBaseline=learnedFeedbackBroadcast\?advice\.strategy:'respond'/);
  assert.match(kernel,/this\.soulCache\.global_workspace=workspaceSnapshot/);
  assert.match(kernel,/type:'aura.workspace.control_change'/);
 });
