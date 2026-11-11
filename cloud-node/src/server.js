@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage } from './embedded_language.js';
@@ -592,6 +593,19 @@ app.get('/api/brain/science-lab', async (_request, reply) => {
       detail:String(error?.message||error).slice(0,130),
       is_live_brain_data:false,
     });
+  }
+});
+
+// Build-time generated anatomical ILLUSTRATION, never actual human MRI.
+// Public static WebP only, with no dependence on external services.
+app.get('/assets/cortex07-brain.webp', async (_request, reply) => {
+  try {
+    const bytes=await readFile(new URL('./assets/cortex07_brain.webp',import.meta.url));
+    reply.header('Cache-Control','public, max-age=3600');
+    reply.type('image/webp');
+    return reply.send(bytes);
+  } catch {
+    return reply.code(404).send({error:'cortex-illustration-unavailable'});
   }
 });
 
