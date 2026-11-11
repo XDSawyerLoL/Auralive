@@ -380,4 +380,4 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
  .graph-bottom .graph-focus-summary{grid-column:2;grid-row:1 / 3;margin:0}
  .graph-bottom .graph-caption{grid-column:1}
 }
-`+BRAIN_ORGANISM_V5_CSS;
+`+BRAIN_ORGANISM_V5_CSS+CORTEX06_CSS;
