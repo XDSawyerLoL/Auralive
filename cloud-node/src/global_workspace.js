@@ -20,7 +20,7 @@ const finiteTime=v=>{
 
 export function workspaceInput({
   userPresent=false,organism={},plan={},history=null,experience=null,metacognition=null,
-  previous=null,nowMs=Date.now(),
+  prediction=null,consolidation=null,previous=null,nowMs=Date.now(),
 }={}){
   const candidates=[];
   const push=(source,label,salience,confidence,metadata={})=>{
@@ -41,6 +41,18 @@ export function workspaceInput({
   const error=clamp(organism.homeostasis?.failure_ema);
   if(error>=.3)push('prediction_error','recent-failure',
     .47+error*.45,.7,{error:Number(error.toFixed(3))});
+  // The prediction bus contributes only fresh, independently observable error;
+  // reports and old surprises never manufacture current attention.
+  const pAt=finiteTime(prediction?.at);
+  if(pAt!==null&&nowMs-pAt>=0&&nowMs-pAt<=120000&&
+    ['machine-observed','machine-verified'].includes(prediction?.source))
+    push('prediction_error','cross-module-surprise',
+      .50+clamp(prediction.error)*.48,.94,{
+        error:Number(clamp(prediction.error).toFixed(3)),
+      });
+  if(consolidation?.verified_rows>=2&&Array.isArray(consolidation?.evidence)&&
+    consolidation.evidence.length>0)
+    push('memory','verified-consolidated-pattern',.56,.9,{action:'respond'});
   if(metacognition?.verify===true)push('metacognition','memory-check-required',
     .94,.98,{kind:'verify'});
   if(history?.changed&&history?.eligible)
