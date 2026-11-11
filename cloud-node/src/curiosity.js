@@ -310,6 +310,8 @@ export class CuriosityEngine {
   }
 
   async researchQuestion(item) {
+    const admission=this.kernel.authorizeAutonomous('curiosity');
+    if(!admission.allowed)return null;
     if (!item?.question || !this.webSubstrate?.enabled) return null;
     const webCountRow = await one(
       `SELECT COUNT(*) AS total FROM aura_cognitive_traces
@@ -366,6 +368,9 @@ export class CuriosityEngine {
   }
 
   async runCycle(trigger = 'manual') {
+    const admission=this.kernel.authorizeAutonomous('curiosity');
+    if(!admission.allowed)
+      return {ok:false,skipped:true,reason:'central-workspace-denied:'+admission.reason};
     if (!config.curiosityEnabled) return { ok: false, skipped: true, reason: 'curiosity disabled' };
     if (this.running) return { ok: true, skipped: true, reason: 'curiosity cycle already running' };
     this.running = true;
