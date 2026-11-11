@@ -42,15 +42,18 @@ test('language cannot receive unfocused autobiographical context',()=>{
  assert.equal(rejected.allowed,false);
  assert.equal(rejected.plan,null);
 });
-test('verified memory enters language only if broadcast won',()=>{
- const workspace=w({history:{changed:true,eligible:true,action:'clarify'}});
+test('only individually identified, broadcast memories enter the language context',()=>{
+ const workspace=w({memoryProposals:[{ref:'note:27',salience:.87}]});
  const p=languageWorkspaceProjection({act:'respond',
-  experiential_memory:[{note:'memory'}],
-  conversation_context:[{role:'user',content:'remembered'}],
+  experiential_memory:[{id:27,note:'selected'},{id:28,note:'unselected'}],
+  conversation_context:[{id:99,role:'user',content:'unselected message'}],
   history_guidance:{eligible:true}},workspace,{privateView:true});
  assert.equal(p.memory_included,true);
- assert.equal(p.plan.experiential_memory.length,1);
- assert.ok(semanticWorkspaceContext('authorized context',workspace).includes('authorized'));
+ assert.deepEqual(p.plan.experiential_memory.map(x=>x.id),[27]);
+ assert.equal(p.plan.conversation_context.length,0);
+ assert.equal(semanticWorkspaceContext('unauthorized raw context',workspace),'');
+ assert.ok(semanticWorkspaceContext([{id:27,kind:'note',content:'authorized context'}],workspace)
+  .includes('authorized context'));
 });
 test('operator entry depends on delivered executive plan, not an LLM claim',()=>{
  const possible=competeInWorkspace(workspaceInput({
@@ -161,7 +164,7 @@ test('kernel implementation wires all four mechanisms and keeps direct tasks acc
  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  for(const pattern of [
   /languageWorkspaceProjection\(plan,workspace/,
-  /semanticWorkspaceContext\(await this\.contextForAi/,
+  /semanticWorkspaceContext\(\[/,
   /executionWorkspaceGate\(workspace\)/,
   /this\.soulCache\.viability=evolveViability/,
   /this\.offlineConsolidation\.step/,
