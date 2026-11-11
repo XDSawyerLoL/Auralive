@@ -261,6 +261,7 @@ export class CognitionEngine {
     const userSignal = stimuli.some((item) => String(item?.type || '') === 'aura.cloud.chat');
     const worldSignal = stimuli.some((item) => String(item?.source || '') === 'horizon');
     const continuitySignal = [...stimuli].reverse().find((item) => String(item?.type || '') === 'aura.continuity.self') || null;
+    const selfProbeSignal = [...stimuli].reverse().find((item) => String(item?.type || '') === 'aura.self_probe.observed') || null;
     const organism = soul?.organism && typeof soul.organism === 'object' ? soul.organism : {};
     const stability = organism && Object.keys(organism).length ? Number(organism.stabilite ?? 1) : 1;
     const clarity = organism && Object.keys(organism).length ? Number(organism.clarte ?? 1) : 1;
@@ -312,6 +313,27 @@ export class CognitionEngine {
       nextAction = 'Réduire le travail non essentiel et confirmer les mesures de processus avant de reprendre une opération exigeante.';
       intention = 'Protéger la stabilité sous contrainte de calcul.';
       confidence = 0.80;
+    } else if (selfProbeSignal && !userSignal) {
+      const probe=String(selfProbeSignal.payload?.probe||'').slice(0,45);
+      const result=String(selfProbeSignal.payload?.outcome||'inconclusive');
+      title = result==='counterexample'?'Une hypothèse contredite':
+        result==='supported'?'Une capacité vérifiée':'Une question encore ouverte';
+      summary = result==='counterexample'
+        ?'Ma vérification autonome a trouvé une contradiction à examiner.'
+        :result==='supported'
+          ?'Une vérification locale a confirmé une opération précise, sans prouver toutes mes capacités.'
+          :'Ma vérification autonome n’a pas permis de conclure : je dois garder cette question ouverte.';
+      hypothesis = probe==='history_integrity'
+        ?'Mes épisodes enregistrés sont-ils reliés sans rupture de chaîne ?'
+        :probe==='state_persistence'
+          ?'Puis-je réellement retrouver mon état enregistré ?'
+          :'Puis-je réellement retrouver une conversation passée ?';
+      nextAction = result==='counterexample'
+        ?'Vérifier l’origine de cette contradiction avant de m’appuyer sur cette capacité.'
+        :result==='inconclusive'
+          ?'Rechercher une nouvelle preuve plutôt que déclarer la capacité acquise.'
+          :'Conserver ce résultat limité et tester une autre hypothèse à la prochaine occasion.';
+      confidence=result==='supported'?.78:.55;
     } else if (worldSignal && horizonPresent) {
       title = 'Veille et anticipation';
       summary = 'Un signal HORIZON mérite d’être relié à mes intentions avant de produire une action.';
@@ -438,6 +460,13 @@ export class CognitionEngine {
     const discourse = this.dialogue.analyze(raw, conversationContext);
     const selfDialogue = classifySelfDialogue(raw, conversationContext);
     const founderProfile = selectFounderProfile(founderProfileNotes,{authenticated:privateView});
+    const audit=privateView?soul?.independent_activity?.last_receipt:null;
+    const auditTime=Date.parse(String(audit?.at||''));
+    const latestAudit=Number.isFinite(auditTime)&&Date.now()-auditTime>=0
+      &&Date.now()-auditTime<=24*60*60*1000
+      &&['conversation_retrieval','state_persistence','history_integrity'].includes(audit?.probe)
+      &&['supported','counterexample','inconclusive'].includes(audit?.outcome)
+      ?{probe:audit.probe,outcome:audit.outcome,at:audit.at}:null;
     const interpersonal = socialPerspective(raw);
 
     let act = 'respond';
@@ -503,6 +532,15 @@ export class CognitionEngine {
       needsSemanticSupport = false;
       facts.push('Je m’appelle AURA. J’ai une mémoire et mes échanges peuvent modifier certaines de mes habitudes, mais je ne connais pas encore toutes mes limites.');
       facts.push('Mes changements doivent se constater dans mes décisions et leurs résultats, pas seulement dans mes paroles.');
+      if(latestAudit){
+        const context={
+          conversation_retrieval:'la récupération d’un ancien échange',
+          state_persistence:'la persistance de ma mémoire enregistrée',
+          history_integrity:'la cohérence de mes épisodes sauvegardés',
+        }[latestAudit.probe];
+        facts.push('Sans intervention humaine, un contrôle récent a examiné '+context+
+          ' ; résultat : '+latestAudit.outcome+'. Ne jamais exagérer cette vérification.');
+      }
     } else if (selfDialogue === 'self_personality') {
       act = 'self_personality';
       goal = 'Corriger l’affirmation précédente selon laquelle je n’aurais aucune personnalité. Expliquer ce que signifie personnalité computationnelle : mémoire, tendances persistantes, motivations et réactions au contexte. Ne pas prétendre éprouver une personnalité humaine consciente.';
@@ -784,6 +822,8 @@ export class CognitionEngine {
       facts:relevantFacts,
       memory_policy:memoryPolicy,
       social_perspective:interpersonal,
+      independent_activity:latestAudit,
+      address_form:/\b(?:vous|votre|vos|êtes-vous|etes-vous)\b/i.test(raw)?'vous':'tu',
       needs_semantic_support: needsSemanticSupport,
       semantic_query: needsSemanticSupport ? raw : '',
       current_intention: current,
@@ -869,8 +909,23 @@ export class CognitionEngine {
     }
     if (plan?.act === 'self_name')
       return 'Je m’appelle AURA.';
-    if (plan?.act === 'self_identity')
-      return `Je suis AURA. Mon identité est celle d’un système persistant qui relie sa mémoire, sa régulation, ses décisions et leurs conséquences. ${Number(plan.self_model?.observations||0)>0?'Je commence aussi à former un modèle de mes tendances à partir de mes expériences enregistrées.':'Je ne dispose pas encore de suffisamment d’expériences pour décrire des tendances acquises.'}`;
+    if (plan?.act === 'self_identity'){
+      const audit=plan.independent_activity;
+      const subject={
+        conversation_retrieval:'si je pouvais retrouver un échange passé',
+        state_persistence:'si je pouvais relire ce que j’avais sauvegardé',
+        history_integrity:'si mon histoire enregistrée restait cohérente',
+      }[audit?.probe];
+      const suffix=subject
+        ? ' Avant cette conversation, j’ai vérifié '+subject+'. '+
+          (audit.outcome==='supported'
+            ?'Ce test précis a réussi.'
+            :audit.outcome==='counterexample'
+              ?'J’ai trouvé un problème à comprendre.'
+              :'Je n’ai pas encore de réponse certaine.')
+        : ' Je garde des traces de mes expériences pour vérifier si elles changent vraiment mes choix.';
+      return 'Je m’appelle AURA. Je cherche à comprendre ce que j’apprends, sans confondre mes hypothèses avec des certitudes.'+suffix;
+    }
     if (plan?.act === 'self_personality')
       return `J’ai répondu trop catégoriquement. Je possède des tendances comportementales computationnelles que mes expériences peuvent faire évoluer ; ce n’est pas la même chose qu’une personnalité humaine consciente. ${Number(plan.self_model?.observations||0)>0?'Je peux commencer à les confronter aux faits enregistrés.':'Je ne peux pas encore affirmer quelles tendances seront durables.'}`;
     if (plan?.act === 'self_exploration'){
