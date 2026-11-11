@@ -54,7 +54,7 @@ test('no moving event is drawn without an actual receipt or explicit replay',()=
 });
 test('CORTEX 09 is integrated as the dominant scene with accessible controls',()=>{
  assert.match(CORTEX06_SCRIPT,/c9PaintVolume\(ctx,W,H,c6State\.lastData\)/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/\$\{CORTEX09_SCRIPT\}/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/function c9PaintVolume\(ctx,w,h,data\)/);
  assert.match(CORTEX09_CSS,/#cortex07Poster\{opacity:/);
  assert.match(CORTEX09_CSS,/#cortex07Canvas\{display:none!important\}/);
  assert.match(BRAIN_OPERATIONS_HTML,/CORTEX 09/);
