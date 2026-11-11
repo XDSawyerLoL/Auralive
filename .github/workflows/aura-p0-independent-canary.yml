@@ -1,0 +1,34 @@
+name: AURA P0 Independent Causal Canary
+on:
+  pull_request:
+    paths:
+      - 'cloud-node/src/**'
+      - 'cloud-node/test/**'
+      - 'cloud-node/package.json'
+      - '.github/workflows/aura-p0-independent-canary.yml'
+  workflow_dispatch:
+jobs:
+  ablation-and-restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: cloud-node/package-lock.json
+      - name: Install reproducible dependencies
+        working-directory: cloud-node
+        run: npm ci --ignore-scripts
+      - name: Reproduce P0 (closed loop, 100 ablations, memory, autonomy, forged verifier)
+        working-directory: cloud-node
+        run: node --test test/aura_p0_closed_loop.test.js
+      - name: Related workspace causal regression
+        working-directory: cloud-node
+        run: node --test test/global_workspace.test.js test/workspace_integrated_mechanisms.test.js test/attention_schema.test.js
+      - name: Verify Node syntax and Hostinger packaging inputs
+        working-directory: cloud-node
+        run: npm run check:package
