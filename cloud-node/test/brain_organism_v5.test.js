@@ -102,7 +102,7 @@ test('P0: no idle synthetic action, recent real hop needed for traveling flash',
  assert.match(BRAIN_ORGANISM_V5_SCRIPT,/!reduced&&!document\.hidden/);
  assert.match(BRAIN_ORGANISM_V5_SCRIPT,/Number\(edge\.observed_count\|\|0\)<1/);
  assert.match(BRAIN_ORGANISM_V5_SCRIPT,/function v5DrawReceiptPulses/);
- assert.match(BRAIN_ORGANISM_V5_SCRIPT,/const.*last.*=/.test('')?/NOPE/:/state\.v5Pulses/);
+ assert.match(BRAIN_ORGANISM_V5_SCRIPT,/state\.v5Pulses/);
  const runtime=readFileSync(new URL('../src/brain_operations_runtime.js',import.meta.url),'utf8');
  const connectome=readFileSync(new URL('../src/brain_connectome_v4.js',import.meta.url),'utf8');
  assert.match(runtime,/v5IngestEvidence\(earlierState,data\)/);
