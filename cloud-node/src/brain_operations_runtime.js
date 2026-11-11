@@ -844,7 +844,9 @@ fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'})
  .then(r=>r.ok?r.json():null)
  .then(result=>{$('runtimeRetry').hidden=result?.authenticated!==true;})
  .catch(()=>{$('runtimeRetry').hidden=true;});
-setInterval(()=>{if(!document.hidden)poll();},state.busy?900:5000);
+// Visible-only polling follows actual database receipts without imposing a fake 10 Hz
+// brain state. Faster while waiting for a real chat result, slower at rest.
+setInterval(()=>{if(!document.hidden&&!state.busy)void poll();},2800);
 // Extra poll while an AURA response is in flight: the graph can show database-
 // committed module hops BEFORE the model produces its final answer.
 setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
