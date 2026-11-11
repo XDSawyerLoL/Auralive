@@ -316,6 +316,8 @@ export class CognitionEngine {
     } else if (selfProbeSignal && !userSignal) {
       const probe=String(selfProbeSignal.payload?.probe||'').slice(0,45);
       const result=String(selfProbeSignal.payload?.outcome||'inconclusive');
+      const ideas=Math.max(0,Number(selfProbeSignal.payload?.new_hypotheses)||0);
+      title = ideas>0?'Nouvelle hypothèse candidate':
       title = result==='counterexample'?'Une hypothèse contredite':
         result==='supported'?'Une capacité vérifiée':'Une question encore ouverte';
       summary = result==='counterexample'
@@ -323,6 +325,8 @@ export class CognitionEngine {
         :result==='supported'
           ?'Une vérification locale a confirmé une opération précise, sans prouver toutes mes capacités.'
           :'Ma vérification autonome n’a pas permis de conclure : je dois garder cette question ouverte.';
+      if(ideas>0)
+        summary='Un motif a fait émerger '+ideas+' hypothèse(s) candidate(s) à confronter à de nouveaux résultats indépendants.';
       hypothesis = probe==='history_integrity'
         ?'Mes épisodes enregistrés sont-ils reliés sans rupture de chaîne ?'
         :probe==='state_persistence'
