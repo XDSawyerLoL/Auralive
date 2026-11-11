@@ -4,6 +4,15 @@ import assert from 'node:assert/strict';
 import { AuraCloudWorkspace } from '../src/cloud_workspace.js';
 import { CapabilityFabric } from '../src/capability_fabric.js';
 import { CognitiveKernel } from '../src/kernel.js';
+import {workspaceInput,competeInWorkspace,workspaceSnapshot} from '../src/global_workspace.js';
+function simulatePriorUserBroadcast(kernel){
+  const at=Date.now();
+  const planned=competeInWorkspace(workspaceInput({
+    userPresent:true,nowMs:at,plan:{act:'task_first'},
+  }),{nowMs:at});
+  kernel.soulCache={global_workspace:workspaceSnapshot(planned)};
+}
+
 import { DagCompiler, TaskGraphExecutor } from '../src/task_graph.js';
 
 test('native DAG compiler composes unfamiliar evidence and transform capabilities', async () => {
@@ -74,6 +83,7 @@ test('cloud kernel executes typed sandbox mission when Quantic Studio is offline
   );
   kernel.trace = async () => {};
   kernel.runAgent = async () => ({ agent: 'operator', answer: 'fallback' });
+  simulatePriorUserBroadcast(kernel);
 
   const outcome = await kernel.operate(
     'Créer un fichier de test, relire son contenu, puis le supprimer.',
@@ -101,6 +111,7 @@ test('swarm dispatches independent agents concurrently before synthesis', async 
     return { agent: name, answer: name };
   };
 
+  simulatePriorUserBroadcast(kernel);
   const result = await kernel.swarm('parallel mission', ['planner', 'research', 'dev', 'critic']);
   assert.equal(result.concurrent, true);
   assert.ok(maxActive >= 2);

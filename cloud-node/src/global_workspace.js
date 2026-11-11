@@ -1,3 +1,4 @@
+import {consumeWorkspaceRecipients} from './workspace_receptors.js';
 // An explicitly functional (not neuroanatomical) recurrent global workspace.
 // A bounded thalamic-like competition gates a cortical-like broadcast.
 // No LLM can nominate itself, change permissions or inject arbitrary actions.
@@ -20,7 +21,7 @@ const finiteTime=v=>{
 
 export function workspaceInput({
   userPresent=false,organism={},plan={},history=null,experience=null,metacognition=null,
-  prediction=null,consolidation=null,previous=null,nowMs=Date.now(),
+  prediction=null,consolidation=null,memoryProposals=[],previous=null,nowMs=Date.now(),
 }={}){
   const candidates=[];
   const push=(source,label,salience,confidence,metadata={})=>{
@@ -55,6 +56,15 @@ export function workspaceInput({
     push('memory','verified-consolidated-pattern',.56,.9,{action:'respond'});
   if(metacognition?.verify===true)push('metacognition','memory-check-required',
     .94,.98,{kind:'verify'});
+  // Individual, reference-only candidates. No selected 'memory' category
+  // can authorize a different note or an entire conversation transcript.
+  for(const m of (Array.isArray(memoryProposals)?memoryProposals:[]).slice(0,3)){
+    const ref=String(m.ref||'');
+    if(!/^(?:note|message):[0-9a-f-]{1,40}$/i.test(ref))continue;
+    const label=ref.startsWith('note:')?'retrieved-note':'retrieved-message';
+    push('memory',label,Math.max(.55,Math.min(.87,Number(m.salience)||.62)),
+      .94,{ref,action:'respond'});
+  }
   if(history?.changed&&history?.eligible)
     push('memory','verified-history-changed-policy',.82,.93,
       {action:actions.has(history.action)?history.action:'respond'});
@@ -72,7 +82,7 @@ export function workspaceInput({
 
 export function competeInWorkspace(candidates=[],{
   capacity=WORKSPACE_CAPACITY,broadcast=true,
-  nowMs=Date.now(),previous=null,
+  nowMs=Date.now(),previous=null,mutedRecipients=[],
 }={}){
   const size=Math.max(1,Math.min(5,Math.floor(Number(capacity)||WORKSPACE_CAPACITY)));
   const normalized=(Array.isArray(candidates)?candidates:[])
@@ -106,14 +116,12 @@ export function competeInWorkspace(candidates=[],{
   const received=Object.fromEntries(RECIPIENTS.map(recipient=>[
     recipient,broadcast?selected:[],
   ]));
-  // Only an actual delivery affects decision selection; a rendered candidate
-  // list alone must have no causal authority.
-  const seen=received.prefrontal;
-  const verify=seen.some(c=>c.source==='metacognition')||
-    seen.some(c=>c.source==='prediction_error'&&c.score>=.7);
-  const reserve=seen.some(c=>c.source==='interoception'&&
-    Number(c.metadata.pressure)>=.75);
-  const attention=seen[0]?.source||'none';
+  // Each functional recipient transforms the same delivered packet into a
+  // distinct typed receipt. Muting a recipient changes downstream control.
+  const processed=consumeWorkspaceRecipients(received,{mutedRecipients});
+  const verify=processed.prefrontal.verification_required;
+  const reserve=processed.insula.optional_compute_deferred;
+  const attention=processed.prefrontal.attention;
   return {
     version:WORKSPACE_VERSION,capacity:size,
     candidates_considered:normalized.length,selected,
@@ -121,11 +129,11 @@ export function competeInWorkspace(candidates=[],{
     broadcast_enabled:Boolean(broadcast),
     broadcasts:delivered.map(d=>({recipient:d.recipient,
       received_count:d.content.length})),
-    received,
+    received,processed,
     decision:{attention,control:verify?'verify':reserve?'conserve':'normal',
       verification_required:verify,
       optional_compute_deferred:reserve,
-      information_available:seen.length>0},
+      information_available:processed.prefrontal.consumed>0},
     recorded_at:new Date(nowMs).toISOString(),
     brain_analogy:'functional-cortico-thalamo-cortical-not-neurons',
     subjective_experience_proven:false,
@@ -136,7 +144,11 @@ function parseMetadata(source,metadata={}){
     return {act:actions.has(metadata.act)?metadata.act:'respond'};
   if(source==='interoception')return {pressure:clamp(metadata.pressure)};
   if(source==='prediction_error')return {error:clamp(metadata.error)};
-  if(source==='memory')return {action:actions.has(metadata.action)?metadata.action:'respond'};
+  if(source==='memory')return {
+    action:actions.has(metadata.action)?metadata.action:'respond',
+    ref:/^(?:note|message):[0-9a-f-]{1,40}$/i.test(String(metadata.ref||''))
+      ?String(metadata.ref):'',
+  };
   if(source==='metacognition'||source==='reentry')return {kind:tag(metadata.kind)};
   return {};
 }
@@ -150,6 +162,18 @@ export function workspaceSnapshot(cycle,previous={}){
     attentional_focus:cycle.decision.attention,
     suppressed:cycle.suppressed,
     receivers:cycle.broadcasts.map(x=>x.recipient),
+    receptor_receipts:Object.fromEntries(Object.entries(cycle.processed||{})
+      .filter(([id])=>['prefrontal','insula','hippocampus','basal_ganglia','metacognition'].includes(id))
+      .map(([id,receipt])=>[id,{
+        kind:String(receipt.kind||'').slice(0,40),
+        consumed:Math.max(0,Number(receipt.consumed)||0),
+        output_count:Array.isArray(receipt.references)?receipt.references.length:
+          Array.isArray(receipt.selected_policies)?receipt.selected_policies.length:
+          Array.isArray(receipt.warnings)?receipt.warnings.length:
+          Number(Boolean(receipt.verification_required||
+            receipt.optional_compute_deferred)),
+      }]),
+    ),
   };
   return base;
 }

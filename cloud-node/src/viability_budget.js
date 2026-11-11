@@ -19,7 +19,9 @@ export function evolveViability(previous={},organism={},nowMs=Date.now()){
    ?Math.max(0,Math.min(3600,(nowMs-last)/1000)):30;
  // Bounded resource strain degrades computation gradually; quiet cycles restore.
  const stress=Math.max(pressure,failure*.8);
- const delta=stress>.6
+ // Missing or stale process metrics are not evidence of recovery.
+ // A denied recovery does not erase the last valid reserve or its history.
+ const delta=!verified?0:stress>.6
    ?-Math.max(.012,elapsed/3600*.32)*(stress-.35)
    :Math.max(.002,elapsed/3600*.14)*(1-stress);
  const reserve=clamp(clamp(before.reserve)+delta);
@@ -29,8 +31,9 @@ export function evolveViability(previous={},organism={},nowMs=Date.now()){
  return {version:'aura-functional-viability-v1',
    at:new Date(nowMs).toISOString(),
    reserve:Number(reserve.toFixed(4)),capacity,mode,
-   optional_work_allowed:reserve>=.35&&pressure<.75,
+   optional_work_allowed:verified&&reserve>=.35&&pressure<.75,
    source:verified?'node-process':'no-fresh-process-reading',
+   recovery_measured:verified&&delta>0,
    stress:Number(stress.toFixed(4)),recovery_possible:true,
    irreversible_destruction_allowed:false};
 }

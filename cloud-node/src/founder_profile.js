@@ -25,6 +25,7 @@ export function selectFounderProfile(notes,{authenticated=false,limit=3}={}){
   // No duplicate biographical claim is fed to a speech provider.
   if(chosen.some(x=>fold(x.detail)===fold(detail)))continue;
   chosen.push({
+    id:note.id??null,
     title:redact(String(note.title||'').slice(0,75)),
     detail,
     provenance:'déclaration du fondateur en mémoire, non vérifiée indépendamment',

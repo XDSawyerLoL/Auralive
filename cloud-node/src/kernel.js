@@ -18,11 +18,13 @@ import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
 import { workspaceInput,competeInWorkspace,workspaceSnapshot } from './global_workspace.js';
-import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,executionWorkspaceGate } from './workspace_boundary.js';
+import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,executionWorkspaceGate,selectBroadcastMemories } from './workspace_boundary.js';
 import { initialPredictionState,predictModule,observePrediction,currentPredictionSignal } from './prediction_error_bus.js';
 import { initialViability,evolveViability } from './viability_budget.js';
 import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
+import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
+import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -117,8 +119,16 @@ export class CognitiveKernel {
     this.autogenesis = new IdentityAutogenesis();
     this.innerDialogue = new InnerDialogueEngine();
     this.livedExperience = new LivedExperience();
+    // A verified outcome requires a one-use receipt from a REAL local
+    // filesystem probe, correlated with a specific historical episode.
+    this.pendingMachineReceipts=new Map();
+    this.pendingOwnerProbePermit=null;
     // Lazily bind the pool: constructing the nucleus must not open MySQL.
-    this.history = new HistoryLedger({db:{
+    this.history = new HistoryLedger({verifyOutcome:async({episodeId,outcome,success})=>{
+      const key=Number(episodeId),receipt=this.pendingMachineReceipts.get(key);
+      return Boolean(receipt&&receipt.outcome===outcome&&
+        receipt.success===success&&receipt.source==='fs-syscall');
+    },db:{
       execute:(sql,params)=>getDb().execute(sql,params),
       getConnection:()=>getDb().getConnection(),
     }});
@@ -181,6 +191,8 @@ export class CognitiveKernel {
       global_workspace:null,
       prediction_bus:initialPredictionState(),
       attention_schema:initialAttentionSchema(),
+      autonomous_allowance:null,
+      verified_probe_loop:initialVerifiedLoop(),
       viability:initialViability(),
       consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
@@ -296,6 +308,11 @@ export class CognitiveKernel {
       this.soulCache.prediction_bus=initialPredictionState();
     if(!this.soulCache.attention_schema||typeof this.soulCache.attention_schema!=='object')
       this.soulCache.attention_schema=initialAttentionSchema();
+    if(!this.soulCache.verified_probe_loop||typeof this.soulCache.verified_probe_loop!=='object')
+      this.soulCache.verified_probe_loop=initialVerifiedLoop();
+    // Rehydrated permits are never trusted after a process restart.
+    this.soulCache.autonomous_allowance=null;
+    this.pendingOwnerProbePermit=null;
     if(!this.soulCache.viability||typeof this.soulCache.viability!=='object')
       this.soulCache.viability=initialViability();
     // Detect a malformed or tampered consolidation; never silently trust it.
@@ -572,6 +589,8 @@ export class CognitiveKernel {
   }
 
   async runDueRoutines() {
+    const permit=this.authorizeAutonomous('routine');
+    if(!permit.allowed)return [];
     const rows = await query('SELECT id,name,prompt,every_seconds,mode,last_run_at FROM aura_routines WHERE enabled=1 ORDER BY name');
     const epoch = Date.now();
     const results = [];
@@ -787,6 +806,11 @@ export class CognitiveKernel {
       }
       this.soulCache.global_workspace=workspaceSnapshot(
         idleWorkspace,priorWorkspace);
+      this.soulCache.autonomous_allowance=this.soulCache.viability.optional_work_allowed
+        ?nextAutonomousAllowance(idleWorkspace,{
+          sequence:Number(this.soulCache.cycles||1)-1,
+          workspace_revision:priorWorkspace?.revision,
+        },Date.now()):null;
       const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
         &&['verify','conserve'].includes(idleWorkspace.decision.control);
       if(attentionChanged){
@@ -1151,19 +1175,91 @@ export class CognitiveKernel {
   }
 
   executionWorkspace(){
-    const proposals=workspaceInput({
-      userPresent:false,
-      organism:this.organism.migrate(this.soulCache||{}),
-      plan:{act:'task_first'},
-      prediction:currentPredictionSignal(this.soulCache?.prediction_bus),
-      consolidation:this.soulCache?.consolidation,
-      previous:this.soulCache?.global_workspace,
+    // No new proposal may be generated at the point of execution.
+    const receipt=this.soulCache?.global_workspace||{};
+    const observed=Date.parse(String(receipt.at||''));
+    const fresh=Number.isFinite(observed)&&observed<=Date.now()&&
+      Date.now()-observed<=120000;
+    const selected=fresh&&receipt.broadcast_enabled===true
+      ?(Array.isArray(receipt.selected)?receipt.selected:[]):[];
+    const workspace={broadcast_enabled:Boolean(fresh&&receipt.broadcast_enabled),
+      received:{prefrontal:selected}};
+    const gate=executionWorkspaceGate(workspace);
+    return {workspace,gate:fresh?gate:{allowed:false,reason:'no-fresh-workspace'}};
+  }
+
+  authorizeAutonomous(source){
+    return centralActionAdmission({
+      source,workspace:this.soulCache?.global_workspace,
+      allowance:this.soulCache?.autonomous_allowance,
+      viability:this.soulCache?.viability,
     });
-    const workspace=competeInWorkspace(proposals,{
-      previous:this.soulCache?.global_workspace,
-      capacity:this.soulCache?.viability?.capacity||3,
+  }
+
+  async admitAuthenticatedLocalProbe(){
+    // Called only by the private-owner API route after session auth.
+    // The receipt is born from this real requested ingress, not from an
+    // arbitrary executive signal produced by a background worker.
+    const stamp=Date.now(),prior=this.soulCache?.global_workspace;
+    const cycle=competeInWorkspace(workspaceInput({
+      userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
+      plan:{act:'verify'},previous:prior,nowMs:stamp,
+    }),{previous:prior,nowMs:stamp,capacity:this.soulCache?.viability?.capacity||3});
+    const gate=executionWorkspaceGate(cycle);
+    if(!gate.allowed)throw Error('owner-probe-not-broadcast');
+    this.soulCache.global_workspace=workspaceSnapshot(cycle,prior);
+    this.pendingOwnerProbePermit={id:randomUUID(),issued_at:stamp};
+    await this.saveSoul();
+    return this.pendingOwnerProbePermit.id;
+  }
+
+  async verifiedLocalProbe({context='read-only-file-probe',relativePath,root,permit}={}){
+    const receipt=this.pendingOwnerProbePermit,stamp=Date.now();
+    this.pendingOwnerProbePermit=null; // one use whether execution succeeds
+    if(!receipt||permit!==receipt.id||stamp-receipt.issued_at>30000)
+      throw Error('verified-probe-requires-private-owner-broadcast');
+    if(!/^[a-z0-9_-]{3,70}$/i.test(String(context)))
+      throw Error('invalid-safe-probe-context');
+    const base=root||new URL('../',import.meta.url).pathname;
+    const runId=randomUUID(),strategy=verifiedLoopDecision(
+      this.soulCache.verified_probe_loop,context);
+    const predicted=this.soulCache.verified_probe_loop.episodes||[];
+    const successes=predicted.filter(x=>x.context===context&&x.outcome==='succeeded').length;
+    const observations=predicted.filter(x=>x.context===context).length;
+    // Commit the expectation BEFORE the actual filesystem syscall.
+    const historyEpisode=await this.history.beginEpisode({
+      mission_id:runId,kind:'action',context_tag:context,
+      action:strategy.verifies_first?'verify':'respond',
+      prediction:'local-probe-readable',confidence:(successes+1)/(observations+2),
     });
-    return {workspace,gate:executionWorkspaceGate(workspace)};
+    const result=await runVerifiedProbe(this.soulCache.verified_probe_loop,{
+      root:base,context,relativePath,runId,
+    });
+    if(!replayVerifiedLoop(result.state,context).verified)
+      throw Error('verified-probe-ledger-integrity-failed');
+    const verifiedResult={outcome:'verified-fs-probe:'+result.receipt.hash,
+      success:result.receipt.exit_code===0?1:0,source:'fs-syscall'};
+    this.pendingMachineReceipts.set(Number(historyEpisode.id),verifiedResult);
+    try{
+      await this.history.recordOutcome(historyEpisode.id,{
+        outcome:verifiedResult.outcome,success:verifiedResult.success,
+        source:'machine-verified',
+      });
+    }finally{
+      this.pendingMachineReceipts.delete(Number(historyEpisode.id));
+    }
+    this.soulCache.verified_probe_loop=result.state;
+    await this.saveSoul();
+    await this.trace('verified-tool-loop','filesystem-observation','',{
+      at:now(),context:String(context).slice(0,80),
+      strategy:result.decision.strategy,preflighted:result.action_was_preflighted,
+      exit_code:result.receipt.exit_code,
+      episode_id:historyEpisode.id,receipt_hash:result.receipt.hash,
+      verified:true,raw_file_content_stored:false,
+    });
+    return {verified:result.verified,decision:result.decision,
+      receipt:result.receipt,history_episode_id:historyEpisode.id,
+      preflighted:result.action_was_preflighted};
   }
 
   async runAgent(name, task, { missionId = '' } = {}) {
@@ -1188,7 +1284,7 @@ export class CognitiveKernel {
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
         `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${workspaceHas(workspace,'hippocampus','memory')
-          ?semanticWorkspaceContext(await this.contextForAi(true,task),workspace):''}`,
+          ?'': ''}`,
         AGENT_ROLES[name] + '\n' + agentSkillsGuidance(task, {role:name,limit:2}),
         700,
         taskRole,
@@ -1459,10 +1555,10 @@ export class CognitiveKernel {
       privateView ? measuredLookup('context_continuity',()=>this.activitySinceLastConversation(conversationSession)) : skippedLookup('context_continuity',{}),
       measuredLookup('context_messages',()=>query(
         privateView
-          ? `SELECT author,role,content,created_at FROM aura_cloud_messages
+          ? `SELECT id,author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id IN ('private-founder','')
              ORDER BY id DESC LIMIT 8`
-          : `SELECT author,role,content,created_at FROM aura_cloud_messages
+          : `SELECT id,author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id=?
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
@@ -1496,23 +1592,13 @@ export class CognitiveKernel {
     ];
     await brainHop('homeostasis','memory','retrieval');
     observe('decision','running');
-    let plan = this.cognition.planReply({
-      text: content,
-      soul: privateView ? privateSoul : publicSoul,
-      intentions,
-      lessons,
-      reflections,
-      work,
-      agenda,
-      continuityReport,
-      recentMessages: [...recentMessages].reverse(),
-      privateView,founderProfileNotes:recognizedProfileNotes,
-    });
-
-    await brainHop('memory','cognition','planReply');
-    observe('decision','done',{
-      decision_act:plan.act,semantic_requested:Boolean(plan.needs_semantic_support),
-    });
+    // The nucleus may classify the INGRESS but must not create a reply plan
+    // before competition. Unselected memory is not provided to CognitionEngine.
+    let plan={act:classifySelfDialogue(content,[...recentMessages].reverse())||'respond',
+      discourse:{move:isExplicitCorrection(content)?'correction':'unclassified'},
+      goal:'',needs_semantic_support:false};
+    const safePlanSoul=privateView?privateSoul:publicSoul;
+    await brainHop('memory','thalamus','unplanned-input-awaits-broadcast');
     if (plan.act==='self_exploration' && privateView) {
       // Founder can request a self-audit; asking alone does not increase
       // learned trait scores or prove that AURA has discovered anything.
@@ -1586,6 +1672,17 @@ export class CognitiveKernel {
     const chatCandidates=workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
       plan,experience:privateView?advice:null,
+      memoryProposals:[
+        ...knowledgeNotes.slice(0,2).map((x,i)=>({
+          ref:'note:'+String(x.id),salience:i===0?.81:.69,
+        })),
+        ...(recognitionQuery?recognizedProfileNotes.slice(0,2).map(x=>({
+          ref:'note:'+String(x.id),salience:.86,
+        })):[]),
+        ...recentMessages.filter(x=>x.id!==undefined).slice(-1).map(x=>({
+          ref:'message:'+String(x.id),salience:.63,
+        })),
+      ],
       prediction:currentPredictionSignal(this.soulCache.prediction_bus),
       consolidation:this.soulCache.consolidation,
       history:privateView&&historyPreChoice?.changed?{
@@ -1611,10 +1708,32 @@ export class CognitiveKernel {
         if(result.accepted)this.soulCache.prediction_bus=result.state;
       }
     }
-    const memoryBroadcast=workspace.received.basal_ganglia.some(
-      signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
-    const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
-      signal=>signal.source==='memory'&&signal.label==='reported-feedback-policy');
+    const admitted=selectBroadcastMemories(workspace,{
+      notes:knowledgeNotes,messages:recentMessages,
+      founderProfile:recognizedProfileNotes,
+    });
+    const selectedNotes=admitted.notes;
+    const selectedMessages=admitted.messages;
+    // Plan generation happens ONLY AFTER the limited global broadcast.
+    // Context sources lacking a selected stable ID are not handed to the planner.
+    plan=this.cognition.planReply({
+      text:content,
+      soul:{...safePlanSoul,
+        current_intention:'',dominant_thought:'',independent_activity:null},
+      intentions:[],lessons:[],reflections:[],work:[],
+      agenda:{},continuityReport:{},
+      recentMessages:[...selectedMessages].reverse(),
+      privateView,founderProfileNotes:admitted.founderProfile,
+    });
+    await brainHop('workspace','cognition','plan-created-from-selected-signals');
+    observe('decision','done',{
+      decision_act:plan.act,semantic_requested:Boolean(plan.needs_semantic_support),
+      selected_memory_refs:admitted.refs,
+    });
+    const memoryBroadcast=workspace.processed.basal_ganglia.selected_policies.some(
+      signal=>signal.label==='verified-history-changed-policy');
+    const learnedFeedbackBroadcast=workspace.processed.basal_ganglia.selected_policies.some(
+      signal=>signal.label==='reported-feedback-policy');
     const chosenBaseline=learnedFeedbackBroadcast?advice.strategy:'respond';
     const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
       .includes(plan.act);
@@ -1960,9 +2079,10 @@ export class CognitiveKernel {
       observe('semantic','running');
       const support = await this.expression.semanticSupport(
         plan,
-        workspaceHas(workspace,'hippocampus','memory')
-          ?semanticWorkspaceContext(await this.contextForAi(privateView, content),workspace)
-          :'',
+        semanticWorkspaceContext([
+          ...selectedNotes.map(x=>({id:x.id,kind:'note',content:x.title+': '+x.body})),
+          ...selectedMessages.map(x=>({id:x.id,kind:'message',content:x.content})),
+        ],workspace),
         {
           maxTokens: Math.max(120, Number(inference.token_budget || 180)),
           taskRole: inference.model_role || 'research',

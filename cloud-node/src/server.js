@@ -1352,6 +1352,8 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
     attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
+    verified_probe_loop:bootstrap.runtimeReady?kernel.soulCache?.verified_probe_loop:null,
+    autonomous_allowance:bootstrap.runtimeReady?kernel.soulCache?.autonomous_allowance:null,
     viability:bootstrap.runtimeReady?kernel.soulCache?.viability:null,
     consolidation:bootstrap.runtimeReady?kernel.soulCache?.consolidation:null,
     language:{
@@ -1377,6 +1379,8 @@ app.get('/api/brain/graph', async (request, reply) => {
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
     attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
+    verified_probe_loop:bootstrap.runtimeReady?kernel.soulCache?.verified_probe_loop:null,
+    autonomous_allowance:bootstrap.runtimeReady?kernel.soulCache?.autonomous_allowance:null,
     viability:bootstrap.runtimeReady?kernel.soulCache?.viability:null,
     consolidation:bootstrap.runtimeReady?kernel.soulCache?.consolidation:null,
     language:{
@@ -1510,6 +1514,23 @@ app.post('/api/kernel/tick', async (request, reply) => {
     text: String(request.body?.text || ''),
     force: true,
   });
+});
+
+// Authenticated, owner-initiated read-only causal canary. Never accept a root
+// directory or arbitrary shell command from an HTTP request.
+app.post('/api/kernel/verified-probe', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  const context=String(request.body?.context||'read-only-file-probe').slice(0,70);
+  const relativePath=String(request.body?.relative_path||'').slice(0,180);
+  try {
+    const permit=await kernel.admitAuthenticatedLocalProbe();
+    return await kernel.verifiedLocalProbe({context,relativePath,permit});
+  } catch (error) {
+    return reply.code(422).send({
+      error:String(error?.message||error).slice(0,160),
+    });
+  }
 });
 
 app.get('/api/kernel/reflections', async (request, reply) =>

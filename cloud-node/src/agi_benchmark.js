@@ -9,6 +9,15 @@ import { validateHorizonSignal } from './policy.js';
 import { normalizeCapability, scoreCapability, CapabilityFabric } from './capability_fabric.js';
 import { DagCompiler, TaskGraphExecutor, validateTaskGraph } from './task_graph.js';
 import { CognitiveKernel, requiresExternalKnowledge } from './kernel.js';
+import {workspaceInput,competeInWorkspace,workspaceSnapshot} from './global_workspace.js';
+function simulatePriorUserBroadcast(kernel){
+  const at=Date.now();
+  const offered=competeInWorkspace(workspaceInput({
+    userPresent:true,nowMs:at,plan:{act:'task_first'},
+  }),{nowMs:at});
+  kernel.soulCache={global_workspace:workspaceSnapshot(offered)};
+}
+
 import { FileCapabilityMemory } from './capability_memory.js';
 import { SoftwareRepairEngine } from './software_repair.js';
 import { solveGridTask, applyGridProgram, gridEquals } from './grid_reasoning.js';
@@ -1032,6 +1041,7 @@ export async function runAgiBattery() {
       );
       kernel.runAgent = async () => ({ agent: 'operator', answer: 'Plan réversible uniquement.' });
       kernel.trace = async () => {};
+      simulatePriorUserBroadcast(kernel);
       const outcome = await kernel.operate(
         'Créer un fichier de test, relire son contenu, puis le supprimer.',
         ['safe'],
@@ -1080,6 +1090,7 @@ export async function runAgiBattery() {
         active -= 1;
         return { agent: name, answer: name };
       };
+      simulatePriorUserBroadcast(kernel);
       await kernel.swarm('held-out concurrent mission', ['planner','research','dev','critic']);
       if (maxActive <= 1) {
         return {
