@@ -124,6 +124,19 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     last_at:safeText(rawPrediction.last_surprise?.at||'',40),
     freshness:evaluateTelemetryFreshness(rawPrediction.last_surprise?.at,nowMs),
   }:null;
+  const rawAttention=extra.attention_schema||{};
+  const attentionSchema=live&&rawAttention.observations?{
+    revision:Math.max(0,Number(rawAttention.revision)||0),
+    observations:Math.max(0,Number(rawAttention.observations)||0),
+    correct_predictions:Math.max(0,Number(rawAttention.correct_predictions)||0),
+    focus:safeText(rawAttention.last_focus||'',35),
+    last_error:rawAttention.last_error===null?null:
+      boundedMetric(rawAttention.last_error),
+    last_at:safeText(rawAttention.last_at||'',40),
+    freshness:evaluateTelemetryFreshness(rawAttention.last_at,nowMs),
+    source:'attention_schema / actual workspace selections',
+    subjective_experience_proven:false,
+  }:null;
   const rawViability=extra.viability||{};
   const viability=live&&rawViability.at?{
     reserve:boundedMetric(rawViability.reserve),
@@ -192,6 +205,13 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
         ' · sélection '+globalWorkspace.selected.map(x=>x.source).join(', ')
         :'Aucun résultat de compétition horodaté.',
       source:'CognitiveKernel.globalWorkspace / aura_soul_state'},
+    {id:'prefrontal',title:'Modèle prédictif de l’attention',
+      state:attentionSchema?'instrumented':'not-observed',
+      detail:attentionSchema?'Focus '+attentionSchema.focus+
+        ' · prévisions '+attentionSchema.observations+
+        ' · exactes '+attentionSchema.correct_predictions
+        :'Aucun schéma d’attention acquis.',
+      source:'attention_schema / aura_soul_state'},
     {id:'metacognition',title:'Erreur de prédiction inter-modules',
       state:prediction&&prediction.modules.length?'instrumented':'not-observed',
       detail:prediction&&prediction.modules.length
@@ -247,7 +267,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     source, metrics, somatic, organ_decision:live?organDecision:null,
     independent_activity:live?independentActivity:null,
     global_workspace:globalWorkspace,
-    prediction,viability,consolidation,
+    prediction,attention_schema:attentionSchema,viability,consolidation,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
