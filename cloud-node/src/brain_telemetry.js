@@ -71,6 +71,22 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
         ?'code-modulates-allocation; runtime-effect-not-benchmarked'
         :'no-regulatory-decision',
     }:null;
+  const savedAudit=extra.independent_activity||{};
+  const auditFreshness=evaluateTelemetryFreshness(savedAudit.last_probe_at,nowMs);
+  const independentActivity=savedAudit.last_probe_at?{
+    last_at:String(savedAudit.last_probe_at).slice(0,40),
+    probe:['conversation_retrieval','state_persistence','history_integrity']
+      .includes(savedAudit.last_probe)?savedAudit.last_probe:'unknown',
+    outcome:['supported','counterexample','inconclusive'].includes(savedAudit.last_outcome)
+      ?savedAudit.last_outcome:'unknown',
+    evidence_source:safeText(savedAudit.last_evidence_source||'',50),
+    completed_tests:Number.isSafeInteger(savedAudit.completed_tests)
+      ?savedAudit.completed_tests:0,
+    freshness:auditFreshness,
+    current_activity_verified:false,
+    test_execution_recorded:true,
+    origin:'IndependentContinuity.step',
+  }:null;
   const counts=publicState.kernel_status?.counts||{};
   const number=(v)=>v===null||v===undefined||v===''?null:
     Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
@@ -108,6 +124,16 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
           '% · budget '+String(organDecision.token_budget??'indisponible')
         :'Aucune décision de régulation mesurée sur ce processus.',
       source:'CognitiveKernel.inferenceAssessment / organ_regulation'},
+    {id:'selfaudit',title:'Auto-vérification hors dialogue',
+      state:live&&independentActivity
+        ?auditFreshness.status==='recent'?'recently-observed':'recorded-history'
+        :'not-observed',
+      detail:independentActivity
+        ?'Dernier test : '+independentActivity.probe+
+          ' · résultat : '+independentActivity.outcome+
+          ' · '+independentActivity.last_at
+        :'Aucune vérification indépendante enregistrée par ce processus.',
+      source:'IndependentContinuity.step / aura_soul_state'},
     {id:'cognition',title:'CognitionEngine',state:live?'available':'unavailable',
       detail:'Le noyau calcule des plans de réponse. Le nombre d’opérations en cours n’est pas mesuré ici.',
       source:'CognitiveKernel.status'},
@@ -132,6 +158,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     sampled_at:new Date(nowMs).toISOString(),
     runtime_ready:live,
     source, metrics, somatic, organ_decision:live?organDecision:null,
+    independent_activity:live?independentActivity:null,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
