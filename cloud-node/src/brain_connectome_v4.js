@@ -35,7 +35,7 @@ function v4Base(){
 /* Static biomorphic outline, informed by cerebral morphology. It is
  * structural art, NOT simulated neural activity. Only recorded hops glow. */
 function v5CerebralMorphology(){
- const cx=canvasW*.5,cy=canvasH*.46;
+ const cx=canvasW*.5,cy=canvasH*(canvasW<=600?.27:.46);
  const rx=Math.min(canvasW*.31,canvasH*.34)*Math.min(1.25,Math.max(.75,state.zoom));
  const ry=Math.min(canvasH*.36,canvasW*.22)*Math.min(1.25,Math.max(.75,state.zoom));
  if(rx<45||ry<45)return;
