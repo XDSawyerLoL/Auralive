@@ -28,7 +28,7 @@ jobs:
         run: node --test test/aura_p0_closed_loop.test.js
       - name: Related workspace causal regression
         working-directory: cloud-node
-        run: node --test test/global_workspace.test.js test/workspace_integrated_mechanisms.test.js test/attention_schema.test.js
+        run: node --test test/global_workspace.test.js test/workspace_integrated_mechanisms.test.js test/attention_schema.test.js test/workspace_receptors.test.js
       - name: Verify Node syntax and Hostinger packaging inputs
         working-directory: cloud-node
         run: npm run check:package
