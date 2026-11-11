@@ -1705,10 +1705,10 @@ export class CognitiveKernel {
       decision_act:plan.act,semantic_requested:Boolean(plan.needs_semantic_support),
       selected_memory_refs:admitted.refs,
     });
-    const memoryBroadcast=workspace.received.basal_ganglia.some(
-      signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
-    const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
-      signal=>signal.source==='memory'&&signal.label==='reported-feedback-policy');
+    const memoryBroadcast=workspace.processed.basal_ganglia.selected_policies.some(
+      signal=>signal.label==='verified-history-changed-policy');
+    const learnedFeedbackBroadcast=workspace.processed.basal_ganglia.selected_policies.some(
+      signal=>signal.label==='reported-feedback-policy');
     const chosenBaseline=learnedFeedbackBroadcast?advice.strategy:'respond';
     const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
       .includes(plan.act);
