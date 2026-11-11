@@ -1516,6 +1516,23 @@ app.post('/api/kernel/tick', async (request, reply) => {
   });
 });
 
+// Authenticated, owner-initiated read-only causal canary. Never accept a root
+// directory or arbitrary shell command from an HTTP request.
+app.post('/api/kernel/verified-probe', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  const context=String(request.body?.context||'read-only-file-probe').slice(0,70);
+  const relativePath=String(request.body?.relative_path||'').slice(0,180);
+  try {
+    const permit=await kernel.admitAuthenticatedLocalProbe();
+    return await kernel.verifiedLocalProbe({context,relativePath,permit});
+  } catch (error) {
+    return reply.code(422).send({
+      error:String(error?.message||error).slice(0,160),
+    });
+  }
+});
+
 app.get('/api/kernel/reflections', async (request, reply) =>
   requirePrivate(request, reply) && requireRuntime(reply)
     ? kernel.reflections(request.query?.limit)
