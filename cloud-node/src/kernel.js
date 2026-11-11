@@ -1459,7 +1459,7 @@ export class CognitiveKernel {
     const historyCandidates=privateView
       ?await this.history.retrieve(experiencedContext).catch(()=>[]):[];
     const historyPreChoice=historyChoice({
-      context:experiencedContext,baseline:advice.strategy,rows:historyCandidates,
+      context:experiencedContext,baseline:'respond',rows:historyCandidates,
     });
     if(historyCandidates.length)
       await brainHop('memory','history','verified-history-candidates-retrieved');
@@ -1470,7 +1470,8 @@ export class CognitiveKernel {
     const attentionMeta=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
     const workspace=competeInWorkspace(workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
-      plan,history:privateView&&historyPreChoice?.changed?{
+      plan,experience:privateView?advice:null,
+      history:privateView&&historyPreChoice?.changed?{
         changed:true,eligible:Boolean(historyPreChoice?.provenance?.length),
         action:historyPreChoice.action,
       }:null,metacognition:attentionMeta,
@@ -1478,13 +1479,16 @@ export class CognitiveKernel {
     }),{previous:privateView?this.soulCache.global_workspace:null});
     const memoryBroadcast=workspace.received.basal_ganglia.some(
       signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
+    const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
+      signal=>signal.source==='memory'&&signal.label==='reported-feedback-policy');
+    const chosenBaseline=learnedFeedbackBroadcast?advice.strategy:'respond';
     const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
       .includes(plan.act);
     // Commit only after thalamic competition and broadcast. All other
     // retrieved history was a candidate, not an executed selection.
     const historyDecision=privateView
       ?await this.history.decide({
-        context_tag:experiencedContext,baseline:advice.strategy,
+        context_tag:experiencedContext,baseline:chosenBaseline,
         run_id:brainFlowId,situation_id:experiencedContext,
         workspacePolicyAllowed:historyPermitted&&memoryBroadcast,
       }).catch(()=>null)
@@ -1525,14 +1529,15 @@ export class CognitiveKernel {
       kernel_decision_only:true,
       raw_user_text_stored:false,subjective_experience_claim:false,
     });
-    const strategy=historyChanged?historyDecision.action:advice.strategy;
-    const strategyChanged=Boolean(advice.changed||historyChanged);
+    const strategy=historyChanged?historyDecision.action:chosenBaseline;
+    const strategyChanged=Boolean((learnedFeedbackBroadcast&&advice.changed)||historyChanged);
     plan.learned_strategy=strategy;
     plan.experience_guidance={
       context:experiencedContext,strategy,
       historical_revision:Number(advice.revision||0),
       changed_by_history:strategyChanged,
-      evidence_kind:historyChanged?'promoted-machine-verified-history':advice.basis,
+      evidence_kind:historyChanged?'promoted-machine-verified-history':
+        learnedFeedbackBroadcast?advice.basis:'workspace-did-not-select-feedback',
     };
     plan.history_guidance=privateView?{
       eligible:Boolean(historyDecision?.provenance?.length),
@@ -1647,7 +1652,7 @@ export class CognitiveKernel {
     // it cannot authorize actions or assert that the world changed.
     const metacognitive=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
     plan.metacognitive_guidance=metacognitive;
-    if(metacognitive.verify){
+    if(metacognitive.verify&&workspace.received.metacognition.some(x=>x.source==='metacognition')){
       plan.metacognitive_action='verify';
       plan.goal+=' Ne présente pas la mémoire comme certaine tant que cette limite n’a pas été revérifiée.';
       plan.facts=[...(plan.facts||[]),metacognitive.limitation];
