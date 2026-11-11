@@ -35,6 +35,12 @@ test('only promoted active policies backed by verified nonablated evidence affec
   assert.equal(historyChoice({context,rows:[mutation]}).action,'respond');
  }
 });
+test('predicting an action will fail cannot make that action a future preferred policy',()=>{
+ const negative={...rows[0],expected_success:0};
+ assert.equal(historyChoice({context,rows:[negative]}).action,'respond');
+ const positive={...rows[0],expected_success:1};
+ assert.equal(historyChoice({context,rows:[positive]}).action,'clarify');
+});
 test('ablation demonstrates a causal choice change without mutating the real data',()=>{
  const original=JSON.stringify(rows);
  const r=ablationComparison({context,rows});

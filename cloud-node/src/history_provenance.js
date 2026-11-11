@@ -18,7 +18,8 @@ export function historyChoice({context,baseline='respond',rows=[],excludedEpisod
   if(!ACTIONS.has(baseline))throw new Error('Invalid baseline action');
   const excluded=new Set(excludedEpisodes.map(Number));
   const candidates=rows.filter(p=>Number(p.active)===1&&
-    p.hypothesis_status==='promoted'&&p.context_tag===context&&ACTIONS.has(p.rule_action))
+    p.hypothesis_status==='promoted'&&p.context_tag===context&&ACTIONS.has(p.rule_action)&&
+    (p.expected_success===undefined||Number(p.expected_success)===1))
    .map(p=>({...p,used_evidence:(p.evidence||[]).filter(e=>e.source==='machine-verified'
       &&e.polarity==='support'&&Number(e.ablated)===0&&!excluded.has(Number(e.episode_id)))}))
    .filter(p=>p.used_evidence.length>=2)
@@ -119,9 +120,9 @@ export class HistoryLedger {
   }
   async retrieve(context_tag){
     const [policies]=await this.db.execute(
-      'SELECT p.id AS policy_id,p.hypothesis_id,p.rule_action,p.active,h.status AS hypothesis_status,h.scope_context AS context_tag,h.confidence '+
+      'SELECT p.id AS policy_id,p.hypothesis_id,p.rule_action,p.active,h.status AS hypothesis_status,h.scope_context AS context_tag,h.confidence,h.expected_success '+
       'FROM aura_history_policies p JOIN aura_history_hypotheses h ON h.id=p.hypothesis_id '+
-      "WHERE p.active=1 AND h.status='promoted' AND h.scope_context=? "+
+      "WHERE p.active=1 AND h.status='promoted' AND h.expected_success=1 AND h.scope_context=? "+
       'ORDER BY h.confidence DESC,p.id LIMIT 12',[context_tag]);
     if(!policies.length)return [];
     const [evidence]=await this.db.execute(
@@ -217,7 +218,9 @@ export class HistoryLedger {
       await conn.execute(
         'UPDATE aura_history_hypotheses SET confidence=?,status=?,updated_ts=? WHERE id=?',
         [confidence,status,utc(this.clock()),h.id]);
-      if(status==='promoted'){
+      // A successful prediction of FAILURE is a warning, never a reason
+      // to promote the failing action as a future preferred policy.
+      if(status==='promoted'&&Number(h.expected_success)===1){
         const [prior]=await conn.execute(
           'SELECT id FROM aura_history_policies WHERE hypothesis_id=? LIMIT 1',[h.id]);
         if(!prior.length)
@@ -227,7 +230,7 @@ export class HistoryLedger {
             [h.id,'Prioriser '+h.predicted_action+' dans '+h.scope_context+
              ' sous réserve des permissions et contrôles de sécurité',
              h.predicted_action,1,utc(this.clock())]);
-      }else if(status==='refuted'){
+      }else if(status==='refuted'||Number(h.expected_success)===0){
         await conn.execute('UPDATE aura_history_policies SET active=0 WHERE hypothesis_id=?',[h.id]);
       }
       await conn.commit();

@@ -26,7 +26,7 @@ export function classifySelfDialogue(text, context = []) {
 
   // Precedence matters: a correction containing "QUI ES TU" is an identity
   // question, not a generic request for apology or a wellbeing check.
-  if (/\b(?:quel est ton nom|quel est ton prenom|comment tu t appelles|comment t appelles tu|comment te nommes tu|comment tu te nommes|c est quoi ton nom|ton nom c est quoi)\b/.test(q))
+  if (/\b(?:quel est ton nom|quel est votre nom|quel est ton prenom|quel est votre prenom|comment tu t appelles|comment t appelles tu|comment te nommes tu|comment tu te nommes|c est quoi ton nom|ton nom c est quoi)\b/.test(q))
     return 'self_name';
 
   if (/\bpersonnalit[e]?\b/.test(q) &&
@@ -42,7 +42,7 @@ export function classifySelfDialogue(text, context = []) {
   ) return 'self_exploration';
 
   if (
-    /\b(?:qui es tu|qui tu es|qu est ce que tu es|ce que tu es|tu es quoi|quelle est ton identite|quelle est ta nature|tu comprends qui tu es|sais tu qui tu es)\b/.test(q)
+    /\b(?:qui es tu|qui tu es|qui etes vous|vous etes qui|qui etes vous vraiment|qu est ce que vous etes|presentez vous|qu est ce que tu es|ce que tu es|tu es quoi|quelle est ton identite|quelle est votre identite|quelle est ta nature|tu comprends qui tu es|sais tu qui tu es)\b/.test(q)
     || /\b(?:es tu consciente|as tu conscience|tu as une conscience)\b/.test(q)
   ) return 'self_identity';
 

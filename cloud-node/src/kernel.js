@@ -14,6 +14,7 @@ import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
 import { SelfInquiryEngine } from './self_inquiry.js';
+import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
 import { groundAgenda } from './activity_truth.js';
@@ -116,6 +117,10 @@ export class CognitiveKernel {
       getConnection:()=>getDb().getConnection(),
     }});
     this.selfInquiry = new SelfInquiryEngine();
+    this.independentContinuity = new IndependentContinuity({
+      db:{execute:(sql,params)=>getDb().execute(sql,params)},
+      selfInquiry:this.selfInquiry,history:this.history,
+    });
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
     this.skillLearning = new SkillLearningEngine({ fabric });
@@ -162,6 +167,7 @@ export class CognitiveKernel {
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
+      independent_activity:null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -727,6 +733,36 @@ export class CognitiveKernel {
         ? await this.prepareContinuityStimulus()
         : { due: false, reason: 'direct-or-budgeted-cycle' };
       const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
+      // A bounded measured inquiry runs between conversations, when due.
+      // No LLM, network action or unverified claim is generated.
+      if(!force && !String(text).trim() && config.continuityEnabled){
+        const independent=await this.independentContinuity.step({
+          soul:this.soulCache,
+        }).catch(()=>({executed:false,reason:'probe-unavailable'}));
+        if(independent.executed){
+          // Merge only the tested state; chat may have updated other fields.
+          this.soulCache.epistemic_self=independent.soul.epistemic_self;
+          this.soulCache.independent_activity=independent.soul.independent_activity;
+          await this.trace('independent-self-test',
+            independent.receipt.probe,independent.receipt.outcome,{
+              at:independent.receipt.at,
+              probe:independent.receipt.probe,
+              observation:independent.receipt.outcome,
+              evidence:independent.receipt.basis,
+              candidate_hypotheses:independent.receipt.new_hypotheses_proposed,
+              autonomous:true,external_action:false,
+            });
+          this.pushStimulus({
+            type:'aura.self_probe.observed',
+            source:'independent-kernel-probe',
+            occurred_at:independent.receipt.at,
+            payload:{probe:independent.receipt.probe,
+              outcome:independent.receipt.outcome,
+              basis:independent.receipt.basis,
+              new_hypotheses:independent.receipt.new_hypotheses_proposed},
+          });
+        }
+      }
       const shouldReflect = force
         || Boolean(String(text).trim())
         || (dueByTime && this.stimuli.length > 0 && underLimit)
@@ -773,7 +809,11 @@ export class CognitiveKernel {
       // Independent, persisted reflections are autobiographical evidence,
       // not feelings or imagined personal memories. A direct user command
       // does not count as an autonomous reflection.
-      if(!force && !String(text).trim()){
+      const observedAutonomousEvent=bundle.stimuli.some(item=>
+        item?.type==='aura.self_probe.observed'||
+        item?.type==='automation.failure'||
+        item?.source==='horizon');
+      if(!force && !String(text).trim() && observedAutonomousEvent){
         this.soulCache.emergent_identity = this.autogenesis.observe(
           this.soulCache.emergent_identity, {kind:'autonomous_reflection',at:timestamp},
         );
@@ -1442,7 +1482,7 @@ export class CognitiveKernel {
         if(this.ai?.enabled){
           proposal=await this.expression.semanticSupport({
             needs_semantic_support:true,
-            semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval ou PROBE:state_persistence. Question : '+content.slice(0,300),
+            semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval, PROBE:state_persistence ou PROBE:history_integrity. Question : '+content.slice(0,300),
           },'',{maxTokens:95,taskRole:'conversation'}).catch(()=>'');
         }
         const probe=this.selfInquiry.chooseProbe(this.soulCache.epistemic_self,{
@@ -1464,6 +1504,13 @@ export class CognitiveKernel {
             outcome=stored&&Number(stored.emergent_identity?.revision||0)===current
               ?'supported':'counterexample';
           }catch{outcome='counterexample';}
+        }else if(probe==='history_integrity'){
+          try{
+            const checked=await this.history.verifyChain({maxEpisodes:2000});
+            outcome=checked.verified&&checked.checked>0?'supported':
+              ['broken-chain','head-mismatch'].includes(checked.reason)
+                ?'counterexample':'inconclusive';
+          }catch{outcome='inconclusive';}
         }
         this.soulCache.epistemic_self=this.selfInquiry.observe(this.soulCache.epistemic_self,{
           probe,outcome,source:'kernel-probe',privateView:true,
@@ -2016,21 +2063,21 @@ export class CognitiveKernel {
         at: row.created_at,
         title: `${row.automation_id}: ${row.ok ? 'réussi' : 'échec'}`,
         detail: row.signature,
-        autonomous: true,
+        autonomous: false,
       })),
       ...missions.map((row) => ({
         type: 'mission',
         at: row.updated_at,
         title: row.title,
         detail: `${row.status} · progression ${Math.round(Number(row.progress || 0) * 100)}%${row.last_error ? ` · blocage: ${row.last_error}` : ''}`,
-        autonomous: true,
+        autonomous: false,
       })),
       ...initiatives.map((row) => ({
         type: 'initiative',
         at: row.updated_at,
         title: row.title,
         detail: `${row.domain || 'AURA'} · ${row.status || ''} · ${row.execution_mode || ''}`,
-        autonomous: true,
+        autonomous: false,
       })),
       ...traces
         .filter((row) => !['reflection','expression'].includes(String(row.kind || '')))
@@ -2039,7 +2086,7 @@ export class CognitiveKernel {
           at: row.created_at,
           title: row.title,
           detail: row.content,
-          autonomous: true,
+          autonomous:String(row.kind||'')==='independent-self-test',
         })),
     ]
       .filter((row) => row.at && row.title)

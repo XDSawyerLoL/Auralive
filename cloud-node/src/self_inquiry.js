@@ -11,6 +11,10 @@ const PROBES=Object.freeze({
   claim:'Mes dispositions enregistrées sont accessibles dans mon stockage persistant.',
   test:'Relire un état sauvegardé et comparer sa révision à celle du noyau.',
  },
+ history_integrity:{
+  claim:'Les épisodes de mon histoire enregistrée forment une chaîne cohérente.',
+  test:'Recalculer les empreintes SHA-256 et vérifier la tête de chaîne sur des épisodes réellement stockés.',
+ },
 });
 const clamp=n=>Math.max(0,Math.min(100000,Number.isFinite(Number(n))?Math.floor(Number(n)):0));
 const iso=v=>Number.isFinite(Date.parse(String(v||'')))?new Date(v).toISOString():new Date().toISOString();
@@ -46,11 +50,13 @@ export class SelfInquiryEngine {
  chooseProbe(input,{proposal='',topic='',privateView=false}={}){
   if(!privateView)return null;
   const state=this.migrate(input);
-  const match=String(proposal||'').match(/(?:^|\n)\s*PROBE\s*[:=]\s*(conversation_retrieval|state_persistence)\b/i);
+  const match=String(proposal||'').match(/(?:^|\n)\s*PROBE\s*[:=]\s*(conversation_retrieval|state_persistence|history_integrity)\b/i);
   if(match)return match[1].toLowerCase();
   const q=String(topic||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   if(/\b(?:souvenir|conversation|historique|echange|retrouv|memoire)\b/.test(q))
    return 'conversation_retrieval';
+  if(/\b(?:chaine|empreinte|hash|integrite|episode)\b/.test(q))
+   return 'history_integrity';
   if(/\b(?:sauvegarde|persistance|stockage|enregistr|identite|disposition)\b/.test(q))
    return 'state_persistence';
   return [...PROBE_IDS].sort((a,b)=>{
@@ -88,14 +94,18 @@ export class SelfInquiryEngine {
    privacy:'not-authenticated',claim:'',status:'unexamined',observation:'',revision:state.revision};
   const id=PROBE_IDS.includes(probe)?probe:PROBE_IDS[0],h=state.hypotheses[id];
   const latest=h.last_outcome;
-  const observation=latest==='supported'
-   ?id==='conversation_retrieval'
-    ?'Le noyau a retrouvé des messages antérieurs dans la base de conversation.'
-    :'Le noyau a relu un état sauvegardé dont la révision correspond à son état actif.'
-   :latest==='counterexample'
-    ?id==='conversation_retrieval'
-     ?'Une tentative de récupération a rencontré une erreur du stockage.'
-     :'La lecture de l’état sauvegardé a échoué ou ne correspond pas à la révision active.'
+  const supported={
+   conversation_retrieval:'Le noyau a retrouvé des messages antérieurs dans la base de conversation.',
+   state_persistence:'Le noyau a relu un état sauvegardé dont la révision correspond à son état actif.',
+   history_integrity:'Une vérification cryptographique a confirmé la chaîne des épisodes effectivement contrôlés.',
+  };
+  const contradicted={
+   conversation_retrieval:'La récupération des messages a échoué malgré une tentative explicite.',
+   state_persistence:'La lecture de l’état sauvegardé a échoué ou sa révision ne correspond pas.',
+   history_integrity:'La vérification cryptographique a signalé une incohérence dans la chaîne.',
+  };
+  const observation=latest==='supported'?supported[id]
+    :latest==='counterexample'?contradicted[id]
     :'L’essai ne permet pas de conclure sur cette capacité.';
   return {
    probe:id,claim:PROBES[id].claim,method:PROBES[id].test,

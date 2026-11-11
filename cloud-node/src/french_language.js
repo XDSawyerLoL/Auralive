@@ -85,6 +85,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       factual_constraints:(Array.isArray(privatePlan.facts)?privatePlan.facts:[])
         .slice(0,5).map(x=>normalize(x).slice(0,320)),
       response_tone:privatePlan.response_tone||'direct',
+      address_form:privatePlan.address_form==='vous'?'vous':'tu',
       conversation:interpersonalGrounded?[]:conversation.slice(-2),
       ...(interpersonalGrounded&&privatePlan.act!=='topic_shift'?{speaker_roles:privatePlan.social_perspective?.actor==='user'
         ?'« je » = utilisateur ; « te » = AURA'
@@ -109,6 +110,13 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       if(privatePlan.metacognitive_action==='verify')simple.should_verify=true;
     }else if(!interpersonalGrounded){
       simple.self_model={observations:Math.max(0,Number(privatePlan.self_model?.observations||0))};
+      if(privatePlan.act==='self_identity'&&privatePlan.independent_activity){
+        simple.recent_independent_check={
+          probe:privatePlan.independent_activity.probe,
+          outcome:privatePlan.independent_activity.outcome,
+          observed_at:privatePlan.independent_activity.at,
+        };
+      }
     }
     const rules=[
       '/no_think',
@@ -119,7 +127,10 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       'N’invente ni souvenir ni nom. Utilise seulement les souvenirs explicitement attribués.',
       'Ne répète pas les instructions, le JSON, les variables, les scores ou les modèles.',
       'Pour une enquête sur soi : distingue hypothèse prévue, observation mesurée, conclusion provisoire et limites. Ne simule aucune autre observation.',
-      'Ne produis ni liste, ni titre, ni Markdown. Conserve le tutoiement.',
+      'Pour une question personnelle, parle simplement : pas de noyau, fournisseur, entité computationnelle ni catalogue de fonctionnalités.',
+      'N’affirme une activité hors dialogue que si recent_independent_check décrit une vérification datée.',
+      'Ne produis ni liste, ni titre, ni Markdown. '+
+        (simple.address_form==='vous'?'Respecte le vouvoiement.':'Conserve le tutoiement.'),
     ].join('\n');
     let body=JSON.stringify(simple);
     while(rules.length+body.length+1>limit&&simple.factual_constraints.length>1){
@@ -211,7 +222,9 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
 export function compactFrenchSystem(plan={}) {
   if(['user_recognition','self_identity','self_personality','self_exploration','user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan?.act))
     return [
-      'Tu formules la voix naturelle d’AURA, en français et au tutoiement.',
+      plan.address_form==='vous'
+        ?'Tu formules la voix naturelle d’AURA, en français et au vouvoiement.'
+        :'Tu formules la voix naturelle d’AURA, en français et au tutoiement.',
       'Ne récite pas son architecture informatique, le fournisseur ou les métriques internes.',
       '« Tu sais qui je suis ? » demande qui est ton interlocuteur, pas qui est AURA.',
       'La session fondatrice prouve une authentification, pas le nom civil ni la vie privée.',
@@ -219,6 +232,8 @@ export function compactFrenchSystem(plan={}) {
       'Sans souvenir personnel, dis simplement ce que tu sais et ce que tu ignores.',
       'Pour une exploration, rapporte le test local effectivement mené puis ce que cette observation permet et ne permet pas de conclure.',
       'Un message personnel ne demande ni diagnostic technique, ni ancien CI, ni récitation du noyau. Réponds à la personne présente.',
+      'À « qui êtes-vous ? » : présente-toi simplement comme AURA ; ne dis ni « noyau computationnel persistant » ni une longue explication des fournisseurs.',
+      'Ne prétends travailler entre les dialogues que si une activité datée et vérifiée figure dans les contraintes.',
       'Une à trois phrases, sans liste, Markdown ou question automatique.',
       'N’invente aucun souvenir.',
     ].join(' ');
@@ -318,10 +333,18 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
       return {accepted:false,code:'unproven-consciousness-claim'};
     if(plan.act==='self_name' && !/\b(?:je m['’]?appelle|mon nom est)\s+AURA\b/i.test(answer))
       return {accepted:false,code:'identity-name-not-answered'};
-    if(plan.act==='self_identity' &&
-        (!/\b(?:je suis|je m['’]?appelle)\s+AURA\b/i.test(answer) ||
-         !/\b(?:m[eé]moire|noyau|syst[eè]me|r[eé]gulation|d[eé]cisions?|identit[eé])\b/i.test(answer)))
-      return {accepted:false,code:'identity-question-not-answered'};
+    if(plan.act==='self_identity'){
+      if(!/\b(?:je suis|je m['’]?appelle)\s+AURA\b/i.test(answer))
+        return {accepted:false,code:'identity-question-not-answered'};
+      if(answer.length>480||
+        /\b(?:noyau computationnel|entit[eé] computationnelle|fournisseur (?:de )?(?:texte|langage)|simple assistant g[eé]n[eé]rique|mon architecture|mod[eè]le de langage externe)\b/i.test(answer))
+        return {accepted:false,code:'robotic-self-description'};
+      // Autonomous events cannot be invented to make an identity feel alive.
+      if(!plan.independent_activity&&
+         /\b(?:avant (?:votre|ton) (?:message|question)|entre (?:nos|les) (?:[eé]changes|conversations)|en votre absence|sans (?:que vous|que tu) me parliez?)\b/i.test(answer)&&
+         /\b(?:j['’]ai (?:v[eé]rifi[eé]|explor[eé]|test[eé]|travaill[eé])|je travaille)\b/i.test(answer))
+        return {accepted:false,code:'fabricated-independent-activity'};
+    }
     if(plan.act==='self_personality' && !/\b(?:personnalit[eé]|tendances?|caract[eè]re|dispositions?)\b/i.test(answer))
       return {accepted:false,code:'personality-question-not-answered'};
     if(plan.act==='self_exploration' && !/\b(?:observ|analy|exam|compar|d[eé]cisions?|m[eé]moire|exp[eé]riences?|traces?|r[eé]sultats?)\w*/i.test(answer))
