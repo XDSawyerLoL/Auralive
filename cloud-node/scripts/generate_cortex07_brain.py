@@ -22,7 +22,7 @@ def hemisphere(side, lat=200, lon=280):
         *np.sin(24*f+3*np.cos(t*10.3))+
       .12*np.sin(11.5*nx+21.3*ny+5.3*np.sin(nz*12))
         *np.sin(11.7*nz+5.5*nx+4*np.sin(ny*8)))
-    delta=.095*folds
+    delta=.060*folds
     taper=.955+.04*np.sin(t*3)+.04*np.cos(f*2)
     x=side*np.maximum(.055,xx+delta*nx)
     y=yy+delta*ny+.06*np.cos(f*1.2)*st
@@ -66,18 +66,6 @@ def build(out):
     out=Path(out);out.parent.mkdir(parents=True,exist_ok=True)
     ren=vtk.vtkRenderer();ren.SetBackground(0,0,0);ren.SetBackgroundAlpha(0)
     for side in (-1,1):ren.AddActor(hemisphere(side))
-    for side in (-1,1):
-        src=vtk.vtkSphereSource();src.SetThetaResolution(100)
-        src.SetPhiResolution(70)
-        tf=vtk.vtkTransform();tf.Translate(.39*side,-.91,-.34)
-        tf.Scale(.49,.30,.49)
-        flt=vtk.vtkTransformPolyDataFilter()
-        flt.SetTransform(tf);flt.SetInputConnection(src.GetOutputPort())
-        mp=vtk.vtkPolyDataMapper();mp.SetInputConnection(flt.GetOutputPort())
-        obj=vtk.vtkActor();obj.SetMapper(mp)
-        prop=obj.GetProperty();prop.SetColor(.055,.19,.32)
-        prop.SetInterpolationToPBR();prop.SetRoughness(.45)
-        ren.AddActor(obj)
     ren.AutomaticLightCreationOff()
     for point,col,intensity in (
       ((1.6,2.5,4.8),(.58,.87,1),2.5),
@@ -89,7 +77,7 @@ def build(out):
         lamp.SetColor(*col);lamp.SetIntensity(intensity)
         lamp.PositionalOn();lamp.SetConeAngle(65);ren.AddLight(lamp)
     camera=ren.GetActiveCamera()
-    camera.SetPosition(0,.25,5.8);camera.SetFocalPoint(0,0,0)
+    camera.SetPosition(.45,.38,5.8);camera.SetFocalPoint(0,0,0)
     camera.SetViewUp(0,1,0);camera.ParallelProjectionOn()
     camera.SetParallelScale(1.65)
     window=vtk.vtkRenderWindow();window.SetSize(1850,1550)
