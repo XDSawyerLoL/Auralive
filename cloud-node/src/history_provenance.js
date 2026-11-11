@@ -239,17 +239,24 @@ export class HistoryLedger {
         prospective_only:true};
     }catch(error){await conn.rollback();throw error;}finally{conn.release();}
   }
-  async decide({context_tag,baseline='respond',run_id,situation_id,excludedEpisodes=[]}={}){
+  async decide({context_tag,baseline='respond',run_id,situation_id,excludedEpisodes=[],workspacePolicyAllowed=true}={}){
     if(!run_id||!situation_id||!context_tag)
       throw new Error('Decision provenance requires run, situation and context');
     const rows=await this.retrieve(context_tag);
-    const choice=historyChoice({context:context_tag,baseline,rows,excludedEpisodes});
+    const proposed=historyChoice({context:context_tag,baseline,rows,excludedEpisodes});
+    // Prefrontal/basal-ganglia gating happens BEFORE the durable decision.
+    // Never persist a retrieved candidate as if it had been executed.
+    const choice=workspacePolicyAllowed?proposed:{
+      action:baseline,changed:false,provenance:[],
+      reason:'workspace-broadcast-did-not-select-policy',
+    };
     const conn=await this.db.getConnection();
     try{
       await conn.beginTransaction();
       const confidence=rows.find(x=>x.policy_id===choice.provenance[0]?.item_id)?.confidence??null;
       const snapshot=JSON.stringify({
         context_tag,baseline,action:choice.action,
+        workspace_policy_allowed:workspacePolicyAllowed===true,
         eligible_policy_ids:rows.map(p=>p.policy_id),
         provenance:choice.provenance,
       });

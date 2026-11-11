@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { one, query, getDb } from './db.js';
-import { HistoryLedger } from './history_provenance.js';
+import { HistoryLedger,historyChoice } from './history_provenance.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
@@ -17,6 +17,7 @@ import { SelfInquiryEngine } from './self_inquiry.js';
 import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
+import { workspaceInput,competeInWorkspace,workspaceSnapshot } from './global_workspace.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -168,6 +169,7 @@ export class CognitiveKernel {
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
       independent_activity:null,
+      global_workspace:null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -270,6 +272,9 @@ export class CognitiveKernel {
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
+    // Only non-text attention receipts are persisted; never raw user or model text.
+    if(!this.soulCache.global_workspace||typeof this.soulCache.global_workspace!=='object')
+      this.soulCache.global_workspace=null;
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -711,6 +716,36 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      // Background thalamo-cortical recurrence uses the same bounded, real
+      // competition as dialogue. A changed control signal can trigger a later
+      // reflection, but an unchanged cycle adds no fabricated discovery.
+      const priorWorkspace=this.soulCache.global_workspace;
+      const idleWorkspace=competeInWorkspace(workspaceInput({
+        userPresent:false,organism:idle.state,
+        plan:{act:'respond'},previous:priorWorkspace,
+      }),{previous:priorWorkspace});
+      this.soulCache.global_workspace=workspaceSnapshot(
+        idleWorkspace,priorWorkspace);
+      const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
+        &&['verify','conserve'].includes(idleWorkspace.decision.control);
+      if(attentionChanged){
+        this.pushStimulus({
+          type:'aura.workspace.control_change',source:'global-workspace',
+          occurred_at:timestamp,payload:{
+            attention:idleWorkspace.decision.attention,
+            control:idleWorkspace.decision.control,
+            selected:idleWorkspace.selected.map(x=>x.label),
+          },
+        });
+        await this.trace('workspace-broadcast','autonomous-control-change','',{
+          at:timestamp,capacity:idleWorkspace.capacity,
+          selected:idleWorkspace.selected.map(x=>({source:x.source,label:x.label})),
+          control:idleWorkspace.decision.control,
+          recipients:idleWorkspace.broadcasts.map(x=>x.recipient),
+          origin:'background-process-sample',
+          subjective_experience_claim:false,
+        });
+      }
       // No artificial LLM utterances: re-evaluate competing functional drives
       // from measured time and the present computation state only.
       this.soulCache.inner_dialogue=this.innerDialogue.publicState(
@@ -1421,28 +1456,88 @@ export class CognitiveKernel {
     // Real retrieval influences the plan only if supported by promoted,
     // active policies and independently verified episodes. The provenance
     // is stored at decision time, not guessed from AURA's answer afterwards.
+    const historyCandidates=privateView
+      ?await this.history.retrieve(experiencedContext).catch(()=>[]):[];
+    const historyPreChoice=historyChoice({
+      context:experiencedContext,baseline:'respond',rows:historyCandidates,
+    });
+    if(historyCandidates.length)
+      await brainHop('memory','history','verified-history-candidates-retrieved');
+    // Thalamic-like competition is a real pre-decision gate: even a validated
+    // memory policy cannot govern this turn if it lost access to the workspace.
+    // The same broadcast reaches distinct receptor functions; a user message
+    // remains a high-priority ingress without obtaining execution authority.
+    const attentionMeta=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
+    const workspace=competeInWorkspace(workspaceInput({
+      userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
+      plan,experience:privateView?advice:null,
+      history:privateView&&historyPreChoice?.changed?{
+        changed:true,eligible:Boolean(historyPreChoice?.provenance?.length),
+        action:historyPreChoice.action,
+      }:null,metacognition:attentionMeta,
+      previous:privateView?this.soulCache.global_workspace:null,
+    }),{previous:privateView?this.soulCache.global_workspace:null});
+    const memoryBroadcast=workspace.received.basal_ganglia.some(
+      signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
+    const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
+      signal=>signal.source==='memory'&&signal.label==='reported-feedback-policy');
+    const chosenBaseline=learnedFeedbackBroadcast?advice.strategy:'respond';
+    const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
+      .includes(plan.act);
+    // Commit only after thalamic competition and broadcast. All other
+    // retrieved history was a candidate, not an executed selection.
     const historyDecision=privateView
       ?await this.history.decide({
-        context_tag:experiencedContext,baseline:advice.strategy,
+        context_tag:experiencedContext,baseline:chosenBaseline,
         run_id:brainFlowId,situation_id:experiencedContext,
+        workspacePolicyAllowed:historyPermitted&&memoryBroadcast,
       }).catch(()=>null)
       :null;
     if(historyDecision){
-      await brainHop('memory','history','provenance-retrieval-committed');
-      if(historyDecision.provenance.length)
-        await brainHop('history','cognition','eligible-policy-evaluated');
+      await brainHop('history','basal_ganglia','post-workspace-policy-gate');
+      if(historyDecision.provenance?.length)
+        await brainHop('basal_ganglia','cognition','chosen-history-strategy');
     }
-    const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
-      .includes(plan.act);
-    const historyChanged=Boolean(historyPermitted&&historyDecision?.changed);
-    const strategy=historyChanged?historyDecision.action:advice.strategy;
-    const strategyChanged=Boolean(advice.changed||historyChanged);
+    const historyChanged=Boolean(historyPermitted&&historyDecision?.changed&&memoryBroadcast);
+    // E2 bridge: gated memory and metacognitive warning have causal authority.
+    // Unselected candidate facts never modify strategy via this gate.
+    plan.global_workspace={
+      focus:workspace.decision.attention,
+      control:workspace.decision.control,
+      selected:workspace.selected.map(x=>({source:x.source,label:x.label,score:x.score})),
+      broadcast_enabled:workspace.broadcast_enabled,
+      delivered_to:workspace.broadcasts.map(x=>x.recipient),
+    };
+    if(privateView){
+      this.soulCache.global_workspace=workspaceSnapshot(
+        workspace,this.soulCache.global_workspace);
+      await this.saveSoul();
+    }
+    await brainHop('cognition','thalamus','competition-from-observed-input');
+    await brainHop('thalamus','workspace','capacity-bounded-selection');
+    for(const receiver of ['prefrontal','hippocampus','basal_ganglia','insula','metacognition']){
+      if(workspace.received[receiver].length)
+        await brainHop('workspace',receiver,'selected-content-received');
+    }
+    await this.trace('workspace-broadcast','capacity-bounded-selection','',{
+      flow_id:brainFlowId,at:workspace.recorded_at,
+      capacity:workspace.capacity,selected:plan.global_workspace.selected,
+      suppressed:workspace.suppressed,
+      recipients:plan.global_workspace.delivered_to,
+      history_policy_selected:memoryBroadcast,
+      control:workspace.decision.control,
+      kernel_decision_only:true,
+      raw_user_text_stored:false,subjective_experience_claim:false,
+    });
+    const strategy=historyChanged?historyDecision.action:chosenBaseline;
+    const strategyChanged=Boolean((learnedFeedbackBroadcast&&advice.changed)||historyChanged);
     plan.learned_strategy=strategy;
     plan.experience_guidance={
       context:experiencedContext,strategy,
       historical_revision:Number(advice.revision||0),
       changed_by_history:strategyChanged,
-      evidence_kind:historyChanged?'promoted-machine-verified-history':advice.basis,
+      evidence_kind:historyChanged?'promoted-machine-verified-history':
+        learnedFeedbackBroadcast?advice.basis:'workspace-did-not-select-feedback',
     };
     plan.history_guidance=privateView?{
       eligible:Boolean(historyDecision?.provenance?.length),
@@ -1542,12 +1637,29 @@ export class CognitiveKernel {
           'Cette session ne permet pas de vérifier des éléments privés de mon histoire.'];
       }
     }
+    // A selected metacognitive signal must change the control path, not
+    // merely appear as a line in a prompt.
+    if(workspace.decision.verification_required&&privateView&&
+      substantiveRequest(content)&&!plan.needs_semantic_support){
+      plan.needs_semantic_support=true;
+      plan.semantic_query=content;
+      plan.goal+=' Vérifier le point incertain avant une conclusion affirmative.';
+    }
+    if(workspace.decision.optional_compute_deferred)
+      plan.optional_compute_deferred=true;
     // A local counterexample must alter the next relevant decision, not merely
     // decorate its response. This is a bounded verification preference only;
     // it cannot authorize actions or assert that the world changed.
     const metacognitive=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
-    plan.metacognitive_guidance=metacognitive;
-    if(metacognitive.verify){
+    const metacognitiveBroadcast=workspace.received.metacognition
+      .some(x=>x.source==='metacognition');
+    plan.metacognitive_guidance={
+      ...metacognitive,
+      verify:Boolean(metacognitive.verify&&metacognitiveBroadcast),
+      broadcast_selected:metacognitiveBroadcast,
+      limitation:metacognitiveBroadcast?metacognitive.limitation:'',
+    };
+    if(plan.metacognitive_guidance.verify){
       plan.metacognitive_action='verify';
       plan.goal+=' Ne présente pas la mémoire comme certaine tant que cette limite n’a pas été revérifiée.';
       plan.facts=[...(plan.facts||[]),metacognitive.limitation];
@@ -1852,6 +1964,7 @@ export class CognitiveKernel {
       self_inquiry:plan.self_inquiry_report||null,
       epistemic_self:this.selfInquiry.publicState(this.soulCache.epistemic_self),
       metacognitive_guidance:plan.metacognitive_guidance,
+      global_workspace:plan.global_workspace,
       experience_guidance:plan.experience_guidance,
       history_guidance:plan.history_guidance,
       organ_regulation:inference.organ_regulation,
