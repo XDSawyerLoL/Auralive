@@ -587,6 +587,8 @@ export class CognitiveKernel {
   }
 
   async runDueRoutines() {
+    const permit=this.authorizeAutonomous('routine');
+    if(!permit.allowed)return [];
     const rows = await query('SELECT id,name,prompt,every_seconds,mode,last_run_at FROM aura_routines WHERE enabled=1 ORDER BY name');
     const epoch = Date.now();
     const results = [];
