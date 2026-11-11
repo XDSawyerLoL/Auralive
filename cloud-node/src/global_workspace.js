@@ -19,7 +19,7 @@ const finiteTime=v=>{
 };
 
 export function workspaceInput({
-  userPresent=false,organism={},plan={},history=null,metacognition=null,
+  userPresent=false,organism={},plan={},history=null,experience=null,metacognition=null,
   previous=null,nowMs=Date.now(),
 }={}){
   const candidates=[];
@@ -46,6 +46,11 @@ export function workspaceInput({
   if(history?.changed&&history?.eligible)
     push('memory','verified-history-changed-policy',.82,.93,
       {action:actions.has(history.action)?history.action:'respond'});
+  // Human feedback can propose an alternative, but its lower confidence
+  // cannot silently bypass the workspace as an independently verified fact.
+  if(experience?.changed===true)
+    push('memory','reported-feedback-policy',.61,.65,
+      {action:actions.has(experience.strategy)?experience.strategy:'respond'});
   const last=previous?.selected;
   if(Array.isArray(last)&&last.some(x=>x.source==='prediction_error')){
     push('reentry','unresolved-error',.58,.6,{kind:'recheck'});
