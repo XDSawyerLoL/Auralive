@@ -3,6 +3,7 @@ import { COGNITIVE_ATLAS_CSS, COGNITIVE_ATLAS_HTML } from './cognitive_atlas_ui.
 import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
 import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
 import {BRAIN_OPERATIONS_SCRIPT} from './brain_operations_runtime.js';
+import {BRAIN_SCIENCE_LAB_HTML,BRAIN_SCIENCE_LAB_CSS} from './brain_science_lab_ui.js';
 
 export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <html lang="fr">
@@ -15,6 +16,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <style>__REFERENCE_CSS__</style>
 <style>__ATLAS_CSS__</style>
 <style>__READABLE_CSS__</style>
+<style>__SCIENCE_CSS__</style>
 </head>
 <body>
 <div class="shell">
@@ -88,6 +90,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <div class="kpi"><label>Dernière mutation organisme</label><strong id="kOrganism">—</strong></div>
   </section>
 
+  __SCIENCE_HTML__
   <section class="workspace">
     <aside class="rail dialogue-rail">
       <section class="panel conversation-workspace" id="conversation-panel" aria-label="Dialogue avec AURA">
@@ -328,5 +331,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 .replace('__OPS_CSS__', BRAIN_OPERATIONS_CSS)
 .replace('__REFERENCE_CSS__', BRAIN_REFERENCE_THEME)
 .replace('__READABLE_CSS__', BRAIN_READABLE_CSS)
+.replace('__SCIENCE_CSS__',BRAIN_SCIENCE_LAB_CSS)
+.replace('__SCIENCE_HTML__',BRAIN_SCIENCE_LAB_HTML)
 .replace('__ATLAS_CSS__', COGNITIVE_ATLAS_CSS)
 .replace('__OPS_SCRIPT__', BRAIN_OPERATIONS_SCRIPT);
