@@ -11,7 +11,7 @@ export const PROTOCOL_DEFAULTS=Object.freeze({
   training_per_context:48,heldout_per_context:20,
   inspection_cost:1,success_reward:4,failure_penalty:4,
   hazard_probability_A:.7,hazard_probability_B:0,
-  exploratory_very_fourth:true,min_samples_per_action:3,
+  exploration_period:4,min_samples_per_action:3,inspection_decision_bias:0,
   minimum_A_effect:.4,maximum_B_effect:.1,
   maximum_residual_ablation:.1,maximum_placebo_effect:.1,
   draws:64,seed_base:104729,session_credit_limit:160,
@@ -28,7 +28,8 @@ export function preRegisterProtocol(overrides={}){
  if(!Number.isInteger(cfg.training_per_context)||cfg.training_per_context<12||
    cfg.training_per_context>300||!Number.isInteger(cfg.heldout_per_context)||
    cfg.heldout_per_context<4||cfg.heldout_per_context>200||
-   cfg.inspection_cost!==1||cfg.hazard_probability_A<0||
+   cfg.inspection_cost!==1||!Number.isInteger(cfg.exploration_period)||
+   cfg.exploration_period<2||cfg.exploration_period>12||cfg.hazard_probability_A<0||
    cfg.hazard_probability_A>1||cfg.hazard_probability_B!==0||
    !Number.isInteger(cfg.draws)||cfg.draws<1||cfg.draws>256||
    cfg.maximum_B_effect<0||cfg.minimum_A_effect<0||
@@ -80,7 +81,7 @@ export function policyFor(episodes=[],context,config=PROTOCOL_DEFAULTS){
     attempted:attempted.length,inspected:inspected.length};
  const attemptValue=attempted.reduce((a,e)=>a+e.utility,0)/attempted.length;
  const inspectValue=inspected.reduce((a,e)=>a+e.utility,0)/inspected.length;
- return {inspect:inspectValue>attemptValue,attempted:attempted.length,
+ return {inspect:(inspectValue-attemptValue)>Number(config.inspection_decision_bias||0),attempted:attempted.length,
    inspected:inspected.length,
    advantage:fixed(inspectValue-attemptValue),
    basis:'empirical-verified-utility',
@@ -120,7 +121,7 @@ export function runSandboxSession({seed=104729,config=preRegisterProtocol(),
    for(let i=0;i<config.training_per_context;i++){
      const contextRows=episodes.filter(e=>e.context===context);
      const chosen=policyFor(contextRows,context,config);
-     const explore=i%4===0; // prospectively scheduled intervention
+     const explore=i%config.exploration_period===0; // preregistered intervention
      const inspect=explore?!chosen.inspect:chosen.inspect;
      if(!execute(createSandboxTask({seed,index:i,context}),inspect,'training'))
        return {executed:false,gates:gate,reason:'credit-depleted',
