@@ -1368,6 +1368,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   const telemetry=buildBrainTelemetry(current,{
     organ_regulation:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.organ_regulation:null,
     organ_budget:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.token_budget:null,
+    independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
     language:{
     enabled:groq.enabled===true,last_status:String(groq.last_status||''),
     model:String(groq.model||''),last_model:String(groq.last_model||''),
