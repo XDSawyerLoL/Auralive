@@ -31,6 +31,61 @@ function v4Base(){
  for(let i=0;i<3;i++){ctx.beginPath();ctx.ellipse(canvasW*.5,canvasH*.50,(205+i*105)*scale,(130+i*63)*scale,0,0,Math.PI*2);ctx.stroke();}
  ctx.setLineDash([]);
 }
+
+/* Static biomorphic outline, informed by cerebral morphology. It is
+ * structural art, NOT simulated neural activity. Only recorded hops glow. */
+function v5CerebralMorphology(){
+ const cx=canvasW*.5,cy=canvasH*.46;
+ const rx=Math.min(canvasW*.31,canvasH*.34)*Math.min(1.25,Math.max(.75,state.zoom));
+ const ry=Math.min(canvasH*.36,canvasW*.22)*Math.min(1.25,Math.max(.75,state.zoom));
+ if(rx<45||ry<45)return;
+ const stream=Number(state.data?.recent_signal_count)||0;
+ const intensity=Math.min(1,Math.max(0,stream)/10);
+ ctx.save();
+ const halo=ctx.createRadialGradient(cx,cy,rx*.15,cx,cy,rx*1.65);
+ halo.addColorStop(0,'rgba(58,130,161,'+(.07+intensity*.08)+')');
+ halo.addColorStop(.57,'rgba(56,91,141,.035)');
+ halo.addColorStop(1,'rgba(3,9,17,0)');
+ ctx.fillStyle=halo;ctx.beginPath();ctx.ellipse(cx,cy,rx*1.65,ry*1.6,0,0,Math.PI*2);ctx.fill();
+ for(const hemi of [-1,1]){
+  const x=cx+hemi*6;
+  ctx.save();ctx.translate(x,cy);ctx.scale(hemi,1);
+  const shape=ctx.createLinearGradient(0,-ry,rx*.96,ry);
+  shape.addColorStop(0,'rgba(78,176,192,'+(.055+intensity*.026)+')');
+  shape.addColorStop(.48,'rgba(53,115,150,.09)');
+  shape.addColorStop(1,'rgba(52,44,126,.025)');
+  ctx.fillStyle=shape;
+  ctx.strokeStyle='rgba(112,206,218,'+(.25+intensity*.16)+')';
+  ctx.shadowColor='rgba(85,199,233,.16)';ctx.shadowBlur=22;
+  ctx.lineWidth=1.15;
+  ctx.beginPath();ctx.moveTo(0,-ry*.82);
+  ctx.bezierCurveTo(rx*.2,-ry*1.13,rx*.64,-ry*.91,rx*.67,-ry*.71);
+  ctx.bezierCurveTo(rx*1.12,-ry*.77,rx*1.07,-ry*.34,rx*.95,-ry*.14);
+  ctx.bezierCurveTo(rx*1.17,ry*.24,rx*.85,ry*.51,rx*.72,ry*.63);
+  ctx.bezierCurveTo(rx*.66,ry*1.03,rx*.19,ry*.88,0,ry*.68);
+  ctx.bezierCurveTo(-rx*.07,ry*.20,-rx*.02,-ry*.18,0,-ry*.82);
+  ctx.closePath();ctx.fill();ctx.stroke();ctx.shadowBlur=0;
+  ctx.strokeStyle='rgba(129,179,217,'+(.10+intensity*.06)+')';
+  ctx.lineWidth=.85;
+  for(let i=0;i<11;i++){
+   // Resting sulcal contours are fixed graphic geometry, not activated neurons.
+   const fy=-ry*.72+i*ry*.135;
+   const start=rx*(.12+(i%3)*.035);
+   const end=rx*(.60+(i%4)*.07);
+   ctx.beginPath();ctx.moveTo(start,fy);
+   ctx.bezierCurveTo(start+rx*.11,fy-ry*.12,end-rx*.06,fy+ry*.12,end,fy+ry*.05);
+   ctx.stroke();
+  }
+  ctx.restore();
+ }
+ ctx.strokeStyle='rgba(127,192,218,.12)';ctx.lineWidth=1;ctx.setLineDash([3,13]);
+ for(let i=0;i<3;i++){
+  ctx.beginPath();ctx.ellipse(cx,cy,rx*(1.09+i*.17),ry*(1.17+i*.16),
+     i%2?.20:-.12,0,Math.PI*2);ctx.stroke();
+ }
+ ctx.setLineDash([]);ctx.restore();
+}
+
 function v4Regions(){
  const d=state.data,nodes=d.nodes||[];
  const groups=[...new Set(nodes.map(n=>n.group))];
@@ -54,7 +109,7 @@ function v4Regions(){
 function draw(){
  if(!state.data)return;
  sizeCanvas();ctx.clearRect(0,0,canvasW,canvasH);
- ctx.save();v4Base();v4Regions();
+ ctx.save();v4Base();v5CerebralMorphology();v4Regions();
  const d=state.data,now=Date.now(),edges=d.edges||[],nodes=d.nodes||[];
  const inLens=id=>state.focusGroup==='all'||findNode(id)?.group===state.focusGroup;
  const replay=replayPosition();
@@ -101,6 +156,7 @@ function draw(){
    ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();
   }
  }
+ v5DrawReceiptPulses();
  state.screen=[];
  const labels=[];
  for(const node of nodes){
@@ -171,6 +227,6 @@ function draw(){
   ctx.fillStyle=selected?'#fff4d9':'#ebf2ff';ctx.fillText(label,box.x+12,box.y+20);
  }
  ctx.restore();
- if(edges.some(e=>e.signal_recent===true&&Date.now()-Date.parse(e.last_observed_at||'')<1650)||replaying)scheduleDraw();
+ if(edges.some(e=>e.signal_recent===true&&Date.now()-Date.parse(e.last_observed_at||'')<1650)||replaying||(state.v5Pulses||[]).length)scheduleDraw();
 }
 `;
