@@ -12,6 +12,7 @@ export const BRAIN_NODES=Object.freeze([
  ['attention','AttentionMap','core','CognitiveKernel.attentionMap'],
  ['inference','ActiveInference','core','active_inference.js'],
  ['interoception','Régulation interne','core','organ_regulation.js'],
+ ['selfaudit','Auto-vérification réelle','memory','independent_continuity.js'],
  ['history','Histoire vérifiée','memory','history_provenance.js'],
  ['semantic','Support sémantique','language','ExpressionLayer.semanticSupport'],
  ['language','Faculté française','language','FrenchLanguageFaculty.generate'],
@@ -62,6 +63,7 @@ const CORE_EDGES=Object.freeze([
  ['kernel','peer'],['output','voice'],['kernel','journal'],
  ['homeostasis','interoception'],['interoception','inference'],['inference','cognition'],
  ['memory','history'],['history','cognition'],
+ ['memory','selfaudit'],['selfaudit','cognition'],
  // A verified 'affect-context-provided' hop is persisted by CognitiveKernel.chat.
  ['homeostasis','language'],
  ['cognition','dialogue'],['kernel','nativelearning'],['kernel','skilllearning'],
@@ -74,6 +76,7 @@ const CATEGORIES=Object.freeze({
  'brain-hop':'Parcours horodaté du noyau',
  'brain-causal':'Bilan causal corrélé à une requête',
  'organ-regulation':'Arbitrage de ressources enregistré',
+ 'independent-self-test':'Auto-vérification réelle hors dialogue',
  'expression':'Formulation enregistrée',
  'web-research':'Recherche web enregistrée',
  'web-research-error':'Échec recherche web',
@@ -217,6 +220,7 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
     ev.type==='operator'||ev.type==='command-event'?'command':
     ev.type==='organism-event'?'homeostasis':
     ev.type==='organ-regulation'?'interoception':
+    ev.type==='independent-self-test'?'selfaudit':
     ev.type==='expression'?'language':
     ev.type==='reflection'?'cognition':ev.type==='event'?'kernel':'';
   if(id)remember(id,ev.at,ev.source);
