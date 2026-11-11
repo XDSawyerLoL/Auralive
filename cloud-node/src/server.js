@@ -1352,6 +1352,8 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
     attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
+    verified_probe_loop:bootstrap.runtimeReady?kernel.soulCache?.verified_probe_loop:null,
+    autonomous_allowance:bootstrap.runtimeReady?kernel.soulCache?.autonomous_allowance:null,
     viability:bootstrap.runtimeReady?kernel.soulCache?.viability:null,
     consolidation:bootstrap.runtimeReady?kernel.soulCache?.consolidation:null,
     language:{
@@ -1377,6 +1379,8 @@ app.get('/api/brain/graph', async (request, reply) => {
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
     attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
+    verified_probe_loop:bootstrap.runtimeReady?kernel.soulCache?.verified_probe_loop:null,
+    autonomous_allowance:bootstrap.runtimeReady?kernel.soulCache?.autonomous_allowance:null,
     viability:bootstrap.runtimeReady?kernel.soulCache?.viability:null,
     consolidation:bootstrap.runtimeReady?kernel.soulCache?.consolidation:null,
     language:{
