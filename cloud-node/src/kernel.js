@@ -1480,7 +1480,7 @@ export class CognitiveKernel {
         if(this.ai?.enabled){
           proposal=await this.expression.semanticSupport({
             needs_semantic_support:true,
-            semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval ou PROBE:state_persistence. Question : '+content.slice(0,300),
+            semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval, PROBE:state_persistence ou PROBE:history_integrity. Question : '+content.slice(0,300),
           },'',{maxTokens:95,taskRole:'conversation'}).catch(()=>'');
         }
         const probe=this.selfInquiry.chooseProbe(this.soulCache.epistemic_self,{
@@ -1502,6 +1502,13 @@ export class CognitiveKernel {
             outcome=stored&&Number(stored.emergent_identity?.revision||0)===current
               ?'supported':'counterexample';
           }catch{outcome='counterexample';}
+        }else if(probe==='history_integrity'){
+          try{
+            const checked=await this.history.verifyChain({maxEpisodes:2000});
+            outcome=checked.verified&&checked.checked>0?'supported':
+              ['broken-chain','head-mismatch'].includes(checked.reason)
+                ?'counterexample':'inconclusive';
+          }catch{outcome='inconclusive';}
         }
         this.soulCache.epistemic_self=this.selfInquiry.observe(this.soulCache.epistemic_self,{
           probe,outcome,source:'kernel-probe',privateView:true,
