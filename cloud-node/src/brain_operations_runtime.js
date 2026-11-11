@@ -639,7 +639,7 @@ function sizeCanvas(){
  ctx.setTransform(ratio,0,0,ratio,0,0);canvasW=r.width;canvasH=r.height;
  scale=Math.min(canvasW/1200,canvasH/615)*state.zoom;
 }
-function project(id){const p=POS[id]||[560,395];return {x:canvasW*.5+(p[0]-590)*scale*1.03+state.panX,y:canvasH*.51+(p[1]-395)*scale*.76+state.panY};}
+function project(id){const p=POS[id]||[560,395];return {x:canvasW*.5+(p[0]-590)*scale*1.03+state.panX,y:canvasH*(canvasW<=600?.27:.51)+(p[1]-395)*scale*.76+state.panY};}
 function edgeMid(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2-28*scale};}
 function edgePoint(a,b,t){const m=edgeMid(a,b);return{x:(1-t)*(1-t)*a.x+2*(1-t)*t*m.x+t*t*b.x,y:(1-t)*(1-t)*a.y+2*(1-t)*t*m.y+t*t*b.y};}
 function drawEdge(a,b){const m=edgeMid(a,b);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(m.x,m.y,b.x,b.y);}
