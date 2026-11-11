@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {runInNewContext} from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {computeCortex08Physiology} from '../src/cortex08_physiology.js';
 import {buildBrainTelemetry} from '../src/brain_telemetry.js';
@@ -123,4 +124,43 @@ test('one page contains visible status and real-event overlays',()=>{
  assert.match(old,/c8DrawAfterglow\(ctx\)/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="chatInput"/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="neuro-lab-details"/);
+});
+
+
+test('paused CORTEX 08 never paints stale physiology, even after resize',()=>{
+ const elements={
+  cortex06:{},
+  cortex07Canvas:{style:{},setAttribute(){},title:''},
+  cortex07PosterImage:{style:{}},
+  c8PhysiologyStatus:{dataset:{}},c8PhysiologyLabel:{},
+  c8SensorAge:{},c8FocusState:{dataset:{}},
+ };
+ const handlers={},drawn=[];
+ const mq={matches:true,addEventListener(){}};
+ const win={matchMedia:()=>mq,addEventListener:(name,fn)=>{handlers[name]=fn;}};
+ const doc={hidden:false,addEventListener:(name,fn)=>{handlers[name]=fn;}};
+ const context={
+  window:win,document:doc,$:id=>elements[id]||null,
+  c8MaterialDraw:(snapshot)=>drawn.push(snapshot),
+  c8MaterialClear(){},c8RecordObservedHops(){},c8FocusLabel(){},
+  requestAnimationFrame:()=>1,cancelAnimationFrame(){},
+  performance:{now:()=>1000},Date,
+ };
+ const api=runInNewContext(CORTEX08_SCENE_SCRIPT+'\\n({observe:c8Observe,start:c8Start})',context);
+ const snapshot=(ageMs)=>({measured:true,state:'active',
+  source_timestamps:{process:new Date(Date.now()-ageMs).toISOString()},
+  metrics:{cpu:.5,heap:.5}});
+ api.observe({telemetry:{cortex08:snapshot(121000)}});
+ assert.equal(drawn.length,0,'no stale image on reduced-motion initialization');
+ assert.equal(elements.cortex07Canvas.style.opacity,'0');
+ assert.equal(elements.c8PhysiologyStatus.dataset.active,'false');
+ handlers.resize();
+ assert.equal(drawn.length,0,'resize cannot replay a stale snapshot');
+ api.observe({telemetry:{cortex08:snapshot(1000)}});
+ assert.equal(drawn.length,1,'a fresh reduced-motion snapshot renders once');
+ assert.equal(elements.c8PhysiologyStatus.dataset.active,'true');
+ doc.hidden=true;
+ api.start();
+ handlers.resize();
+ assert.equal(drawn.length,1,'hidden page does not redraw physiology');
 });
