@@ -1,6 +1,6 @@
 // Scientific read-only presentation of SANDBOX data; NOT an activity claim.
 // All numbers come from /api/brain/science-lab and are explicitly labelled.
-export const BRAIN_SCIENCE_LAB_HTML=String.raw\`
+export const BRAIN_SCIENCE_LAB_HTML=String.raw`
 <section class="science-lab" id="science-lab" aria-label="Laboratoire de neurogenèse computationnelle">
   <div class="science-lab-head">
     <div>
@@ -67,9 +67,9 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw\`
     </div>
   </div>
 </section>
-\`;
+`;
 
-export const BRAIN_SCIENCE_LAB_CSS=String.raw\`
+export const BRAIN_SCIENCE_LAB_CSS=String.raw`
 .science-lab{margin:15px 0 17px;border:1px solid #243747;border-radius:22px;overflow:hidden;background:radial-gradient(ellipse at 16% 0%,rgba(46,118,148,.15),transparent 38%),radial-gradient(ellipse at 95% 35%,rgba(123,56,135,.12),transparent 35%),linear-gradient(140deg,#080e17,#0c131e 68%,#0b1119);box-shadow:0 18px 46px #0006;position:relative}
 .science-lab::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(#85cfff08 1px,transparent 1px),linear-gradient(90deg,#85cfff08 1px,transparent 1px);background-size:35px 35px;mask-image:linear-gradient(90deg,#0007,transparent)}
 .science-lab-head,.science-lab-main,.science-bottom-grid{position:relative;z-index:1}
@@ -100,9 +100,9 @@ export const BRAIN_SCIENCE_LAB_CSS=String.raw\`
 @media(max-width:1170px){.science-lab-main{grid-template-columns:1fr}.science-bottom-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.science-lab-head{padding:17px;align-items:start;flex-direction:column}.science-lab-main{padding:9px}.science-bottom-grid{padding:0 9px 9px;grid-template-columns:1fr}.science-metrics-row{grid-template-columns:repeat(2,1fr)}.science-bar-row{grid-template-columns:90px minmax(0,1fr) 34px;gap:6px}.science-genome-bottom{grid-template-columns:1fr 1fr}.science-block-header{flex-direction:column}.science-neutral{text-align:left;max-width:none}}
 @media(prefers-reduced-motion:reduce){.science-bar-fill{transition:none}}
-\`;
+`;
 
-export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw\`
+export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
 (function(){
  'use strict';
  const labEl=id=>document.getElementById(id);
@@ -254,4 +254,4 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw\`
  window.addEventListener('resize',()=>{if(snapshot)canvasDraw();},{passive:true});
  loadLab();
 })();
-\`;
+`;
