@@ -2063,21 +2063,21 @@ export class CognitiveKernel {
         at: row.created_at,
         title: `${row.automation_id}: ${row.ok ? 'réussi' : 'échec'}`,
         detail: row.signature,
-        autonomous: true,
+        autonomous: false,
       })),
       ...missions.map((row) => ({
         type: 'mission',
         at: row.updated_at,
         title: row.title,
         detail: `${row.status} · progression ${Math.round(Number(row.progress || 0) * 100)}%${row.last_error ? ` · blocage: ${row.last_error}` : ''}`,
-        autonomous: true,
+        autonomous: false,
       })),
       ...initiatives.map((row) => ({
         type: 'initiative',
         at: row.updated_at,
         title: row.title,
         detail: `${row.domain || 'AURA'} · ${row.status || ''} · ${row.execution_mode || ''}`,
-        autonomous: true,
+        autonomous: false,
       })),
       ...traces
         .filter((row) => !['reflection','expression'].includes(String(row.kind || '')))
