@@ -7,11 +7,11 @@ export function workspaceHas(workspace,recipient,source){
   return receive(workspace,recipient).some(s=>s.source===source);
 }
 export function selectedMemoryRefs(workspace){
-  return new Set(receive(workspace,'hippocampus').filter(signal=>
-    signal.source==='memory'&&
-    ['retrieved-note','retrieved-message'].includes(signal.label)
-  ).map(signal=>String(signal.metadata?.ref||''))
-  .filter(ref=>/^(?:note|message):[0-9a-f-]{1,40}$/i.test(ref)));
+  // Read the hippocampal RECEIVER output, not the raw broadcast itself.
+  // A muted hippocampus must lose the ability to expose memory.
+  return new Set((Array.isArray(workspace?.processed?.hippocampus?.references)
+    ?workspace.processed.hippocampus.references:[])
+    .filter(ref=>/^(?:note|message):[0-9a-f-]{1,40}$/i.test(ref)));
 }
 const rowReference=(row,kind)=>kind+':'+String(row?.id??'');
 export function selectBroadcastMemories(workspace,{
