@@ -735,7 +735,7 @@ export class CognitiveKernel {
       const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
       // A bounded measured inquiry runs between conversations, when due.
       // No LLM, network action or unverified claim is generated.
-      if(continuity.due){
+      if(!force && !String(text).trim() && config.continuityEnabled){
         const independent=await this.independentContinuity.step({
           soul:this.soulCache,
         }).catch(()=>({executed:false,reason:'probe-unavailable'}));
