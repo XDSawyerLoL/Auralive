@@ -17,6 +17,9 @@ export function languageWorkspaceProjection(plan={},workspace,{privateView=false
     // channel when the corresponding module lost the workspace competition.
     result.experiential_memory=[];
     result.conversation_context=[];
+    if(!['self_exploration','topic_shift','user_asks_if_interrupting',
+      'user_reports_aura_interrupts'].includes(result.act))
+      result.facts=[];
     result.founder_profile=[];
     result.history_guidance=null;
     result.lived_experience=null;
