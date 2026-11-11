@@ -227,6 +227,6 @@ function draw(){
   ctx.fillStyle=selected?'#fff4d9':'#ebf2ff';ctx.fillText(label,box.x+12,box.y+20);
  }
  ctx.restore();
- if(edges.some(e=>e.signal_recent===true&&Date.now()-Date.parse(e.last_observed_at||'')<1650)||replaying||(state.v5Pulses||[]).length)scheduleDraw();
+ if(edges.some(e=>e.signal_recent===true&&Date.now()-Date.parse(e.last_observed_at||'')<1650)||replaying||(!reduced&&!document.hidden&&(state.v5Pulses||[]).length))scheduleDraw();
 }
 `;
