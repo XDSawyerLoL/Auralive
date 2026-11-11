@@ -122,6 +122,7 @@ export class CognitiveKernel {
     // A verified outcome requires a one-use receipt from a REAL local
     // filesystem probe, correlated with a specific historical episode.
     this.pendingMachineReceipts=new Map();
+    this.pendingOwnerProbePermit=null;
     // Lazily bind the pool: constructing the nucleus must not open MySQL.
     this.history = new HistoryLedger({verifyOutcome:async({episodeId,outcome,success})=>{
       const key=Number(episodeId),receipt=this.pendingMachineReceipts.get(key);
@@ -311,6 +312,7 @@ export class CognitiveKernel {
       this.soulCache.verified_probe_loop=initialVerifiedLoop();
     // Rehydrated permits are never trusted after a process restart.
     this.soulCache.autonomous_allowance=null;
+    this.pendingOwnerProbePermit=null;
     if(!this.soulCache.viability||typeof this.soulCache.viability!=='object')
       this.soulCache.viability=initialViability();
     // Detect a malformed or tampered consolidation; never silently trust it.
@@ -1194,7 +1196,28 @@ export class CognitiveKernel {
     });
   }
 
-  async verifiedLocalProbe({context='read-only-file-probe',relativePath,root}={}){
+  async admitAuthenticatedLocalProbe(){
+    // Called only by the private-owner API route after session auth.
+    // The receipt is born from this real requested ingress, not from an
+    // arbitrary executive signal produced by a background worker.
+    const stamp=Date.now(),prior=this.soulCache?.global_workspace;
+    const cycle=competeInWorkspace(workspaceInput({
+      userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
+      plan:{act:'verify'},previous:prior,nowMs:stamp,
+    }),{previous:prior,nowMs:stamp,capacity:this.soulCache?.viability?.capacity||3});
+    const gate=executionWorkspaceGate(cycle);
+    if(!gate.allowed)throw Error('owner-probe-not-broadcast');
+    this.soulCache.global_workspace=workspaceSnapshot(cycle,prior);
+    this.pendingOwnerProbePermit={id:randomUUID(),issued_at:stamp};
+    await this.saveSoul();
+    return this.pendingOwnerProbePermit.id;
+  }
+
+  async verifiedLocalProbe({context='read-only-file-probe',relativePath,root,permit}={}){
+    const receipt=this.pendingOwnerProbePermit,stamp=Date.now();
+    this.pendingOwnerProbePermit=null; // one use whether execution succeeds
+    if(!receipt||permit!==receipt.id||stamp-receipt.issued_at>30000)
+      throw Error('verified-probe-requires-private-owner-broadcast');
     if(!/^[a-z0-9_-]{3,70}$/i.test(String(context)))
       throw Error('invalid-safe-probe-context');
     const base=root||new URL('../',import.meta.url).pathname;
