@@ -46,6 +46,12 @@ export class EvolutionLab {
   }
 
   async dispatchCycle(objective, trigger = 'manual', options = {}) {
+    const actor=trigger==='command-center'?'command-center':
+      trigger==='capability-scout'?'capability-scout':'evolution';
+    const admission=this.kernel.authorizeAutonomous(actor);
+    if(!admission.allowed)
+      return {status:'workspace-denied',executed:false,
+        reason:admission.reason,trigger};
     const repository = String(options.repository || '').trim();
     const baseBranch = String(options.baseBranch || options.base_branch || 'main').trim() || 'main';
     if (this.bridge?.enabled && await this.bridge.workerOnline()) {
@@ -216,6 +222,11 @@ export class EvolutionLab {
   }
 
   async runCycle(objective, trigger = 'manual') {
+    const actor=trigger==='command-center'?'command-center':
+      trigger==='capability-scout'?'capability-scout':'evolution';
+    const admission=this.kernel.authorizeAutonomous(actor);
+    if(!admission.allowed)
+      return {status:'workspace-denied',executed:false,reason:admission.reason};
     if (this.running) return { ok: true, skipped: true, reason: 'un cycle Evolution est déjà en cours' };
     this.running = true;
     const id = randomUUID();
