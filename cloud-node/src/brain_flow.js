@@ -70,7 +70,7 @@ const CORE_EDGES=Object.freeze([
  ['kernel','curiosity'],['kernel','scout'],['kernel','evolution'],
  ['kernel','peer'],['output','voice'],['kernel','journal'],
  ['homeostasis','interoception'],['interoception','inference'],['inference','cognition'],
- ['memory','history'],['history','cognition'],
+ ['memory','history'],['history','cognition'],['history','basal_ganglia'],
  // Reentrant thalamo-cortical and cortico-striatal analogues.
  ['cognition','thalamus'],['thalamus','workspace'],
  ['workspace','prefrontal'],['workspace','hippocampus'],
