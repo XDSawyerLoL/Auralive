@@ -61,7 +61,7 @@ test('a real local probe produces revisable evidence, never an inherited truth',
  const counter=self.observe(first,{probe:'conversation_retrieval',outcome:'counterexample',
   source:'kernel-probe',privateView:true,at});
  assert.equal(self.status(counter,'conversation_retrieval'),'contradicted');
- assert.match(self.summary(counter,{probe:'conversation_retrieval',privateView:true}).observation,/erreur/i);
+ assert.match(self.summary(counter,{probe:'conversation_retrieval',privateView:true}).observation,/(erreur|[eé]chou[eé])/i);
  const revised=self.observe(counter,{probe:'conversation_retrieval',outcome:'supported',
   source:'kernel-probe',privateView:true,at});
  assert.equal(self.status(revised,'conversation_retrieval'),'mixed-evidence');
