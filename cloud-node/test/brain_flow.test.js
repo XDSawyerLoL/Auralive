@@ -140,7 +140,8 @@ test('kernel records real stage transitions with unique IDs and no message conte
  assert.match(src,/brainHop\('input','kernel','chat-received'/);
  assert.match(src,/brainHop\('kernel','homeostasis','beforeInteraction'/);
  assert.match(src,/brainHop\('homeostasis','memory'/);
- assert.match(src,/brainHop\('memory','cognition'/);
+ assert.match(src,/brainHop\('memory','thalamus'/);
+ assert.match(src,/brainHop\('workspace','cognition'/);
  assert.match(src,/brainHop\('language',providerNode/);
  assert.match(src,/brainHop\(providerNode\|\|'language','coherence'/);
  assert.match(src,/brainHop\('coherence','output'/);
