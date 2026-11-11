@@ -749,6 +749,7 @@ export class CognitiveKernel {
               probe:independent.receipt.probe,
               observation:independent.receipt.outcome,
               evidence:independent.receipt.basis,
+              candidate_hypotheses:independent.receipt.new_hypotheses_proposed,
               autonomous:true,external_action:false,
             });
           this.pushStimulus({
@@ -757,7 +758,8 @@ export class CognitiveKernel {
             occurred_at:independent.receipt.at,
             payload:{probe:independent.receipt.probe,
               outcome:independent.receipt.outcome,
-              basis:independent.receipt.basis},
+              basis:independent.receipt.basis,
+              new_hypotheses:independent.receipt.new_hypotheses_proposed},
           });
         }
       }
