@@ -99,6 +99,31 @@ test('missing history table or interrupted process is not a proven memory failur
  assert.equal(out.receipt.outcome,'inconclusive');
  assert.equal(out.soul.epistemic_self.hypotheses.history_integrity.counterexamples,0);
 });
+test('new candidate hypotheses require machine-verified evidence, never promotion by narration',async()=>{
+ const initial=soul();
+ const epistemic=model.migrate(initial.epistemic_self);
+ epistemic.hypotheses.conversation_retrieval.observed=3;
+ epistemic.hypotheses.state_persistence.observed=3;
+ initial.epistemic_self=epistemic;
+ initial.independent_activity={completed_tests:2,
+   last_probe_at:new Date(now-3600_001).toISOString()};
+ const db={execute:async(sql)=>{
+   if(sql.includes('aura_history_episodes'))return [[{context_tag:'task_technical'}]];
+   throw Error('unexpected DB call '+sql);
+ }};
+ const history={verifyChain:async()=>({verified:true,checked:4,reason:'full-chain'}),
+   discoverHypotheses:async({context_tag})=>{
+     assert.equal(context_tag,'task_technical');
+     return [{created:true,status:'candidate'}];
+   },
+ };
+ const cycle=new IndependentContinuity({db,selfInquiry:model,history,clock:()=>now});
+ const result=await cycle.step({soul:initial});
+ assert.equal(result.receipt.probe,'history_integrity');
+ assert.equal(result.receipt.new_hypotheses_proposed,1);
+ assert.equal(result.receipt.external_action,false);
+ assert.equal(result.receipt.consciousness_claim,false);
+});
 test('dated evidence can enrich identity, but missing evidence cannot be invented',()=>{
  const engine=new CognitionEngine();
  const saved=soul();
