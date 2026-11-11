@@ -249,7 +249,13 @@ export class CognitionEngine {
     const lessons = Array.isArray(bundle?.lessons) ? bundle.lessons : [];
     const outcomes = Array.isArray(bundle?.outcomes) ? bundle.outcomes : [];
     const latest = stimuli.at(-1) || null;
-    const failed = latestFailure(outcomes);
+    // An old failure is historical evidence, not an eternally active crisis.
+    const recentOutcomes=outcomes.filter(row=>{
+      const time=Date.parse(String(row?.created_at||''));
+      return !Number.isFinite(time)||
+        (Date.now()-time>=0&&Date.now()-time<=60*60*1000);
+    });
+    const failed = latestFailure(recentOutcomes);
 
     const currentIntention = topIntention(intentions, soul?.current_intention);
     const extra = normalize(text || bundle?.extra_text);
