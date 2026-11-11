@@ -462,6 +462,7 @@ export class CognitionEngine {
     const conversationContext = (Array.isArray(recentMessages) ? recentMessages : [])
       .slice(-6)
       .map((row) => ({
+        id:row?.id??null,
         role: String(row?.role || '').slice(0,20),
         author: String(row?.author || '').slice(0,80),
         content: normalize(row?.content).slice(0,500),
