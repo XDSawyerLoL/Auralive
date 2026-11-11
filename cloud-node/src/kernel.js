@@ -18,6 +18,10 @@ import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
 import { workspaceInput,competeInWorkspace,workspaceSnapshot } from './global_workspace.js';
+import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,executionWorkspaceGate } from './workspace_boundary.js';
+import { initialPredictionState,predictModule,observePrediction,currentPredictionSignal } from './prediction_error_bus.js';
+import { initialViability,evolveViability } from './viability_budget.js';
+import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -118,6 +122,10 @@ export class CognitiveKernel {
       getConnection:()=>getDb().getConnection(),
     }});
     this.selfInquiry = new SelfInquiryEngine();
+    this.offlineConsolidation=new OfflineConsolidation({
+      db:{execute:(sql,params)=>getDb().execute(sql,params)},
+      signingKey:process.env.AURA_STATE_SIGNING_KEY||'',
+    });
     this.independentContinuity = new IndependentContinuity({
       db:{execute:(sql,params)=>getDb().execute(sql,params)},
       selfInquiry:this.selfInquiry,history:this.history,
@@ -170,6 +178,9 @@ export class CognitiveKernel {
       epistemic_self: this.selfInquiry.defaultState(),
       independent_activity:null,
       global_workspace:null,
+      prediction_bus:initialPredictionState(),
+      viability:initialViability(),
+      consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -275,6 +286,14 @@ export class CognitiveKernel {
     // Only non-text attention receipts are persisted; never raw user or model text.
     if(!this.soulCache.global_workspace||typeof this.soulCache.global_workspace!=='object')
       this.soulCache.global_workspace=null;
+    if(!this.soulCache.prediction_bus||typeof this.soulCache.prediction_bus!=='object')
+      this.soulCache.prediction_bus=initialPredictionState();
+    if(!this.soulCache.viability||typeof this.soulCache.viability!=='object')
+      this.soulCache.viability=initialViability();
+    // Detect a malformed or tampered consolidation; never silently trust it.
+    if(this.soulCache.consolidation&&
+      !verifyConsolidation(this.soulCache.consolidation,this.offlineConsolidation.signingKey))
+      this.soulCache.consolidation=null;
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -716,6 +735,21 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      this.soulCache.viability=evolveViability(
+        this.soulCache.viability,idle.state,Date.now());
+      if(this.soulCache.viability.optional_work_allowed){
+        const consolidated=await this.offlineConsolidation.step(
+          this.soulCache.consolidation||{}).catch(()=>({executed:false}));
+        if(consolidated.executed){
+          this.soulCache.consolidation=consolidated.state;
+          await this.trace('memory-consolidation','verified-episodes-compacted','',{
+            at:timestamp,verified_rows:consolidated.state.verified_rows,
+            patterns:consolidated.verified_patterns,
+            signed:consolidated.signed,raw_memory_exposed:false,
+            irreversible_deletion:false,
+          });
+        }
+      }
       // Background thalamo-cortical recurrence uses the same bounded, real
       // competition as dialogue. A changed control signal can trigger a later
       // reflection, but an unchanged cycle adds no fabricated discovery.
@@ -723,7 +757,9 @@ export class CognitiveKernel {
       const idleWorkspace=competeInWorkspace(workspaceInput({
         userPresent:false,organism:idle.state,
         plan:{act:'respond'},previous:priorWorkspace,
-      }),{previous:priorWorkspace});
+        prediction:currentPredictionSignal(this.soulCache.prediction_bus),
+        consolidation:this.soulCache.consolidation,
+      }),{previous:priorWorkspace,capacity:this.soulCache.viability.capacity});
       this.soulCache.global_workspace=workspaceSnapshot(
         idleWorkspace,priorWorkspace);
       const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
@@ -764,17 +800,28 @@ export class CognitiveKernel {
 
       const dueByTime = Date.now() - this.lastReflectionAtMs >= config.cognitiveReflectionSeconds * 1000;
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
-      const continuity = (!force && !String(text).trim() && underLimit)
+      const continuity = (!force && !String(text).trim() && underLimit && this.soulCache.viability.optional_work_allowed)
         ? await this.prepareContinuityStimulus()
         : { due: false, reason: 'direct-or-budgeted-cycle' };
       const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
       // A bounded measured inquiry runs between conversations, when due.
       // No LLM, network action or unverified claim is generated.
-      if(!force && !String(text).trim() && config.continuityEnabled){
+      if(!force && !String(text).trim() && config.continuityEnabled && this.soulCache.viability.optional_work_allowed){
         const independent=await this.independentContinuity.step({
           soul:this.soulCache,
         }).catch(()=>({executed:false,reason:'probe-unavailable'}));
         if(independent.executed){
+          const prospective=predictModule(this.soulCache.prediction_bus,{
+            module:'self-inquiry',operationId:'background-probe',at:timestamp,
+          });
+          if(['supported','counterexample'].includes(independent.receipt.outcome)){
+            const observation=observePrediction(this.soulCache.prediction_bus,prospective,{
+              success:independent.receipt.outcome==='supported',
+              source:independent.receipt.basis==='probe-unavailable'?'reported':'machine-observed',
+              at:now(),
+            });
+            if(observation.accepted)this.soulCache.prediction_bus=observation.state;
+          }
           // Merge only the tested state; chat may have updated other fields.
           this.soulCache.epistemic_self=independent.soul.epistemic_self;
           this.soulCache.independent_activity=independent.soul.independent_activity;
@@ -1471,12 +1518,15 @@ export class CognitiveKernel {
     const workspace=competeInWorkspace(workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
       plan,experience:privateView?advice:null,
+      prediction:currentPredictionSignal(this.soulCache.prediction_bus),
+      consolidation:this.soulCache.consolidation,
       history:privateView&&historyPreChoice?.changed?{
         changed:true,eligible:Boolean(historyPreChoice?.provenance?.length),
         action:historyPreChoice.action,
       }:null,metacognition:attentionMeta,
       previous:privateView?this.soulCache.global_workspace:null,
-    }),{previous:privateView?this.soulCache.global_workspace:null});
+    }),{previous:privateView?this.soulCache.global_workspace:null,
+      capacity:this.soulCache.viability?.capacity||3});
     const memoryBroadcast=workspace.received.basal_ganglia.some(
       signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
     const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
