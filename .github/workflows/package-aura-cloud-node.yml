@@ -18,6 +18,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate CORTEX 07 offline 3D fallback image
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --disable-pip-version-check "numpy>=1.26,<3" "pillow>=10" "vtk>=9.3,<9.7"
+          python cloud-node/scripts/generate_cortex07_brain.py cloud-node/src/assets/cortex07_brain.webp
+          test -s cloud-node/src/assets/cortex07_brain.webp
+
       - name: Prepare clean Hostinger upload
         shell: bash
         run: |
