@@ -1126,7 +1126,27 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
+  executionWorkspace(){
+    const proposals=workspaceInput({
+      userPresent:false,
+      organism:this.organism.migrate(this.soulCache||{}),
+      plan:{act:'task_first'},
+      prediction:currentPredictionSignal(this.soulCache?.prediction_bus),
+      consolidation:this.soulCache?.consolidation,
+      previous:this.soulCache?.global_workspace,
+    });
+    const workspace=competeInWorkspace(proposals,{
+      previous:this.soulCache?.global_workspace,
+      capacity:this.soulCache?.viability?.capacity||3,
+    });
+    return {workspace,gate:executionWorkspaceGate(workspace)};
+  }
+
   async runAgent(name, task, { missionId = '' } = {}) {
+    const {workspace,gate}=this.executionWorkspace();
+    if(!gate.allowed)
+      return {agent:name,status:'workspace-denied',answer:'',
+        executed:false,reason:gate.reason};
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
     const taskRole = ({
       planner: 'reasoning',
@@ -1143,7 +1163,8 @@ export class CognitiveKernel {
       task,
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
-        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true, task)).slice(0, 6000)}`,
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${workspaceHas(workspace,'hippocampus','memory')
+          ?semanticWorkspaceContext(await this.contextForAi(true,task),workspace):''}`,
         AGENT_ROLES[name] + '\n' + agentSkillsGuidance(task, {role:name,limit:2}),
         700,
         taskRole,
@@ -1160,6 +1181,10 @@ export class CognitiveKernel {
   }
 
   async swarm(task, names) {
+    const {gate}=this.executionWorkspace();
+    if(!gate.allowed)
+      return {agents:[],synthesis:'',executed:false,
+        status:'workspace-denied',reason:gate.reason};
     const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic']).filter((name) => AGENT_ROLES[name]).slice(0, 5);
     if (!selected.length) throw new Error('Aucun agent valide');
     const outputs = await Promise.all(selected.map(async (name) => {
@@ -1179,6 +1204,14 @@ export class CognitiveKernel {
   async operate(task, requestedRisks = []) {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
+    const {workspace,gate}=this.executionWorkspace();
+    if(!gate.allowed){
+      await this.trace('workspace-denial','operator-plan-not-broadcast','',{
+        at:now(),reason:gate.reason,scope:'kernel-operate',
+      });
+      return {ok:false,task:mission,executed:false,
+        execution_mode:'workspace-denied',reason:gate.reason};
+    }
     // Instrument ONLY actual transitions, never infer that a service was called
     // just because it exists. No mission text or private input in brain-hop events.
     const operationFlowId = randomUUID();
