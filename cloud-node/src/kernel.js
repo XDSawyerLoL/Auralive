@@ -17,6 +17,7 @@ import { SelfInquiryEngine } from './self_inquiry.js';
 import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
+import { workspaceInput,competeInWorkspace,workspaceSnapshot } from './global_workspace.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -168,6 +169,7 @@ export class CognitiveKernel {
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
       independent_activity:null,
+      global_workspace:null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -270,6 +272,9 @@ export class CognitiveKernel {
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
+    // Only non-text attention receipts are persisted; never raw user or model text.
+    if(!this.soulCache.global_workspace||typeof this.soulCache.global_workspace!=='object')
+      this.soulCache.global_workspace=null;
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -1432,9 +1437,54 @@ export class CognitiveKernel {
       if(historyDecision.provenance.length)
         await brainHop('history','cognition','eligible-policy-evaluated');
     }
+    // Thalamic-like competition is a real pre-decision gate: even a validated
+    // memory policy cannot govern this turn if it lost access to the workspace.
+    // The same broadcast reaches distinct receptor functions; a user message
+    // remains a high-priority ingress without obtaining execution authority.
+    const attentionMeta=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
+    const workspace=competeInWorkspace(workspaceInput({
+      userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
+      plan,history:privateView&&historyDecision?.changed?{
+        changed:true,eligible:Boolean(historyDecision?.provenance?.length),
+        action:historyDecision.action,
+      }:null,metacognition:attentionMeta,
+      previous:privateView?this.soulCache.global_workspace:null,
+    }),{previous:privateView?this.soulCache.global_workspace:null});
+    const memoryBroadcast=workspace.received.basal_ganglia.some(
+      signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
     const historyPermitted=!['self_name','self_identity','self_personality','self_exploration']
       .includes(plan.act);
-    const historyChanged=Boolean(historyPermitted&&historyDecision?.changed);
+    const historyChanged=Boolean(historyPermitted&&historyDecision?.changed&&memoryBroadcast);
+    // E2 bridge: gated memory and metacognitive warning have causal authority.
+    // Unselected candidate facts never modify strategy via this gate.
+    plan.global_workspace={
+      focus:workspace.decision.attention,
+      control:workspace.decision.control,
+      selected:workspace.selected.map(x=>({source:x.source,label:x.label,score:x.score})),
+      broadcast_enabled:workspace.broadcast_enabled,
+      delivered_to:workspace.broadcasts.map(x=>x.recipient),
+    };
+    if(privateView){
+      this.soulCache.global_workspace=workspaceSnapshot(
+        workspace,this.soulCache.global_workspace);
+      await this.saveSoul();
+    }
+    await brainHop('cognition','thalamus','competition-from-observed-input');
+    await brainHop('thalamus','workspace','capacity-bounded-selection');
+    for(const receiver of ['prefrontal','hippocampus','basal_ganglia','insula','metacognition']){
+      if(workspace.received[receiver].length)
+        await brainHop('workspace',receiver,'selected-content-received');
+    }
+    await this.trace('workspace-broadcast','capacity-bounded-selection','',{
+      flow_id:brainFlowId,at:workspace.recorded_at,
+      capacity:workspace.capacity,selected:plan.global_workspace.selected,
+      suppressed:workspace.suppressed,
+      recipients:plan.global_workspace.delivered_to,
+      history_policy_selected:memoryBroadcast,
+      control:workspace.decision.control,
+      kernel_decision_only:true,
+      raw_user_text_stored:false,subjective_experience_claim:false,
+    });
     const strategy=historyChanged?historyDecision.action:advice.strategy;
     const strategyChanged=Boolean(advice.changed||historyChanged);
     plan.learned_strategy=strategy;
@@ -1542,6 +1592,16 @@ export class CognitiveKernel {
           'Cette session ne permet pas de vérifier des éléments privés de mon histoire.'];
       }
     }
+    // A selected metacognitive signal must change the control path, not
+    // merely appear as a line in a prompt.
+    if(workspace.decision.verification_required&&privateView&&
+      substantiveRequest(content)&&!plan.needs_semantic_support){
+      plan.needs_semantic_support=true;
+      plan.semantic_query=content;
+      plan.goal+=' Vérifier le point incertain avant une conclusion affirmative.';
+    }
+    if(workspace.decision.optional_compute_deferred)
+      plan.optional_compute_deferred=true;
     // A local counterexample must alter the next relevant decision, not merely
     // decorate its response. This is a bounded verification preference only;
     // it cannot authorize actions or assert that the world changed.
@@ -1852,6 +1912,7 @@ export class CognitiveKernel {
       self_inquiry:plan.self_inquiry_report||null,
       epistemic_self:this.selfInquiry.publicState(this.soulCache.epistemic_self),
       metacognitive_guidance:plan.metacognitive_guidance,
+      global_workspace:plan.global_workspace,
       experience_guidance:plan.experience_guidance,
       history_guidance:plan.history_guidance,
       organ_regulation:inference.organ_regulation,
