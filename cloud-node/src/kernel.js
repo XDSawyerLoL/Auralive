@@ -1651,8 +1651,15 @@ export class CognitiveKernel {
     // decorate its response. This is a bounded verification preference only;
     // it cannot authorize actions or assert that the world changed.
     const metacognitive=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
-    plan.metacognitive_guidance=metacognitive;
-    if(metacognitive.verify&&workspace.received.metacognition.some(x=>x.source==='metacognition')){
+    const metacognitiveBroadcast=workspace.received.metacognition
+      .some(x=>x.source==='metacognition');
+    plan.metacognitive_guidance={
+      ...metacognitive,
+      verify:Boolean(metacognitive.verify&&metacognitiveBroadcast),
+      broadcast_selected:metacognitiveBroadcast,
+      limitation:metacognitiveBroadcast?metacognitive.limitation:'',
+    };
+    if(plan.metacognitive_guidance.verify){
       plan.metacognitive_action='verify';
       plan.goal+=' Ne présente pas la mémoire comme certaine tant que cette limite n’a pas été revérifiée.';
       plan.facts=[...(plan.facts||[]),metacognitive.limitation];
