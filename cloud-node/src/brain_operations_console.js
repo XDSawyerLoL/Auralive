@@ -4,6 +4,7 @@ import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
 import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
 import {BRAIN_OPERATIONS_SCRIPT} from './brain_operations_runtime.js';
 import {BRAIN_SCIENCE_LAB_HTML,BRAIN_SCIENCE_LAB_CSS} from './brain_science_lab_ui.js';
+import {BRAIN_ORGANISM_V5_HTML} from './brain_organism_v5.js';
 
 export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <html lang="fr">
@@ -34,7 +35,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 
   <nav class="scene-nav" aria-label="Accès aux espaces d’AURA">
     <button class="scene-active" data-focus="conversation-panel" type="button">Dialogue</button>
-    <button data-focus="brain" type="button">Réseau</button>
+    <button data-focus="brain" type="button">Organisme</button>
+    <button data-focus="neuro-lab-details" type="button">Labo / Génome</button>
     <button data-focus="atlas-v3" type="button">Atlas v3 · 18 processus</button>
     <button data-focus="homeostasis-panel" type="button">État interne</button>
     <button data-focus="diagnostics-details" type="button">Historique et outils</button>
@@ -90,7 +92,6 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     <div class="kpi"><label>Dernière mutation organisme</label><strong id="kOrganism">—</strong></div>
   </section>
 
-  __SCIENCE_HTML__
   <section class="workspace">
     <aside class="rail dialogue-rail">
       <section class="panel conversation-workspace" id="conversation-panel" aria-label="Dialogue avec AURA">
@@ -177,6 +178,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
             <div class="graph-floating" id="graphHover" aria-live="off">Sélectionne un module pour inspecter ses preuves.</div>
             <div class="graph-floating">Glisser · Zoomer · Cliquer sur un module · Rejouer un trajet enregistré</div>
           </div>
+          __ORGANISM_V5_HTML__
           <div class="neural-inspector memory-inspector" role="button" tabindex="0" data-inspect="memory">
             <div class="ni-heading"><span class="ni-icon">▤</span> Mémoire <span id="niMemoryState" class="ni-state">NON VÉRIFIÉE</span></div>
             <div class="ni-meta">Réflexions enregistrées</div><strong id="niMemoryCount">—</strong><small id="niMemoryTime">Dernier événement : —</small>
@@ -293,6 +295,10 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     </aside>
   </section>
 
+  <details class="v5-lab-details" id="neuro-lab-details">
+    <summary>NEUROGENÈSE NUMÉRIQUE · LABORATOIRE CAUSAL <span>Ouvrir la double hélice, les ablations et le protocole P0</span></summary>
+    __SCIENCE_HTML__
+  </details>
   <details class="atlas-details" id="atlas-v3">
     <summary>Atlas Cognitif v3 · 18 opérations et chronologie vérifiées</summary>
     ${COGNITIVE_ATLAS_HTML}
@@ -333,5 +339,6 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 .replace('__READABLE_CSS__', BRAIN_READABLE_CSS)
 .replace('__SCIENCE_CSS__',BRAIN_SCIENCE_LAB_CSS)
 .replace('__SCIENCE_HTML__',BRAIN_SCIENCE_LAB_HTML)
+.replace('__ORGANISM_V5_HTML__',BRAIN_ORGANISM_V5_HTML)
 .replace('__ATLAS_CSS__', COGNITIVE_ATLAS_CSS)
 .replace('__OPS_SCRIPT__', BRAIN_OPERATIONS_SCRIPT);
