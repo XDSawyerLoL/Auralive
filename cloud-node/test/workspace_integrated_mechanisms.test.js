@@ -117,8 +117,14 @@ test('viability reserve degrades and recovers, reducing attention capacity witho
  const constrained=v.reserve;
  for(let n=0;n<300;n++){
   t+=30000;
-  v=evolveViability(v,{homeostasis:{}},t);
+  v=evolveViability(v,{homeostasis:{
+    sensor:{source:'node-process',sampled_at:new Date(t).toISOString(),
+      compute_pressure:0},failure_ema:0,
+  }},t);
  }
+ const stale=evolveViability(v,{homeostasis:{}},t+30000);
+ assert.equal(stale.reserve,v.reserve,'stale metrics must not cause recovery');
+ assert.equal(stale.optional_work_allowed,false);
  assert.ok(v.reserve>constrained);
  assert.equal(v.recovery_possible,true);
  const differs=viabilityAblation(initialViability(),{
