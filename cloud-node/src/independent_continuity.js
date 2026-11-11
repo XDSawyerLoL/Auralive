@@ -60,12 +60,34 @@ export class IndependentContinuity {
       // DB availability problems cannot be mistaken for proof about identity.
       outcome='inconclusive';basis='probe-unavailable';
     }
+    // Independently verified task records can give rise to NEW, context-bound
+    // hypotheses. Retrospective evidence can create candidates only;
+    // promotion still requires future, independently verified outcomes.
+    let newCandidates=0;
+    if(Math.max(0,Number(before.completed_tests)||0)%3===2){
+      try{
+        const [contexts]=await this.db.execute(
+          'SELECT e.context_tag FROM aura_history_episodes e '+
+          'JOIN aura_history_outcomes o ON o.episode_id=e.id '+
+          "WHERE e.ablated=0 AND e.kind='action' AND o.source='machine-verified' "+
+          'GROUP BY e.context_tag ORDER BY MAX(e.id) DESC LIMIT 3');
+        for(const row of contexts){
+          const proposals=await this.history.discoverHypotheses({
+            context_tag:row.context_tag,limit:1,
+          });
+          newCandidates+=proposals.filter(p=>p.created===true).length;
+        }
+      }catch{
+        // No database migration or verified evidence: never invent a candidate.
+      }
+    }
     const epistemic=this.selfInquiry.observe(soul.epistemic_self,{
       probe,outcome,source:'kernel-probe',privateView:true,at,
     });
     const old=soul.epistemic_self?.hypotheses?.[probe]?.last_outcome||'unexamined';
     const changed=old!==outcome;
     const receipt={at,probe,outcome,basis,changed,
+      new_hypotheses_proposed:newCandidates,
       origin:'kernel-autonomous-test',external_action:false,
       consciousness_claim:false};
     return {
