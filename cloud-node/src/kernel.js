@@ -325,7 +325,8 @@ export class CognitiveKernel {
     this.started = true;
     if (config.cognitiveEnabled) {
       this.timer = setInterval(() => {
-        this.runDueRoutines()
+        (this.soulCache?.viability?.optional_work_allowed===false
+          ?Promise.resolve():this.runDueRoutines())
           .then(() => this.tick({ trigger: 'ambient', force: false }))
           .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
       }, config.cognitiveTickSeconds * 1000);
@@ -816,7 +817,7 @@ export class CognitiveKernel {
         }).catch(()=>({executed:false,reason:'probe-unavailable'}));
         if(independent.executed){
           const prospective=predictModule(this.soulCache.prediction_bus,{
-            module:'self-inquiry',operationId:'background-probe',at:timestamp,
+            module:'self-inquiry',operationId:randomUUID(),at:timestamp,
           });
           if(['supported','counterexample'].includes(independent.receipt.outcome)){
             const observation=observePrediction(this.soulCache.prediction_bus,prospective,{
@@ -851,8 +852,9 @@ export class CognitiveKernel {
       }
       const shouldReflect = force
         || Boolean(String(text).trim())
-        || (dueByTime && this.stimuli.length > 0 && underLimit)
-        || (continuity.due && underLimit);
+        || (this.soulCache.viability.optional_work_allowed&&
+          ((dueByTime && this.stimuli.length > 0 && underLimit)
+          ||(continuity.due && underLimit)));
       await this.saveSoul();
       if (!shouldReflect) {
         return {
