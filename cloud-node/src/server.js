@@ -1350,6 +1350,10 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
     organ_budget:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.token_budget:null,
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
+    prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
+    attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
+    viability:bootstrap.runtimeReady?kernel.soulCache?.viability:null,
+    consolidation:bootstrap.runtimeReady?kernel.soulCache?.consolidation:null,
     language:{
       enabled:groq.enabled===true,
       model:String(groq.model||'').slice(0,90),
@@ -1371,6 +1375,10 @@ app.get('/api/brain/graph', async (request, reply) => {
     organ_budget:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.token_budget:null,
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
+    prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
+    attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
+    viability:bootstrap.runtimeReady?kernel.soulCache?.viability:null,
+    consolidation:bootstrap.runtimeReady?kernel.soulCache?.consolidation:null,
     language:{
     enabled:groq.enabled===true,last_status:String(groq.last_status||''),
     model:String(groq.model||''),last_model:String(groq.last_model||''),
@@ -1379,7 +1387,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   if(bootstrap.dbReady){
     const results=await Promise.allSettled([
       readBrainTraceRows(
-        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event','organ-regulation','independent-self-test','workspace-broadcast') ORDER BY id DESC LIMIT 250"),
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event','organ-regulation','independent-self-test','workspace-broadcast','prediction-error','memory-consolidation','workspace-denial') ORDER BY id DESC LIMIT 250"),
       readBrainTraceRows(
         'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
       readBrainTraceRows(

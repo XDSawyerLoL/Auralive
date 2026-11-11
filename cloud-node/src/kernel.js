@@ -18,6 +18,11 @@ import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
 import { workspaceInput,competeInWorkspace,workspaceSnapshot } from './global_workspace.js';
+import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,executionWorkspaceGate } from './workspace_boundary.js';
+import { initialPredictionState,predictModule,observePrediction,currentPredictionSignal } from './prediction_error_bus.js';
+import { initialViability,evolveViability } from './viability_budget.js';
+import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
+import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -118,6 +123,10 @@ export class CognitiveKernel {
       getConnection:()=>getDb().getConnection(),
     }});
     this.selfInquiry = new SelfInquiryEngine();
+    this.offlineConsolidation=new OfflineConsolidation({
+      db:{execute:(sql,params)=>getDb().execute(sql,params)},
+      signingKey:process.env.AURA_STATE_SIGNING_KEY||'',
+    });
     this.independentContinuity = new IndependentContinuity({
       db:{execute:(sql,params)=>getDb().execute(sql,params)},
       selfInquiry:this.selfInquiry,history:this.history,
@@ -170,6 +179,10 @@ export class CognitiveKernel {
       epistemic_self: this.selfInquiry.defaultState(),
       independent_activity:null,
       global_workspace:null,
+      prediction_bus:initialPredictionState(),
+      attention_schema:initialAttentionSchema(),
+      viability:initialViability(),
+      consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
       last_tick_at: '',
       last_reflection_at: '',
@@ -234,9 +247,13 @@ export class CognitiveKernel {
   inferenceAssessment({ novelty = 0, risk = 0 } = {}) {
     const organism = this.organism.migrate(this.soulCache || {});
     const policy = this.nativeLearning.inferenceParams(this.soulCache?.native_learning);
+    const decisionId=randomUUID();
     const assessment = { ...organRegulate(
       this.activeInference.assess(organism, { novelty, risk, policy }),organism,
-    ),decision_id: randomUUID() };
+    ),decision_id: decisionId,
+      outcome_prediction:predictModule(this.soulCache?.prediction_bus,{
+        module:'outcomes',operationId:decisionId,at:now(),
+      }) };
     this.lastInferenceAssessment = assessment;
     this.recentReflexDecisions.push(assessment);
     if (this.recentReflexDecisions.length > 100) this.recentReflexDecisions.shift();
@@ -275,6 +292,16 @@ export class CognitiveKernel {
     // Only non-text attention receipts are persisted; never raw user or model text.
     if(!this.soulCache.global_workspace||typeof this.soulCache.global_workspace!=='object')
       this.soulCache.global_workspace=null;
+    if(!this.soulCache.prediction_bus||typeof this.soulCache.prediction_bus!=='object')
+      this.soulCache.prediction_bus=initialPredictionState();
+    if(!this.soulCache.attention_schema||typeof this.soulCache.attention_schema!=='object')
+      this.soulCache.attention_schema=initialAttentionSchema();
+    if(!this.soulCache.viability||typeof this.soulCache.viability!=='object')
+      this.soulCache.viability=initialViability();
+    // Detect a malformed or tampered consolidation; never silently trust it.
+    if(this.soulCache.consolidation&&
+      !verifyConsolidation(this.soulCache.consolidation,this.offlineConsolidation.signingKey))
+      this.soulCache.consolidation=null;
     await this.skillLearning.hydrate().catch((error) => {
       this.lastError = String(error?.message || error).slice(0, 1000);
     });
@@ -302,7 +329,8 @@ export class CognitiveKernel {
     this.started = true;
     if (config.cognitiveEnabled) {
       this.timer = setInterval(() => {
-        this.runDueRoutines()
+        (this.soulCache?.viability?.optional_work_allowed===false
+          ?Promise.resolve():this.runDueRoutines())
           .then(() => this.tick({ trigger: 'ambient', force: false }))
           .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
       }, config.cognitiveTickSeconds * 1000);
@@ -716,14 +744,47 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      this.soulCache.viability=evolveViability(
+        this.soulCache.viability,idle.state,Date.now());
+      if(this.soulCache.viability.optional_work_allowed){
+        const consolidated=await this.offlineConsolidation.step(
+          this.soulCache.consolidation||{}).catch(()=>({executed:false}));
+        if(consolidated.executed){
+          this.soulCache.consolidation=consolidated.state;
+          await this.trace('memory-consolidation','verified-episodes-compacted','',{
+            at:timestamp,verified_rows:consolidated.state.verified_rows,
+            patterns:consolidated.verified_patterns,
+            signed:consolidated.signed,raw_memory_exposed:false,
+            irreversible_deletion:false,
+          });
+        }
+      }
       // Background thalamo-cortical recurrence uses the same bounded, real
       // competition as dialogue. A changed control signal can trigger a later
       // reflection, but an unchanged cycle adds no fabricated discovery.
       const priorWorkspace=this.soulCache.global_workspace;
-      const idleWorkspace=competeInWorkspace(workspaceInput({
+      const idleCandidates=workspaceInput({
         userPresent:false,organism:idle.state,
         plan:{act:'respond'},previous:priorWorkspace,
-      }),{previous:priorWorkspace});
+        prediction:currentPredictionSignal(this.soulCache.prediction_bus),
+        consolidation:this.soulCache.consolidation,
+      });
+      const priorAttention=predictAttention(this.soulCache.attention_schema,idleCandidates);
+      const idleWorkspace=competeInWorkspace(
+        steerAttention(idleCandidates,priorAttention),{
+        previous:priorWorkspace,capacity:this.soulCache.viability.capacity});
+      const attentionObserved=observeAttention(this.soulCache.attention_schema,
+        priorAttention,idleWorkspace,timestamp);
+      if(attentionObserved.observed){
+        this.soulCache.attention_schema=attentionObserved.state;
+        if(attentionObserved.prediction_qualified){
+          const prediction=predictModule(this.soulCache.prediction_bus,{
+            module:'attention',operationId:randomUUID(),at:timestamp});
+          const result=observePrediction(this.soulCache.prediction_bus,prediction,{
+            success:attentionObserved.correct,source:'machine-observed',at:now()});
+          if(result.accepted)this.soulCache.prediction_bus=result.state;
+        }
+      }
       this.soulCache.global_workspace=workspaceSnapshot(
         idleWorkspace,priorWorkspace);
       const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
@@ -764,17 +825,28 @@ export class CognitiveKernel {
 
       const dueByTime = Date.now() - this.lastReflectionAtMs >= config.cognitiveReflectionSeconds * 1000;
       const underLimit = await this.reflectionCountLastHour() < config.cognitiveMaxReflectionsPerHour;
-      const continuity = (!force && !String(text).trim() && underLimit)
+      const continuity = (!force && !String(text).trim() && underLimit && this.soulCache.viability.optional_work_allowed)
         ? await this.prepareContinuityStimulus()
         : { due: false, reason: 'direct-or-budgeted-cycle' };
       const effectiveTrigger = continuity.due ? `continuity:${continuity.reason}` : trigger;
       // A bounded measured inquiry runs between conversations, when due.
       // No LLM, network action or unverified claim is generated.
-      if(!force && !String(text).trim() && config.continuityEnabled){
+      if(!force && !String(text).trim() && config.continuityEnabled && this.soulCache.viability.optional_work_allowed){
         const independent=await this.independentContinuity.step({
           soul:this.soulCache,
         }).catch(()=>({executed:false,reason:'probe-unavailable'}));
         if(independent.executed){
+          const prospective=predictModule(this.soulCache.prediction_bus,{
+            module:'self-inquiry',operationId:randomUUID(),at:timestamp,
+          });
+          if(['supported','counterexample'].includes(independent.receipt.outcome)){
+            const observation=observePrediction(this.soulCache.prediction_bus,prospective,{
+              success:independent.receipt.outcome==='supported',
+              source:independent.receipt.basis==='probe-unavailable'?'reported':'machine-observed',
+              at:now(),
+            });
+            if(observation.accepted)this.soulCache.prediction_bus=observation.state;
+          }
           // Merge only the tested state; chat may have updated other fields.
           this.soulCache.epistemic_self=independent.soul.epistemic_self;
           this.soulCache.independent_activity=independent.soul.independent_activity;
@@ -800,8 +872,9 @@ export class CognitiveKernel {
       }
       const shouldReflect = force
         || Boolean(String(text).trim())
-        || (dueByTime && this.stimuli.length > 0 && underLimit)
-        || (continuity.due && underLimit);
+        || (this.soulCache.viability.optional_work_allowed&&
+          ((dueByTime && this.stimuli.length > 0 && underLimit)
+          ||(continuity.due && underLimit)));
       await this.saveSoul();
       if (!shouldReflect) {
         return {
@@ -920,6 +993,13 @@ export class CognitiveKernel {
       item => item.decision_id === String(payload.reflex_decision_id || ''),
     );
     const reflexObservation = reflexOutcomeRecord(matchedDecision, payload);
+    if(reflexObservation&&matchedDecision?.outcome_prediction){
+      const evaluated=observePrediction(this.soulCache.prediction_bus,
+        matchedDecision.outcome_prediction,{success:ok,source:'reported',at:timestamp});
+      if(evaluated.accepted)this.soulCache.prediction_bus=evaluated.state;
+      // A user-reported outcome trains calibration but cannot masquerade
+      // as independent proof or drive the high-salience attention channel.
+    }
     if (reflexObservation) {
       await query(
         'INSERT INTO aura_reflex_observations(id,decision_id,compute_tier,difficulty,risk,novelty,uncertainty,outcome_ok,evidence_level,source,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
@@ -988,10 +1068,12 @@ export class CognitiveKernel {
     const target = `${automationId}:${signature}`.slice(0, 500);
     const existing = await one("SELECT id FROM aura_improvement_proposals WHERE target=? AND status IN ('proposed','accepted') LIMIT 1", [target]);
     if (existing) return existing;
-    const lessons = await this.lessons(6);
+    const {workspace,gate}=this.executionWorkspace();
+    const lessons=gate.allowed&&workspaceHas(workspace,'hippocampus','memory')
+      ?await this.lessons(6):[];
     let parsed = {};
     try {
-      parsed = parseJsonObject(await this.ai.generate(
+      if(gate.allowed)parsed = parseJsonObject(await this.ai.generate(
         `Analyse ce motif d’échec AURA et propose une amélioration minimale. Retourne JSON diagnosis, proposal, validation_plan, risk. Ne désactive aucun garde-fou.\n${JSON.stringify({ failure: { automationId, signature, count }, lessons }).slice(0, 9000)}`,
         'Tu es le laboratoire d’amélioration d’AURA. Tu proposes; tu n’appliques rien silencieusement.',
         360,
@@ -1068,7 +1150,27 @@ export class CognitiveKernel {
     return lines.join('\n').slice(0, 18000);
   }
 
+  executionWorkspace(){
+    const proposals=workspaceInput({
+      userPresent:false,
+      organism:this.organism.migrate(this.soulCache||{}),
+      plan:{act:'task_first'},
+      prediction:currentPredictionSignal(this.soulCache?.prediction_bus),
+      consolidation:this.soulCache?.consolidation,
+      previous:this.soulCache?.global_workspace,
+    });
+    const workspace=competeInWorkspace(proposals,{
+      previous:this.soulCache?.global_workspace,
+      capacity:this.soulCache?.viability?.capacity||3,
+    });
+    return {workspace,gate:executionWorkspaceGate(workspace)};
+  }
+
   async runAgent(name, task, { missionId = '' } = {}) {
+    const {workspace,gate}=this.executionWorkspace();
+    if(!gate.allowed)
+      return {agent:name,status:'workspace-denied',answer:'',
+        executed:false,reason:gate.reason};
     if (!AGENT_ROLES[name]) throw new Error(`Agent inconnu: ${name}`);
     const taskRole = ({
       planner: 'reasoning',
@@ -1085,7 +1187,8 @@ export class CognitiveKernel {
       task,
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
-        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${(await this.contextForAi(true, task)).slice(0, 6000)}`,
+        `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${workspaceHas(workspace,'hippocampus','memory')
+          ?semanticWorkspaceContext(await this.contextForAi(true,task),workspace):''}`,
         AGENT_ROLES[name] + '\n' + agentSkillsGuidance(task, {role:name,limit:2}),
         700,
         taskRole,
@@ -1102,6 +1205,10 @@ export class CognitiveKernel {
   }
 
   async swarm(task, names) {
+    const {gate}=this.executionWorkspace();
+    if(!gate.allowed)
+      return {agents:[],synthesis:'',executed:false,
+        status:'workspace-denied',reason:gate.reason};
     const selected = (Array.isArray(names) && names.length ? names : ['planner', 'research', 'dev', 'security', 'critic']).filter((name) => AGENT_ROLES[name]).slice(0, 5);
     if (!selected.length) throw new Error('Aucun agent valide');
     const outputs = await Promise.all(selected.map(async (name) => {
@@ -1121,6 +1228,14 @@ export class CognitiveKernel {
   async operate(task, requestedRisks = []) {
     const mission = String(task || '').trim();
     if (!mission) throw new Error('Mission vide');
+    const {workspace,gate}=this.executionWorkspace();
+    if(!gate.allowed){
+      await this.trace('workspace-denial','operator-plan-not-broadcast','',{
+        at:now(),reason:gate.reason,scope:'kernel-operate',
+      });
+      return {ok:false,task:mission,executed:false,
+        execution_mode:'workspace-denied',reason:gate.reason};
+    }
     // Instrument ONLY actual transitions, never infer that a service was called
     // just because it exists. No mission text or private input in brain-hop events.
     const operationFlowId = randomUUID();
@@ -1468,15 +1583,34 @@ export class CognitiveKernel {
     // The same broadcast reaches distinct receptor functions; a user message
     // remains a high-priority ingress without obtaining execution authority.
     const attentionMeta=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
-    const workspace=competeInWorkspace(workspaceInput({
+    const chatCandidates=workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
       plan,experience:privateView?advice:null,
+      prediction:currentPredictionSignal(this.soulCache.prediction_bus),
+      consolidation:this.soulCache.consolidation,
       history:privateView&&historyPreChoice?.changed?{
         changed:true,eligible:Boolean(historyPreChoice?.provenance?.length),
         action:historyPreChoice.action,
       }:null,metacognition:attentionMeta,
       previous:privateView?this.soulCache.global_workspace:null,
-    }),{previous:privateView?this.soulCache.global_workspace:null});
+    });
+    const attentionForecast=predictAttention(this.soulCache.attention_schema,chatCandidates);
+    const workspace=competeInWorkspace(
+      steerAttention(chatCandidates,attentionForecast),{
+      previous:privateView?this.soulCache.global_workspace:null,
+      capacity:this.soulCache.viability?.capacity||3});
+    const attentionObserved=observeAttention(this.soulCache.attention_schema,
+      attentionForecast,workspace,now());
+    if(attentionObserved.observed){
+      this.soulCache.attention_schema=attentionObserved.state;
+      if(attentionObserved.prediction_qualified){
+        const prediction=predictModule(this.soulCache.prediction_bus,{
+          module:'attention',operationId:brainFlowId,at:now()});
+        const result=observePrediction(this.soulCache.prediction_bus,prediction,{
+          success:attentionObserved.correct,source:'machine-observed',at:now()});
+        if(result.accepted)this.soulCache.prediction_bus=result.state;
+      }
+    }
     const memoryBroadcast=workspace.received.basal_ganglia.some(
       signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
     const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
@@ -1574,7 +1708,7 @@ export class CognitiveKernel {
         // The external semantic engine may help select WHAT to investigate,
         // but cannot assert the outcome or create a new identity claim.
         let proposal='';
-        if(this.ai?.enabled){
+        if(this.ai?.enabled&&workspaceHas(workspace,'prefrontal','perception')){
           proposal=await this.expression.semanticSupport({
             needs_semantic_support:true,
             semantic_query:'Choisis une seule vérification de mon fonctionnement, sans inventer de résultat. Réponds uniquement PROBE:conversation_retrieval, PROBE:state_persistence ou PROBE:history_integrity. Question : '+content.slice(0,300),
@@ -1754,6 +1888,7 @@ export class CognitiveKernel {
     let researchAttempted = false;
     if (
       plan.needs_semantic_support
+      && workspaceHas(workspace,'prefrontal','perception')
       && this.webSubstrate?.enabled
       && requiresExternalKnowledge(content)
     ) {
@@ -1821,11 +1956,13 @@ export class CognitiveKernel {
 
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
-    if (plan.needs_semantic_support) {
+    if (plan.needs_semantic_support&&workspaceHas(workspace,'prefrontal','perception')) {
       observe('semantic','running');
       const support = await this.expression.semanticSupport(
         plan,
-        await this.contextForAi(privateView, content),
+        workspaceHas(workspace,'hippocampus','memory')
+          ?semanticWorkspaceContext(await this.contextForAi(privateView, content),workspace)
+          :'',
         {
           maxTokens: Math.max(120, Number(inference.token_budget || 180)),
           taskRole: inference.model_role || 'research',
@@ -1859,10 +1996,32 @@ export class CognitiveKernel {
         // History is optional while v18 is rolling out; never fabricate it.
       }
     }
-    const answer = await this.expression.verbalize(plan, {
-      maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
-      taskRole: 'conversation',
+    const languageGate=languageWorkspaceProjection(plan,workspace,{privateView});
+    if(!languageGate.allowed)
+      await this.trace('workspace-denial','language-not-broadcast','',{
+        flow_id:brainFlowId,at:now(),reason:languageGate.reason,
+      });
+    const languagePrediction=predictModule(this.soulCache.prediction_bus,{
+      module:'language',operationId:brainFlowId,at:now(),
     });
+    const answer=languageGate.allowed
+      ?await this.expression.verbalize(languageGate.plan,{
+        maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
+        taskRole:'conversation',
+      }):'';
+    const languageResult=observePrediction(this.soulCache.prediction_bus,languagePrediction,{
+      success:Boolean(answer),source:'machine-observed',at:now(),
+    });
+    if(languageResult.accepted){
+      this.soulCache.prediction_bus=languageResult.state;
+      await this.trace('prediction-error','language-output-calibration','',{
+        flow_id:brainFlowId,at:now(),module:'language',
+        pre_action_probability:languagePrediction.probability,
+        error:languageResult.error,
+        observation:'response-produced-not-answer-correctness',
+        source:'machine-observed',raw_text_stored:false,
+      });
+    }
     observe('expression',answer?'done':'error',{
       answer_chars:answer?answer.length:0,
       language_mode:this.expression.lastMode,

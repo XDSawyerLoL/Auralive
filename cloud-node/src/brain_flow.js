@@ -94,6 +94,9 @@ const CATEGORIES=Object.freeze({
  'organ-regulation':'Arbitrage de ressources enregistré',
  'independent-self-test':'Auto-vérification réelle hors dialogue',
  'workspace-broadcast':'Compétition et diffusion attestées',
+ 'prediction-error':'Erreur de prédiction observée',
+ 'memory-consolidation':'Consolidation de mémoire vérifiée',
+ 'workspace-denial':'Refus par le contrôle de diffusion',
  'expression':'Formulation enregistrée',
  'web-research':'Recherche web enregistrée',
  'web-research-error':'Échec recherche web',
@@ -239,6 +242,9 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
     ev.type==='organ-regulation'?'interoception':
     ev.type==='independent-self-test'?'selfaudit':
     ev.type==='workspace-broadcast'?'workspace':
+    ev.type==='prediction-error'?'metacognition':
+    ev.type==='memory-consolidation'?'hippocampus':
+    ev.type==='workspace-denial'?'thalamus':
     ev.type==='expression'?'language':
     ev.type==='reflection'?'cognition':ev.type==='event'?'kernel':'';
   if(id)remember(id,ev.at,ev.source);

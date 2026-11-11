@@ -108,6 +108,57 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     biological_equivalence_proven:false,
     subjective_experience_proven:false,
   }:null;
+  const rawPrediction=extra.prediction_bus||{};
+  const prediction=live?{
+    revision:Math.max(0,Number(rawPrediction.revision)||0),
+    modules:Object.entries(rawPrediction.modules||{}).slice(0,8).map(([id,m])=>({
+      id:safeText(id,35),observations:Math.max(0,Number(m.n)||0),
+      brier:boundedMetric(m.brier_mean),
+      ece:boundedMetric(m.ece),
+      last_error:boundedMetric(m.last_error),
+      last_at:safeText(m.last_at||'',40),
+      source:safeText(m.last_source||'',35),
+    })),
+    verified_events:Math.max(0,Number(rawPrediction.verified_events)||0),
+    reported_events:Math.max(0,Number(rawPrediction.reported_events)||0),
+    last_at:safeText(rawPrediction.last_surprise?.at||'',40),
+    freshness:evaluateTelemetryFreshness(rawPrediction.last_surprise?.at,nowMs),
+  }:null;
+  const rawAttention=extra.attention_schema||{};
+  const attentionSchema=live&&rawAttention.observations?{
+    revision:Math.max(0,Number(rawAttention.revision)||0),
+    observations:Math.max(0,Number(rawAttention.observations)||0),
+    correct_predictions:Math.max(0,Number(rawAttention.correct_predictions)||0),
+    focus:safeText(rawAttention.last_focus||'',35),
+    last_error:rawAttention.last_error===null?null:
+      boundedMetric(rawAttention.last_error),
+    last_at:safeText(rawAttention.last_at||'',40),
+    freshness:evaluateTelemetryFreshness(rawAttention.last_at,nowMs),
+    source:'attention_schema / actual workspace selections',
+    subjective_experience_proven:false,
+  }:null;
+  const rawViability=extra.viability||{};
+  const viability=live&&rawViability.at?{
+    reserve:boundedMetric(rawViability.reserve),
+    capacity:Math.max(1,Math.min(3,Number(rawViability.capacity)||3)),
+    mode:['normal','restricted','critical','protected-rest']
+      .includes(rawViability.mode)?rawViability.mode:'unknown',
+    optional_work_allowed:rawViability.optional_work_allowed===true,
+    source:safeText(rawViability.source||'',40),
+    last_at:safeText(rawViability.at||'',40),
+    irreversible_destruction_allowed:false,
+  }:null;
+  const rawConsolidation=extra.consolidation||{};
+  const consolidation=live&&rawConsolidation.last_at?{
+    last_at:safeText(rawConsolidation.last_at,40),
+    revision:Math.max(0,Number(rawConsolidation.revision)||0),
+    verified_rows:Math.max(0,Number(rawConsolidation.verified_rows)||0),
+    patterns:Array.isArray(rawConsolidation.evidence)?rawConsolidation.evidence.length:0,
+    signed:rawConsolidation.signed===true,
+    integrity:safeText(rawConsolidation.integrity||'',35),
+    freshness:evaluateTelemetryFreshness(rawConsolidation.last_at,nowMs),
+    origin:'OfflineConsolidation.step',
+  }:null;
   const counts=publicState.kernel_status?.counts||{};
   const number=(v)=>v===null||v===undefined||v===''?null:
     Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
@@ -154,6 +205,32 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
         ' · sélection '+globalWorkspace.selected.map(x=>x.source).join(', ')
         :'Aucun résultat de compétition horodaté.',
       source:'CognitiveKernel.globalWorkspace / aura_soul_state'},
+    {id:'prefrontal',title:'Modèle prédictif de l’attention',
+      state:attentionSchema?'instrumented':'not-observed',
+      detail:attentionSchema?'Focus '+attentionSchema.focus+
+        ' · prévisions '+attentionSchema.observations+
+        ' · exactes '+attentionSchema.correct_predictions
+        :'Aucun schéma d’attention acquis.',
+      source:'attention_schema / aura_soul_state'},
+    {id:'metacognition',title:'Erreur de prédiction inter-modules',
+      state:prediction&&prediction.modules.length?'instrumented':'not-observed',
+      detail:prediction&&prediction.modules.length
+        ?prediction.modules.map(x=>x.id+' : '+x.observations+' observations').join(' · ')
+        :'Aucun résultat prédictif mesuré.',
+      source:'prediction_error_bus / aura_soul_state'},
+    {id:'insula',title:'Réserve computationnelle réversible',
+      state:viability?'instrumented':'not-observed',
+      detail:viability?'Mode '+viability.mode+' · réserve '+viability.reserve+
+        ' · tampon '+viability.capacity
+        :'Aucune réserve fonctionnelle datée.',
+      source:'viability_budget / aura_soul_state'},
+    {id:'hippocampus',title:'Consolidation hors dialogue',
+      state:consolidation?'recorded-history':'not-observed',
+      detail:consolidation?'Épisodes vérifiés : '+consolidation.verified_rows+
+        ' · profils : '+consolidation.patterns+
+        ' · signature '+(consolidation.signed?'HMAC':'non activée')
+        :'Aucun souvenir vérifié consolidé.',
+      source:'offline_consolidation / aura_soul_state'},
     {id:'selfaudit',title:'Auto-vérification hors dialogue',
       state:live&&independentActivity
         ?auditFreshness.status==='recent'?'recently-observed':'recorded-history'
@@ -190,6 +267,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     source, metrics, somatic, organ_decision:live?organDecision:null,
     independent_activity:live?independentActivity:null,
     global_workspace:globalWorkspace,
+    prediction,attention_schema:attentionSchema,viability,consolidation,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
