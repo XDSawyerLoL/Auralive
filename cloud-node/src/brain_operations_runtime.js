@@ -1,6 +1,7 @@
 import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
 import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
+import {BRAIN_ORGANISM_V5_SCRIPT} from './brain_organism_v5_runtime.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -622,7 +623,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();renderOrganismStage();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
@@ -787,7 +788,9 @@ async function poll(){
    if(!res.ok)throw new Error('HTTP '+res.status);
    const data=await res.json();
    if(data.version!=='brain-flow-v1'||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Schéma réseau invalide');
+   const earlierState=state.data;
    state.data=data;
+   v5IngestEvidence(earlierState,data);
    if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
    // Select once the latest persisted route, but do NOT replay it and never
    // present a historical route as an event happening right now.
@@ -796,10 +799,7 @@ async function poll(){
      state.flow=data.flows.find(f=>f.causal?.phase==='completed')||data.flows[0]||null;
      state.replayStarted=0;
      state.replayPlaying=false;state.replayOffset=0;
-     if(state.flow?.steps?.length&&!reduced){
-       // One explicit ARCHIVE-labeled playback on first load, never a fabricated live pulse.
-       state.replayPlaying=true;state.replayStarted=performance.now();state.initialReplayShown=true;
-     }
+     // No automatic historic animation. Only real new receipts or explicit replay move.
    }
    if(!findNode(state.selected))state.selected='kernel';
    state.lastError='';renderAll();
@@ -962,6 +962,7 @@ async function api(path){
 }
 ${COGNITIVE_ATLAS_SCRIPT}
 ${BRAIN_SCIENCE_LAB_SCRIPT}
+${BRAIN_ORGANISM_V5_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
