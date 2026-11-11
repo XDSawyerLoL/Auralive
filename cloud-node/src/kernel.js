@@ -1048,10 +1048,12 @@ export class CognitiveKernel {
     const target = `${automationId}:${signature}`.slice(0, 500);
     const existing = await one("SELECT id FROM aura_improvement_proposals WHERE target=? AND status IN ('proposed','accepted') LIMIT 1", [target]);
     if (existing) return existing;
-    const lessons = await this.lessons(6);
+    const {workspace,gate}=this.executionWorkspace();
+    const lessons=gate.allowed&&workspaceHas(workspace,'hippocampus','memory')
+      ?await this.lessons(6):[];
     let parsed = {};
     try {
-      parsed = parseJsonObject(await this.ai.generate(
+      if(gate.allowed)parsed = parseJsonObject(await this.ai.generate(
         `Analyse ce motif d’échec AURA et propose une amélioration minimale. Retourne JSON diagnosis, proposal, validation_plan, risk. Ne désactive aucun garde-fou.\n${JSON.stringify({ failure: { automationId, signature, count }, lessons }).slice(0, 9000)}`,
         'Tu es le laboratoire d’amélioration d’AURA. Tu proposes; tu n’appliques rien silencieusement.',
         360,
@@ -1850,6 +1852,7 @@ export class CognitiveKernel {
     let researchAttempted = false;
     if (
       plan.needs_semantic_support
+      && workspaceHas(workspace,'prefrontal','perception')
       && this.webSubstrate?.enabled
       && requiresExternalKnowledge(content)
     ) {
@@ -1917,7 +1920,7 @@ export class CognitiveKernel {
 
     // Un modèle peut apporter du savoir ou de la sémantique, mais il n'a pas
     // le droit de créer l'intention ni de modifier le Soul.
-    if (plan.needs_semantic_support) {
+    if (plan.needs_semantic_support&&workspaceHas(workspace,'prefrontal','perception')) {
       observe('semantic','running');
       const support = await this.expression.semanticSupport(
         plan,
