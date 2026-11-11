@@ -18,7 +18,7 @@ import { IndependentContinuity } from './independent_continuity.js';
 import { ActiveInferenceEngine } from './active_inference.js';
 import { organRegulate } from './organ_regulation.js';
 import { workspaceInput,competeInWorkspace,workspaceSnapshot } from './global_workspace.js';
-import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,executionWorkspaceGate } from './workspace_boundary.js';
+import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,executionWorkspaceGate,selectBroadcastMemories } from './workspace_boundary.js';
 import { initialPredictionState,predictModule,observePrediction,currentPredictionSignal } from './prediction_error_bus.js';
 import { initialViability,evolveViability } from './viability_budget.js';
 import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
@@ -1226,7 +1226,7 @@ export class CognitiveKernel {
       provider: () => this.ai.lastBackend || this.ai.provider,
       invoke: async () => this.ai.generate(
         `Mission:\n${String(task).slice(0, 6000)}\n\nContexte AURA:\n${workspaceHas(workspace,'hippocampus','memory')
-          ?semanticWorkspaceContext(await this.contextForAi(true,task),workspace):''}`,
+          ?'': ''}`,
         AGENT_ROLES[name] + '\n' + agentSkillsGuidance(task, {role:name,limit:2}),
         700,
         taskRole,
@@ -1497,10 +1497,10 @@ export class CognitiveKernel {
       privateView ? measuredLookup('context_continuity',()=>this.activitySinceLastConversation(conversationSession)) : skippedLookup('context_continuity',{}),
       measuredLookup('context_messages',()=>query(
         privateView
-          ? `SELECT author,role,content,created_at FROM aura_cloud_messages
+          ? `SELECT id,author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id IN ('private-founder','')
              ORDER BY id DESC LIMIT 8`
-          : `SELECT author,role,content,created_at FROM aura_cloud_messages
+          : `SELECT id,author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id=?
              ORDER BY id DESC LIMIT 8`,
         privateView ? [] : [conversationSession],
@@ -1534,23 +1534,13 @@ export class CognitiveKernel {
     ];
     await brainHop('homeostasis','memory','retrieval');
     observe('decision','running');
-    let plan = this.cognition.planReply({
-      text: content,
-      soul: privateView ? privateSoul : publicSoul,
-      intentions,
-      lessons,
-      reflections,
-      work,
-      agenda,
-      continuityReport,
-      recentMessages: [...recentMessages].reverse(),
-      privateView,founderProfileNotes:recognizedProfileNotes,
-    });
-
-    await brainHop('memory','cognition','planReply');
-    observe('decision','done',{
-      decision_act:plan.act,semantic_requested:Boolean(plan.needs_semantic_support),
-    });
+    // The nucleus may classify the INGRESS but must not create a reply plan
+    // before competition. Unselected memory is not provided to CognitionEngine.
+    let plan={act:classifySelfDialogue(content,[...recentMessages].reverse())||'respond',
+      discourse:{move:isExplicitCorrection(content)?'correction':'unclassified'},
+      goal:'',needs_semantic_support:false};
+    const safePlanSoul=privateView?privateSoul:publicSoul;
+    await brainHop('memory','thalamus','unplanned-input-awaits-broadcast');
     if (plan.act==='self_exploration' && privateView) {
       // Founder can request a self-audit; asking alone does not increase
       // learned trait scores or prove that AURA has discovered anything.
@@ -1624,6 +1614,17 @@ export class CognitiveKernel {
     const chatCandidates=workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
       plan,experience:privateView?advice:null,
+      memoryProposals:[
+        ...knowledgeNotes.slice(0,2).map((x,i)=>({
+          ref:'note:'+String(x.id),salience:i===0?.81:.69,
+        })),
+        ...(recognitionQuery?recognizedProfileNotes.slice(0,2).map(x=>({
+          ref:'note:'+String(x.id),salience:.86,
+        })):[]),
+        ...recentMessages.filter(x=>x.id!==undefined).slice(-1).map(x=>({
+          ref:'message:'+String(x.id),salience:.63,
+        })),
+      ],
       prediction:currentPredictionSignal(this.soulCache.prediction_bus),
       consolidation:this.soulCache.consolidation,
       history:privateView&&historyPreChoice?.changed?{
@@ -1649,6 +1650,28 @@ export class CognitiveKernel {
         if(result.accepted)this.soulCache.prediction_bus=result.state;
       }
     }
+    const admitted=selectBroadcastMemories(workspace,{
+      notes:knowledgeNotes,messages:recentMessages,
+      founderProfile:recognizedProfileNotes,
+    });
+    const selectedNotes=admitted.notes;
+    const selectedMessages=admitted.messages;
+    // Plan generation happens ONLY AFTER the limited global broadcast.
+    // Context sources lacking a selected stable ID are not handed to the planner.
+    plan=this.cognition.planReply({
+      text:content,
+      soul:{...safePlanSoul,
+        current_intention:'',dominant_thought:'',independent_activity:null},
+      intentions:[],lessons:[],reflections:[],work:[],
+      agenda:{},continuityReport:{},
+      recentMessages:[...selectedMessages].reverse(),
+      privateView,founderProfileNotes:admitted.founderProfile,
+    });
+    await brainHop('workspace','cognition','plan-created-from-selected-signals');
+    observe('decision','done',{
+      decision_act:plan.act,semantic_requested:Boolean(plan.needs_semantic_support),
+      selected_memory_refs:admitted.refs,
+    });
     const memoryBroadcast=workspace.received.basal_ganglia.some(
       signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
     const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
@@ -1998,9 +2021,10 @@ export class CognitiveKernel {
       observe('semantic','running');
       const support = await this.expression.semanticSupport(
         plan,
-        workspaceHas(workspace,'hippocampus','memory')
-          ?semanticWorkspaceContext(await this.contextForAi(privateView, content),workspace)
-          :'',
+        semanticWorkspaceContext([
+          ...selectedNotes.map(x=>({id:x.id,kind:'note',content:x.title+': '+x.body})),
+          ...selectedMessages.map(x=>({id:x.id,kind:'message',content:x.content})),
+        ],workspace),
         {
           maxTokens: Math.max(120, Number(inference.token_budget || 180)),
           taskRole: inference.model_role || 'research',
