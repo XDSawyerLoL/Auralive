@@ -9,6 +9,14 @@ export const BRAIN_NODES=Object.freeze([
  ['knowledge','KnowledgeVault','memory','knowledge_vault.js'],
  ['journal','Journal de traces','memory','aura_cognitive_traces'],
  ['cognition','CognitionEngine','core','CognitionEngine.planReply'],
+ // Human-inspired pathways, not assertions of anatomical equivalence.
+ ['thalamus','Filtre thalamique','core','global_workspace.competeInWorkspace'],
+ ['workspace','Espace de travail global','core','global_workspace.js'],
+ ['prefrontal','Cortex préfrontal fonctionnel','core','global_workspace.decision'],
+ ['hippocampus','Hippocampe fonctionnel','memory','workspaceSnapshot / history'],
+ ['basal_ganglia','Ganglions de la base fonctionnels','core','gated history strategy'],
+ ['insula','Insula fonctionnelle','core','process sensing to attention'],
+ ['metacognition','Métacognition et attention','core','SelfInquiryEngine / workspace'],
  ['attention','AttentionMap','core','CognitiveKernel.attentionMap'],
  ['inference','ActiveInference','core','active_inference.js'],
  ['interoception','Régulation interne','core','organ_regulation.js'],
@@ -63,6 +71,14 @@ const CORE_EDGES=Object.freeze([
  ['kernel','peer'],['output','voice'],['kernel','journal'],
  ['homeostasis','interoception'],['interoception','inference'],['inference','cognition'],
  ['memory','history'],['history','cognition'],
+ // Reentrant thalamo-cortical and cortico-striatal analogues.
+ ['cognition','thalamus'],['thalamus','workspace'],
+ ['workspace','prefrontal'],['workspace','hippocampus'],
+ ['workspace','basal_ganglia'],['workspace','insula'],
+ ['workspace','metacognition'],
+ ['hippocampus','memory'],['prefrontal','cognition'],
+ ['basal_ganglia','cognition'],['insula','inference'],
+ ['metacognition','thalamus'],
  ['memory','selfaudit'],['selfaudit','cognition'],
  // A verified 'affect-context-provided' hop is persisted by CognitiveKernel.chat.
  ['homeostasis','language'],
@@ -77,6 +93,7 @@ const CATEGORIES=Object.freeze({
  'brain-causal':'Bilan causal corrélé à une requête',
  'organ-regulation':'Arbitrage de ressources enregistré',
  'independent-self-test':'Auto-vérification réelle hors dialogue',
+ 'workspace-broadcast':'Compétition et diffusion attestées',
  'expression':'Formulation enregistrée',
  'web-research':'Recherche web enregistrée',
  'web-research-error':'Échec recherche web',
@@ -221,6 +238,7 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
     ev.type==='organism-event'?'homeostasis':
     ev.type==='organ-regulation'?'interoception':
     ev.type==='independent-self-test'?'selfaudit':
+    ev.type==='workspace-broadcast'?'workspace':
     ev.type==='expression'?'language':
     ev.type==='reflection'?'cognition':ev.type==='event'?'kernel':'';
   if(id)remember(id,ev.at,ev.source);
