@@ -15,8 +15,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <style>__OPS_CSS__</style>
 <style>__REFERENCE_CSS__</style>
 <style>__ATLAS_CSS__</style>
-<style>__READABLE_CSS__</style>
 <style>__SCIENCE_CSS__</style>
+<style>__READABLE_CSS__</style>
 </head>
 <body>
 <div class="shell">
