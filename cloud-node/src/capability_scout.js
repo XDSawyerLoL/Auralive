@@ -627,6 +627,9 @@ export class CapabilityScout {
   }
 
   async runCycle(trigger = 'manual') {
+    const admission=this.kernel.authorizeAutonomous('capability-scout');
+    if(!admission.allowed)
+      return {ok:false,skipped:true,reason:'central-workspace-denied:'+admission.reason};
     if (!config.capabilityScoutEnabled) {
       return { ok: false, skipped: true, reason: 'capability scout disabled' };
     }
