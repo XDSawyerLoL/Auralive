@@ -17,7 +17,7 @@ test('CORTEX06 is single dominant visual scene, not 3-column dashboard',()=>{
  assert.match(CORTEX06_CSS,/#graphCanvas\{display:none!important\}/);
  assert.match(CORTEX06_CSS,/@media\(max-width:800px\)/);
  assert.match(CORTEX06_CSS,/@media\(prefers-reduced-motion:reduce\)/);
- assert.ok(CORTEX06_HTML.includes("architecture <em>vivante."));
+ assert.ok(CORTEX06_HTML.includes("invisible <em>prend forme."));
  assert.ok(BRAIN_OPERATIONS_HTML.includes('.cortex06{'),'The composed page must include cortex CSS, not just markup');
  for(const id of ['hippocampus','insula','prefrontal','metacognition'])
   assert.match(CORTEX06_HTML,new RegExp('data-c6-node="'+id+'"'));
