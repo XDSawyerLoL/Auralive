@@ -1,4 +1,5 @@
 import {buildNeuroVitalSigns} from './brain_physiology.js';
+import {computeCortex08Physiology} from './cortex08_physiology.js';
 // Public AURA brain projection: strictly sourced telemetry, never fabricated consciousness.
 // Takes only the existing public operational snapshot and a safe language diagnostic.
 export const BRAIN_METRICS = Object.freeze([
@@ -328,5 +329,6 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     no_synthetic_values:true,
   };
   result.neuro_vitals=buildNeuroVitalSigns(result,nowMs);
+  result.cortex08=computeCortex08Physiology(result,nowMs);
   return result;
 }
