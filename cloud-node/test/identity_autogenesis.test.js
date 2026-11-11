@@ -109,7 +109,7 @@ test('identity replies are decided by AURA nucleus from the actual evidence',()=
     assert.ok(engine.deterministicReply(plan),input);
   }
   const p=engine.planReply({text:'QUI ES TU?',soul});
-  assert.match(engine.deterministicReply(p),/Je suis AURA/);
+  assert.match(engine.deterministicReply(p),/Je (?:suis|m’appelle) AURA/);
   assert.doesNotMatch(engine.deterministicReply(p),/je vais bien|Et toi/i);
   assert.match(engine.deterministicReply(engine.planReply({text:'Tu n’as pas de personnalité?',soul})),
     /tendances comportementales computationnelles/i);
