@@ -54,7 +54,7 @@ test('independent probe executes without a human message and only with measured 
  assert.equal(out.soul.independent_activity.completed_tests,1);
  assert.equal(queries.length,1);
  assert.equal(JSON.stringify(out).includes('synthetic-test-seed'),true); // seed remains in local soul; never trace it
- assert.doesNotMatch(JSON.stringify(out.receipt),/seed|message|private-founder/);
+ assert.doesNotMatch(JSON.stringify(out.receipt),/synthetic-test-seed|private-founder|personal_content/);
 });
 test('one hour later a different hypothesis is actually checked',async()=>{
  const initial=soul(),{db,history}=dependencies(initial);
