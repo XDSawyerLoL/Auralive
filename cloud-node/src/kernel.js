@@ -716,6 +716,36 @@ export class CognitiveKernel {
       );
       this.soulCache.organism = idle.state;
       this.syncLegacyFromOrganism();
+      // Background thalamo-cortical recurrence uses the same bounded, real
+      // competition as dialogue. A changed control signal can trigger a later
+      // reflection, but an unchanged cycle adds no fabricated discovery.
+      const priorWorkspace=this.soulCache.global_workspace;
+      const idleWorkspace=competeInWorkspace(workspaceInput({
+        userPresent:false,organism:idle.state,
+        plan:{act:'respond'},previous:priorWorkspace,
+      }),{previous:priorWorkspace});
+      this.soulCache.global_workspace=workspaceSnapshot(
+        idleWorkspace,priorWorkspace);
+      const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
+        &&['verify','conserve'].includes(idleWorkspace.decision.control);
+      if(attentionChanged){
+        this.pushStimulus({
+          type:'aura.workspace.control_change',source:'global-workspace',
+          occurred_at:timestamp,payload:{
+            attention:idleWorkspace.decision.attention,
+            control:idleWorkspace.decision.control,
+            selected:idleWorkspace.selected.map(x=>x.label),
+          },
+        });
+        await this.trace('workspace-broadcast','autonomous-control-change','',{
+          at:timestamp,capacity:idleWorkspace.capacity,
+          selected:idleWorkspace.selected.map(x=>({source:x.source,label:x.label})),
+          control:idleWorkspace.decision.control,
+          recipients:idleWorkspace.broadcasts.map(x=>x.recipient),
+          origin:'background-process-sample',
+          subjective_experience_claim:false,
+        });
+      }
       // No artificial LLM utterances: re-evaluate competing functional drives
       // from measured time and the present computation state only.
       this.soulCache.inner_dialogue=this.innerDialogue.publicState(
