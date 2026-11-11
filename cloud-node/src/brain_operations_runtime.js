@@ -8,7 +8,9 @@ const GROUPS={conversation:'Conversation',core:'Noyau et décision',memory:'Mém
 const COLORS={conversation:'#ffbb8a',core:'#ffa26e',memory:'#ed80ff',language:'#67fafa',provider:'#ff6e9b',security:'#ff9a9b',tools:'#af77fb',execution:'#ffa866',research:'#69f3f4'};
 const POS={
  input:[90,385],kernel:[560,380],homeostasis:[290,470],memory:[310,245],knowledge:[175,162],journal:[110,245],
- cognition:[480,270],attention:[430,122],inference:[485,565],semantic:[680,146],language:[760,295],
+ cognition:[480,270],thalamus:[610,337],workspace:[700,390],prefrontal:[645,245],
+ hippocampus:[225,210],basal_ganglia:[475,422],insula:[365,538],metacognition:[750,475],
+ attention:[430,122],inference:[485,565],semantic:[680,146],language:[760,295],
  groq:[930,125],openrouter:[948,220],local:[956,315],coherence:[913,430],output:[1080,395],
  web:[638,84],fabric:[690,585],toolbox:[596,530],command:[430,640],dag:[586,690],agent:[274,642],
  bridge:[810,660],github:[906,596],scout:[534,54],curiosity:[390,66],evolution:[226,72],
@@ -19,7 +21,7 @@ const POS={
 };
 const STAGES={input:'Entrée',homeostasis:'Homéostasie',memory:'Mémoire',cognition:'Cognition',web:'Recherche Web',semantic:'Support sémantique',language:'Langage',groq:'Groq',openrouter:'OpenRouter',local:'Modèle local',coherence:'Validation',output:'Réponse',command:'CommandCenter',fabric:'CapabilityFabric',dag:'TaskGraphExecutor',agent:'Agent',bridge:'ExecutionBridge'};
 const state={data:null,selected:'kernel',hovered:null,focusGroup:'all',showAllLabels:false,flow:null,replayStarted:0,zoom:1,panX:0,panY:0,screen:[],drag:null,busy:false,lastPrompt:'',lastError:'',pollInFlight:false,drawScheduled:false,activityOnly:false,replayPlaying:false,replayOffset:0,replaySpeed:1,replayRendered:-1,initialReplayShown:false};
-const ANCHORS=new Set(['kernel','homeostasis','memory','cognition','language','output','web','command']);
+const ANCHORS=new Set(['kernel','homeostasis','memory','cognition','thalamus','workspace','prefrontal','language','output','web','command']);
 const LENSES=Object.entries(GROUPS);
 for(const [group,label] of LENSES){
  for(const id of ['moduleGroup','graphLens']){
