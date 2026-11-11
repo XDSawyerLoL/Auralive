@@ -22,6 +22,7 @@ import { workspaceHas,languageWorkspaceProjection,semanticWorkspaceContext,execu
 import { initialPredictionState,predictModule,observePrediction,currentPredictionSignal } from './prediction_error_bus.js';
 import { initialViability,evolveViability } from './viability_budget.js';
 import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
+import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -179,6 +180,7 @@ export class CognitiveKernel {
       independent_activity:null,
       global_workspace:null,
       prediction_bus:initialPredictionState(),
+      attention_schema:initialAttentionSchema(),
       viability:initialViability(),
       consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
@@ -292,6 +294,8 @@ export class CognitiveKernel {
       this.soulCache.global_workspace=null;
     if(!this.soulCache.prediction_bus||typeof this.soulCache.prediction_bus!=='object')
       this.soulCache.prediction_bus=initialPredictionState();
+    if(!this.soulCache.attention_schema||typeof this.soulCache.attention_schema!=='object')
+      this.soulCache.attention_schema=initialAttentionSchema();
     if(!this.soulCache.viability||typeof this.soulCache.viability!=='object')
       this.soulCache.viability=initialViability();
     // Detect a malformed or tampered consolidation; never silently trust it.
@@ -759,12 +763,28 @@ export class CognitiveKernel {
       // competition as dialogue. A changed control signal can trigger a later
       // reflection, but an unchanged cycle adds no fabricated discovery.
       const priorWorkspace=this.soulCache.global_workspace;
-      const idleWorkspace=competeInWorkspace(workspaceInput({
+      const idleCandidates=workspaceInput({
         userPresent:false,organism:idle.state,
         plan:{act:'respond'},previous:priorWorkspace,
         prediction:currentPredictionSignal(this.soulCache.prediction_bus),
         consolidation:this.soulCache.consolidation,
-      }),{previous:priorWorkspace,capacity:this.soulCache.viability.capacity});
+      });
+      const priorAttention=predictAttention(this.soulCache.attention_schema,idleCandidates);
+      const idleWorkspace=competeInWorkspace(
+        steerAttention(idleCandidates,priorAttention),{
+        previous:priorWorkspace,capacity:this.soulCache.viability.capacity});
+      const attentionObserved=observeAttention(this.soulCache.attention_schema,
+        priorAttention,idleWorkspace,timestamp);
+      if(attentionObserved.observed){
+        this.soulCache.attention_schema=attentionObserved.state;
+        if(attentionObserved.prediction_qualified){
+          const prediction=predictModule(this.soulCache.prediction_bus,{
+            module:'attention',operationId:randomUUID(),at:timestamp});
+          const result=observePrediction(this.soulCache.prediction_bus,prediction,{
+            success:attentionObserved.correct,source:'machine-observed',at:now()});
+          if(result.accepted)this.soulCache.prediction_bus=result.state;
+        }
+      }
       this.soulCache.global_workspace=workspaceSnapshot(
         idleWorkspace,priorWorkspace);
       const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
@@ -1563,7 +1583,7 @@ export class CognitiveKernel {
     // The same broadcast reaches distinct receptor functions; a user message
     // remains a high-priority ingress without obtaining execution authority.
     const attentionMeta=this.selfInquiry.advise(this.soulCache.epistemic_self,plan);
-    const workspace=competeInWorkspace(workspaceInput({
+    const chatCandidates=workspaceInput({
       userPresent:true,organism:this.organism.migrate(this.soulCache||{}),
       plan,experience:privateView?advice:null,
       prediction:currentPredictionSignal(this.soulCache.prediction_bus),
@@ -1573,8 +1593,24 @@ export class CognitiveKernel {
         action:historyPreChoice.action,
       }:null,metacognition:attentionMeta,
       previous:privateView?this.soulCache.global_workspace:null,
-    }),{previous:privateView?this.soulCache.global_workspace:null,
+    });
+    const attentionForecast=predictAttention(this.soulCache.attention_schema,chatCandidates);
+    const workspace=competeInWorkspace(
+      steerAttention(chatCandidates,attentionForecast),{
+      previous:privateView?this.soulCache.global_workspace:null,
       capacity:this.soulCache.viability?.capacity||3});
+    const attentionObserved=observeAttention(this.soulCache.attention_schema,
+      attentionForecast,workspace,now());
+    if(attentionObserved.observed){
+      this.soulCache.attention_schema=attentionObserved.state;
+      if(attentionObserved.prediction_qualified){
+        const prediction=predictModule(this.soulCache.prediction_bus,{
+          module:'attention',operationId:brainFlowId,at:now()});
+        const result=observePrediction(this.soulCache.prediction_bus,prediction,{
+          success:attentionObserved.correct,source:'machine-observed',at:now()});
+        if(result.accepted)this.soulCache.prediction_bus=result.state;
+      }
+    }
     const memoryBroadcast=workspace.received.basal_ganglia.some(
       signal=>signal.source==='memory'&&signal.label==='verified-history-changed-policy');
     const learnedFeedbackBroadcast=workspace.received.basal_ganglia.some(
