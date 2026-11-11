@@ -1,6 +1,7 @@
 import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
 import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
+import {BRAIN_ORGANISM_V5_SCRIPT} from './brain_organism_v5_runtime.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -622,7 +623,7 @@ function renderKPIs(){
    :'Cyan : transitions observées. Ambre : replay du trajet sélectionné. Gris : architecture déclarée. Données publiques anonymisées.';
 }
 
-function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();scheduleDraw();}
+function renderAll(){renderKPIs();renderSourceCallouts();renderModules();renderInspect();renderRoute();renderCausal();renderLearnedIdentity();renderInnerDialogue();renderFlows();renderEvents();renderTools();renderToolMirror();renderMemory();renderActivity();renderMetrics();v4Counters();syncTraceConsole();renderOrganismStage();scheduleDraw();}
 function selectNode(id){
  state.selected=id;
  const detail=$('module-proof-details');if(detail)detail.open=true;
@@ -638,7 +639,7 @@ function sizeCanvas(){
  ctx.setTransform(ratio,0,0,ratio,0,0);canvasW=r.width;canvasH=r.height;
  scale=Math.min(canvasW/1200,canvasH/615)*state.zoom;
 }
-function project(id){const p=POS[id]||[560,395];return {x:canvasW*.5+(p[0]-590)*scale*1.03+state.panX,y:canvasH*.51+(p[1]-395)*scale*.76+state.panY};}
+function project(id){const p=POS[id]||[560,395];return {x:canvasW*.5+(p[0]-590)*scale*1.03+state.panX,y:canvasH*(canvasW<=600?.27:.51)+(p[1]-395)*scale*.76+state.panY};}
 function edgeMid(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2-28*scale};}
 function edgePoint(a,b,t){const m=edgeMid(a,b);return{x:(1-t)*(1-t)*a.x+2*(1-t)*t*m.x+t*t*b.x,y:(1-t)*(1-t)*a.y+2*(1-t)*t*m.y+t*t*b.y};}
 function drawEdge(a,b){const m=edgeMid(a,b);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.quadraticCurveTo(m.x,m.y,b.x,b.y);}
@@ -787,7 +788,9 @@ async function poll(){
    if(!res.ok)throw new Error('HTTP '+res.status);
    const data=await res.json();
    if(data.version!=='brain-flow-v1'||!Array.isArray(data.nodes)||!Array.isArray(data.edges))throw new Error('Schéma réseau invalide');
+   const earlierState=state.data;
    state.data=data;
+   v5IngestEvidence(earlierState,data);
    if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
    // Select once the latest persisted route, but do NOT replay it and never
    // present a historical route as an event happening right now.
@@ -796,10 +799,7 @@ async function poll(){
      state.flow=data.flows.find(f=>f.causal?.phase==='completed')||data.flows[0]||null;
      state.replayStarted=0;
      state.replayPlaying=false;state.replayOffset=0;
-     if(state.flow?.steps?.length&&!reduced){
-       // One explicit ARCHIVE-labeled playback on first load, never a fabricated live pulse.
-       state.replayPlaying=true;state.replayStarted=performance.now();state.initialReplayShown=true;
-     }
+     // No automatic historic animation. Only real new receipts or explicit replay move.
    }
    if(!findNode(state.selected))state.selected='kernel';
    state.lastError='';renderAll();
@@ -844,7 +844,9 @@ fetch('/api/auth/session',{credentials:'same-origin',cache:'no-store'})
  .then(r=>r.ok?r.json():null)
  .then(result=>{$('runtimeRetry').hidden=result?.authenticated!==true;})
  .catch(()=>{$('runtimeRetry').hidden=true;});
-setInterval(()=>{if(!document.hidden)poll();},state.busy?900:5000);
+// Visible-only polling follows actual database receipts without imposing a fake 10 Hz
+// brain state. Faster while waiting for a real chat result, slower at rest.
+setInterval(()=>{if(!document.hidden&&!state.busy)void poll();},2800);
 // Extra poll while an AURA response is in flight: the graph can show database-
 // committed module hops BEFORE the model produces its final answer.
 setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
@@ -962,6 +964,7 @@ async function api(path){
 }
 ${COGNITIVE_ATLAS_SCRIPT}
 ${BRAIN_SCIENCE_LAB_SCRIPT}
+${BRAIN_ORGANISM_V5_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');

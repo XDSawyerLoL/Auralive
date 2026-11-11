@@ -252,6 +252,8 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    selectGene(Math.min(7,Math.floor(Math.max(0,(e.clientX-box.left)/box.width)*8)));
  });
  window.addEventListener('resize',()=>{if(snapshot)canvasDraw();},{passive:true});
- loadLab();
+ const drawer=document.getElementById('neuro-lab-details');
+ if(drawer)drawer.addEventListener('toggle',()=>{if(drawer.open)void loadLab();});
+ else void loadLab();
 })();
 `;

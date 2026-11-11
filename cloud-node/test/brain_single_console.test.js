@@ -65,8 +65,8 @@ test('the ONE page distinguishes conversation from explicit owner-only operator 
 });
 
 test('idle graph stays static; observed events and user replay alone can move',()=>{
- assert.match(BRAIN_OPERATIONS_SCRIPT,/v4Base\(\);v4Regions\(\)/);
- assert.match(BRAIN_OPERATIONS_SCRIPT,/state\.replayPlaying\)scheduleDraw\(\)/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/v4Base\(\);v5CerebralMorphology\(\);v4Regions\(\)/);
+ assert.match(BRAIN_OPERATIONS_SCRIPT,/replaying\|\|\(!reduced&&/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/document\.hidden/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/recent&&age<1600/);
  assert.doesNotMatch(BRAIN_OPERATIONS_SCRIPT,/Math\.random\(/);
