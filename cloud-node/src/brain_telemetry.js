@@ -1,3 +1,4 @@
+import {buildNeuroVitalSigns} from './brain_physiology.js';
 // Public AURA brain projection: strictly sourced telemetry, never fabricated consciousness.
 // Takes only the existing public operational snapshot and a safe language diagnostic.
 export const BRAIN_METRICS = Object.freeze([
@@ -164,11 +165,18 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     origin:'OfflineConsolidation.step',
   }:null;
   const historyLoop=extra.verified_probe_loop||{};
+  const realSuccesses=(Array.isArray(historyLoop.episodes)?historyLoop.episodes:[])
+    .filter(x=>x.verification==='fs-syscall'&&x.outcome==='succeeded'&&
+      Number.isFinite(Date.parse(String(x.observed_at||''))));
+  const recentSuccesses=realSuccesses.filter(x=>nowMs>=Date.parse(x.observed_at)&&
+    nowMs-Date.parse(x.observed_at)<=120000);
   const verifiedLoop=live&&historyLoop.revision?{
     revision:Math.max(0,Number(historyLoop.revision)||0),
     observed_episodes:Array.isArray(historyLoop.episodes)?historyLoop.episodes.length:0,
     verified_receipts:Array.isArray(historyLoop.episodes)?historyLoop.episodes.filter(x=>
       x.verification==='fs-syscall').length:0,
+    recent_verified_successes:recentSuccesses.length,
+    last_success_at:realSuccesses.length?realSuccesses.at(-1).observed_at:null,
     verify_first_contexts:Object.values(historyLoop.policies||{}).filter(x=>
       x.strategy==='verify-before-attempt').length,
     last_at:safeText(historyLoop.last_at||'',40),
@@ -296,11 +304,13 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
         :'Aucune exécution de mission prouvée dans cette projection.',
       source:'CommandCenter.status'},
   ];
-  return {
+  const result={
     version:'brain-telemetry-v1',
     sampled_at:new Date(nowMs).toISOString(),
     runtime_ready:live,
-    source, metrics, somatic, organ_decision:live?organDecision:null,
+    source,metrics,somatic,organ_decision:live?organDecision:null,
+    failure_ema:live&&source.status==='recent'
+      ?boundedMetric(organism.homeostasis?.failure_ema):null,
     independent_activity:live?independentActivity:null,
     global_workspace:globalWorkspace,
     prediction,attention_schema:attentionSchema,viability,consolidation,
@@ -317,4 +327,6 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     warning:'Visualisation d’états logiciels déterministes. Aucune preuve de conscience, d’émotions humaines ou d’activité neuronale biologique.',
     no_synthetic_values:true,
   };
+  result.neuro_vitals=buildNeuroVitalSigns(result,nowMs);
+  return result;
 }
