@@ -56,7 +56,7 @@ test('CORTEX 09 is integrated as the dominant scene with accessible controls',()
  assert.match(CORTEX06_SCRIPT,/c9PaintVolume\(ctx,W,H,c6State\.lastData\)/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/function c9PaintVolume\(ctx,w,h,data\)/);
  assert.match(CORTEX09_CSS,/#cortex07Poster\{opacity:/);
- assert.match(CORTEX09_CSS,/#cortex07Canvas\{display:none!important\}/);
+ assert.match(CORTEX09_CSS,/#cortex07Canvas\{display:block!important/);
  assert.match(BRAIN_OPERATIONS_HTML,/CORTEX 09/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="c6Replay"/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="c6Details"/);
