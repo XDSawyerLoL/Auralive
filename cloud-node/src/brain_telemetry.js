@@ -103,6 +103,10 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
       })),
     suppressed:Math.max(0,Number(savedWorkspace.suppressed)||0),
     broadcast_enabled:savedWorkspace.broadcast_enabled===true,
+    receptors:Object.entries(savedWorkspace.receptor_receipts||{}).slice(0,5)
+      .map(([id,p])=>({id:safeText(id,35),
+        kind:safeText(p.kind,45),consumed:Math.max(0,Number(p.consumed)||0),
+        output_count:Math.max(0,Number(p.output_count)||0)})),
     freshness:workspaceFreshness,
     evidence:'global_workspace.js / aura_soul_state',
     biological_equivalence_proven:false,
@@ -158,6 +162,26 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     integrity:safeText(rawConsolidation.integrity||'',35),
     freshness:evaluateTelemetryFreshness(rawConsolidation.last_at,nowMs),
     origin:'OfflineConsolidation.step',
+  }:null;
+  const historyLoop=extra.verified_probe_loop||{};
+  const verifiedLoop=live&&historyLoop.revision?{
+    revision:Math.max(0,Number(historyLoop.revision)||0),
+    observed_episodes:Array.isArray(historyLoop.episodes)?historyLoop.episodes.length:0,
+    verified_receipts:Array.isArray(historyLoop.episodes)?historyLoop.episodes.filter(x=>
+      x.verification==='fs-syscall').length:0,
+    verify_first_contexts:Object.values(historyLoop.policies||{}).filter(x=>
+      x.strategy==='verify-before-attempt').length,
+    last_at:safeText(historyLoop.last_at||'',40),
+    source:'real-filesystem-syscalls-and-history-ledger',
+    human_equivalence_proven:false,
+  }:null;
+  const rawGrant=extra.autonomous_allowance||{};
+  const admission=live&&rawGrant.issued_at?{
+    actor:safeText(rawGrant.source||'',38),
+    at:safeText(rawGrant.issued_at,40),
+    expires_at:safeText(rawGrant.expires_at,40),
+    freshness:evaluateTelemetryFreshness(rawGrant.issued_at,nowMs),
+    authority:'CognitiveKernel.tick',
   }:null;
   const counts=publicState.kernel_status?.counts||{};
   const number=(v)=>v===null||v===undefined||v===''?null:
@@ -231,6 +255,18 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
         ' · signature '+(consolidation.signed?'HMAC':'non activée')
         :'Aucun souvenir vérifié consolidé.',
       source:'offline_consolidation / aura_soul_state'},
+    {id:'basal_ganglia',title:'Politique adaptative vérifiée en contexte',
+      state:verifiedLoop?'instrumented':'not-observed',
+      detail:verifiedLoop?'Épisodes locaux vérifiés : '+verifiedLoop.verified_receipts+
+        ' · contextes vérification préalable : '+verifiedLoop.verify_first_contexts
+        :'Aucun effet d’apprentissage local vérifié enregistré.',
+      source:'verified_tool_loop / HistoryLedger'},
+    {id:'command',title:'Autorisation centrale de l’autonomie',
+      state:admission?'recorded-history':'not-observed',
+      detail:admission?'Dernier acteur admis : '+admission.actor+
+        ' · expire '+admission.expires_at
+        :'Aucun permis actif enregistré par le noyau.',
+      source:'central_action_gate / CognitiveKernel.tick'},
     {id:'selfaudit',title:'Auto-vérification hors dialogue',
       state:live&&independentActivity
         ?auditFreshness.status==='recent'?'recently-observed':'recorded-history'
@@ -268,6 +304,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     independent_activity:live?independentActivity:null,
     global_workspace:globalWorkspace,
     prediction,attention_schema:attentionSchema,viability,consolidation,
+    verified_loop:verifiedLoop,autonomous_admission:admission,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
