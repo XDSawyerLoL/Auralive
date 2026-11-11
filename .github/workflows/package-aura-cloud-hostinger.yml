@@ -35,8 +35,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb libegl1 libosmesa6 libgl1-mesa-dri
           python -m pip install --quiet --disable-pip-version-check "numpy>=1.26,<3" "pillow>=10" "vtk>=9.3,<9.7"
-          python cloud-node/scripts/generate_cortex07_brain.py cloud-node/src/assets/cortex07_brain.webp
+          xvfb-run -a -s "-screen 0 1920x1600x24" python cloud-node/scripts/generate_cortex07_brain.py cloud-node/src/assets/cortex07_brain.webp
           test -s cloud-node/src/assets/cortex07_brain.webp
 
       - name: Prepare canonical AURA Cloud Node Hostinger upload
