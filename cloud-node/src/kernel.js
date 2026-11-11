@@ -740,7 +740,9 @@ export class CognitiveKernel {
           soul:this.soulCache,
         }).catch(()=>({executed:false,reason:'probe-unavailable'}));
         if(independent.executed){
-          this.soulCache=independent.soul;
+          // Merge only the tested state; chat may have updated other fields.
+          this.soulCache.epistemic_self=independent.soul.epistemic_self;
+          this.soulCache.independent_activity=independent.soul.independent_activity;
           await this.trace('independent-self-test',
             independent.receipt.probe,independent.receipt.outcome,{
               at:independent.receipt.at,
@@ -2075,8 +2077,7 @@ export class CognitiveKernel {
           at: row.created_at,
           title: row.title,
           detail: row.content,
-          autonomous: ['independent-self-test','identity-autogenesis','organ-regulation']
-            .includes(String(row.kind||'')),
+          autonomous:String(row.kind||'')==='independent-self-test',
         })),
     ]
       .filter((row) => row.at && row.title)
