@@ -805,7 +805,11 @@ export class CognitiveKernel {
       // Independent, persisted reflections are autobiographical evidence,
       // not feelings or imagined personal memories. A direct user command
       // does not count as an autonomous reflection.
-      if(!force && !String(text).trim()){
+      const observedAutonomousEvent=bundle.stimuli.some(item=>
+        item?.type==='aura.self_probe.observed'||
+        item?.type==='automation.failure'||
+        item?.source==='horizon');
+      if(!force && !String(text).trim() && observedAutonomousEvent){
         this.soulCache.emergent_identity = this.autogenesis.observe(
           this.soulCache.emergent_identity, {kind:'autonomous_reflection',at:timestamp},
         );
@@ -2071,7 +2075,8 @@ export class CognitiveKernel {
           at: row.created_at,
           title: row.title,
           detail: row.content,
-          autonomous: true,
+          autonomous: ['independent-self-test','identity-autogenesis','organ-regulation']
+            .includes(String(row.kind||'')),
         })),
     ]
       .filter((row) => row.at && row.title)
