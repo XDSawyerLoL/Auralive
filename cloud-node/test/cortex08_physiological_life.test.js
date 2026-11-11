@@ -146,7 +146,7 @@ test('paused CORTEX 08 never paints stale physiology, even after resize',()=>{
   requestAnimationFrame:()=>1,cancelAnimationFrame(){},
   performance:{now:()=>1000},Date,
  };
- const api=runInNewContext(CORTEX08_SCENE_SCRIPT+'\\n({observe:c8Observe,start:c8Start})',context);
+ const api=runInNewContext(CORTEX08_SCENE_SCRIPT+';({observe:c8Observe,start:c8Start})',context);
  const snapshot=(ageMs)=>({measured:true,state:'active',
   source_timestamps:{process:new Date(Date.now()-ageMs).toISOString()},
   metrics:{cpu:.5,heap:.5}});
