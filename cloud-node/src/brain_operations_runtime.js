@@ -7,6 +7,7 @@ import {CORTEX08_MATERIAL_SCRIPT} from './cortex08_material.js';
 import {CORTEX08_FLOW_SCRIPT} from './cortex08_flow.js';
 import {CORTEX08_FOCUS_SCRIPT} from './cortex08_focus.js';
 import {CORTEX08_SCENE_SCRIPT} from './cortex08_scene.js';
+import {CORTEX09_SCRIPT} from './cortex09_neural_volume.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -977,6 +978,7 @@ ${CORTEX08_FOCUS_SCRIPT}
 ${CORTEX08_FLOW_SCRIPT}
 ${CORTEX08_MATERIAL_SCRIPT}
 ${CORTEX08_SCENE_SCRIPT}
+${CORTEX09_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
