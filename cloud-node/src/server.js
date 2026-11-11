@@ -30,6 +30,7 @@ import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
+import { ProcessSomaticSensor } from './somatic_dynamics.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
 import { query as readBrainTraceRows } from './db.js';
@@ -1398,11 +1399,26 @@ async function publicOperationalSnapshot() {
 app.get('/api/dashboard/public', async () => publicOperationalSnapshot());
 
 // Public read-only brain diagnostic. No private thoughts, raw memory or credentials.
+// Read-only, throttled Node-process sampling for the public CORTEX display.
+// The cognitive cycle remains independent (30 s by default); no fabricated activity.
+const cortexProcessSensor=new ProcessSomaticSensor();
+let cortexSampleCache=null,cortexLastSampleMs=0;
+function readCortexProcessSample(){
+  const at=Date.now();
+  if(!cortexSampleCache||at-cortexLastSampleMs>=1600){
+    cortexLastSampleMs=at;
+    try{cortexSampleCache=cortexProcessSensor.sample();}
+    catch{cortexSampleCache=null;}
+  }
+  return cortexSampleCache;
+}
+
 app.get('/api/brain/telemetry', async (_request, reply) => {
   reply.header('Cache-Control','no-store');
   const projection=await publicOperationalSnapshot();
   const groq=ai.groq?.snapshot?.()||{};
   return buildBrainTelemetry(projection,{
+    process_sample:bootstrap.runtimeReady?readCortexProcessSample():null,
     organ_regulation:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.organ_regulation:null,
     organ_budget:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.token_budget:null,
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
@@ -1430,6 +1446,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   const current=await publicOperationalSnapshot();
   const groq=ai.groq?.snapshot?.()||{};
   const telemetry=buildBrainTelemetry(current,{
+    process_sample:bootstrap.runtimeReady?readCortexProcessSample():null,
     organ_regulation:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.organ_regulation:null,
     organ_budget:bootstrap.runtimeReady?kernel.lastInferenceAssessment?.token_budget:null,
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,

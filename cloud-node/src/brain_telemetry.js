@@ -37,8 +37,13 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     measured:false, // deterministic software-state index, not a biological reading
   }));
   // Physical telemetry is only from the current Node process, never synthetic.
-  const processSample=live&&organism.homeostasis?.sensor?.source==='node-process'
+  const cachedProcessSample=live&&organism.homeostasis?.sensor?.source==='node-process'
     ?organism.homeostasis.sensor:null;
+  const directProcessSample=live&&extra.process_sample?.source==='node-process'
+    ?extra.process_sample:null;
+  const directFreshness=evaluateTelemetryFreshness(directProcessSample?.sampled_at,nowMs);
+  const processSample=directFreshness.status==='recent'
+    ?directProcessSample:cachedProcessSample;
   const processFreshness=processSample?evaluateTelemetryFreshness(processSample.sampled_at,nowMs)
     :{status:'unavailable',updated_at:null,age_seconds:null};
   const measured=processFreshness.status==='recent';
