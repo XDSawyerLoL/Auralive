@@ -1,5 +1,6 @@
 import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
 import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
+import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -960,6 +961,7 @@ async function api(path){
  return response.json();
 }
 ${COGNITIVE_ATLAS_SCRIPT}
+${BRAIN_SCIENCE_LAB_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');

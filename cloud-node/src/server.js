@@ -26,6 +26,8 @@ import {
 import { DASHBOARD_HTML } from './dashboard.js';
 import { BRAIN_HTML } from './brain_console.js';
 import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
+import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
+import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
@@ -550,6 +552,47 @@ app.addHook('onSend', async (_request, reply, payload) => {
   reply.header('Referrer-Policy', 'no-referrer');
   reply.header('Cache-Control', 'no-store');
   return payload;
+});
+
+// Computational science lab: deterministic sandbox data ONLY, no mutation
+// of AURA's persistent soul, no tools, no LLM, no credentials or user history.
+let scienceLabCache=null;
+app.get('/api/brain/science-lab', async (_request, reply) => {
+  reply.header('Cache-Control','private, max-age=60');
+  const current=Date.now();
+  if(scienceLabCache&&current-scienceLabCache.at<15*60*1000)
+    return scienceLabCache.data;
+  try{
+    const config=preRegisterProtocol({draws:16});
+    const study=runABStudy({config});
+    const sample=runSandboxSession({config,seed:104729});
+    const genome=createDigitalGenome({seed:'aura-science-lab-20261111'});
+    const phenotype=expressDigitalGenome(genome);
+    const evolution=evolveDigitalGenome({
+      seed:'aura-science-lab-20261111',generations:2,population:4,
+    });
+    const data={version:'aura-science-lab-v1',
+      generated_at:new Date(current).toISOString(),
+      scope:'deterministic-sandbox-simulation-not-real-brain-state',
+      sandbox:{study,sample:{policies:sample.policies,effect:sample.effect}},
+      genome:{id:genome.id,dna:genome.dna,traits:phenotype.traits,
+        expression_scope:'isolated-sandbox-only'},
+      evolution:{history:evolution.history,
+        independent_validation:evolution.independentValidation,
+        production_adoption:'NOT_AUTHORIZED'},
+      independent_process_verified:false,
+      hostinger_learning_verified:false,
+      quantum_computation_performed:false,
+      consciousness_proven:false};
+    scienceLabCache={at:current,data};
+    return data;
+  }catch(error){
+    return reply.code(503).send({
+      error:'scientific-laboratory-unavailable',
+      detail:String(error?.message||error).slice(0,130),
+      is_live_brain_data:false,
+    });
+  }
 });
 
 app.get('/cerveau', async (_request, reply) => {
