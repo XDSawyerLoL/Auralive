@@ -1,3 +1,4 @@
+import {CORTEX06_CSS} from './cortex06_visual.js';
 import {BRAIN_ORGANISM_V5_CSS} from './brain_organism_v5.js';
 export const BRAIN_READABLE_CSS = String.raw`/* AURA cockpit — readability layer. Applied AFTER the legacy reference stylesheet.
    The normal experience is a conversation, a causal map and a compact status.
