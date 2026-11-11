@@ -32,6 +32,9 @@ export function observePrediction(state,prediction,{
     return {accepted:false,reason:'missing-prospective-prediction',state:old};
   const allowed=['machine-observed','machine-verified','reported'];
   if(!allowed.includes(source))return {accepted:false,reason:'untrusted-source',state:old};
+  if(prediction.operation_id&&old.recent.some(r=>
+    r.module===name&&r.operation_id===moduleId(prediction.operation_id)))
+    return {accepted:false,reason:'duplicate-outcome',state:old};
   const p=clamp(prediction.probability),y=success?1:0;
   const residual=Number(Math.abs(y-p).toFixed(4));
   const brier=Number(((y-p)**2).toFixed(4));
@@ -40,7 +43,20 @@ export function observePrediction(state,prediction,{
   const next={n,successes:Math.max(0,Number(prev.successes)||0)+(y===1?1:0),
     brier_sum:Number((Number(prev.brier_sum||0)+brier).toFixed(4)),
     brier_mean:Number(((Number(prev.brier_sum||0)+brier)/n).toFixed(4)),
-    last_error:residual,last_at:at,last_source:source};
+    last_error:residual,last_at:at,last_source:source,
+    bins:Array.isArray(prev.bins)&&prev.bins.length===5
+      ?prev.bins.map(x=>({...x})):Array.from({length:5},()=>({
+        count:0,successes:0,probability_sum:0})),
+  };
+  const bin=Math.min(4,Math.floor(p*5));
+  next.bins[bin].count++;
+  next.bins[bin].successes+=y;
+  next.bins[bin].probability_sum=Number(
+    (next.bins[bin].probability_sum+p).toFixed(4));
+  next.ece=Number(next.bins.reduce((sum,b)=>
+    sum+(b.count/n)*Math.abs(
+      b.successes/Math.max(1,b.count)-
+      b.probability_sum/Math.max(1,b.count)),0).toFixed(4));
   const entry={module:name,at,source,error:residual,
     prediction:p,observed:y,operation_id:moduleId(prediction.operation_id)};
   const stateNext={...old,version:PREDICTION_BUS_VERSION,
