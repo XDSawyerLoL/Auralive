@@ -87,6 +87,27 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     test_execution_recorded:true,
     origin:'IndependentContinuity.step',
   }:null;
+  const savedWorkspace=extra.global_workspace||null;
+  const workspaceFreshness=evaluateTelemetryFreshness(savedWorkspace?.at,nowMs);
+  const globalWorkspace=savedWorkspace&&live?{
+    at:String(savedWorkspace.at||'').slice(0,40),
+    revision:Math.max(0,Math.trunc(Number(savedWorkspace.revision)||0)),
+    capacity:Math.max(1,Math.min(5,Number(savedWorkspace.capacity)||3)),
+    focus:safeText(savedWorkspace.attentional_focus||'',45),
+    control:['normal','verify','conserve'].includes(savedWorkspace.action_control)
+      ?savedWorkspace.action_control:'unknown',
+    selected:(Array.isArray(savedWorkspace.selected)?savedWorkspace.selected:[])
+      .slice(0,5).map(x=>({
+        source:safeText(x.source,30),label:safeText(x.label,50),
+        score:boundedMetric(x.score),
+      })),
+    suppressed:Math.max(0,Number(savedWorkspace.suppressed)||0),
+    broadcast_enabled:savedWorkspace.broadcast_enabled===true,
+    freshness:workspaceFreshness,
+    evidence:'global_workspace.js / aura_soul_state',
+    biological_equivalence_proven:false,
+    subjective_experience_proven:false,
+  }:null;
   const counts=publicState.kernel_status?.counts||{};
   const number=(v)=>v===null||v===undefined||v===''?null:
     Number.isFinite(Number(v))&&Number(v)>=0?Math.floor(Number(v)):null;
@@ -124,6 +145,15 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
           '% · budget '+String(organDecision.token_budget??'indisponible')
         :'Aucune décision de régulation mesurée sur ce processus.',
       source:'CognitiveKernel.inferenceAssessment / organ_regulation'},
+    {id:'workspace',title:'Espace de travail global borné',
+      state:globalWorkspace
+        ?workspaceFreshness.status==='recent'?'recently-observed':'recorded-history'
+        :'not-observed',
+      detail:globalWorkspace?'Dernière diffusion : '+globalWorkspace.at+
+        ' · capacité '+globalWorkspace.capacity+
+        ' · sélection '+globalWorkspace.selected.map(x=>x.source).join(', ')
+        :'Aucun résultat de compétition horodaté.',
+      source:'CognitiveKernel.globalWorkspace / aura_soul_state'},
     {id:'selfaudit',title:'Auto-vérification hors dialogue',
       state:live&&independentActivity
         ?auditFreshness.status==='recent'?'recently-observed':'recorded-history'
@@ -159,6 +189,7 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     runtime_ready:live,
     source, metrics, somatic, organ_decision:live?organDecision:null,
     independent_activity:live?independentActivity:null,
+    global_workspace:globalWorkspace,
     mood:live?safeText(organism.mood||'',45):'',
     last_reason:live?safeText(organism.last_reason||'',180):'',
     intention:live?safeText(organism.active_intention||'',180):'',
