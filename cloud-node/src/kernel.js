@@ -23,6 +23,8 @@ import { initialPredictionState,predictModule,observePrediction,currentPredictio
 import { initialViability,evolveViability } from './viability_budget.js';
 import { OfflineConsolidation,verifyConsolidation } from './offline_consolidation.js';
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
+import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
+import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop } from './verified_tool_loop.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -181,6 +183,8 @@ export class CognitiveKernel {
       global_workspace:null,
       prediction_bus:initialPredictionState(),
       attention_schema:initialAttentionSchema(),
+      autonomous_allowance:null,
+      verified_probe_loop:initialVerifiedLoop(),
       viability:initialViability(),
       consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
@@ -296,6 +300,10 @@ export class CognitiveKernel {
       this.soulCache.prediction_bus=initialPredictionState();
     if(!this.soulCache.attention_schema||typeof this.soulCache.attention_schema!=='object')
       this.soulCache.attention_schema=initialAttentionSchema();
+    if(!this.soulCache.verified_probe_loop||typeof this.soulCache.verified_probe_loop!=='object')
+      this.soulCache.verified_probe_loop=initialVerifiedLoop();
+    // Rehydrated permits are never trusted after a process restart.
+    this.soulCache.autonomous_allowance=null;
     if(!this.soulCache.viability||typeof this.soulCache.viability!=='object')
       this.soulCache.viability=initialViability();
     // Detect a malformed or tampered consolidation; never silently trust it.
@@ -787,6 +795,11 @@ export class CognitiveKernel {
       }
       this.soulCache.global_workspace=workspaceSnapshot(
         idleWorkspace,priorWorkspace);
+      this.soulCache.autonomous_allowance=this.soulCache.viability.optional_work_allowed
+        ?nextAutonomousAllowance(idleWorkspace,{
+          sequence:Number(this.soulCache.cycles||1)-1,
+          workspace_revision:priorWorkspace?.revision,
+        },Date.now()):null;
       const attentionChanged=priorWorkspace?.action_control!==idleWorkspace.decision.control
         &&['verify','conserve'].includes(idleWorkspace.decision.control);
       if(attentionChanged){
@@ -1151,19 +1164,44 @@ export class CognitiveKernel {
   }
 
   executionWorkspace(){
-    const proposals=workspaceInput({
-      userPresent:false,
-      organism:this.organism.migrate(this.soulCache||{}),
-      plan:{act:'task_first'},
-      prediction:currentPredictionSignal(this.soulCache?.prediction_bus),
-      consolidation:this.soulCache?.consolidation,
-      previous:this.soulCache?.global_workspace,
+    // No new proposal may be generated at the point of execution.
+    const receipt=this.soulCache?.global_workspace||{};
+    const observed=Date.parse(String(receipt.at||''));
+    const fresh=Number.isFinite(observed)&&observed<=Date.now()&&
+      Date.now()-observed<=120000;
+    const selected=fresh&&receipt.broadcast_enabled===true
+      ?(Array.isArray(receipt.selected)?receipt.selected:[]):[];
+    const workspace={broadcast_enabled:Boolean(fresh&&receipt.broadcast_enabled),
+      received:{prefrontal:selected}};
+    const gate=executionWorkspaceGate(workspace);
+    return {workspace,gate:fresh?gate:{allowed:false,reason:'no-fresh-workspace'}};
+  }
+
+  authorizeAutonomous(source){
+    return centralActionAdmission({
+      source,workspace:this.soulCache?.global_workspace,
+      allowance:this.soulCache?.autonomous_allowance,
+      viability:this.soulCache?.viability,
     });
-    const workspace=competeInWorkspace(proposals,{
-      previous:this.soulCache?.global_workspace,
-      capacity:this.soulCache?.viability?.capacity||3,
+  }
+
+  async verifiedLocalProbe({context='read-only-file-probe',relativePath,root}={}){
+    const base=root||new URL('../',import.meta.url).pathname;
+    const result=await runVerifiedProbe(this.soulCache.verified_probe_loop,{
+      root:base,context,relativePath,
     });
-    return {workspace,gate:executionWorkspaceGate(workspace)};
+    if(!replayVerifiedLoop(result.state,context).verified)
+      throw Error('verified-probe-ledger-integrity-failed');
+    this.soulCache.verified_probe_loop=result.state;
+    await this.saveSoul();
+    await this.trace('verified-tool-loop','filesystem-observation','',{
+      at:now(),context:String(context).slice(0,80),
+      strategy:result.decision.strategy,preflighted:result.action_was_preflighted,
+      exit_code:result.receipt.exit_code,
+      episode_id:result.receipt.id,verified:true,raw_file_content_stored:false,
+    });
+    return {verified:result.verified,decision:result.decision,
+      receipt:result.receipt,preflighted:result.action_was_preflighted};
   }
 
   async runAgent(name, task, { missionId = '' } = {}) {
