@@ -47,9 +47,13 @@ Une réserve ne peut remonter **que si** un capteur \`node-process\` daté de mo
 
 Le workflow \`.github/workflows/aura-p0-independent-canary.yml\` rejoue ces tests sur un runner Ubuntu propre, avec \`npm ci --ignore-scripts\`, puis les régressions du workspace. Un **relecteur externe** qui n'a pas écrit les tests doit néanmoins produire ses propres cas contradictoires : une CI reproductible ne remplace pas un audit humain indépendant.
 
-## P1 non réalisés ici
+## P1, amorçage et limites
 
-- Récepteurs réellement différenciés avec sorties typées et boucles réentrantes.
+Les cinq récepteurs consomment désormais le paquet diffusé et produisent cinq reçus distincts (`workspace_receptors.js`). La sélection d'un souvenir dépend du traitement hippocampique, la stratégie du traitement des ganglions de la base, la pression CPU de l'insula et le contrôle de vérification du préfrontal. Leur ablation ciblée est testée dans `workspace_receptors.test.js` ; les compteurs de traitement sont exposés dans la même vue cérébrale, sans aucun contenu privé.
+
+Les limitations non couvertes restent :
+
+- Récepteurs différenciés : sorties typées et ablations préfrontal/insula/hippocampe **implémentées**. Les véritables cycles intermodules réentrants et l'extensibilité à toutes les opérations restent à construire.
 - Canari Postgres/MySQL/Hostinger après reboot du processus ; les tests locaux sont suffisants uniquement pour la preuve en mémoire et fichiers du scénario étroit.
 - Promotion prospective des politiques de \`HistoryLedger\` pour d'autres opérations (le canari possède son propre apprentissage vérifié, rattaché au registre historique).
 - Inventaire exhaustif des interfaces de commandes hors noyau.
