@@ -669,6 +669,10 @@ export class CommandCenter {
   }
 
   async executeGithubInitiative(initiative) {
+    const admission=this.kernel.authorizeAutonomous('command-center');
+    if(!admission.allowed)
+      return {status:'waiting',execution_mode:'workspace-denied',
+        result:{reason:admission.reason}};
     if (!this.githubToken) {
       return {
         status: 'waiting',
@@ -1584,6 +1588,10 @@ export class CommandCenter {
   }
 
   async executeInitiative(row) {
+    const admission=this.kernel.authorizeAutonomous('command-center');
+    if(!admission.allowed)
+      return {id:row?.id||null,status:'waiting',execution_mode:'workspace-denied',
+        reason:admission.reason,executed:false};
     const initiative = {
       ...row,
       requested_risks: parseJson(row.requested_risks, []),
@@ -2321,6 +2329,9 @@ export class CommandCenter {
   }
 
   async runCycle(trigger = 'manual') {
+    const admission=this.kernel.authorizeAutonomous('command-center');
+    if(!admission.allowed)
+      return {ok:false,skipped:true,reason:'central-workspace-denied:'+admission.reason};
     if (!config.commandCenterEnabled) {
       return { ok: false, skipped: true, reason: 'command center disabled' };
     }
