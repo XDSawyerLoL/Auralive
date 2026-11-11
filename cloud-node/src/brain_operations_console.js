@@ -5,6 +5,7 @@ import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
 import {BRAIN_OPERATIONS_SCRIPT} from './brain_operations_runtime.js';
 import {BRAIN_SCIENCE_LAB_HTML,BRAIN_SCIENCE_LAB_CSS} from './brain_science_lab_ui.js';
 import {BRAIN_ORGANISM_V5_HTML} from './brain_organism_v5.js';
+import {CORTEX06_HTML,CORTEX06_CSS} from './cortex06_visual.js';
 
 export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <html lang="fr">
@@ -18,6 +19,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <style>__ATLAS_CSS__</style>
 <style>__SCIENCE_CSS__</style>
 <style>__READABLE_CSS__</style>
+<style>__CORTEX06_CSS__</style>
 </head>
 <body>
 <div class="shell">
@@ -178,6 +180,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
             <div class="graph-floating" id="graphHover" aria-live="off">Sélectionne un module pour inspecter ses preuves.</div>
             <div class="graph-floating">Glisser · Zoomer · Cliquer sur un module · Rejouer un trajet enregistré</div>
           </div>
+          __CORTEX06_HTML__
           __ORGANISM_V5_HTML__
           <div class="neural-inspector memory-inspector" role="button" tabindex="0" data-inspect="memory">
             <div class="ni-heading"><span class="ni-icon">▤</span> Mémoire <span id="niMemoryState" class="ni-state">NON VÉRIFIÉE</span></div>
@@ -340,5 +343,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 .replace('__SCIENCE_CSS__',BRAIN_SCIENCE_LAB_CSS)
 .replace('__SCIENCE_HTML__',BRAIN_SCIENCE_LAB_HTML)
 .replace('__ORGANISM_V5_HTML__',BRAIN_ORGANISM_V5_HTML)
+.replace('__CORTEX06_HTML__',CORTEX06_HTML)
+.replace('__CORTEX06_CSS__',CORTEX06_CSS)
 .replace('__ATLAS_CSS__', COGNITIVE_ATLAS_CSS)
 .replace('__OPS_SCRIPT__', BRAIN_OPERATIONS_SCRIPT);
