@@ -3,6 +3,10 @@ import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
 import {BRAIN_ORGANISM_V5_SCRIPT} from './brain_organism_v5_runtime.js';
 import {CORTEX06_SCRIPT} from './cortex06_runtime.js';
+import {CORTEX08_MATERIAL_SCRIPT} from './cortex08_material.js';
+import {CORTEX08_FLOW_SCRIPT} from './cortex08_flow.js';
+import {CORTEX08_FOCUS_SCRIPT} from './cortex08_focus.js';
+import {CORTEX08_SCENE_SCRIPT} from './cortex08_scene.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -793,6 +797,7 @@ async function poll(){
    state.data=data;
    v5IngestEvidence(earlierState,data);
    c6Ingest(data);
+   c8Observe(data);
    if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
    // Select once the latest persisted route, but do NOT replay it and never
    // present a historical route as an event happening right now.
@@ -968,6 +973,10 @@ ${COGNITIVE_ATLAS_SCRIPT}
 ${BRAIN_SCIENCE_LAB_SCRIPT}
 ${BRAIN_ORGANISM_V5_SCRIPT}
 ${CORTEX06_SCRIPT}
+${CORTEX08_FOCUS_SCRIPT}
+${CORTEX08_FLOW_SCRIPT}
+${CORTEX08_MATERIAL_SCRIPT}
+${CORTEX08_SCENE_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
