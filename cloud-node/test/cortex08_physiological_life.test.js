@@ -164,3 +164,72 @@ test('paused CORTEX 08 never paints stale physiology, even after resize',()=>{
  handlers.resize();
  assert.equal(drawn.length,1,'hidden page does not redraw physiology');
 });
+
+test('CORTEX live telemetry uses direct process samples instead of a stale cognitive tick',()=>{
+ const state={runtime_ready:true,kernel_status:{organism:{
+  updated_at:at,stabilite:.73,homeostasis:{sensor:{source:'node-process',
+   sampled_at:new Date(now-30000).toISOString(),
+   cpu_utilization:.05,heap_utilization:.35,compute_pressure:0}},
+ }}};
+ const freshSample={source:'node-process',sampled_at:at,
+  cpu_utilization:.82,heap_utilization:.61,compute_pressure:.72};
+ const data=buildBrainTelemetry(state,{process_sample:freshSample},now);
+ assert.equal(data.somatic.cpu_utilization,82);
+ assert.equal(data.somatic.heap_utilization,61);
+ assert.equal(data.somatic.compute_pressure,72);
+ assert.equal(data.neuro_vitals.sensor_fresh,true);
+ assert.equal(data.cortex08.metrics.cpu,.82);
+ assert.equal(data.cortex08.metrics.heap,.61);
+ const older={...freshSample,sampled_at:new Date(now-122000).toISOString()};
+ const fallback=buildBrainTelemetry(state,{process_sample:older},now);
+ assert.equal(fallback.somatic.cpu_utilization,5,'expired direct readings are not reused');
+ const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ assert.match(server,/function readCortexProcessSample\(/);
+ assert.equal((server.match(/process_sample:bootstrap.runtimeReady\?readCortexProcessSample\(\):null/g)||[]).length,2);
+});
+
+test('CORTEX live trends show only unique observed samples and stop on stale data',()=>{
+ const elements={
+  cortex06:{},
+  cortex07Canvas:{style:{},setAttribute(){}},
+  cortex07PosterImage:{style:{}},
+  c8PhysiologyStatus:{dataset:{}},c8PhysiologyLabel:{},
+  c8SensorAge:{},c8FocusState:{dataset:{}},
+  c8CpuLive:{},c8HeapLive:{},c8PressureLive:{},
+  c8TrendStatus:{},
+  c8CpuTrend:{setAttribute(k,v){this[k]=v;}},
+  c8HeapTrend:{setAttribute(k,v){this[k]=v;}},
+  c8PressureTrend:{setAttribute(k,v){this[k]=v;}},
+ };
+ const handlers={}, mq={matches:true,addEventListener(){}};
+ const context={
+  window:{matchMedia:()=>mq,addEventListener(k,fn){handlers[k]=fn;}},
+  document:{hidden:false,addEventListener(k,fn){handlers[k]=fn;}},
+  $:id=>elements[id]||null,
+  c8MaterialDraw(){},c8MaterialClear(){},
+  c8RecordObservedHops(){},c8FocusLabel(){},
+  requestAnimationFrame:()=>1,cancelAnimationFrame(){},
+  performance:{now:()=>1000},Date,
+ };
+ const api=runInNewContext(CORTEX08_SCENE_SCRIPT+
+  ';({observe:c8Observe,history:c8LiveSeries})',context);
+ const snapshot=(ageMs,cpu)=>({measured:true,state:'active',
+  source_timestamps:{process:new Date(Date.now()-ageMs).toISOString()},
+  metrics:{cpu,heap:.61,pressure:.13}});
+ const first=snapshot(3000,.21),second=snapshot(1000,.81);
+ api.observe({telemetry:{cortex08:first}});
+ assert.equal(api.history.history.length,1);
+ assert.equal(elements.c8CpuLive.textContent,'21 %');
+ api.observe({telemetry:{cortex08:first}});
+ assert.equal(api.history.history.length,1,'same sample is not duplicated');
+ api.observe({telemetry:{cortex08:second}});
+ assert.equal(api.history.history.length,2);
+ assert.equal(elements.c8CpuLive.textContent,'81 %');
+ assert.ok((elements.c8CpuTrend.points||'').includes(' '),'real history draws a polyline');
+ const older=snapshot(13000,.99);
+ api.observe({telemetry:{cortex08:older}});
+ assert.equal(api.history.history.length,2,'stale sample never becomes history');
+ assert.equal(elements.c8CpuLive.textContent,'—','stale sample is not marked as current');
+ assert.equal(elements.c8PhysiologyStatus.dataset.active,'false');
+ assert.match(elements.c8TrendStatus.textContent,/ÉCHANTILLONS DATÉS : 2/);
+});
