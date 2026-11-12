@@ -6,8 +6,8 @@ const fold=s=>String(s||'').toLocaleLowerCase('fr-FR')
  .replace(/[’‘]/g,"'").replace(/\s+/g,' ').trim();
 export function pragmaticIntent(message='',priorAssistant=''){
  const q=fold(message),previous=fold(priorAssistant);
- const toneSubject=/\b(?:ton|parle|parles|voix|solennell?e?|solonelle|chaleureu[xs]?|d[eé]tendu[es]?|formell?e?|froid[es]?|robotique)\b/.test(q);
- if(/\b(?:plus chaleureu[xs]?|plus de chaleur|sois chaleureu[xs]?|chaleureuse|moins solennell?e?|moins robotique|moins froid[es]?)\b/.test(q)&&
+ const toneSubject=/\b(?:ton|parle|parles|voix|solennell?e?|solonelle|chaleureu(?:x|se)?|d[eé]tendu[es]?|formell?e?|froid[es]?|robotique)\b/.test(q);
+ if(/\b(?:plus chaleureu(?:x|se)?|plus de chaleur|sois chaleureu(?:x|se)?|chaleureuse|moins solennell?e?|moins robotique|moins froid[es]?)\b/.test(q)&&
     /\b(?:sois|etre|être|parle|plus|moins|voudrais|dirait|tente|essaie|pourrais|peux|peut)\b/.test(q)){
    return {act:'adjust_conversation_tone',
     goal:'Accueillir cette préférence et répondre avec davantage de chaleur dans les mots, sans décrire des réglages techniques ni prétendre éprouver une émotion humaine.',
@@ -65,8 +65,8 @@ export function sessionConversationStyle(rows=[],current=''){
  for(const r of order.reverse()){
   if(String(r?.role)!=='user')continue;
   const q=fold(r.content);
-  if(!/\b(?:chaleureu[xs]?|chaleur|moins froid|moins robotique|plus detendu|plus naturel|plus formel|plus distant)\b/.test(q))continue;
-  if(/\b(?:pas|moins)\s+chaleureu[xs]?/.test(q)||/\b(?:plus distant|plus formel)\b/.test(q))
+  if(!/\b(?:chaleureu(?:x|se)?|chaleur|moins froid|moins robotique|plus detendu|plus naturel|plus formel|plus distant)\b/.test(q))continue;
+  if(/\b(?:pas|moins)\s+chaleureu(?:x|se)?/.test(q)||/\b(?:plus distant|plus formel)\b/.test(q))
    return 'reserved';
   if(/\b(?:sois|parle|reponds|je veux|j'aimerais|prefere|pourrais|peux|plus|moins)\b/.test(q))
    return 'warm';
