@@ -197,7 +197,7 @@ def main():
         heldout['source']['nwb_sha256']=file_sha256(nwb_path)
         args.heldout_output.parent.mkdir(parents=True,exist_ok=True)
         args.heldout_output.write_text(
-            json.dumps(heldout,ensure_ascii=False,indent=2)+'\\n',
+            json.dumps(heldout,ensure_ascii=False,indent=2)+'\n',
             encoding='utf-8')
         print('Human NWB trace downloaded: ',args.heldout_output)
         print('Independence from Allen precomputed features NOT verified.')
