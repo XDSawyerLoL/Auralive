@@ -30,6 +30,7 @@ import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
+import { ObservedProcessMonitor } from './process_observer.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
 import { query as readBrainTraceRows } from './db.js';
@@ -378,6 +379,8 @@ const capabilityScout = new CapabilityScout({
 const cognitiveTrace = new CognitiveTraceLedger();
 const fallbackSoul = kernel.defaultSoul();
 
+const processObserver = new ObservedProcessMonitor();
+
 const bootstrap = {
   serverReady: true,
   dbConfigured: databaseConfigured(),
@@ -436,6 +439,7 @@ async function startRuntime() {
     // jamais empêcher l'organisme, la mémoire et le chat de démarrer.
     await kernel.start();
     bootstrap.runtimeReady = true;
+    processObserver.start(); // Node timer: independent from website visitors
     bootstrap.phase = 'ready';
     bootstrap.failureCode = '';
     bootstrap.lastReadyAt = new Date().toISOString();
@@ -1408,6 +1412,7 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
     background_cycle:bootstrap.runtimeReady?kernel.soulCache?.existence:null,
     independent_probe_seconds:config.independentProbeSeconds,
+    process_monitor:bootstrap.runtimeReady?processObserver.snapshot():null,
     curiosity_cycle:bootstrap.runtimeReady?projection.curiosity:null,
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
@@ -1438,6 +1443,7 @@ app.get('/api/brain/graph', async (request, reply) => {
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
     background_cycle:bootstrap.runtimeReady?kernel.soulCache?.existence:null,
     independent_probe_seconds:config.independentProbeSeconds,
+    process_monitor:bootstrap.runtimeReady?processObserver.snapshot():null,
     curiosity_cycle:bootstrap.runtimeReady?current.curiosity:null,
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
