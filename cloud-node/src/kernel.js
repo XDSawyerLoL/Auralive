@@ -15,6 +15,7 @@ import {validateSensoryReading} from './sensory_input.js';
 import {validateSemanticPerception} from './semantic_perception.js';
 import {updatePerceptualContinuity} from './perceptual_continuity.js';
 import {fusePerceptualEvents,decidePerceptualIntervention} from './multimodal_fusion.js';
+import {defaultInterventionLearning,observeInterventionFeedback,evaluateInterventionLearning} from './intervention_learning.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -209,6 +210,7 @@ export class CognitiveKernel {
       inner_dialogue: null,
       endophasia: null,
       social_initiative:{revision:0,pending:null,last_evidence_key:''},
+      intervention_learning:defaultInterventionLearning(),
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
@@ -328,6 +330,8 @@ export class CognitiveKernel {
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
+    if(!this.soulCache.intervention_learning||typeof this.soulCache.intervention_learning!=='object')
+      this.soulCache.intervention_learning=defaultInterventionLearning();
     const initiative=this.soulCache.social_initiative;
     if(!initiative||typeof initiative!=='object')
       this.soulCache.social_initiative={revision:0,pending:null,last_evidence_key:''};
@@ -498,13 +502,29 @@ export class CognitiveKernel {
     const pending=stored?.pending;
     if(!pending||String(pending.id)!==String(id||''))return false;
     this.soulCache.social_initiative={
-      ...stored,pending:null,last_delivered_at:now(),
+      ...stored,pending:null,last_delivered_at:now(),last_delivered_id:id,
     };
     await this.saveSoul();
     await this.trace('social-initiative','opt-in-browser-display','',{
       at:now(),evidence_scope:'local-counterfactual-only',
       source:'explicit-founder-display-ack',llm_used:false,
       display_confirmed:true,conversation_request_received:false,
+    });
+    return true;
+  }
+
+  async rateSocialInitiative(id,rating){
+    const stored=this.soulCache?.social_initiative||{};
+    if(id!==stored.last_delivered_id)return false;
+    const result=observeInterventionFeedback(this.soulCache.intervention_learning,{
+      candidateId:id,expectedId:stored.last_delivered_id,rating,at:now(),
+    });
+    if(!result.accepted)return false;
+    this.soulCache.intervention_learning=result.state;
+    await this.saveSoul();
+    await this.trace('social-initiative','explicit-utility-feedback','',{
+      at:now(),rating,source:'private-user-correlated-feedback',
+      rating_is_external_task_success:false,raw_dialogue_logged:false,
     });
     return true;
   }
@@ -1048,7 +1068,14 @@ export class CognitiveKernel {
           if(socialDecision.reason!=='no-verified-cognitive-event'){
             this.soulCache.social_decision=socialDecision;
           }
-          if(socialDecision.act==='ask'){
+          const learnedSpeech=evaluateInterventionLearning(
+            this.soulCache.intervention_learning,{
+              evidenceScope:'machine-verified-local-change',
+              resourcePressure:Number(this.soulCache.organism?.homeostasis?.resource_pressure)||0,
+              conversationBusy:this.chatRunning===true,
+              consent:true,
+            });
+          if(socialDecision.act==='ask'&&learnedSpeech.question_allowed===true){
             this.soulCache.social_initiative={
               ...prior,
               revision:Math.max(0,Number(prior.revision)||0)+1,
