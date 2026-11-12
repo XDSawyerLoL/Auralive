@@ -13,6 +13,7 @@ import { InnerDialogueEngine } from './inner_dialogue.js';
 import { arbitrateConversationInitiative } from './conversation_initiative.js';
 import {validateSensoryReading} from './sensory_input.js';
 import {validateSemanticPerception} from './semantic_perception.js';
+import {updatePerceptualContinuity} from './perceptual_continuity.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -430,7 +431,27 @@ export class CognitiveKernel {
     const old=this.semanticPerceptions[valid.kind];
     if(old&&Date.parse(old.measured_at)>=Date.parse(valid.measured_at))return null;
     this.semanticPerceptions[valid.kind]=valid;
+    const prior=this.perceptualContinuity||null;
+    const processed=updatePerceptualContinuity(prior,valid);
+    if(processed.accepted){
+      this.perceptualContinuity=processed.state;
+      if(processed.event){
+        if(!this.recentPerceptualEvents)this.recentPerceptualEvents={};
+        this.recentPerceptualEvents[valid.kind]=processed.event;
+      }
+    }
     return valid;
+  }
+
+  perceptualEventSnapshot(){
+    const cutoff=Date.now()-120000;
+    return Object.values(this.recentPerceptualEvents||{})
+      .filter(event=>Date.parse(String(event.at||''))>=cutoff)
+      .map(event=>({
+        kind:event.kind==='speech-detected'?'speech-transcription':'visual-classification',
+        measured_at:event.at,trusted:false,verified_real_world:false,
+        evidence_scope:'repeated-or-once-client-model-output-not-ground-truth',
+      }));
   }
 
   semanticPerceptionSnapshot(){
@@ -899,7 +920,7 @@ export class CognitiveKernel {
         plan:{act:'respond'},previous:priorWorkspace,
         prediction:currentPredictionSignal(this.soulCache.prediction_bus),
         consolidation:this.soulCache.consolidation,
-        sensorySignals:Object.values(this.semanticPerceptionSnapshot()),
+        sensorySignals:this.perceptualEventSnapshot(),
       });
       const priorAttention=predictAttention(this.soulCache.attention_schema,idleCandidates);
       const idleWorkspace=competeInWorkspace(
