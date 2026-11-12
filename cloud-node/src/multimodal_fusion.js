@@ -4,7 +4,7 @@ const time=x=>{const v=Date.parse(String(x||''));return Number.isFinite(v)?v:nul
 export function fusePerceptualEvents(previous={},event=null,{windowMs=15000}={}){
  const state={speech_at:previous?.speech_at||null,vision_at:previous?.vision_at||null,
    vision_kind:previous?.vision_kind||null,last_pair_key:previous?.last_pair_key||null};
- if(!event||!['speech-detected','object-hypothesis-stable','visual-hypothesis-changed']
+ if(!event||!['speech-detected','object-hypothesis-stable','object-image-displacement-hypothesis','visual-hypothesis-changed']
   .includes(event.kind)||event.verified_real_world!==false)return {state,event:null};
  const at=time(event.at);
  if(at===null)return {state,event:null};
@@ -29,7 +29,11 @@ export function fusePerceptualEvents(previous={},event=null,{windowMs=15000}={})
    label:'browser-multimodal-hypothesis',
    evidence_scope:'temporal-coincidence-only',
    verified_real_world:false,confidence_claim:false,
-   interpretation:'speech-and-visual-output-near-in-time-not-causal-relation',
+   interpretation:state.vision_kind==='object-image-displacement-hypothesis'
+    ?'speech-near-image-space-displacement-no-causal-attribution'
+    :'speech-and-visual-output-near-in-time-not-causal-relation',
+   image_displacement_hypothesis:state.vision_kind==='object-image-displacement-hypothesis',
+   person_moved_object_verified:false,
  }};
 }
 export function decidePerceptualIntervention(fusion,context={}){
