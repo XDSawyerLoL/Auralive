@@ -14,6 +14,7 @@ import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicit
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { immediateDialogueWindow,mergeConversationViews } from './immediate_dialogue_window.js';
+import {sessionConversationStyle} from './conversation_pragmatics.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
 import { SelfInquiryEngine } from './self_inquiry.js';
 import { IndependentContinuity } from './independent_continuity.js';
@@ -1820,6 +1821,13 @@ export class CognitiveKernel {
     }
     // Plan generation happens ONLY AFTER the limited global broadcast.
     // Context sources lacking a selected stable ID are not handed to the planner.
+    // Only same-session, explicitly requested language preferences survive
+    // more than a few conversation turns. No cross-user preference leakage.
+    const styleStatement=await one(
+      "SELECT id,role,content FROM aura_cloud_messages WHERE session_id=? AND role='user' AND (content LIKE ? OR content LIKE ? OR content LIKE ?) ORDER BY id DESC LIMIT 1",
+      [conversationSession,'%chaleureu%','%plus naturel%','%plus distant%'],
+    ).catch(()=>null);
+    const sessionStyle=sessionConversationStyle(styleStatement?[styleStatement]:[],content);
     plan=this.cognition.planReply({
       text:content,
       soul:{...safePlanSoul,
@@ -1828,6 +1836,7 @@ export class CognitiveKernel {
       agenda:{},continuityReport:{},
       recentMessages:dialogueMessages,
       privateView,founderProfileNotes:admitted.founderProfile,
+      sessionStyle,
     });
     await brainHop('workspace','cognition','plan-created-from-selected-signals');
     observe('decision','done',{
