@@ -57,20 +57,23 @@ jobs:
           (cd "$RUNNER_TEMP/aura-preview" && zip -q -r "$GITHUB_WORKSPACE/AURA_CERVEAU_BIOPHYSIQUE_SWC_20261112.zip" .)
           unzip -t "$GITHUB_WORKSPACE/AURA_CERVEAU_BIOPHYSIQUE_SWC_20261112.zip" | tail -n 1
           sha256sum "$GITHUB_WORKSPACE/AURA_CERVEAU_BIOPHYSIQUE_SWC_20261112.zip"
-      - name: Publish direct-download prerelease asset
+      - name: Publish binary in dedicated distribution branch
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="aura-human-swc-synapses-20261112"
-          ZIP="$GITHUB_WORKSPACE/AURA_CERVEAU_BIOPHYSIQUE_SWC_20261112.zip"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" \
-              --target "a75dd22644b2b0795fe68d1d41fdf7d1f2daed6a" --prerelease \
-              --title "AURA - morphologie SWC et synapses, recherche biophysique" \
-              --notes "Validated source commit a75dd22644b2b0795fe68d1d41fdf7d1f2daed6a, canonical artifact from workflow 43263702275. Seven GitHub CI validations succeeded. SWC cable solver, AMPA NMDA GABA synapses, Allen human specimen checks, offline NEURON research. NO complete or calibrated human brain, no proven consciousness. Draft research release; not deployed. Preserve MySQL and existing memory."
-          fi
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets,url
+          DISTRIBUTION_BRANCH="distribution/aura-bio-20261112"
+          ARCHIVE="AURA_CERVEAU_BIOPHYSIQUE_SWC_20261112.zip"
+          SOURCE_SHA="a75dd22644b2b0795fe68d1d41fdf7d1f2daed6a"
+          test -s "$GITHUB_WORKSPACE/$ARCHIVE"
+          cd "$GITHUB_WORKSPACE"
+          git fetch --depth=1 origin "refs/heads/$DISTRIBUTION_BRANCH"
+          git checkout -B "$DISTRIBUTION_BRANCH" FETCH_HEAD
+          mkdir -p downloads
+          cp "$GITHUB_WORKSPACE/$ARCHIVE" "downloads/$ARCHIVE"
+          git add "downloads/$ARCHIVE"
+          git -c user.name="AURA CI" -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "distribution(aura): tested human SWC morphology + synaptic physiology; source $SOURCE_SHA"
+          git push origin "HEAD:refs/heads/$DISTRIBUTION_BRANCH"
+          sha256sum "downloads/$ARCHIVE"
