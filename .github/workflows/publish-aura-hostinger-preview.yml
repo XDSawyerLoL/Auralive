@@ -24,33 +24,36 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/aura-preview"
-          gh run download 43240644884 --repo "$GITHUB_REPOSITORY" --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-preview"
+          gh run download 43249849925 --repo "$GITHUB_REPOSITORY" --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-preview"
           test -f "$RUNNER_TEMP/aura-preview/server.js"
           test -f "$RUNNER_TEMP/aura-preview/package.json"
           test -f "$RUNNER_TEMP/aura-preview/DEPLOYMENT.json"
           test -f "$RUNNER_TEMP/aura-preview/test/endophasia_developmental_causality.test.js"
           test -f "$RUNNER_TEMP/aura-preview/docs/AURA_DEVELOPMENTAL_CAUSAL_AUDIT_20261112.md"
+          grep -q '"git_sha": "bc001afc39b8435f20551eeb64ad86fc064c187a"' "$RUNNER_TEMP/aura-preview/DEPLOYMENT.json"
+          grep -q 'semantic_intent' "$RUNNER_TEMP/aura-preview/src/inner_dialogue.js"
+          grep -q 'observeSocialFeedback' "$RUNNER_TEMP/aura-preview/src/organism.js"
       - name: Pack immutable Hostinger-ready ZIP
         shell: bash
         run: |
           set -euo pipefail
-          (cd "$RUNNER_TEMP/aura-preview" && zip -q -r "$GITHUB_WORKSPACE/AURA_HOSTINGER_20261112.zip" .)
-          unzip -t "$GITHUB_WORKSPACE/AURA_HOSTINGER_20261112.zip" | tail -n 1
-          sha256sum "$GITHUB_WORKSPACE/AURA_HOSTINGER_20261112.zip"
+          (cd "$RUNNER_TEMP/aura-preview" && zip -q -r "$GITHUB_WORKSPACE/AURA_HOSTINGER_LANGAGE_20261112.zip" .)
+          unzip -t "$GITHUB_WORKSPACE/AURA_HOSTINGER_LANGAGE_20261112.zip" | tail -n 1
+          sha256sum "$GITHUB_WORKSPACE/AURA_HOSTINGER_LANGAGE_20261112.zip"
       - name: Publish direct-download prerelease asset
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="aura-hostinger-preview-20261112"
-          ZIP="$GITHUB_WORKSPACE/AURA_HOSTINGER_20261112.zip"
+          TAG="aura-cognition-language-20261112"
+          ZIP="$GITHUB_WORKSPACE/AURA_HOSTINGER_LANGAGE_20261112.zip"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
           else
             gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" --prerelease \
-              --title "AURA CORTEX - archive Hostinger (prevalidation)" \
-              --notes "Archive Hostinger du workflow valide 43240644884, issue de la PR #251. Tests CI reussis. Pas de deploiement automatique. Conserver la base MySQL et les variables d'environnement existantes. Ne pas activer la genese developpementale sur l'instance existante."
+              --title "AURA CORTEX - cognition et langage (prevalidation)" \
+              --notes "Archive Hostinger du workflow valide 43249849925, issue de la PR #251. Tests CI reussis. Pas de deploiement automatique. Conserver la base MySQL et les variables d'environnement existantes. Ne pas activer la genese developpementale sur l'instance existante."
           fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets,url
