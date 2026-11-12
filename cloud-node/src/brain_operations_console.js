@@ -304,11 +304,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   </section>
 
   <details class="v5-lab-details" id="neuro-lab-details">
-    <summary>NEUROGENÈSE NUMÉRIQUE · LABORATOIRE CAUSAL <span>Ouvrir la double hélice, les ablations et le protocole P0</span></summary>
+    <summary>Observatoire cognitif <span>Intentions et délibérations réelles · génome expérimental · protocole P0</span></summary>
     __SCIENCE_HTML__
   </details>
   <details class="atlas-details" id="atlas-v3">
-    <summary>Atlas Cognitif v3 · 18 opérations et chronologie vérifiées</summary>
+    <summary>Atlas des décisions <span>18 modules instrumentés · événements réellement observés</span></summary>
     ${COGNITIVE_ATLAS_HTML}
   </details>
   <details class="diagnostics-details" id="diagnostics-details">
