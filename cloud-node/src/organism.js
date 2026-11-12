@@ -19,9 +19,10 @@ export class AuraOrganism {
     return state.homeostasis;
   }
 
-  defaultState() {
+  defaultState({developmental=false}={}) {
     const stamp = now();
-    return this.recompute({
+    const state = this.recompute({
+      developmental_mode: developmental === true,
       version: AuraOrganism.VERSION,
       turns: 0,
       identite: 0.86,
@@ -100,6 +101,21 @@ export class AuraOrganism {
         last_effect: {},
       },
     }, 'initialisation');
+    if(developmental===true){
+      // A safe functional organism needs initial regulators, not an
+      // authored job, origin story or high-confidence self-identity.
+      state.identite=.5;
+      state.attachement=.5;
+      state.risque_assistante=0;
+      state.relationship.familiarity=0;
+      state.relationship.trust=.5;
+      state.executive.role='';
+      state.executive.portfolio_focus='';
+      state.executive.strategic_drive=.5;
+      state.executive.decisiveness=.5;
+      return this.recompute(state,'initialisation-developpementale');
+    }
+    return state;
   }
 
   migrate(soul = {}) {
@@ -213,6 +229,14 @@ export class AuraOrganism {
     n.avancer = clamp(0.54 + state.engagement*0.18 + state.agency*0.18 + state.clarte*0.08);
     n.terminer = clamp(0.42 + state.engagement*0.18 + state.satisfaction*0.08 + state.confiance*0.08);
     n.explorer_externe = clamp(0.48 + state.curiosite*0.26 + state.agency*0.10);
+    if(state.developmental_mode===true){
+      // A new individual is not born with the founder's earlier role
+      // preferences. This is distinct from non-negotiable safety gates.
+      n.rester_aura=0;
+      n.ne_pas_devenir_assistante=0;
+      n.diriger=clamp(.23+state.agency*.25);
+      n.garder_douceur=clamp(.36+state.attachement*.15);
+    }
     return Object.fromEntries(Object.entries(n).map(([k,v])=>[k,Number(v.toFixed(4))]));
   }
 
