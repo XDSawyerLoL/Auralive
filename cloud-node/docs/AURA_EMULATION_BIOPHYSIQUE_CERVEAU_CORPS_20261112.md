@@ -447,3 +447,42 @@ démontrée par cette PR.
 - https://alleninstitute.github.io/AllenSDK/biophysical_models.html
 - https://www.neuronsimulator.org/en/9.0.1/guide/bio_faq.html
 - https://docs.neuroml.org/Userdocs/NeuroMLv2AndLEMS.html
+
+
+## Résultat réellement exécuté — cellule humaine Allen 643582610
+
+Une CI a exécuté `aura-allen-real-human-validation.yml` avec les
+données publiques réellement récupérées pour le spécimen
+`643582610` (Homo sapiens), dont une reconstruction SWC et les
+caractéristiques électriques publiées dans Allen Cell Types.
+
+**Premier rapport sans comparaison NWB** :
+- Job GitHub `43263540987` — **réussite**.
+- 13 995 points de reconstruction, 269 sections NEURON et
+  1 081 segments de calcul.
+- Vrest mesuré : -73.187744140625 mV.
+- R entrée mesurée : 135.312497615814 MΩ.
+- Constante de temps mesurée : 8.64352768096981 ms.
+- SHA-256 de la reconstruction SWC :
+  `d2bc685734b460bb2e256cb656c93fc85eab57f1b95cc006a60b1456ec3f78f7`.
+- Le solveur NEURON a résolu les équations passives sur cette vraie
+  géométrie (pas de canal humain actif validé).
+
+Le modèle passif utilise des paramètres dérivés de ces
+caractéristiques observées. Le premier rapport **ne mesurait pas
+l'erreur sur un autre enregistrement** et ne constitue pas une
+preuve d'exactitude physiologique des prédictions du modèle.
+
+**Seconde étape en cours** : téléchargement d'un balayage NWB
+réel, calcul de l'écart entre la tension mesurée et les prédictions
+de NEURON (câbles) et de la cellule RC (un seul compartiment),
+avec RMSE/MAE en mV. Les caractéristiques Allen pouvant provenir
+de la même batterie d'enregistrements, ce n'est **pas une
+validation indépendante attestée**. Le rapport doit conserver
+cette limite même si l'erreur obtenue est faible.
+
+L'archive du premier rapport de CI porte le nom
+`aura-allen-human-real-cell-validation`, run `43263540987`.
+Ne pas confondre avec la preuve de physiologie d'une amygdale,
+d'une cellule humaine active, d'un circuit entier ou d'un
+cerveau conscient.
