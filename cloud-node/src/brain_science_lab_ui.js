@@ -153,10 +153,105 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
  let snapshot=null,context='A',selectedGene=0,loading=false;
  const geneNames=['Biais d’inspection','Période d’exploration','Pénalité d’échec','Gain attentionnel','Seuil d’incertitude','Récupération','Plasticité','Décroissance mémoire'];
  const traitKeys=['inspection_bias','exploration_period','failure_penalty','attention_gain','uncertainty_threshold','homeostasis_recovery','plasticity','memory_decay'];
+ const geneMeaning=[
+  {range:'−2 à 2',desc:'Influence la probabilité simulée d’inspecter avant d’agir.',role:'Utilisé dans l’expérience P0'},
+  {range:'3 à 10 cycles',desc:'Définit la fréquence de l’exploration dans la session simulée.',role:'Utilisé dans l’expérience P0'},
+  {range:'1 à 8',desc:'Modifie le coût simulé d’un échec dans le protocole.',role:'Utilisé dans l’expérience P0'},
+  {range:'0 à 0,08',desc:'Paramètre encodé mais non consommé par le calcul du score actuel.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,50 à 0,95',desc:'Seuil encodé ; aucun effet causal sur cette expérience n’a été établi.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,001 à 0,14',desc:'Récupération encodée ; le simulateur P0 ne lit pas cette valeur.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,05 à 0,90',desc:'Plasticité encodée ; aucune synapse biologique ni politique vivante modifiée.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,001 à 0,10',desc:'Décroissance mémoire encodée ; aucun souvenir d’AURA n’est effacé.',role:'NON RELIÉ AU PROTOCOLE'},
+ ];
  const baseColors={A:'#7cebd3',C:'#f7bb83',G:'#a89cff',T:'#8ac9f8'};
  const number=x=>Number.isFinite(Number(x))?Number(x):0;
- const fmt=x=>Number.isFinite(Number(x))?Number(x).toFixed(2):'—';
+ const fmt=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x).toFixed(2):'—';
  const put=(id,v)=>{const e=labEl(id);if(e)e.textContent=String(v??'—');};
+ let readingBusy=false,privateForbidden=false,readingCounter=0;
+ const actionNames={respond:'Répondre',clarify:'Demander une précision',verify:'Vérifier une preuve',defer:'Différer'};
+ const driveNames={initiative:'Initiative',care:'Attention à autrui',curiosity:'Curiosité',caution:'Prudence'};
+ function renderReadout(info){
+   const thought=info?.declared_thought?.text;
+   const intent=info?.current_intention?.text;
+   const focus=info?.current_focus?.text;
+   put('scienceMindThought',thought||'Aucun énoncé dominant enregistré dans la mémoire persistante.');
+   put('scienceMindIntention',intent||focus||'Aucune intention actuellement persistée.');
+   put('scienceMindThoughtSource','Source : aura_soul_state.dominant_thought · texte enregistré, pas pensée cachée du modèle');
+   put('scienceMindIntentionSource',intent
+     ?'Source : aura_soul_state.current_intention · intention non exécutée par défaut'
+     :'Source : existence.current_focus · objectif déclaré, pas résultat');
+   const a=info?.arbitration||{};
+   put('scienceMindChoice',actionNames[a.selected_action]||
+      'Aucun arbitrage récent vérifié');
+   put('scienceMindChoiceSource',a.last_evaluated_at
+      ?'Dernier calcul : '+a.last_evaluated_at.replace('T',' ').slice(0,19)+
+       ' UTC · InnerDialogueEngine (sans Groq)'
+      :'Aucune évaluation fonctionnelle persistée à ce jour');
+   const holder=labEl('scienceMindDrives');holder.replaceChildren();
+   for(const ch of a.competition||[]){
+     if(!Number.isFinite(ch.value))continue;
+     const item=document.createElement('div');item.className='science-mind-drive';
+     const line=document.createElement('div');
+     const name=document.createElement('span');name.textContent=driveNames[ch.channel]||ch.channel;
+     const number=document.createElement('strong');number.textContent=ch.value.toFixed(2);
+     line.append(name,number);
+     const bar=document.createElement('div');bar.className='science-mind-track';
+     const fill=document.createElement('div');fill.className='science-mind-fill';
+     fill.style.width=Math.round(Math.max(0,Math.min(1,ch.value))*100)+'%';
+     bar.append(fill);item.append(line,bar);holder.append(item);
+   }
+   const entries=Array.isArray(info?.intentions)?info.intentions:[];
+   put('scienceMindCount',entries.length+' intention(s) documentée(s)');
+   const list=labEl('scienceMindRows');list.replaceChildren();
+   if(!entries.length){
+     const empty=document.createElement('p');empty.textContent='Aucune intention persistée accessible.';
+     list.append(empty);
+   } else for(const item of entries){
+     const row=document.createElement('div');row.className='science-mind-entry';
+     const top=document.createElement('div');top.className='science-mind-entry-top';
+     const state=document.createElement('span');state.textContent=item.status||'non renseigné';
+     const from=document.createElement('small');
+     from.textContent=(item.source||'source non précisée')+' · '+
+       (item.updated_at?item.updated_at.replace('T',' ').slice(0,19)+' UTC':'date inconnue');
+     top.append(state,from);
+     const label=document.createElement('p');label.textContent=item.statement||'';
+     row.append(top,label);list.append(row);
+   }
+   put('scienceMindState','REGISTRES LUS · '+(info?.observed_at?.replace('T',' ').slice(11,19)||'—'));
+ }
+ async function readMind(force=false){
+   if(readingBusy||(privateForbidden&&!force))return;
+   readingBusy=true;
+   put('scienceMindState','Lecture privée du noyau…');
+   try{
+     const response=await fetch('/api/brain/introspection',
+       {credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+     if(response.status===401||response.status===403){
+       privateForbidden=true;
+       put('scienceMindThought','Lecture réservée à la session fondatrice authentifiée.');
+       put('scienceMindIntention','Les intentions privées ne sont pas publiées à tous les visiteurs.');
+       put('scienceMindChoice','Accès privé requis');
+       labEl('scienceMindDrives').replaceChildren();
+       labEl('scienceMindRows').replaceChildren();
+       put('scienceMindState','SESSION FONDATRICE REQUISE');
+       put('scienceMindCount','Registre privé');
+       return;
+     }
+     if(!response.ok)throw Error('HTTP '+response.status);
+     const data=await response.json();
+     if(data.version!=='aura-readable-cognition-v1')throw Error('Format de noyau incompatible');
+     privateForbidden=false;
+     renderReadout(data);
+   }catch(error){
+     put('scienceMindState','LECTURE INDISPONIBLE');
+     put('scienceMindThought','Impossible de vérifier le texte mémorisé par le noyau.');
+     put('scienceMindChoice','Non vérifié');
+     put('scienceMindIntention','Aucune donnée fiable reçue.');
+     labEl('scienceMindDrives').replaceChildren();
+     labEl('scienceMindRows').replaceChildren();
+   }finally{readingBusy=false;}
+ }
+ labEl('scienceMindRefresh').addEventListener('click',()=>void readMind(true));
  function canvasDraw(){
    const can=labEl('scienceGenomeCanvas'),ctx=can.getContext('2d');
    const bounds=can.getBoundingClientRect();
@@ -198,6 +293,15 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    const genome=snapshot?.genome;
    put('scienceGeneName',geneNames[selectedGene]);
    put('scienceGeneValue',genome?.traits?.[traitKeys[selectedGene]]??'—');
+   const meanings=geneMeaning[selectedGene];
+   put('scienceGeneLocus','LOCUS G'+String(selectedGene+1).padStart(2,'0')+
+     ' / BASES '+String(selectedGene*6+1).padStart(2,'0')+'–'+
+     String(selectedGene*6+6).padStart(2,'0'));
+   put('scienceGeneSequence',genome?.dna?.slice(selectedGene*6,selectedGene*6+6)||'------');
+   put('scienceGeneInterpretation',geneNames[selectedGene]);
+   put('scienceGeneCausality',meanings.desc);
+   put('scienceGeneRange','Plage : '+meanings.range);
+   put('scienceGeneWiring',meanings.role);
    const list=labEl('scienceGeneList');list.replaceChildren();
    for(let i=0;i<8;i++){
      const button=document.createElement('button');button.type='button';
@@ -212,19 +316,19 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    const d=snapshot?.sandbox?.sample?.policies;
    if(!d){holder.textContent='Aucune distribution A/B vérifiable disponible.';return;}
    const rows=[
-     ['Référence S0',0,'baseline'],
-     ['Après apprentissage S1',Number(d.after?.[context]?.inspect), 'after'],
+     ['Après apprentissage',d.after?.[context]?.inspect, 'after'],
      ['Ablation de A',Number(d.ablated?.[context]?.inspect),'ablation'],
      ['Placebo B',Number(d.placebo?.[context]?.inspect),'placebo'],
    ];
    for(const [label,raw,kind] of rows){
-     const val=Math.max(0,Math.min(1,number(raw)));
+     const valid=raw!==null&&raw!==undefined&&Number.isFinite(Number(raw));
+     const val=valid?Math.max(0,Math.min(1,Number(raw))):null;
      const row=document.createElement('div');row.className='science-bar-row';
      const name=document.createElement('span');name.textContent=label;
      const track=document.createElement('div');track.className='science-bar-track';
      const bar=document.createElement('div');bar.className='science-bar-fill '+kind;
-     bar.style.width=Math.round(val*100)+'%';track.append(bar);
-     const pct=document.createElement('strong');pct.textContent=Math.round(val*100)+' %';
+     bar.style.width=valid?Math.round(val*100)+'%':'0%';track.append(bar);
+     const pct=document.createElement('strong');pct.textContent=valid?Math.round(val*100)+' %':'—';
      row.append(name,track,pct);holder.append(row);
    }
  }
@@ -254,6 +358,11 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    put('scienceDiD',fmt(metrics.difference_in_differences));
    put('scienceAblation',fmt(metrics.causal_ablation_A));
    put('scienceNoise',fmt(metrics.noise_floor));
+   put('scienceEffectReading',s.executed
+     ?'Effet calculé en bac à sable : ablation A = '+fmt(metrics.causal_ablation_A)+
+      ' ; différence A − B = '+fmt(metrics.difference_in_differences)+
+      '. Ce résultat compare des politiques simulées, pas les décisions vivantes d’AURA.'
+     :'Aucune expérience P0 exécutée : les différences causales restent inconnues.');
    put('scienceDraws',s.draws??'—');
    put('scienceProtocolProof','Vérificateur arithmétique du simulateur. La validation indépendante du protocole PDF, avec processus séparé, signature et intervalle bootstrap, n’est PAS encore acquise.');
    put('scienceStudyProof','SIMULATION / NON CERTIFIÉE P0');
@@ -296,7 +405,10 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
  });
  window.addEventListener('resize',()=>{if(snapshot)canvasDraw();},{passive:true});
  const drawer=document.getElementById('neuro-lab-details');
- if(drawer)drawer.addEventListener('toggle',()=>{if(drawer.open)void loadLab();});
- else void loadLab();
+ if(drawer)drawer.addEventListener('toggle',()=>{if(drawer.open){void loadLab();void readMind(true);}});
+ else {void loadLab();void readMind(true);}
+ // Private readout is refreshed only while visible, never in the background.
+ setInterval(()=>{if(drawer?.open&&!document.hidden&&!privateForbidden&&!readingBusy)
+   void readMind();},7000);
 })();
 `;
