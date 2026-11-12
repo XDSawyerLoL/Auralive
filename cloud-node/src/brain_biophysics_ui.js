@@ -39,6 +39,16 @@ export const BRAIN_BIOPHYSICS_HTML=String.raw`
       <div class="bio-metric"><small>Décharges observées (NWB)</small><strong id="bioSpikes">—</strong><span id="bioSpikesContext">Balayage humain mesuré, non simulation</span></div>
     </div>
   </div>
+  <details class="bio-fit-details" id="bioFitDetails">
+    <summary><span>CALIBRATION NEURONALE · TRAIN / VALIDATION</span><strong id="bioFitSummary">Résultat expérimental à charger</strong></summary>
+    <div class="bio-fit-grid">
+      <div><small>Entraînement · NWB 26 · 10 pA</small><b id="bioFitTrainLow">—</b></div>
+      <div><small>Entraînement · NWB 37 · 230 pA</small><b id="bioFitTrainHigh">—</b></div>
+      <div><small>Validation réservée · NWB 44 · 120 pA</small><b id="bioFitHoldout">—</b></div>
+    </div>
+    <p>Modèle HH historique à cinétique non humaine. Les paramètres ont été choisis sur les deux premières stimulations. La troisième n'a pas participé au choix.</p>
+    <a href="https://github.com/XDSawyerLoL/Auralive/actions/runs/43294699060" target="_blank" rel="noopener noreferrer">Consulter la preuve expérimentale (GitHub Actions)</a>
+  </details>
   <div class="bio-anatomy" id="bioAnatomyPane" hidden>
     <div class="bio-anatomy-head"><b>Cartographie des preuves par système biologique</b><small>Les noms de régions ne prouvent aucune émulation humaine.</small></div>
     <div class="bio-system-grid" id="bioSystemGrid"><p>Chargement des états de validation…</p></div>
@@ -92,6 +102,19 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw`
  cursor:pointer;font-size:11px;margin:8px 0}
 .bio-run-btn:disabled{opacity:.5;cursor:not-allowed}#bioRunStatus{display:block;font-size:10px;color:#b7c6d1}
 .bio-pane[hidden],.bio-anatomy[hidden]{display:none!important}
+.bio-fit-details{margin:10px 0;border:1px solid #36485d;background:#111c2a;border-radius:10px;padding:8px 10px;color:#d9e6ed}
+.bio-fit-details summary{display:flex;cursor:pointer;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;list-style:none;font-size:10px}
+.bio-fit-details summary::-webkit-details-marker{display:none}
+.bio-fit-details summary span{font:700 9px ui-monospace,monospace;letter-spacing:.08em;color:#a2b6d4}
+.bio-fit-details summary strong{font:600 11px ui-monospace,monospace;color:#ffc6a6}
+.bio-fit-details summary:focus-visible{outline:2px solid #a0c6fa;outline-offset:3px}
+.bio-fit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 8px}
+.bio-fit-grid>div{border:1px solid #354358;border-radius:7px;padding:9px;min-width:0}
+.bio-fit-grid small{display:block;color:#92aec0;font-size:9px}
+.bio-fit-grid b{display:block;margin-top:7px;color:#ecf5f7;font:700 13px ui-monospace,monospace}
+.bio-fit-details p{color:#9ab3bf;font-size:10px;line-height:1.5;margin:8px 0}
+.bio-fit-details a{font-size:10px;color:#89e0db;text-decoration:underline}
+@media(max-width:550px){.bio-fit-grid{grid-template-columns:1fr}}
 .bio-anatomy{background:#0b1721;border:1px solid #294254;border-radius:10px;padding:12px}
 .bio-anatomy-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;margin-bottom:10px}
 .bio-anatomy-head b{font-size:12px}.bio-anatomy-head small{color:#839fb1;font-size:10px}
@@ -219,6 +242,19 @@ function bioRenderEvidence(){
  const spiking=e.measured_spiking||{};
  setText('bioSpikes',Number.isInteger(spiking.observed_spike_count)
    ?bioNumber(spiking.observed_spike_count,0)+' mesurées':'—');
+ const fit=e.active_multisweep_calibration||null;
+ if(fit){
+   const hold=fit.validation||{};
+   setText('bioFitSummary','Validation : '+bioNumber(hold.observed_spikes,0)+
+      ' observées / '+bioNumber(hold.simulated_spikes,0)+' simulées');
+   const write=(id,ob)=>{
+      setText(id,bioNumber(ob?.observed_spikes,0)+' réelles / '+
+        bioNumber(ob?.simulated_spikes,0)+' simulées');
+   };
+   write('bioFitTrainLow',fit.training?.[0]);
+   write('bioFitTrainHigh',fit.training?.[1]);
+   write('bioFitHoldout',hold);
+ }
  const hhComparison=e.active_reference_comparison;
  setText('bioSpikesContext',Number.isInteger(spiking.sweep_number)
    ?'NWB '+spiking.sweep_number+' · +'+bioNumber(spiking.injected_current_max_pA,0)+' pA'+
