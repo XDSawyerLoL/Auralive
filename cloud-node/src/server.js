@@ -2262,6 +2262,46 @@ app.post('/api/research/biophysics/experiment', async (request, reply) => {
   }
 });
 
+// Optional sensory input: private browser opt-in, numeric features only.
+// This is not autonomous camera access, speech recognition, or object vision.
+app.post('/api/cognition/senses', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private, no-store');
+  const reading=kernel.observeBrowserSense(request.body);
+  if(!reading)return reply.code(422).send({error:'Mesure sensorielle invalide ou périmée'});
+  return {ok:true,reading,stored_only_in_process:true,
+    used_as_independent_evidence:false,automatic_speech:false};
+});
+
+// Explicit user-activated on-device inference. This endpoint never
+// receives images or audio, just an untrusted short-lived model output.
+app.post('/api/cognition/perception', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private, no-store');
+  const reading=kernel.observeSemanticPerception(request.body);
+  if(!reading)return reply.code(422).send({error:'Perception sémantique invalide ou périmée'});
+  return {ok:true,reading,stored_only_in_process:true,
+    machine_verified:false,automatic_speech:false};
+});
+
+app.get('/api/cognition/perception', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  return {ok:true,perceptions:kernel.semanticPerceptionSnapshot(),
+    evidence_scope:'unverified-client-model-output'};
+});
+
+app.get('/api/cognition/senses', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  return {ok:true,senses:kernel.sensorySnapshot(),
+    evidence_scope:'client-reported-sensor-features'};
+});
+
 app.get('/api/cognition/initiative', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   reply.header('Cache-Control','private, no-store');
@@ -2281,6 +2321,21 @@ app.post('/api/cognition/initiative/ack', async (request, reply) => {
     return reply.code(422).send({error:'Reçu d’initiative invalide'});
   const acknowledged=await kernel.acknowledgeSocialInitiative(id);
   return {ok:acknowledged,acknowledged};
+});
+
+// Correlated private rating of a previously displayed autonomous initiative.
+// Never infer usefulness from silence, response tone or a model's opinion.
+app.post('/api/cognition/initiative/feedback', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private, no-store');
+  const id=String(request.body?.id||'');
+  const rating=String(request.body?.rating||'');
+  if(!/^[a-f\\d]{24}$/.test(id)||!['helpful','unhelpful'].includes(rating))
+    return reply.code(422).send({error:'Retour invalide'});
+  const accepted=await kernel.rateSocialInitiative(id,rating);
+  return {ok:accepted,accepted};
 });
 
 app.post('/api/chat', async (request, reply) => {
@@ -2334,9 +2389,14 @@ app.post('/api/chat', async (request, reply) => {
     language_unavailable: unavailable,
     retryable: unavailable,
     service_status: unavailable ? {
-      code: 'french-inference-unavailable',
-      message: 'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
-      recovery: 'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
+      code: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+        ?'local-corpus-unsupported-intent':'french-inference-unavailable',
+      message: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+        ?'Le moteur local ne sait pas encore formuler cet acte de langage. Aucun fournisseur distant sollicité.'
+        :'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
+      recovery: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+        ?'Enrichir les schémas sémantiques et le réalisateur grammatical local.'
+        :'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
     } : null,
     curiosity_question: curiosityItem,
     voice_ticket: answer ? createVoiceTicket(answer) : '',

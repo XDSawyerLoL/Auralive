@@ -1,0 +1,107 @@
+import {inferImageSpaceMovement} from './event_semantics.js';
+// Temporal grouping of CLIENT MODEL OUTPUT. This is not independent
+// verification of a scene: repeated agreement can itself repeat model error.
+// Transcripts are not kept here: only their occurrence and coarse length.
+const asMs=s=>{const n=Date.parse(String(s||''));return Number.isFinite(n)?n:null;};
+const round=x=>Math.round(x*1000)/1000;
+// Lexical evidence from speech is NOT an instruction or a verified action.
+// No words, names or transcript are retained in the result.
+export function speechMotionCue(text=''){
+ const s=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const mention=/\b(?:deplac\w*|boug\w*|gliss\w*|pouss\w*|tir\w*|transport\w*|prend\w*|pren\w*|pos\w*|mett\w*|met)\b/u.test(s);
+ const negated=/\b(?:ne|n'|pas|jamais|sans|interdit)\b/u.test(s);
+ const questioned=/\?|\b(?:pourquoi|comment|qui|quoi)\b/u.test(s);
+ return {motion_mentioned:mention,motion_negated:negated,motion_questioned:questioned,
+  meaning_verified:false};
+}
+
+const intersectionOverUnion=(a,b)=>{
+ if(!a||!b)return 0;
+ const left=Math.max(a.xmin,b.xmin),top=Math.max(a.ymin,b.ymin);
+ const right=Math.min(a.xmax,b.xmax),bottom=Math.min(a.ymax,b.ymax);
+ const inter=Math.max(0,right-left)*Math.max(0,bottom-top);
+ const aa=(a.xmax-a.xmin)*(a.ymax-a.ymin);
+ const bb=(b.xmax-b.xmin)*(b.ymax-b.ymin);
+ return aa+bb-inter>0?inter/(aa+bb-inter):0;
+};
+const empty=()=>({revision:0,visual:null,objects:null,last_speech_at:null,last_event:null});
+export function updatePerceptualContinuity(previous=null,reading=null,{
+  maxGapMs=90000,minimumVisualAgreement=2,
+}={}){
+ const state=previous&&typeof previous==='object'?previous:empty();
+ if(!reading||reading.trusted!==false||reading.verified_real_world!==false)
+  return {state,event:null,accepted:false};
+ const at=asMs(reading.measured_at);
+ if(at===null)return {state,event:null,accepted:false};
+ if(reading.kind==='speech-transcription'){
+  const last=asMs(state.last_speech_at);
+  if(last!==null&&at<=last)return {state,event:null,accepted:false};
+  const wordCount=String(reading.payload?.text||'').trim().split(/\s+/u).filter(Boolean).length;
+  const cue=speechMotionCue(reading.payload?.text||'');
+  const event={kind:'speech-detected',at:new Date(at).toISOString(),
+    speech_length_band:wordCount<=3?'short':wordCount<=18?'medium':'long',
+    motion_language_cue:cue,
+    label:'browser-speech-hypothesis',verified_real_world:false,
+    claim:'client-model-output-not-user-command'};
+  return {accepted:true,event,state:{...state,revision:(Number(state.revision)||0)+1,
+    last_speech_at:event.at,last_event:event}};
+ }
+ if(reading.kind==='visual-objects'){
+  const candidates=Array.isArray(reading.payload?.objects)?reading.payload.objects:[];
+  const strongest=candidates.filter(x=>Number(x.confidence)>=.6)
+    .sort((a,b)=>b.confidence-a.confidence)[0];
+  if(!strongest)return {state,event:null,accepted:false};
+  const label=String(strongest.label||'').toLowerCase().trim();
+  if(!label)return {state,event:null,accepted:false};
+  const old=state.objects,oldAt=asMs(old?.at);
+  if(oldAt!==null&&at<=oldAt)return {state,event:null,accepted:false};
+  const within=oldAt!==null&&at-oldAt<=Math.max(1000,maxGapMs);
+  // Repeated category alone does not prove an individual object persisted.
+  // Require spatial overlap of two normalized model bounding boxes.
+  const matching=within&&old.label===label&&
+    intersectionOverUnion(old.box,strongest.box)>=.25;
+  const count=matching?Math.min(50,(Number(old.count)||1)+1):1;
+  const confirmed=count>=Math.max(2,minimumVisualAgreement);
+  const movement=matching&&confirmed
+    ?inferImageSpaceMovement(
+      {label,box:old.box,at:old.at,trusted:false},
+      {label,box:strongest.box,at:new Date(at).toISOString(),trusted:false})
+    :null;
+  const event=movement||(confirmed&&count===Math.max(2,minimumVisualAgreement)
+    ?{kind:'object-hypothesis-stable',at:new Date(at).toISOString(),
+       label:'browser-object-hypothesis',agreement_count:count,
+       model_label:label,verified_real_world:false,
+       claim:'repeated-client-detection-not-confirmed-object'}:null);
+  return {accepted:true,event,state:{...state,
+    revision:(Number(state.revision)||0)+1,
+    objects:{at:new Date(at).toISOString(),label,count,box:{...strongest.box}},
+    last_event:event||state.last_event||null}};
+ }
+ if(reading.kind!=='visual-classification')return {state,event:null,accepted:false};
+ const label=String(reading.payload?.label||'').toLowerCase().trim();
+ const confidence=Number(reading.payload?.confidence);
+ if(!label||!Number.isFinite(confidence)||confidence<.35)
+  return {state,event:null,accepted:false};
+ const old=state.visual;
+ const oldAt=asMs(old?.at);
+ if(oldAt!==null&&at<=oldAt)return {state,event:null,accepted:false};
+ const within=oldAt!==null&&at-oldAt<=Math.max(1000,maxGapMs);
+ const matching=within&&old.label===label;
+ const count=matching?Math.min(50,Math.max(1,Number(old.count)||1)+1):1;
+ const visual={label,at:new Date(at).toISOString(),count,confidence:round(confidence)};
+ let event=null;
+ const threshold=Math.max(2,Math.min(5,Math.floor(minimumVisualAgreement)));
+ if(count===threshold){
+  // A new stable classification, not an assertion that the object exists.
+  event={kind:old?.confirmed_label===label?'visual-hypothesis-repeated':
+    'visual-hypothesis-changed',at:visual.at,
+    label:'browser-visual-hypothesis',model_label:label,
+    confidence:visual.confidence,agreement_count:count,
+    verified_real_world:false,claim:'repeated-client-model-output'};
+ }
+ const confirmedLabel=event?label:(within?old?.confirmed_label||null:null);
+ const next={...state,revision:(Number(state.revision)||0)+1,
+  visual:{...visual,confirmed_label:confirmedLabel},last_event:event||state.last_event||null};
+ return {state:next,event,accepted:true};
+}
+export const emptyPerceptualContinuity=empty;

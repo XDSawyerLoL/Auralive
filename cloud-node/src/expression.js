@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.js';
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
+import {nativeFrenchCorpus} from './native_french_corpus.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -19,6 +20,7 @@ export class ExpressionLayer {
   }
 
   async semanticSupport(plan, context = '', options = {}) {
+    if (process.env.AURA_NATIVE_FRENCH_MODE==='local-only') return '';
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
@@ -73,6 +75,34 @@ export class ExpressionLayer {
       this.lastMode='natural-language-unavailable';
       return '';
     }
+    const nativeMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
+    if(nativeMode==='local-only'||nativeMode==='prefer-local'){
+      const local=nativeFrenchCorpus.realizePlan(plan);
+      if(local?.text){
+        const checked=validateNucleusSpeech(plan,local.text);
+        this.language.lastNucleusContract={
+          ...checked,origin:'AURA.nucleus.CognitionEngine.planReply',
+        };
+        if(checked.accepted){
+          this.lastError='';
+          this.lastMode='native-corpus-language';
+          this.language.lastBackend='aura-native-corpus';
+          this.language.lastModel='ud-fr-gsd-morphological-symbolic';
+          this.language.lastLatencyMs=0;
+          this.language.lastError='';
+          return local.text;
+        }
+        this.lastError='native-corpus-contract-rejected:'+checked.code;
+      }else{
+        this.lastError=nativeFrenchCorpus.status().ready
+          ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
+      }
+      if(nativeMode==='local-only'){
+        this.lastMode='native-corpus-uncovered';
+        // No covert Groq/OpenRouter/remote fallback in local-only mode.
+        return '';
+      }
+    }
     try {
       const answer = normalize(await this.language.generate(plan, {
         maxTokens: Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
@@ -103,15 +133,24 @@ export class ExpressionLayer {
 
   async diagnostic() {
     const language = await this.language.status();
+    const corpusOnly=process.env.AURA_NATIVE_FRENCH_MODE==='local-only';
+    const corpusReady=nativeFrenchCorpus.status().ready;
     return {
       version: ExpressionLayer.VERSION,
       language,
-      natural_french_ready: Boolean(language.verified_ready),
-      mode: language.verified_ready
+      corpus_local:nativeFrenchCorpus.status(),
+      corpus_mode:String(process.env.AURA_NATIVE_FRENCH_MODE||'off'),
+      corpus_is_open_domain:false,
+      natural_french_ready: corpusOnly?false:Boolean(language.verified_ready),
+      mode: corpusOnly
+        ? (corpusReady?'native-corpus-limited':'native-corpus-not-installed')
+        : language.verified_ready
         ? 'learned-language-model'
         : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
-      scripted_normal_path: false,
+      scripted_normal_path: corpusOnly,
       strict_natural_language: Boolean(config.frenchLanguageRequired),
+      remote_language_calls_permitted: !corpusOnly,
+      native_corpus_fully_fluent:false,
       fallback_count: this.fallbackCount,
       last_mode: this.lastMode,
       last_error: this.lastError || language.last_error || '',

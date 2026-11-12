@@ -10,6 +10,12 @@ import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { InnerDialogueEngine } from './inner_dialogue.js';
+import { arbitrateConversationInitiative } from './conversation_initiative.js';
+import {validateSensoryReading} from './sensory_input.js';
+import {validateSemanticPerception} from './semantic_perception.js';
+import {updatePerceptualContinuity} from './perceptual_continuity.js';
+import {fusePerceptualEvents,decidePerceptualIntervention} from './multimodal_fusion.js';
+import {defaultInterventionLearning,observeInterventionFeedback,evaluateInterventionLearning} from './intervention_learning.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -204,6 +210,7 @@ export class CognitiveKernel {
       inner_dialogue: null,
       endophasia: null,
       social_initiative:{revision:0,pending:null,last_evidence_key:''},
+      intervention_learning:defaultInterventionLearning(),
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
@@ -323,6 +330,8 @@ export class CognitiveKernel {
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
+    if(!this.soulCache.intervention_learning||typeof this.soulCache.intervention_learning!=='object')
+      this.soulCache.intervention_learning=defaultInterventionLearning();
     const initiative=this.soulCache.social_initiative;
     if(!initiative||typeof initiative!=='object')
       this.soulCache.social_initiative={revision:0,pending:null,last_evidence_key:''};
@@ -402,6 +411,86 @@ export class CognitiveKernel {
     this.started = false;
   }
 
+  // Short-lived browser sensory features, clearly NOT independent evidence.
+  // They never authorize conversations, claims about objects or people,
+  // nor any modification to learned autobiographical memories.
+  observeBrowserSense(reading){
+    const valid=validateSensoryReading(reading);
+    if(!valid)return null;
+    if(!this.sensoryReadings)this.sensoryReadings={};
+    const previous=this.sensoryReadings[valid.kind];
+    const previousAt=Date.parse(String(previous?.measured_at||''));
+    if(Number.isFinite(previousAt)&&Date.parse(valid.measured_at)<=previousAt)
+      return null;
+    this.sensoryReadings[valid.kind]=valid;
+    return valid;
+  }
+
+  // Browser inference results are short-lived, untrusted perceptual cues.
+  // The cognitive workspace may inspect these, but no autonomous claim,
+  // action or memory promotion follows solely from this signal.
+  observeSemanticPerception(value){
+    const valid=validateSemanticPerception(value);
+    if(!valid)return null;
+    if(!this.semanticPerceptions)this.semanticPerceptions={};
+    const old=this.semanticPerceptions[valid.kind];
+    if(old&&Date.parse(old.measured_at)>=Date.parse(valid.measured_at))return null;
+    // Retain only nonverbatim speech metadata. The transcript is used once
+    // to classify an event's length, then discarded after this call.
+    const memorySafe=valid.kind==='speech-transcription'
+      ?{...valid,payload:{language:valid.payload.language,final:true,
+          text_retained:false}}
+      :valid;
+    this.semanticPerceptions[valid.kind]=memorySafe;
+    const prior=this.perceptualContinuity||null;
+    const processed=updatePerceptualContinuity(prior,valid);
+    if(processed.accepted){
+      this.perceptualContinuity=processed.state;
+      if(processed.event){
+        if(!this.recentPerceptualEvents)this.recentPerceptualEvents={};
+        this.recentPerceptualEvents[valid.kind]=processed.event;
+        const merged=fusePerceptualEvents(this.multimodalState||{},processed.event);
+        this.multimodalState=merged.state;
+        if(merged.event){
+          this.recentPerceptualEvents.multimodal=merged.event;
+          // A multimodal observation is not an unsolicited conversational
+          // message, nor a statement that an actual object is present.
+          this.multimodalDecision=decidePerceptualIntervention(merged.event,{
+            resource_pressure:Number(this.soulCache?.organism?.homeostasis?.resource_pressure)||0,
+            conversation_busy:this.chatRunning===true,
+          });
+        }
+      }
+    }
+    return memorySafe;
+  }
+
+  perceptualEventSnapshot(){
+    const cutoff=Date.now()-120000;
+    return Object.values(this.recentPerceptualEvents||{})
+      .filter(event=>Date.parse(String(event.at||''))>=cutoff)
+      .map(event=>({
+        kind:event.kind==='speech-detected'?'speech-transcription':
+          event.kind==='audio-visual-temporal-coincidence'?'multimodal-temporal':
+          event.kind==='object-image-displacement-hypothesis'?'visual-motion':
+          event.kind==='object-hypothesis-stable'?'visual-objects':'visual-classification',
+        measured_at:event.at,trusted:false,verified_real_world:false,
+        evidence_scope:'repeated-or-once-client-model-output-not-ground-truth',
+      }));
+  }
+
+  semanticPerceptionSnapshot(){
+    const cutoff=Date.now()-120000;
+    return Object.fromEntries(Object.entries(this.semanticPerceptions||{})
+      .filter(([,v])=>Date.parse(v.measured_at)>=cutoff));
+  }
+
+  sensorySnapshot(){
+    const limit=Date.now()-15000;
+    return Object.fromEntries(Object.entries(this.sensoryReadings||{})
+      .filter(([,v])=>Date.parse(String(v?.measured_at||''))>=limit));
+  }
+
   // Read-only, safe projection. No browser, service or model can author
   // an initiative through this endpoint.
   pendingSocialInitiative(){
@@ -414,13 +503,29 @@ export class CognitiveKernel {
     const pending=stored?.pending;
     if(!pending||String(pending.id)!==String(id||''))return false;
     this.soulCache.social_initiative={
-      ...stored,pending:null,last_delivered_at:now(),
+      ...stored,pending:null,last_delivered_at:now(),last_delivered_id:id,
     };
     await this.saveSoul();
     await this.trace('social-initiative','opt-in-browser-display','',{
       at:now(),evidence_scope:'local-counterfactual-only',
       source:'explicit-founder-display-ack',llm_used:false,
       display_confirmed:true,conversation_request_received:false,
+    });
+    return true;
+  }
+
+  async rateSocialInitiative(id,rating){
+    const stored=this.soulCache?.social_initiative||{};
+    if(id!==stored.last_delivered_id)return false;
+    const result=observeInterventionFeedback(this.soulCache.intervention_learning,{
+      candidateId:id,expectedId:stored.last_delivered_id,rating,at:now(),
+    });
+    if(!result.accepted)return false;
+    this.soulCache.intervention_learning=result.state;
+    await this.saveSoul();
+    await this.trace('social-initiative','explicit-utility-feedback','',{
+      at:now(),rating,source:'private-user-correlated-feedback',
+      rating_is_external_task_success:false,raw_dialogue_logged:false,
     });
     return true;
   }
@@ -856,6 +961,7 @@ export class CognitiveKernel {
         plan:{act:'respond'},previous:priorWorkspace,
         prediction:currentPredictionSignal(this.soulCache.prediction_bus),
         consolidation:this.soulCache.consolidation,
+        sensorySignals:this.perceptualEventSnapshot(),
       });
       const priorAttention=predictAttention(this.soulCache.attention_schema,idleCandidates);
       const idleWorkspace=competeInWorkspace(
@@ -954,16 +1060,34 @@ export class CognitiveKernel {
             previous:this.soulCache.social_initiative,
             viability:this.soulCache.viability,now:timestamp,
           });
-          if(candidate){
-            const prior=this.soulCache.social_initiative||{};
+          const prior=this.soulCache.social_initiative||{};
+          const socialDecision=arbitrateConversationInitiative({
+            receipt:independent.receipt,candidate,previous:prior,now:timestamp,
+          });
+          // Durable evidence of deciding NOT to interrupt is as important as
+          // evidence of asking. The decision is never an LLM-written message.
+          if(socialDecision.reason!=='no-verified-cognitive-event'){
+            this.soulCache.social_decision=socialDecision;
+          }
+          const learnedSpeech=evaluateInterventionLearning(
+            this.soulCache.intervention_learning,{
+              evidenceScope:'machine-verified-local-change',
+              resourcePressure:Number(this.soulCache.organism?.homeostasis?.resource_pressure)||0,
+              conversationBusy:this.chatRunning===true,
+              consent:true,
+            });
+          if(socialDecision.act==='ask'&&learnedSpeech.question_allowed===true){
             this.soulCache.social_initiative={
+              ...prior,
               revision:Math.max(0,Number(prior.revision)||0)+1,
               pending:candidate,
               last_evidence_key:candidate.evidence_key,
+              last_decision_at:timestamp,
             };
-            await this.trace('social-initiative','native-outbound-candidate','',{
+            await this.trace('social-initiative','verified-review-question-candidate','',{
               at:timestamp,source:candidate.source,kind:candidate.kind,
               evidence_scope:candidate.evidence_scope,
+              act:socialDecision.act,decision_reason:socialDecision.reason,
               decision_to_publish:false,opt_in_required:true,
               llm_used:false,subjective_experience_claim:false,
             });
@@ -2476,7 +2600,8 @@ export class CognitiveKernel {
       brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
       response_kind: languageUnavailable ? 'model-unavailable'
-        :this.expression.lastMode==='native-social-kernel'
+        :(this.expression.lastMode==='native-social-kernel'
+          ||this.expression.lastMode==='native-corpus-language')
           ?'native-kernel':'model-generated',
       retryable: languageUnavailable,
       act: plan.act,
