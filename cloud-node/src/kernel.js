@@ -1736,6 +1736,14 @@ export class CognitiveKernel {
         :this.livedExperience.observeFounderApproval(before);
       this.soulCache.lived_experience=after;
       if(after.revision>before.revision){
+        // The prior-response receipt is necessary: generic compliments,
+        // greetings and unrelated questions do not manufacture a bond.
+        this.soulCache.organism=this.organism.observeSocialFeedback(
+          this.organism.migrate(this.soulCache||{}),{
+            kind:isCorrection?'founder-correction':'founder-approval',
+            authenticated:privateView,correlated:true,
+          });
+        this.syncLegacyFromOrganism();
         await this.trace('lived-learning',
           isCorrection?'correction-associated':'approval-associated','',{
           flow_id:brainFlowId,at:now(),revision:after.revision,
