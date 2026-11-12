@@ -94,7 +94,7 @@ export function simulateHumanPassiveCell(model,{
 }
 export function validateHumanPassiveCell(record,heldout){
   const model=calibrateHumanPassiveCell(record);
-  if(!heldout||heldout.specimen_id!==model.specimen_id)
+  if(!heldout||String(heldout.specimen_id)!==model.specimen_id)
     throw new TypeError('held-out trace must match the measured human specimen');
   if(heldout.used_for_fit!==false||
     heldout.source?.origin!=='Allen Cell Types Database'||
