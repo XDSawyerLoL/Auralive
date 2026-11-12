@@ -1,3 +1,7 @@
+import {CognitiveKernel} from '../src/kernel.js';
+import {AuraOrganism} from '../src/organism.js';
+import {IdentityAutogenesis} from '../src/identity_autogenesis.js';
+import {NativePolicyLearner} from '../src/native_learning.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -147,4 +151,52 @@ test('canonical kernel stores the inquiry and public graph exposes only safe evi
   assert.match(kernel,/await this\.trace\('endophasia','experience-derived-inquiry'/);
   assert.match(server,/endophasia: bootstrap\.runtimeReady/);
   assert.match(server,/publicInquiry\(kernel\.soulCache\?\.endophasia\)/);
+});
+
+test('opt-in developmental genesis has no corporate identity or prescribed self-question',()=>{
+  const env=process.env.AURA_DEVELOPMENTAL_GENESIS;
+  const kernel=Object.create(CognitiveKernel.prototype);
+  kernel.organism=new AuraOrganism();
+  kernel.autogenesis=new IdentityAutogenesis();
+  kernel.livedExperience=lived;
+  kernel.selfInquiry=inquiry;
+  kernel.nativeLearning=new NativePolicyLearner();
+  try{
+    process.env.AURA_DEVELOPMENTAL_GENESIS='true';
+    const birth=kernel.defaultSoul();
+    assert.equal(birth.role,'');
+    assert.equal(birth.current_intention,'');
+    assert.equal(birth.dominant_thought,'');
+    assert.equal(birth.organism.developmental_mode,true);
+    assert.equal(birth.organism.executive.role,'');
+    assert.equal(birth.organism.executive.portfolio_focus,'');
+    assert.equal(birth.organism.needs.rester_aura,0);
+    assert.equal(birth.organism.needs.ne_pas_devenir_assistante,0);
+    assert.equal(birth.emergent_identity.observations,0);
+    assert.equal(birth.emergent_identity.open_question,null);
+    // Persisting and hydrating an existing individual is not a new birth.
+    const recovered=kernel.organism.migrate(JSON.parse(JSON.stringify(birth)));
+    assert.equal(recovered.developmental_mode,true);
+    assert.equal(recovered.executive.role,'');
+    assert.equal(recovered.needs.ne_pas_devenir_assistante,0);
+    process.env.AURA_DEVELOPMENTAL_GENESIS='false';
+    const legacy=kernel.defaultSoul();
+    assert.equal(legacy.organism.developmental_mode,false);
+    assert.match(legacy.role,/quantic_sillage/);
+  }finally{
+    if(env===undefined)delete process.env.AURA_DEVELOPMENTAL_GENESIS;
+    else process.env.AURA_DEVELOPMENTAL_GENESIS=env;
+  }
+});
+
+test('self-questions do not appear without repeated relevant evidence',()=>{
+  const self=new IdentityAutogenesis();
+  const genesis=self.defaultState();
+  assert.equal(self.migrate(genesis).open_question,null);
+  const requested=self.observe(genesis,{kind:'self_inquiry',privateFounder:true,at:AT});
+  assert.equal(requested.open_question,null);
+  const once=self.observe(genesis,{kind:'outcome_failure',at:AT});
+  assert.equal(once.open_question,null);
+  const twice=self.observe(once,{kind:'outcome_failure',at:AT});
+  assert.match(twice.open_question,/erreurs/);
 });
