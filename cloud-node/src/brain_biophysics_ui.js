@@ -117,6 +117,9 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw`
 .bio-fit-details summary span{font:700 9px ui-monospace,monospace;letter-spacing:.08em;color:#a2b6d4}
 .bio-fit-details summary strong{font:600 11px ui-monospace,monospace;color:#ffc6a6}
 .bio-fit-details summary:focus-visible{outline:2px solid #a0c6fa;outline-offset:3px}
+#bioCohortGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+#bioCohortGrid b{font-size:11px;line-height:1.5;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:560px){#bioCohortGrid{grid-template-columns:1fr}}
 .bio-fit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 8px}
 .bio-fit-grid>div{border:1px solid #354358;border-radius:7px;padding:9px;min-width:0}
 .bio-fit-grid small{display:block;color:#92aec0;font-size:9px}
