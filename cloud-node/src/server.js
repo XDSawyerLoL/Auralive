@@ -1408,7 +1408,7 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
     independent_activity:bootstrap.runtimeReady?kernel.soulCache?.independent_activity:null,
     background_cycle:bootstrap.runtimeReady?kernel.soulCache?.existence:null,
     independent_probe_seconds:config.independentProbeSeconds,
-    curiosity_cycle:bootstrap.runtimeReady?current.curiosity:null,
+    curiosity_cycle:bootstrap.runtimeReady?projection.curiosity:null,
     global_workspace:bootstrap.runtimeReady?kernel.soulCache?.global_workspace:null,
     prediction_bus:bootstrap.runtimeReady?kernel.soulCache?.prediction_bus:null,
     attention_schema:bootstrap.runtimeReady?kernel.soulCache?.attention_schema:null,
