@@ -142,6 +142,117 @@ export const BRAIN_SCIENCE_LAB_CSS=String.raw`
 .science-proof-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:6px;align-items:center;font-size:9px;margin-top:11px}.science-proof-grid span{color:#7a95a5}.science-proof-grid strong{color:#c8f3e5;font-size:10px;word-break:break-all}.science-proof-grid code{font-size:9px;color:#93bad4;overflow-wrap:anywhere}
 @media(max-width:1170px){.science-lab-main{grid-template-columns:1fr}.science-bottom-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.science-lab-head{padding:17px;align-items:start;flex-direction:column}.science-lab-main{padding:9px}.science-bottom-grid{padding:0 9px 9px;grid-template-columns:1fr}.science-metrics-row{grid-template-columns:repeat(2,1fr)}.science-bar-row{grid-template-columns:90px minmax(0,1fr) 34px;gap:6px}.science-genome-bottom{grid-template-columns:1fr 1fr}.science-block-header{flex-direction:column}.science-neutral{text-align:left;max-width:none}}
+
+/* Atelier 2.0 — controlled editorial hierarchy, transparent scientific sourcing. */
+.science-lab{margin:9px 0 14px;border-radius:13px;background:#070e18;
+ box-shadow:none;border-color:#26374a}
+.science-lab::before{opacity:.25}
+.science-lab-head{padding:22px 23px 18px;background:linear-gradient(96deg,rgba(40,75,105,.10),transparent 62%)}
+.science-lab h2{font-size:clamp(22px,1.8vw,28px);font-weight:620;letter-spacing:-.035em}
+.science-lab-head p{font-size:11px;line-height:1.7;max-width:680px}
+.science-status{font-size:9px;border-radius:8px;min-width:135px;background:#102332;padding:9px}
+.science-mind{position:relative;margin:15px 16px 0;padding:20px 21px 15px;
+ border:1px solid rgba(128,168,194,.24);border-radius:12px;
+ background:linear-gradient(110deg,#0d1b2a,#0a1623 51%,#0c1726);
+ box-shadow:inset 0 1px 0 #ffffff05}
+.science-mind::before{content:'';position:absolute;left:20px;top:0;right:30%;height:1px;
+ background:linear-gradient(90deg,#7ae4dc80,transparent)}
+.science-mind-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:18px}
+.science-mind-heading h3{font-weight:590;font-size:clamp(18px,1.7vw,23px);
+ letter-spacing:-.03em;color:#eff8fb;margin:7px 0 5px}
+.science-mind-heading h3 em{font-weight:550;font-style:normal;color:#a4e6dd}
+.science-mind-heading p{margin:0;font-size:11px;line-height:1.65;
+ color:#8da5b7;max-width:710px}
+.science-mind-actions{display:flex;gap:9px;align-items:center;flex-shrink:0}
+.science-mind-actions span{font:700 9px ui-monospace,monospace;letter-spacing:.04em;
+ color:#9bbac9;text-align:right}
+.science-mind-actions button{font:600 10px inherit;border:1px solid #4d687b;
+ color:#daedf3;background:#142a3c;border-radius:7px;padding:8px 12px;cursor:pointer}
+.science-mind-actions button:hover{border-color:#80d9d7;background:#184051}
+.science-mind-grid{display:grid;grid-template-columns:1.4fr 1fr .95fr;
+ gap:0;border:1px solid #294255;border-radius:9px;overflow:hidden;background:#0b1826}
+.science-mind-grid>article{min-width:0;padding:17px 17px 14px}
+.science-mind-grid>article+article{border-left:1px solid #2b4254}
+.science-source-index{display:flex;gap:10px;align-items:center;color:#6fd3d2;
+ font:700 10px ui-monospace,monospace;letter-spacing:.08em}
+.science-source-index span{color:#86a5b7;font-size:9px;letter-spacing:.10em}
+.science-mind-focus blockquote{font-size:17px;line-height:1.46;font-weight:540;letter-spacing:-.015em;
+ border:0;padding:0;margin:16px 0 13px;color:#f0fbfa;overflow-wrap:anywhere}
+.science-mind-intention p{font-size:14px;color:#d0e6eb;line-height:1.5;margin:16px 0 14px;
+ overflow-wrap:anywhere}
+.science-mind-grid small{display:block;margin-top:auto;font-size:9px;line-height:1.5;
+ color:#6f8fa3;overflow-wrap:anywhere}
+.science-mind-choice>strong{display:block;color:#e2f5f4;font-size:14px;line-height:1.4;
+ font-weight:650;margin:15px 0 12px}
+.science-mind-drives{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:5px 0 12px}
+.science-mind-drive>div:first-child{display:flex;justify-content:space-between;gap:5px;
+ color:#93afc2;font:9px ui-monospace,monospace}
+.science-mind-drive strong{color:#b8e9e2;font-weight:600}
+.science-mind-track{height:3px;border-radius:3px;background:#2a394a;margin-top:4px;overflow:hidden}
+.science-mind-fill{height:100%;background:linear-gradient(90deg,#477f9c,#83dcd0)}
+.science-mind-ledger{border-top:1px solid #294050;margin-top:14px}
+.science-mind-ledger summary{display:flex;align-items:center;justify-content:space-between;gap:15px;
+ padding:12px 2px 0;cursor:pointer;color:#c6dee9;font-size:11px;font-weight:600}
+.science-mind-ledger summary small{color:#8cb1c1;font:10px ui-monospace,monospace}
+.science-mind-ledger summary:focus-visible{outline:2px solid #80dcd2}
+.science-mind-rows{display:grid;gap:7px;padding:12px 0 3px}
+.science-mind-rows>p{font-size:11px;color:#8299a9}
+.science-mind-entry{padding:11px 13px;background:#0c1c2b;border-left:2px solid #6ebcc3;
+ border-radius:4px;min-width:0}
+.science-mind-entry-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.science-mind-entry-top span{color:#88e0d6;font:700 9px ui-monospace,monospace;text-transform:uppercase}
+.science-mind-entry-top small{font:9px ui-monospace,monospace;color:#7698ad;overflow-wrap:anywhere}
+.science-mind-entry p{margin:5px 0 0;font-size:12px;color:#d2e3ee;line-height:1.6;overflow-wrap:anywhere}
+.science-lab-main{gap:12px;padding:13px 16px}
+.science-genome-block,.science-causal-block{border-color:#273d50;border-radius:10px;
+ box-shadow:none;background:#0b1724;min-height:0}
+.science-block-header{padding:14px 16px;align-items:center}
+.science-genome-stage{height:218px;background:radial-gradient(ellipse at 50% 54%,#1338485e,transparent 67%)}
+.science-genome-hint{font-size:9px;bottom:4px}
+.science-gene-insight{margin:0 13px 12px;padding:14px 15px;
+ background:#0e2330;border:1px solid #315467;border-radius:9px}
+.science-gene-insight-head{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.science-gene-insight-head code{font:700 14px ui-monospace,monospace;
+ color:#a9f1dd;letter-spacing:.21em}
+.science-gene-insight>strong{display:block;color:#e4f2fa;font-size:15px;
+ font-weight:620;margin:10px 0 4px}
+.science-gene-insight p{font-size:11px;color:#9ab5c5;line-height:1.55;margin:0 0 9px}
+.science-gene-range{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;
+ border-top:1px solid #335365;padding-top:8px;color:#8da7bb;font:10px ui-monospace,monospace}
+#scienceGeneWiring{color:#f0c396}
+.science-genome-bottom{margin:0 13px 10px}
+.science-genome-bottom span{background:#0d1d2a;border-radius:6px;border-color:#283e4e}
+.science-gene-list{padding-bottom:15px;gap:6px}
+.science-gene-list button{background:#0d2130;font-size:10px;border-radius:6px;min-height:32px}
+.science-gene-list button[aria-pressed=true]{background:#1c4851;color:#e4fcf6}
+.science-context-tabs{margin-top:15px}
+.science-plot{min-height:160px;border-radius:9px;margin-bottom:8px}
+.science-effects-chart{gap:19px}
+.science-effect-reading{margin:0 16px 13px;font-size:10px;line-height:1.6;color:#a1b7c5}
+.science-metrics-row strong{font-size:15px}
+.science-bottom-grid{padding-bottom:15px;gap:10px}
+.science-status-card{border-radius:9px;background:#0b1725}
+@media(max-width:1250px){
+ .science-mind-grid{grid-template-columns:1.2fr 1fr}
+ .science-mind-choice{grid-column:1/-1;border-top:1px solid #2b4254}
+ .science-mind-grid>article:nth-child(3){border-left:0}
+}
+@media(max-width:880px){
+ .science-mind-heading{flex-direction:column}
+ .science-mind-actions{width:100%;justify-content:space-between}
+ .science-mind{margin:10px 9px 0;padding:15px 13px}
+ .science-lab-main{padding:10px 9px}
+}
+@media(max-width:630px){
+ .science-mind-grid{grid-template-columns:1fr}
+ .science-mind-grid>article{padding:13px 14px}
+ .science-mind-grid>article+article{border-left:0;border-top:1px solid #294255}
+ .science-mind-choice{grid-column:auto}
+ .science-mind-focus blockquote{font-size:16px}
+ .science-mind-heading h3{font-size:19px}
+ .science-mind-actions{flex-wrap:wrap}
+ .science-gene-range{flex-direction:column}
+}
 @media(prefers-reduced-motion:reduce){.science-bar-fill{transition:none}}
 `;
 
