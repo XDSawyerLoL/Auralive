@@ -30,7 +30,9 @@ jobs:
           test -f "$RUNNER_TEMP/aura-preview/DEPLOYMENT.json"
           test -f "$RUNNER_TEMP/aura-preview/test/endophasia_developmental_causality.test.js"
           test -f "$RUNNER_TEMP/aura-preview/docs/AURA_DEVELOPMENTAL_CAUSAL_AUDIT_20261112.md"
-          grep -q '"git_sha": "bc001afc39b8435f20551eeb64ad86fc064c187a"' "$RUNNER_TEMP/aura-preview/DEPLOYMENT.json"
+          # Pull-request packaging records GitHub's synthetic merge SHA.
+          # Require the exact tested artifact's value, not the PR head SHA.
+          grep -q '"git_sha": "e90c5d7b25eabf0945063521ecf0cec7bcd0e883"' "$RUNNER_TEMP/aura-preview/DEPLOYMENT.json"
           grep -q 'semantic_intent' "$RUNNER_TEMP/aura-preview/src/inner_dialogue.js"
           grep -q 'observeSocialFeedback' "$RUNNER_TEMP/aura-preview/src/organism.js"
       - name: Pack immutable Hostinger-ready ZIP
