@@ -90,5 +90,5 @@ test('render is event-driven and can degrade gracefully without WebGL2',()=>{
  assert.doesNotMatch(CORTEX13_SCRIPT,/setInterval\(/);
  assert.match(CORTEX13_CSS,/pointer-events:none/);
  assert.match(CORTEX13_SCRIPT,/jamais des neurones biologiques/);
- assert.match(BRAIN_READABLE_CSS,/CORTEX13_CSS/);
+ assert.match(BRAIN_READABLE_CSS,/#cortex13WebGL/);
 });
