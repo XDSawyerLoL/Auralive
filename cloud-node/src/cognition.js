@@ -4,6 +4,7 @@ import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { substantiveRequest } from './composite_intent.js';
 import { socialPerspective, conversationMemoryPolicy } from './conversation_grounding.js';
 import { pragmaticIntent } from './conversation_pragmatics.js';
+import {socialTurnDecision,nativeSocialReply} from './social_turn_kernel.js';
 import { selectFounderProfile } from './founder_profile.js';
 
 function normalize(value) {
@@ -496,6 +497,7 @@ export class CognitionEngine {
       ?{probe:audit.probe,outcome:audit.outcome,at:audit.at}:null;
     const interpersonal = socialPerspective(raw);
     const pragmatics = pragmaticIntent(raw,previousAssistantMessage(conversationContext)?.content||'');
+    const socialTurn = socialTurnDecision(raw,conversationContext);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -528,6 +530,14 @@ export class CognitionEngine {
       needsSemanticSupport=false;
       facts.push('Référent grammatical confirmé : « tu » désigne AURA, « me » désigne la personne qui écrit.');
       facts.push('Aucun événement proactif confirmé par ce seul message.');
+    } else if (socialTurn?.act) {
+      // First-class current-session micro-conversation: these acts are
+      // resolved before asking Groq/OpenRouter. The model cannot invent
+      // a social motive, an emotion or a topic not in the actual dialogue.
+      act=socialTurn.act;
+      goal=socialTurn.goal;
+      needsSemanticSupport=false;
+      facts.push('Interprétation fondée sur un échange immédiat de cette session, pas sur une émotion supposée.');
     } else if (pragmatics?.act) {
       // Social inference is a native discourse decision, not a model's persona.
       act=pragmatics.act;goal=pragmatics.goal;needsSemanticSupport=false;
@@ -859,6 +869,7 @@ export class CognitionEngine {
       memory_policy:memoryPolicy,
       speech_style:['warm','reserved'].includes(sessionStyle)?sessionStyle:'neutral',
       social_perspective:interpersonal,
+      social_turn:socialTurn,
       independent_activity:latestAudit,
       address_form:/\b(?:vous|votre|vos|êtes-vous|etes-vous)\b/i.test(raw)?'vous':'tu',
       needs_semantic_support: needsSemanticSupport,
@@ -931,6 +942,10 @@ export class CognitionEngine {
       return row ? String(row).slice(prefix.length).replace(/[. ]+$/, '').trim() : '';
     };
 
+    if (plan?.social_turn) {
+      const reply=nativeSocialReply(plan);
+      if(reply)return reply;
+    }
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
     if (plan?.act === 'topic_shift')
       return 'Tu veux changer de sujet ? Je t’écoute.';
