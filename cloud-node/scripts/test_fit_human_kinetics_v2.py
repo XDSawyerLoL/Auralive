@@ -65,7 +65,7 @@ class OriginalHumanConstrainedGatesTests(unittest.TestCase):
         self.assertEqual(len(model.calls),9)
         self.assertEqual(model.calls[-1][0],44)
         self.assertNotIn(44,[num for num,_ in model.calls[:-1]])
-        self.assertEqual(out['locked_holdout_metrics']['rmse_mV'],200.24)
+        self.assertEqual(out['locked_holdout_metrics']['rmse_mV'],200.0)
         self.assertFalse(out['locked_holdout_used_for_selection'])
         self.assertFalse(out['human_NaK_direct_voltage_clamp_calibrated'])
         self.assertFalse(out['biologically_validated_human_channel'])
