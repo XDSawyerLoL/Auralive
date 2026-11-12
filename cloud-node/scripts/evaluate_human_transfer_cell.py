@@ -31,7 +31,8 @@ def validate_target(specimen, sweep, cohort):
     rows = cohort.get('transfer_test_specimens') or []
     eligible = [row for row in rows
                 if row.get('specimen_id') == specimen
-                and row.get('validation_sweep_number') == sweep]
+                and sweep in (row.get('validation_sweep_number'),
+                              row.get('challenge_sweep_number'))]
     if len(eligible) != 1:
         raise ValueError('Specimen/sweep must appear exactly once in prespecified cohort')
     if cohort.get('selected_using_spike_counts') or cohort.get('selection_used_voltage'):
