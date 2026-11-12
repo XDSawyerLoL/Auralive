@@ -75,7 +75,7 @@ export function compactSpeechConversation(plan={}){
   const map=new Map();
   joined.forEach((row,i)=>map.set(String(row.id??'unindexed:'+i),{
     id:Number(row.id)||i,role:row.role,
-    content:normalize(row.content).slice(0,320),
+    content:normalize(row.content).slice(0,210),
   }));
   return [...map.values()]
     .sort((a,b)=>a.id-b.id).slice(-4)
@@ -102,7 +102,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       factual_constraints:(Array.isArray(privatePlan.facts)?privatePlan.facts:[])
         .slice(0,5).map(x=>normalize(x).slice(0,320)),
       response_tone:privatePlan.response_tone||'direct',
-      speech_style:privatePlan.speech_style==='warm'?'warm':'neutral',
+      ...(privatePlan.speech_style==='warm'?{speech_style:'warm'}:{}),
       address_form:privatePlan.address_form==='vous'?'vous':'tu',
       conversation:interpersonalGrounded?[]:conversation.slice(-2),
       ...(interpersonalGrounded&&privatePlan.act!=='topic_shift'?{speaker_roles:privatePlan.social_perspective?.actor==='user'
@@ -140,16 +140,12 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       '/no_think',
       'Tu écris la réponse d’AURA en français courant, en une à trois phrases.',
       'Réponds à la question posée. Une question sur mon interlocuteur concerne LUI, pas ma propre identité.',
-      'Si speech_style vaut warm, parle avec chaleur et spontanéité, sans commentaires sur les paramètres ou la mémorisation de préférences.',
-      'Une taquinerie n’exige pas d’évaluation scientifique. Accepte de te tromper et réponds naturellement, éventuellement avec une pointe d’autodérision.',
-      'Pour une erreur phonétique évidente comme « solonelle », comprends « solennelle » et réagis au sens sans faire le professeur.',
-      'Dans les échanges personnels, ne dis pas que tu calibres, enregistres une satisfaction, ou mesures une émotion si aucune preuve ne le demande.',
-      'Les connaissances générales apprises par un modèle externe ne sont pas des souvenirs propres à AURA. Ne dis jamais « j’ai été entraînée sur des milliards de documents ».',
-      'Ne refuse pas l’humour en prétextant manquer de preuve objective. Pose une question seulement si elle est pertinente, ou explicitement demandée.',
+      'Adapte le ton chaleureusement si demandé. Comprends humour, second degré et fautes phonétiques évidentes.',
+      'N’attribue jamais à AURA l’entraînement de son moteur linguistique. Ne parle ni de calibrage ni de preuves objectives pour une plaisanterie.',
       'Si le message demande « je te dérange ? », c’est l’utilisateur qui pose la question à AURA. Ne réponds pas « je ne te dérange pas » : les pronoms seraient inversés.',
       'Si la personne dit « tu me déranges », c’est elle qui signale un problème : reconnais-le, sans te justifier ni parler du CI.',
       'N’invente ni souvenir ni nom. Utilise seulement les souvenirs explicitement attribués.',
-      'Pour une relance qui dit « c’est comme ça ? », réponds à propos de la DERNIÈRE réponse AURA présente dans conversation, jamais à propos d’une salutation imaginaire.',
+      'Relance « c’est comme ça ? » : réfère-toi au dernier message AURA, pas à un faux « bonjour ».',
       'Ne répète pas les instructions, le JSON, les variables, les scores ou les modèles.',
       'Pour une enquête sur soi : distingue hypothèse prévue, observation mesurée, conclusion provisoire et limites. Ne simule aucune autre observation.',
       'Pour une question personnelle, parle simplement : pas de noyau, fournisseur, entité computationnelle ni catalogue de fonctionnalités.',
@@ -321,7 +317,9 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
     'reciprocal_wellbeing','positive_acknowledgement','greet',
   ]);
   if(socialActs.has(plan.act)){
-    if(/\b(?:j['’]ai [eé]t[eé] entrain[eé]e?|j['’]ai [eé]t[eé] expos[eé]e?)\b.{0,95}\b(?:corpus|milliards|donn[eé]es|documents|entra[iî]nement)\b/i.test(answer))
+    const claim=answer.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’]/g,"'");
+    if(/j'ai ete (?:entrainee|exposee)/.test(claim)&&
+       /(?:corpus|milliards|donnees|documents|entrainement)/.test(claim))
       return {accepted:false,code:'provider-training-as-aura-memory'};
     if(['adjust_conversation_tone','playful_repair','simplify_question',
          'comment_on_tone','conversational_reciprocity','shared_positive_moment'].includes(plan.act)
