@@ -13,6 +13,7 @@ import { InnerDialogueEngine } from './inner_dialogue.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
+import { immediateDialogueWindow,mergeConversationViews } from './immediate_dialogue_window.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
 import { SelfInquiryEngine } from './self_inquiry.js';
 import { IndependentContinuity } from './independent_continuity.js';
@@ -1801,6 +1802,22 @@ export class CognitiveKernel {
     });
     const selectedNotes=admitted.notes;
     const selectedMessages=admitted.messages;
+    // A very small, current-session dialogue buffer is PERCEPTUAL context:
+    // it enters only after the workspace actually broadcasts perception.
+    // It is not project memory and carries no authority beyond this chat.
+    const immediateDialogue=immediateDialogueWindow(recentMessages,content,{
+      perceptualBroadcast:workspaceHas(workspace,'prefrontal','perception'),
+      maxTurns:3,
+    });
+    const dialogueMessages=mergeConversationViews(selectedMessages,immediateDialogue);
+    if(immediateDialogue.length){
+      await brainHop('workspace','dialogue','immediate-context-admitted');
+      await this.trace('dialogue-context','same-session-turn-window','',{
+        flow_id:brainFlowId,at:now(),turn_count:immediateDialogue.length,
+        admitted_after_perception:true,source:'session-scoped-message-query',
+        raw_text_stored:false,
+      });
+    }
     // Plan generation happens ONLY AFTER the limited global broadcast.
     // Context sources lacking a selected stable ID are not handed to the planner.
     plan=this.cognition.planReply({
@@ -1809,7 +1826,7 @@ export class CognitiveKernel {
         current_intention:'',dominant_thought:'',independent_activity:null},
       intentions:[],lessons:[],reflections:[],work:[],
       agenda:{},continuityReport:{},
-      recentMessages:[...selectedMessages].reverse(),
+      recentMessages:dialogueMessages,
       privateView,founderProfileNotes:admitted.founderProfile,
     });
     await brainHop('workspace','cognition','plan-created-from-selected-signals');
@@ -2203,7 +2220,9 @@ export class CognitiveKernel {
         // History is optional while v18 is rolling out; never fabricate it.
       }
     }
-    const languageGate=languageWorkspaceProjection(plan,workspace,{privateView});
+    const languageGate=languageWorkspaceProjection(plan,workspace,{
+      privateView,immediateDialogue,
+    });
     if(!languageGate.allowed)
       await this.trace('workspace-denial','language-not-broadcast','',{
         flow_id:brainFlowId,at:now(),reason:languageGate.reason,
@@ -2321,6 +2340,8 @@ export class CognitiveKernel {
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       nucleus_plan_origin: 'AURA.nucleus.CognitionEngine.planReply',
+      immediate_context_turns:immediateDialogue.length,
+      language_latency_ms:Math.max(0,Number(this.expression.language.lastLatencyMs)||0),
       nucleus_verbalization_validated:
         Boolean(answer && this.expression.language.lastNucleusContract?.accepted),
       nucleus_verbalization_code:
