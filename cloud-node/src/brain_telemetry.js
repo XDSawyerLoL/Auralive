@@ -55,6 +55,10 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     source:measured?'node-process':'unavailable',
     heap_utilization:measured?boundedMetric(processSample.heap_utilization):null,
     cpu_utilization:measured?boundedMetric(processSample.cpu_utilization):null,
+    heap_precise:measured&&processSample.heap_utilization!=null
+      ?Number((Number(processSample.heap_utilization)*100).toFixed(2)):null,
+    cpu_precise:measured&&processSample.cpu_utilization!=null
+      ?Number((Number(processSample.cpu_utilization)*100).toFixed(2)):null,
     compute_pressure:measured?boundedMetric(processSample.compute_pressure):null,
     rss_mib:measured&&Number.isFinite(Number(processSample.rss_bytes))
       ?Math.round(Number(processSample.rss_bytes)/1048576):null,
@@ -356,9 +360,9 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
       samples:(Array.isArray(observer.history)?observer.history:[]).slice(-60).map(row=>({
         at:safeText(row.at,40),
         sequence:Math.max(0,Number(row.sequence)||0),
-        cpu:row.cpu==null?null:boundedMetric(row.cpu)/100,
-        heap:row.heap==null?null:boundedMetric(row.heap)/100,
-        pressure:row.pressure==null?null:boundedMetric(row.pressure)/100,
+        cpu:row.cpu==null?null:Number(Math.max(0,Math.min(1,Number(row.cpu))).toFixed(4)),
+        heap:row.heap==null?null:Number(Math.max(0,Math.min(1,Number(row.heap))).toFixed(4)),
+        pressure:row.pressure==null?null:Number(Math.max(0,Math.min(1,Number(row.pressure))).toFixed(4)),
       })),
     }:null,
     curiosity_cycle:curiosityCycle,
