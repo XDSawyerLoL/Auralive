@@ -1447,6 +1447,7 @@ app.get('/api/brain/live', async (request,reply)=>{
   });
   out.flushHeaders?.();
   liveBrainClients++;
+  let timer=null;
   let closed=false,previousSample=0,previousCycle=-1,lastSent=0;
   const close=()=>{
     if(closed)return;
@@ -1488,7 +1489,7 @@ app.get('/api/brain/live', async (request,reply)=>{
     catch{close();}
   };
   out.on('close',close);
-  const timer=setInterval(emit,250);
+  timer=setInterval(emit,250);
   timer.unref?.();emit();
 });
 
