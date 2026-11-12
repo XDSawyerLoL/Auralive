@@ -9,8 +9,10 @@ from evaluate_human_transfer_cell import (
 def cohort():
     return {
         'transfer_test_specimens': [
-            {'specimen_id': 10001, 'validation_sweep_number': 71},
-            {'specimen_id': 10002, 'validation_sweep_number': 72},
+            {'specimen_id': 10001, 'validation_sweep_number': 71,
+             'challenge_sweep_number': 81},
+            {'specimen_id': 10002, 'validation_sweep_number': 72,
+             'challenge_sweep_number': 82},
         ],
         'transferred_parameters': dict(PARAMETERS),
         'selected_using_spike_counts': False,
@@ -31,6 +33,7 @@ def evaluated():
 class IndependentHumanTransferTests(unittest.TestCase):
     def test_other_specimen_and_preselected_sweep_are_mandatory(self):
         self.assertEqual(validate_target(10001, 71, cohort())['specimen_id'], 10001)
+        self.assertEqual(validate_target(10001, 81, cohort())['specimen_id'], 10001)
         for specimen, sweep in ((REFERENCE_SPECIMEN, 71), (10001, 72),
                                 (10003, 71)):
             with self.assertRaises(ValueError):
