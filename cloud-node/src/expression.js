@@ -52,6 +52,29 @@ export class ExpressionLayer {
   }
 
   async verbalize(plan, options = {}) {
+    const fallback = this.cognition.deterministicReply(plan);
+    // Explicit current-turn social intent can be expressed by the kernel
+    // itself. A language provider must not invent AURA's curiosity or steer
+    // the conversation. This is NOT a fake hidden thought or human emotion.
+    if (plan?.social_turn?.source==='same-session-conversation-and-rule'
+        && NATIVE_SOCIAL_ACTS.has(plan.act) && fallback) {
+      const check=validateNucleusSpeech(plan,fallback);
+      this.language.lastNucleusContract={
+        ...check,origin:'AURA.native-social-kernel-v1'};
+      if(check.accepted){
+        this.lastError='';
+        this.lastMode='native-social-kernel';
+        this.language.lastBackend='aura-native-social';
+        this.language.lastModel='';
+        this.language.lastLatencyMs=0;
+        this.language.lastError='';
+        return fallback;
+      }
+      this.lastError='native-social-rejected:'+check.code;
+      // Do NOT let a provider override a rejected kernel decision.
+      this.lastMode='natural-language-unavailable';
+      return '';
+    }
     const nativeMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
     if(nativeMode==='local-only'||nativeMode==='prefer-local'){
       const local=nativeFrenchCorpus.realizePlan(plan);
@@ -79,29 +102,6 @@ export class ExpressionLayer {
         // No covert Groq/OpenRouter/remote fallback in local-only mode.
         return '';
       }
-    }
-    const fallback = this.cognition.deterministicReply(plan);
-    // Explicit current-turn social intent can be expressed by the kernel
-    // itself. A language provider must not invent AURA's curiosity or steer
-    // the conversation. This is NOT a fake hidden thought or human emotion.
-    if (plan?.social_turn?.source==='same-session-conversation-and-rule'
-        && NATIVE_SOCIAL_ACTS.has(plan.act) && fallback) {
-      const check=validateNucleusSpeech(plan,fallback);
-      this.language.lastNucleusContract={
-        ...check,origin:'AURA.native-social-kernel-v1'};
-      if(check.accepted){
-        this.lastError='';
-        this.lastMode='native-social-kernel';
-        this.language.lastBackend='aura-native-social';
-        this.language.lastModel='';
-        this.language.lastLatencyMs=0;
-        this.language.lastError='';
-        return fallback;
-      }
-      this.lastError='native-social-rejected:'+check.code;
-      // Do NOT let a provider override a rejected kernel decision.
-      this.lastMode='natural-language-unavailable';
-      return '';
     }
     try {
       const answer = normalize(await this.language.generate(plan, {
