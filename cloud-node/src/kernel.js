@@ -203,6 +203,7 @@ export class CognitiveKernel {
       emergent_identity: this.autogenesis.defaultState(),
       inner_dialogue: null,
       endophasia: null,
+      social_initiative:{revision:0,pending:null,last_evidence_key:''},
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
@@ -322,6 +323,9 @@ export class CognitiveKernel {
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
+    const initiative=this.soulCache.social_initiative;
+    if(!initiative||typeof initiative!=='object')
+      this.soulCache.social_initiative={revision:0,pending:null,last_evidence_key:''};
     // Only non-text attention receipts are persisted; never raw user or model text.
     if(!this.soulCache.global_workspace||typeof this.soulCache.global_workspace!=='object')
       this.soulCache.global_workspace=null;
@@ -396,6 +400,29 @@ export class CognitiveKernel {
     this.microReflex.stop();
     this.timer = null;
     this.started = false;
+  }
+
+  // Read-only, safe projection. No browser, service or model can author
+  // an initiative through this endpoint.
+  pendingSocialInitiative(){
+    return this.innerDialogue.publicSocialInitiative(
+      this.soulCache?.social_initiative?.pending);
+  }
+
+  async acknowledgeSocialInitiative(id){
+    const stored=this.soulCache?.social_initiative;
+    const pending=stored?.pending;
+    if(!pending||String(pending.id)!==String(id||''))return false;
+    this.soulCache.social_initiative={
+      ...stored,pending:null,last_delivered_at:now(),
+    };
+    await this.saveSoul();
+    await this.trace('social-initiative','opt-in-browser-display','',{
+      at:now(),evidence_scope:'local-counterfactual-only',
+      source:'explicit-founder-display-ack',llm_used:false,
+      display_confirmed:true,conversation_request_received:false,
+    });
+    return true;
   }
 
   async saveSoul() {
@@ -917,6 +944,30 @@ export class CognitiveKernel {
           // Merge only the tested state; chat may have updated other fields.
           this.soulCache.epistemic_self=independent.soul.epistemic_self;
           this.soulCache.independent_activity=independent.soul.independent_activity;
+          // An actual counterfactual outcome may compete for outward
+          // expression. Nothing is broadcast by this code: a private,
+          // opt-in browser must explicitly request its presentation.
+          const candidate=this.innerDialogue.proposeSocialInitiative({
+            organism:this.soulCache.organism,
+            identity:this.soulCache.emergent_identity,
+            receipt:independent.receipt,
+            previous:this.soulCache.social_initiative,
+            viability:this.soulCache.viability,now:timestamp,
+          });
+          if(candidate){
+            const prior=this.soulCache.social_initiative||{};
+            this.soulCache.social_initiative={
+              revision:Math.max(0,Number(prior.revision)||0)+1,
+              pending:candidate,
+              last_evidence_key:candidate.evidence_key,
+            };
+            await this.trace('social-initiative','native-outbound-candidate','',{
+              at:timestamp,source:candidate.source,kind:candidate.kind,
+              evidence_scope:candidate.evidence_scope,
+              decision_to_publish:false,opt_in_required:true,
+              llm_used:false,subjective_experience_claim:false,
+            });
+          }
           if(independent.soul.endophasia){
             this.soulCache.endophasia=independent.soul.endophasia;
             await this.trace('endophasia','experience-derived-inquiry','',{
