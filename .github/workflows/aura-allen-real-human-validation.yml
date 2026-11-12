@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - ".github/workflows/aura-allen-real-human-validation.yml"
+      - "cloud-node/scripts/export_allen_human_features.py"
+      - "cloud-node/scripts/run_human_swc_neuron.py"
+      - "cloud-node/src/human_ephys_calibration.js"
   workflow_dispatch:
 
 permissions:
