@@ -81,6 +81,7 @@ recognitionButton.onclick=async()=>{
  }finally{recognitionButton.disabled=false;}
 };
 function stopVisualMeaning(){
+ $('auraObjectOverlay')?.getContext('2d')?.clearRect(0,0,224,224);
  semantic.visionEnabled=false;
  if(semantic.visionTimer){clearInterval(semantic.visionTimer);semantic.visionTimer=null;}
  visionButton.textContent='Comprendre la scène';visionButton.setAttribute('aria-pressed','false');
@@ -108,6 +109,22 @@ async function ensureDetector(){
  }
  semantic.detector=await semantic.detectorPromise;
  return semantic.detector;
+}
+function drawObjectOverlay(objects){
+ const layer=$('auraObjectOverlay'),context=layer?.getContext('2d');
+ if(!context)return;
+ context.clearRect(0,0,224,224);
+ context.lineWidth=2;context.font='11px system-ui';
+ for(const item of objects){
+   const x=item.box.xmin*224,y=item.box.ymin*224,
+     w=(item.box.xmax-item.box.xmin)*224,h=(item.box.ymax-item.box.ymin)*224;
+   context.strokeStyle='#71f5cb';context.fillStyle='rgba(9,22,20,.85)';
+   context.strokeRect(x,y,w,h);
+   const label=String(item.label||'').slice(0,22)+' '+Math.round(item.confidence*100)+'%';
+   const width=Math.min(224-x,context.measureText(label).width+7);
+   context.fillRect(x,Math.max(0,y-15),width,15);
+   context.fillStyle='#ffffff';context.fillText(label,x+3,Math.max(11,y-3));
+ }
 }
 async function classifyCurrentView(){
  const video=$('auraCameraPreview');
@@ -149,6 +166,7 @@ async function classifyCurrentView(){
          }))
          .filter(x=>x.label.length>=2&&x.box.xmin<x.box.xmax&&x.box.ymin<x.box.ymax);
        if(semantic.visionEnabled&&senseState.cam){
+         drawObjectOverlay(objects);
          await emitPerception('visual-objects','browser-ondevice-transformers',
            semantic.detectorId,{objects});
          if(objects.length)chatLine('AURA · LOCALISATION VISUELLE LOCALE',
