@@ -125,6 +125,63 @@ export class InnerDialogueEngine {
     };
     return result;
   }
+  // Endophasie fonctionnelle : une interrogation privée naît d'un écart
+  // entre les retours reçus et la stratégie actuellement apprise. L'origine
+  // n'est ni un texte du modèle ni une question existentielle pré-écrite.
+  derivePrivateInquiry({experience={},identity={},organism={},previous=null,now=new Date().toISOString()}={}){
+    const revision=Math.max(0,Math.floor(Number(experience?.revision)||0));
+    if(!revision||revision<=Math.max(0,Number(previous?.experience_revision)||0))
+      return null;
+    const pressure=bounded(organism?.homeostasis?.resource_pressure);
+    if(pressure>=.75)return null;
+    const prudence=bounded(identity?.dimensions?.prudence?.value??.5);
+    const frustration=bounded(organism?.frustration);
+    const contexts=Object.entries(experience?.cases||{})
+      .filter(([context])=>/^(task|dialogue)_[a-z_]{3,50}$/.test(context))
+      .map(([context,record])=>{
+        const data=Object.values(record?.strategies||{});
+        const bad=data.reduce((sum,v)=>sum+Math.max(0,Number(v?.bad)||0),0);
+        const verified=data.reduce((sum,v)=>sum+Math.max(0,Number(v?.verified)||0),0);
+        const observations=Math.max(0,Number(record?.observations)||0);
+        return {context,bad,verified,observations,
+          salience:bad*(1+frustration*.4+prudence*.2)+verified*.2};
+      })
+      .filter(c=>c.bad>=1.2||c.verified>=2)
+      .sort((a,b)=>b.salience-a.salience||a.context.localeCompare(b.context));
+    if(!contexts.length)return null;
+    const chosen=contexts[0];
+    const at=Number.isFinite(Date.parse(String(now)))?new Date(now).toISOString():
+      new Date().toISOString();
+    return {
+      version:'functional-endophasia-v1',at,focus:'test-learned-context-policy',
+      context:chosen.context,experience_revision:revision,
+      question:'Dans le contexte « '+chosen.context+
+        ' », mes expériences changent-elles réellement ma prochaine décision ?',
+      origin:'experience-derived-private-question',
+      evidence:{source:'lived_experience.cases',observations:chosen.observations,
+        reported_failures:Number(chosen.bad.toFixed(3)),
+        verified_outcomes:chosen.verified},
+      subjective_experience_proven:false,external_action:false,
+    };
+  }
+  publicInquiry(input){
+    if(!input||typeof input!=='object')return null;
+    const context=/^(task|dialogue)_[a-z_]{3,50}$/.test(String(input.context||''))
+      ?String(input.context):'unknown';
+    return {
+      version:'functional-endophasia-v1',at:String(input.at||'').slice(0,40),
+      focus:'test-learned-context-policy',context,
+      experience_revision:Math.max(0,Math.floor(Number(input.experience_revision)||0)),
+      question:context==='unknown'?'':(
+        'Dans le contexte « '+context+
+        ' », mes expériences changent-elles réellement ma prochaine décision ?'),
+      outcome:['supported','counterexample','inconclusive'].includes(input.outcome)
+        ?input.outcome:'unexamined',
+      causal_change:input.causal_change===true,
+      proof_scope:'local-policy-counterfactual-not-external-success',
+      subjective_experience_proven:false,
+    };
+  }
   publicState(input){
     if(!input||typeof input!=='object')return null;
     const situations=new Set(['mixed_or_negative','self_identity','self_inquiry','correction','uncertain_request','positive','ambient','ordinary','external_facts']);
