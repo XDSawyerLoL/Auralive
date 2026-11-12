@@ -473,10 +473,15 @@ caractéristiques observées. Le premier rapport **ne mesurait pas
 l'erreur sur un autre enregistrement** et ne constitue pas une
 preuve d'exactitude physiologique des prédictions du modèle.
 
-**Seconde étape en cours** : téléchargement d'un balayage NWB
-réel, calcul de l'écart entre la tension mesurée et les prédictions
-de NEURON (câbles) et de la cellule RC (un seul compartiment),
-avec RMSE/MAE en mV. Les caractéristiques Allen pouvant provenir
+**Seconde étape réalisée** (job GitHub `43264469643`) :
+balayage NWB réel n° 25, 10 000 échantillons.
+Comparaison des tensions mesurées aux prédictions :
+- NEURON SWC multicompartmental passif RMSE 0,854482657 mV,
+  MAE 0,780455866 mV.
+- RC passif monopartimental RMSE 1,061231 mV.
+- SHA-256 du NWB : `73b89bef175547c1e0a134efa65bd075db4eecb9bfd6be01d2eae0b24e5e4687`.
+- La qualité de la stimulation (amplitude du courant / potentiel d'action)
+  doit être rapportée avant de qualifier cet écart de représentatif. Les caractéristiques Allen pouvant provenir
 de la même batterie d'enregistrements, ce n'est **pas une
 validation indépendante attestée**. Le rapport doit conserver
 cette limite même si l'erreur obtenue est faible.
