@@ -163,3 +163,76 @@ et **non calibrées sur l'humain**. Ne jamais appeler cet état du projet
 
 Ces sources imposent une progression par validation. Aucun nombre de
 lignes de code ne résout le manque de données d'un cerveau entier.
+
+
+## Tranche suivante — données humaines AllenSDK (12 novembre)
+
+La base Allen Cell Types contient des données électrophysiologiques, morphologiques
+et transcriptomiques de neurones humains et murins. Il est indispensable de
+**filtrer Homo sapiens et de vérifier le spécimen**, sinon le changement de
+fichier pourrait injecter des paramètres de souris dans une cellule dite humaine.
+
+### Acquis, directement en code
+
+- `scripts/export_allen_human_features.py` : export optionnel, hors Hostinger,
+  des caractéristiques `vrest` (mV), `ri` (MΩ) et `tau` (ms) d'un
+  spécimen réel identifié par AllenSDK, avec source, espèce, unités et ID.
+  Le script échoue si le spécimen n'est pas humain ou si une mesure manque.
+  Aucune valeur « normale » n'est insérée par défaut.
+- `src/human_ephys_calibration.js` : validation stricte de la provenance,
+  reconstruction du **compartiment membranaire passif humain** à partir de
+  ses caractéristiques mesurées, avec conductance `g(nS)=1000/R(MΩ)`
+  et capacité `C(pF)=tau(ms)*g(nS)`. Intégration analytique de la
+  dynamique RC de membrane sous courant en pA.
+- Possibilité de comparer, sur un balayage d'enregistrement *non utilisé
+  pour l'ajustement*, les prédictions de tension aux mesures avec erreur
+  RMSE et MAE (mV). Le résultat reste classé « non expertisé » : il ne
+  prouve ni fidélité des potentiels d'action ni calibration humaine globale.
+- Route privée `POST /api/research/biophysics/human-passive` : accepte
+  l'export validé et, facultativement, un balayage tenu à l'écart,
+  renvoie les paramètres ajustés et les erreurs. **Pas de stockage des
+  courbes brutes, pas de fournisseur LLM, pas de mutation de l'âme AURA.**
+- `test/human_ephys_calibration.test.js` : tests de conversions,
+  réponse analytique, convergence en pas de temps, rejet d'espèces
+  incorrectes et d'unités manquantes. Les chiffres des tests sont
+  artificiels, uniquement pour tester l'arithmétique : **aucun
+  enregistrement de donneur n'est fourni ou prétendu mesuré**.
+
+### Export réel, sur machine de recherche autorisée
+
+```bash
+python -m pip install allensdk
+cd cloud-node
+python scripts/export_allen_human_features.py \
+  --specimen-id 643625553 \
+  --output /tmp/allen-human-643625553.json
+```
+
+L'ID est un exemple de spécimen humain visible dans la base publique ;
+l'export ne réussira que s'il existe des mesures `vrest/ri/tau`
+complètes pour ce spécimen. La commande **n'a pas été exécutée
+sur un jeu de données humain lors de cette tranche**. Le script utilise
+le manifeste cache d'AllenSDK ; il ne doit pas être exécuté dans les
+routes publiques d'AURA ou à chaque requête.
+
+**Exemple de commande d'appel privé :** envoyer via navigateur
+authentifié un JSON de forme `{"record": <export AllenSDK>}` à
+`/api/research/biophysics/human-passive`.
+Il n'existe pas de boutons factices ni de données synthétiques
+présentées comme issues d'Allen.
+
+### Ce que nous ne pouvons PAS encore conclure
+
+Un compartiment passif n'est pas un neurone complet. La calibration des
+canaux Na/K/Ca, des morphologies dendritiques, des cinétiques synaptiques,
+des neuromodulateurs, des populations d'interneurones, des structures
+amygdaliennes et des retours corporels humains reste à réaliser.
+Des cellules issues de prélèvements chirurgicaux peuvent différer
+des cellules d'autres populations ; ne pas généraliser un spécimen
+isolé à « l'humain » entier.
+
+**Références AllenSDK officielles :**
+- https://celltypes.brain-map.org/
+- https://celltypes.brain-map.org/data?donor__species=Homo+Sapiens
+- https://alleninstitute.github.io/AllenSDK/cell_types.html
+- https://brain-map.org/support/documentation/cell-types-database-api
