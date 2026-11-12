@@ -112,7 +112,7 @@ async function classifyCurrentView(){
    const ranked=await classifier(canvas,{top_k:1});
    // Never transmit the frame or canvas. Top-1 model prediction only.
    const first=Array.isArray(ranked)?ranked[0]:null;
-   const label=String(first?.label||'').replace(/[^\\p{L}\\p{N},.()' /_-]/gu,'').trim().slice(0,90);
+   const label=String(first?.label||'').replace(/[^\p{L}\p{N},.()' /_-]/gu,'').trim().slice(0,90);
    const confidence=Number(first?.score);
    if(!label||!Number.isFinite(confidence))throw Error('résultat de classification absent');
    if(!semantic.visionEnabled||!senseState.cam)return;
