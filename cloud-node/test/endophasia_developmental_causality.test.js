@@ -231,3 +231,51 @@ test('autonomous activity count alone does not fabricate existential inquiry',()
   },state,{trigger:'ambient'});
   assert.notEqual(thoughts.title,'Enquête autonome sur mon identité acquise');
 });
+
+test('a greeting cannot manufacture social reward, trust or attachment',()=>{
+  const organ=new AuraOrganism({sensor:{sample:()=>null}});
+  const before=organ.defaultState({developmental:true});
+  const first=organ.beforeInteraction(before,'bonjour',{
+    privateRelationship:true,author:'test',
+  }).state;
+  const second=organ.beforeInteraction(first,'bonjour',{
+    privateRelationship:true,author:'test',
+  }).state;
+  assert.equal(second.relationship.interaction_count,before.relationship.interaction_count+2);
+  for(const key of ['trust','familiarity','reciprocity','shared_momentum','social_curiosity']){
+    assert.equal(second.relationship[key],before.relationship[key],key);
+  }
+  assert.equal(second.attachement,before.attachement);
+  const compliment=organ.beforeInteraction(second,'merci, super',{
+    privateRelationship:true,author:'test',
+  }).state;
+  assert.equal(compliment.relationship.trust,before.relationship.trust);
+  assert.equal(compliment.attachement,before.attachement);
+});
+
+test('social feedback from a prior authenticated answer changes relationship, but not trust',()=>{
+  const organ=new AuraOrganism({sensor:{sample:()=>null}});
+  const base=organ.defaultState({developmental:true});
+  assert.deepEqual(
+    organ.observeSocialFeedback(base,{kind:'founder-approval',
+      correlated:true,authenticated:false}),base);
+  assert.deepEqual(
+    organ.observeSocialFeedback(base,{kind:'founder-approval',
+      correlated:false,authenticated:true}),base);
+  const approved=organ.observeSocialFeedback(base,{
+    kind:'founder-approval',authenticated:true,correlated:true});
+  assert.ok(approved.relationship.reciprocity>base.relationship.reciprocity);
+  assert.ok(approved.relationship.familiarity>base.relationship.familiarity);
+  assert.equal(approved.relationship.trust,base.relationship.trust);
+  assert.equal(approved.relationship.last_social_evidence.external_success_verified,false);
+  const contradicted=organ.observeSocialFeedback(approved,{
+    kind:'founder-correction',authenticated:true,correlated:true});
+  assert.ok(contradicted.relationship.reciprocity<approved.relationship.reciprocity);
+  assert.ok(contradicted.frustration>approved.frustration);
+  assert.equal(contradicted.relationship.trust,base.relationship.trust);
+});
+
+test('canonical kernel applies relational feedback only after learned-experience revision',()=>{
+  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
+  assert.match(kernel,/if\(after\.revision>before\.revision\)\{[\s\S]{0,450}observeSocialFeedback/);
+});
