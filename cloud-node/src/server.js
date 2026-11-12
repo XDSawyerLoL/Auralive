@@ -379,7 +379,7 @@ const capabilityScout = new CapabilityScout({
 const cognitiveTrace = new CognitiveTraceLedger();
 const fallbackSoul = kernel.defaultSoul();
 
-const processObserver = new ObservedProcessMonitor();
+const processObserver = new ObservedProcessMonitor({intervalMs:config.processObserverMs});
 
 const bootstrap = {
   serverReady: true,
