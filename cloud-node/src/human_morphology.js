@@ -61,15 +61,19 @@ export function inspectSwc(text,{
     lengths[name]=(lengths[name]||0)+length;
     edges.push({child:n.id,parent:n.parent});
   }
-  // Explicit graph traversal rejects disconnected cycles, even if all
-  // individual parent IDs exist.
+  // O(n) parent-chain audit: no recursive stack overflow and no quadratic
+  // traversal for very long human axonal reconstructions.
+  const verified=new Set([rootId]);
   for(const node of nodes.values()){
-    let cursor=node,steps=0;
-    while(cursor.parent!==-1){
+    let cursor=node;
+    const visiting=new Set(),chain=[];
+    while(!verified.has(cursor.id)){
+      if(visiting.has(cursor.id))throw new TypeError('SWC cycle or disconnected tree');
+      visiting.add(cursor.id);chain.push(cursor.id);
       cursor=nodes.get(cursor.parent);
-      if(!cursor||++steps>=nodes.size)throw new TypeError('SWC cycle or disconnected tree');
+      if(!cursor)throw new TypeError('SWC disconnected component');
     }
-    if(cursor.id!==rootId)throw new TypeError('SWC disconnected component');
+    for(const id of chain)verified.add(id);
   }
   const hash=createHash('sha256').update(text,'utf8').digest('hex');
   return {
