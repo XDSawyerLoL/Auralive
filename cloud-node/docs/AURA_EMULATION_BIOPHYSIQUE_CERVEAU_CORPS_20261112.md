@@ -643,3 +643,71 @@ les analogies par des modèles validés.
 
 Source NEURON : https://www.neuronsimulator.org/en/latest/progref/simctrl/programmatic.html
 Source AllenSDK : https://alleninstitute.github.io/AllenSDK/biophysical_models.html
+
+
+## Calibrage actif multibalayages avec véritable validation retenue
+
+Développement `scripts/fit_human_active_multisweep.py`, tests
+`scripts/test_fit_human_active_multisweep.py` et CI
+`aura-allen-real-human-validation.yml`.
+
+### Procédure préenregistrée
+
+1. AllenSDK sélectionne par **métadonnées de stimulation seulement** les
+   « Long Square » de courant positif à amplitudes distinctes. Le
+   nombre observé de décharges **n'entre pas dans ce choix**.
+2. La plus faible et la plus forte amplitude sont utilisées **pour
+   l'ajustement**. L'amplitude médiane est conservée, inaccessible à
+   l'optimiseur, pour une **seule évaluation finale**. Trois
+   conditions distinctes sont nécessaires ; sinon l'expérience échoue.
+3. Huit combinaisons **fixées à l'avance**, sans recherche aléatoire,
+   modifient les densités effectives Na/K dans un modèle NEURON.
+   Une section axonale peut recevoir un conductance HH
+   facultative, mais **elle ne constitue pas un segment initial
+   de l'axone mesuré**. Le squelette cellulaire SWC et les
+   caractéristiques passives sont ceux du même spécimen humain.
+4. Le score d'entraînement déclaré est :
+   **RMSE de tension (mV) + 5 mV × valeur absolue de l'écart du
+   nombre de potentiels d'action**. Score moyen sur les deux
+   balayages de formation, en conservant la matrice complète
+   des candidats et des scores.
+5. Le meilleur candidat est sélectionné et figé. **Alors seulement**
+   le balayage médian est chargé dans la fonction de simulation
+   finale et mesuré : RMSE, MAE, décharges observées, décharges
+   calculées et erreur sur le nombre de décharges.
+6. L'export public ne contient que les métriques, la sélection, les
+   paramètres et la provenance, jamais les échantillons NWB bruts.
+   Aucune donnée n'est écrite dans les souvenirs, l'état interne
+   ni le moteur de dialogue d'AURA.
+
+### Distinctions scientifiques impératives
+
+- Les tensions et les potentiels d'action **d'entraînement sont des
+  mesures humaines**, mais les cinétiques actives sont encore les
+  équations historiques Hodgkin–Huxley de calmar. L'ajustement
+  numérique des *densités effectives* à des réponses humaines ne
+  transforme pas le mécanisme en canaux humains physiologiquement
+  validés.
+- Le test médian est indépendant **de l'optimisation active
+  présentée ici**. Il n'est **pas garanti indépendant** des
+  caractéristiques vrest/ri/tau d'origine publiées par Allen,
+  car elles ont pu être calculées à partir de la même expérience.
+- C'est une seule cellule humaine, et non plusieurs donneurs ;
+  les différents balayages permettent d'examiner une généralisation
+  à une autre stimulation **chez cette cellule**, pas à l'espèce.
+- Un score plus faible n'est pas une preuve de fidélité
+  biophysique : plusieurs jeux de densités peuvent produire une
+  réponse similaire, et l'organisation dendritique, l'AIS, les
+  cinétiques spécifiques et les potentiels synaptiques ne sont
+  pas identifiés ici.
+- L'optimiseur n'a pas accès au fournisseur Groq ni à un générateur
+  de langage. Aucune animation du cerveau opérationnel ne doit
+  découler des courbes de cette expérience hors production.
+
+Résultat de la CI réelle : **voir le champ
+`active_multisweep_fit` du rapport d'artefact**, qui n'est
+considéré disponible qu'après réussite du job et inspection de
+l'artefact. Sans rapport, ne pas inventer les décharges simulées.
+
+Références : <https://alleninstitute.github.io/AllenSDK/cell_types.html>,
+<https://alleninstitute.github.io/AllenSDK/biophysical_models.html>.
