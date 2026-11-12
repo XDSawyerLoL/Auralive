@@ -1638,6 +1638,39 @@ app.get('/api/kernel/organism', async (request, reply) => {
   return kernel.organismState({ publicView: false });
 });
 
+// Hostinger Web/Cloud does not guarantee always-on background workers.
+// A protected cron invocation can restart the Node site and execute one
+// bounded autonomous cycle, without claiming millisecond persistence.
+let lastCronContinuityAt=0;
+let cronContinuityRunning=false;
+app.post('/api/cron/continuity', async (request,reply)=>{
+  if(!requirePrivate(request,reply))return;
+  reply.header('Cache-Control','private, no-store');
+  if(!bootstrap.runtimeReady)await startRuntime();
+  if(!requireRuntime(reply))return;
+  const since=Date.now()-lastCronContinuityAt;
+  if(cronContinuityRunning)return reply.code(409).send({
+    ok:false,reason:'cron-already-running',
+  });
+  if(lastCronContinuityAt&&since<55000)return {
+    ok:true,skipped:true,reason:'cron-cooldown',
+  };
+  const last=Date.parse(String(kernel.soulCache?.existence?.last_background_tick_at||''));
+  if(Number.isFinite(last)&&Date.now()-last<20000)return {
+    ok:true,skipped:true,reason:'autonomous-kernel-already-active',
+    background_cycles:Number(kernel.soulCache?.existence?.background_cycles)||0,
+  };
+  cronContinuityRunning=true;lastCronContinuityAt=Date.now();
+  try{
+    const result=await kernel.tick({trigger:'cron',text:'',force:false});
+    return {ok:result?.ok===true,skipped:result?.skipped===true,
+      reason:String(result?.reason||'cron-cycle').slice(0,100),
+      background_cycles:Number(kernel.soulCache?.existence?.background_cycles)||0,
+      at:String(kernel.soulCache?.existence?.last_background_tick_at||''),
+    };
+  }finally{cronContinuityRunning=false;}
+});
+
 app.post('/api/kernel/tick', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   return kernel.tick({
