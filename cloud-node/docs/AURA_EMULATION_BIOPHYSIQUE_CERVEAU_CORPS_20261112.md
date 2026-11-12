@@ -366,3 +366,84 @@ si la base n'en fournit pas.
 `scripts/run_human_swc_neuron.py` reste la référence passive sous
 NEURON pour comparer le câble morphologique aux données humaines.
 Elle ne représente pas encore une calibration humaine des canaux actifs.
+
+
+## Tranche recherche réelle — morphologie humaine, modèles actifs Allen, NEURON
+
+### Cellules et compartiments sans invention de structures
+
+- `src/human_morphology.js` analyse des reconstructions SWC avec unités
+  en micromètres, vérification de l'arbre parent–enfant, présence du soma,
+  détection de cycles, mesures des longueurs et approximations de surfaces
+  et volumes par troncs de cônes. **Cela n'est pas un simulateur électrique.**
+  L'origine humaine doit être recoupée avec le spécimen Allen correspondant.
+- `scripts/export_allen_human_features.py` peut récupérer depuis AllenSDK
+  les caractéristiques et, à la demande, une reconstruction SWC et un
+  enregistrement NWB. Ce dernier est converti à partir des unités brutes
+  officielles (A et V) en pA et mV. Les condensations d'échantillons sont
+  déclarées, l'empreinte SHA-256 de la source est conservée.
+- Les paramètres d'électrophysiologie Allen peuvent avoir été calculés
+  à partir d'enregistrements appartenant à la même expérience. Un balayage
+  non utilisé **directement** par notre solveur ne constitue pas
+  automatiquement une validation indépendante du fichier de caractéristiques.
+- `scripts/run_human_swc_neuron.py` importe la vraie géométrie SWC dans
+  NEURON et résout des équations câbles **multicompartimentales** sur
+  plusieurs sections. La conductance passive et la capacité sont initialisées
+  à partir de mesures humaines R/tau et de la superficie du modèle.
+  La répartition est supposée uniforme et Ra/température sont **non
+  mesurés** : l'accord avec les mesures doit être quantifié, pas présumé.
+  Aucun canal ionique actif n'est inventé.
+- `scripts/allen_human_active_models.py` utilise
+  `BiophysicalApi.get_neuronal_models` pour chercher des modèles
+  biophysiques déjà ajustés par l'Allen Institute à un spécimen
+  **Homo sapiens** ; il valide la correspondance de spécimen et exclut les
+  modèles non biophysiques. `run_verified_allen_model.py` vérifie
+  les empreintes des fichiers téléchargés avant qu'un chercheur puisse
+  exécuter explicitement le véritable modèle NEURON dans un environnement
+  séparé. Les mécanismes MOD téléchargés **ne sont jamais exécutés en
+  production ni automatiquement dans la CI**.
+- La source publique officielle Allen contient des reconstructions et des
+  modèles de neurones notamment corticaux, pas une reconstruction
+  synapse-par-synapse de l'amygdale humaine. **Ne pas déduire
+  les structures de l'amygdale ni leurs connectivités de ces cellules.**
+
+### Vérifications de cette tranche
+
+- CI Node.js : tests de géométrie et d'intégrité SWC, limites de mémoire,
+  calculs SI, oscillations HH du banc de référence et sécurité.
+- CI Python : vérification des métadonnées humaines, export A/V → pA/mV,
+  sélection du modèle actif lié au spécimen, contrôle SHA-256, refus de
+  téléchargement silencieux de modèles non humains.
+- CI scientifique NEURON (`aura-neuron-biophysics-research.yml`) :
+  exécute réellement le solveur NEURON 9.0.2 sur une **morphologie
+  synthétique contrôlée**, jamais revendiquée issue d'un humain.
+- Validation biologique réelle (`aura-allen-real-human-validation.yml`) :
+  tentative d'acquisition sur un spécimen humain public avec morphologie,
+  numéro 643582610, puis calcul NEURON et publication d'un rapport
+  numérique restreint. Tant que le job n'a pas réussi, **ne pas
+  déclarer l'acquisition réelle accomplie**.
+- Le moteur de recherche demeure séparé de l'identité, de la mémoire,
+  des décisions et de l'interface d'AURA en production.
+
+### Poursuite nécessaire pour satisfaire le projet intégral
+
+Les régions amygdaliennes humaines, leurs différents noyaux,
+l'hippocampe, le cortex, le thalamus, les ganglions de la base, la
+neuroglie, le cerveau endocrine, les réseaux vagaux, le corps
+physiologique et la plasticité nécessitent des données expérimentales
+provenant des tissus et systèmes correspondants, une calibration des
+conductances et une validation multiscalaire. Les régions ne peuvent
+être considérées comme construites parce que leur nom apparaît dans
+`biophysical_microcircuit.js`.
+
+Le dernier niveau — reproduction intégrale du cerveau humain et
+effets sur les choix, pensées et comportements — demeure une
+**hypothèse de programme de recherche**, pas une réalisation
+démontrée par cette PR.
+
+### Références de méthode
+
+- https://alleninstitute.github.io/AllenSDK/cell_types.html
+- https://alleninstitute.github.io/AllenSDK/biophysical_models.html
+- https://www.neuronsimulator.org/en/9.0.1/guide/bio_faq.html
+- https://docs.neuroml.org/Userdocs/NeuroMLv2AndLEMS.html
