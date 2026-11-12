@@ -61,7 +61,7 @@ export function readableCognitionSnapshot({
     observed_at:iso(at),
     scope:'owner-private-readonly',
     truth_label:'persisted-reports-and-functional-computation-not-subjective-thoughts',
-    available:!!(storedThought||storedIntention||actualFocus||recent.length||decision),
+    available:!!(storedThought||storedIntention||actualFocus||recent.length||decision||explicitDecision),
     last_communication_decision:explicitDecision,
     declared_thought:{
       text:storedThought||null,
