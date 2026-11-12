@@ -78,6 +78,7 @@ test('held-out sweep scoring reports errors but never certifies biological fidel
     dt_ms:1,
   };
   const report=validateHumanPassiveCell(r,heldout);
+  assert.equal(validateHumanPassiveCell(r,{...heldout,specimen_id:Number(model.specimen_id)}).validation.samples,100);
   assert.equal(report.validation.samples,100);
   assert.ok(report.validation.rmse_mV>=0);
   assert.ok(report.validation.rmse_mV<1);
