@@ -32,6 +32,8 @@ import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './di
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
 import { calibrateHumanPassiveCell, validateHumanPassiveCell } from './human_ephys_calibration.js';
+import {constructHumanPassiveArbor,runPassiveArbor} from './biophysical_morphology.js';
+import {simulateSynapticArbor} from './biophysical_synapses.js';
 import { ObservedProcessMonitor } from './process_observer.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
@@ -2109,6 +2111,61 @@ app.post('/api/research/biophysics/human-passive', async (request, reply) => {
       evidence_kind:'human-passive-cell-features',
       externally_validated:result.validation?.externally_validated===true,
       no_llm:true,production_brain_unchanged:true};
+  }catch(error){
+    if(error instanceof TypeError||error instanceof RangeError)
+      return reply.code(422).send({error:String(error.message).slice(0,180)});
+    throw error;
+  }
+});
+
+// Morphologically explicit, passive cable and typed synaptic research.
+// Never modify human features, persistent AURA history, production choices
+// or silently call an LLM. The HTTP version uses a small CPU budget;
+// larger cells belong in the offline scientific runner.
+app.post('/api/research/biophysics/human-arbor', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private,no-store');
+  const body=request.body||{};
+  if(typeof body.swc_text!=='string'||body.swc_text.length>120000||
+    typeof body.record!=='object'||!body.record)
+    return reply.code(422).send({error:'SWC and matching human passive-feature record required'});
+  const durationMs=Number(body.duration_ms??30);
+  const dtMs=Number(body.dt_ms??.1);
+  const injection=Number(body.soma_current_pA??0);
+  if(!Number.isFinite(durationMs)||durationMs<=0||durationMs>50||
+    !Number.isFinite(dtMs)||dtMs<.05||dtMs>1||
+    !Number.isFinite(injection)||Math.abs(injection)>5000)
+    return reply.code(422).send({error:'Research CPU/current bounds exceeded'});
+  try{
+    const model=constructHumanPassiveArbor({
+      swcText:body.swc_text,humanFeatures:body.record,
+      axialResistivity_ohm_cm:body.axial_resistivity_ohm_cm??150,
+    });
+    if(model.count>256||Math.ceil(durationMs/dtMs)*model.count>100000)
+      return reply.code(422).send({error:'Too many morphological segments for online research; run offline'});
+    const synapses=body.synapses??[];
+    if(!Array.isArray(synapses)||synapses.length>32)
+      return reply.code(422).send({error:'Too many synaptic contacts for online research'});
+    const experiment=synapses.length
+      ?simulateSynapticArbor(model,synapses,{
+        duration_ms:durationMs,dt_ms:dtMs,
+        injected_pA:{[model.node_ids[0]]:injection}})
+      :runPassiveArbor(model,{
+        duration_ms:durationMs,dt_ms:dtMs,
+        soma_current_pA:injection,
+      });
+    return {ok:true,
+      morphology:{compartments:model.count,specimen_id:model.specimen_id,
+        total_surface_um2:model.total_surface_um2,
+        axial_resistivity_ohm_cm:model.axialResistivity_ohm_cm},
+      experiment,
+      claims:{human_cell_source_authenticated:false,
+        active_channel_calibration:false,
+        human_neuroanatomical_circuit_validated:false,
+        biologically_faithful_brain:false},
+      read_only:true,llm_used:false};
   }catch(error){
     if(error instanceof TypeError||error instanceof RangeError)
       return reply.code(422).send({error:String(error.message).slice(0,180)});
