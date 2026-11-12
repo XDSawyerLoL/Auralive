@@ -43,6 +43,21 @@ test('native micro-circuit resolves the five actual conversation turns with no i
  assert.equal(identity.act,'self_identity');
 });
 
+test('counterfactual functional curiosity changes style, not facts or claimed consciousness',()=>{
+ const p=plan('tu semble intrigué je me trompe?',turns.slice(6));
+ const low=nativeSocialReply({...p,inner_dialogue:{competition:{curiosity:.12}}});
+ const high=nativeSocialReply({...p,inner_dialogue:{competition:{curiosity:.85}}});
+ assert.notEqual(low,high);
+ assert.match(low,/phrase sans la finir/);
+ assert.match(high,/phrase inachevée/);
+ assert.doesNotMatch(low+' '+high,/je ressens|je suis intriguée|conscience/);
+ const address=plan('Tu',turns.slice(3,7));
+ assert.notEqual(
+  nativeSocialReply({...address,inner_dialogue:{competition:{curiosity:.12}}}),
+  nativeSocialReply({...address,inner_dialogue:{competition:{curiosity:.85}}})
+ );
+});
+
 test('no previous question means no fabricated social acknowledgement or fictitious remembered topic',()=>{
  assert.equal(socialTurnDecision('bien merci',[]),null);
  assert.equal(socialTurnDecision('comment ça',
