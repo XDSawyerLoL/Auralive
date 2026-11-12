@@ -2262,6 +2262,26 @@ app.post('/api/research/biophysics/experiment', async (request, reply) => {
   }
 });
 
+// Optional sensory input: private browser opt-in, numeric features only.
+// This is not autonomous camera access, speech recognition, or object vision.
+app.post('/api/cognition/senses', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private, no-store');
+  const reading=kernel.observeBrowserSense(request.body);
+  if(!reading)return reply.code(422).send({error:'Mesure sensorielle invalide ou périmée'});
+  return {ok:true,reading,stored_only_in_process:true,
+    used_as_independent_evidence:false,automatic_speech:false};
+});
+
+app.get('/api/cognition/senses', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  return {ok:true,senses:kernel.sensorySnapshot(),
+    evidence_scope:'client-reported-sensor-features'};
+});
+
 app.get('/api/cognition/initiative', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   reply.header('Cache-Control','private, no-store');
