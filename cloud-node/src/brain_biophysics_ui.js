@@ -1,7 +1,7 @@
 // Browser research interface embedded inside the ONE AURA brain-and-chat page.
 // No pseudo-neural animation. All voltage paths are numeric traces from a
 // declared scientific equation or private experiment; real NWB is statistics only.
-export const BRAIN_BIOPHYSICS_HTML=String.raw\`
+export const BRAIN_BIOPHYSICS_HTML=String.raw`
 <section class="bio-research" id="bioEvidencePanel" aria-label="Laboratoire biophysique et preuves humaines">
   <div class="bio-heading">
     <div class="bio-heading-title">
@@ -47,9 +47,9 @@ export const BRAIN_BIOPHYSICS_HTML=String.raw\`
     <span id="bioProvenance">Aucune observation humaine chargée.</span>
     <a id="bioReportLink" href="https://github.com/XDSawyerLoL/Auralive/actions/runs/43264994852" target="_blank" rel="noopener noreferrer">Rapport du calcul humain</a>
   </div>
-</section>\`;
+</section>`;
 
-export const BRAIN_BIOPHYSICS_CSS=String.raw\`
+export const BRAIN_BIOPHYSICS_CSS=String.raw`
 .bio-research{position:relative;margin:12px 14px 16px;padding:15px 16px 13px;border:1px solid #2b4557;
  background:linear-gradient(152deg,rgba(14,27,39,.98),rgba(8,16,26,.99) 53%,rgba(17,22,37,.98));
  border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.16);color:#dcebf1}
@@ -91,6 +91,7 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw\`
 .bio-run-btn{padding:9px 12px;background:#173943;color:#b8fcf4;border:1px solid #39858c;border-radius:7px;
  cursor:pointer;font-size:11px;margin:8px 0}
 .bio-run-btn:disabled{opacity:.5;cursor:not-allowed}#bioRunStatus{display:block;font-size:10px;color:#b7c6d1}
+.bio-pane[hidden],.bio-anatomy[hidden]{display:none!important}
 .bio-anatomy{background:#0b1721;border:1px solid #294254;border-radius:10px;padding:12px}
 .bio-anatomy-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;margin-bottom:10px}
 .bio-anatomy-head b{font-size:12px}.bio-anatomy-head small{color:#839fb1;font-size:10px}
@@ -115,9 +116,9 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw\`
  .bio-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
  .bio-system-grid{grid-template-columns:1fr}
  .bio-evidence-tag{white-space:normal}}
-\`;
+`;
 
-export const BRAIN_BIOPHYSICS_SCRIPT=String.raw\`
+export const BRAIN_BIOPHYSICS_SCRIPT=String.raw`
 const bioLab={mode:'human',evidence:null,hh:null,busy:false};
 const bioButtons={human:$('bioModeHuman'),hh:$('bioModeHH'),atlas:$('bioModeAtlas')};
 function bioStatus(text){const node=$('bioRunStatus');if(node)node.textContent=String(text||'');}
@@ -148,7 +149,7 @@ function bioRenderEvidence(){
  setText('bioProvenance','Allen Cell Types · NWB n° '+
    String(measurement.sweep_number||'—')+' · simulation NEURON · 12/11/2026 · aucune donnée en direct');
  const link=$('bioReportLink');
- if(link&&/^https:\\/\\/github\\.com\\/XDSawyerLoL\\/Auralive\\/actions\\/runs\\/\\d+$/.test(e.workflow_url||''))
+ if(link&&/^https:\/\/github\.com\/XDSawyerLoL\/Auralive\/actions\/runs\/\d+$/.test(e.workflow_url||''))
    link.href=e.workflow_url;
  const grid=$('bioSystemGrid');
  if(grid){
@@ -292,4 +293,4 @@ async function bioLoadEvidence(){
 }
 window.addEventListener('resize',()=>bioPaintTrace());
 void bioLoadEvidence();
-\`;
+`;
