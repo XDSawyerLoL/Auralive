@@ -32,6 +32,15 @@ test('published real human NWB receipt has stable grounded specimen, scope and h
  assert.equal(e.active_reference_comparison.allen_active_fitted_models_for_this_specimen,0);
  assert.equal(e.active_reference_comparison.active_human_ion_channels_validated,false);
  assert.equal(e.active_reference_comparison.heldout_human_ephys_validated,false);
+ assert.equal(e.active_multisweep_calibration.workflow_run_id,43294699060);
+ assert.deepEqual(e.active_multisweep_calibration.training.map(x=>x.sweep),[26,37]);
+ assert.equal(e.active_multisweep_calibration.validation.sweep,44);
+ assert.equal(e.active_multisweep_calibration.validation.observed_spikes,2);
+ assert.equal(e.active_multisweep_calibration.validation.simulated_spikes,0);
+ assert.equal(e.active_multisweep_calibration.validation.rmse_mV,4.343179);
+ assert.equal(e.active_multisweep_calibration.holdout_used_for_parameter_selection,false);
+ assert.equal(e.active_multisweep_calibration.human_active_channels_reconstructed,false);
+
 
 
  assert.equal(e.measured_nwb.independent_holdout,false);
@@ -83,6 +92,11 @@ test('biological lab is embedded in same AURA brain-and-dialogue page',()=>{
  assert.ok(BRAIN_BIOPHYSICS_HTML.includes('aucune donnée')===false);
  assert.match(BRAIN_BIOPHYSICS_CSS,/bio-research/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/bioLoadEvidence/);
+ assert.match(BRAIN_OPERATIONS_HTML,/id="bioFitDetails"/);
+ assert.match(BRAIN_BIOPHYSICS_SCRIPT,/bioFitSummary/);
+ assert.match(BRAIN_BIOPHYSICS_HTML,/<details class="bio-fit-details"/);
+ assert.doesNotMatch(BRAIN_BIOPHYSICS_HTML,/<details class="bio-fit-details"[^>]*open/);
+
  assert.match(BRAIN_BIOPHYSICS_SCRIPT,/calculated-not-measured/);
  assert.match(BRAIN_BIOPHYSICS_SCRIPT,/HH témoin/);
  assert.doesNotMatch(BRAIN_BIOPHYSICS_SCRIPT,/Math\.random|fakeSpike|fakePulse/);
