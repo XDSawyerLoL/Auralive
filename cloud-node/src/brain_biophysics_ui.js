@@ -58,6 +58,21 @@ export const BRAIN_BIOPHYSICS_HTML=String.raw`
     <p>Paramètres Na/K gelés depuis la cellule 643582610. Les caractéristiques passives restent propres à chaque cellule. Même si les décharges expérimentales sont réelles, la cinétique HH reste d'origine non humaine.</p>
     <a href="https://github.com/XDSawyerLoL/Auralive/actions/runs/43299079259" target="_blank" rel="noopener noreferrer">Rapport de simulation sur les cellules humaines (GitHub)</a>
   </details>
+  <details class="bio-fit-details" id="bioHumanNaKV2Details">
+    <summary><span>NOUVEAUX MÉCANISMES Na/K · 3 CELLULES</span><strong id="bioNaKV2Summary">Comparaison à charger</strong></summary>
+    <div class="bio-kinetics-scroll">
+      <table class="bio-kinetics-table" aria-label="Décharges humaines observées et simulations HH contre Na K">
+        <thead><tr><th>Cellule humaine</th><th>Mesurées</th><th>HH</th><th>AURA Na/K</th><th>Erreur Na/K</th></tr></thead>
+        <tbody>
+          <tr><th>643582610 · NWB 44</th><td>2</td><td>0</td><td id="bioNaKV2RefSpikes">—</td><td id="bioNaKV2RefRMSE">—</td></tr>
+          <tr><th>529898751 · NWB 54</th><td>3</td><td>0</td><td id="bioNaKV2CellA">—</td><td id="bioNaKV2CellARMSE">—</td></tr>
+          <tr><th>508410761 · NWB 58</th><td>2</td><td>0</td><td id="bioNaKV2CellB">—</td><td id="bioNaKV2CellBRMSE">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Les mécanismes Na/K ont été écrits pour AURA et ajustés à des enregistrements humains. Ils calculent désormais des décharges, mais leurs erreurs de tension sont plus fortes que celles du modèle HH témoin. Les propriétés moléculaires des canaux humains ne sont pas encore identifiées.</p>
+    <a href="https://github.com/XDSawyerLoL/Auralive/actions/runs/43302961099" target="_blank" rel="noopener noreferrer">Consulter le calcul NEURON et les trois validations humaines</a>
+  </details>
   <div class="bio-anatomy" id="bioAnatomyPane" hidden>
     <div class="bio-anatomy-head"><b>Cartographie des preuves par système biologique</b><small>Les noms de régions ne prouvent aucune émulation humaine.</small></div>
     <div class="bio-system-grid" id="bioSystemGrid"><p>Chargement des états de validation…</p></div>
@@ -111,6 +126,13 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw`
  cursor:pointer;font-size:11px;margin:8px 0}
 .bio-run-btn:disabled{opacity:.5;cursor:not-allowed}#bioRunStatus{display:block;font-size:10px;color:#b7c6d1}
 .bio-pane[hidden],.bio-anatomy[hidden]{display:none!important}
+.bio-kinetics-scroll{width:100%;overflow-x:auto;margin-top:9px}
+.bio-kinetics-table{width:100%;min-width:430px;border-collapse:collapse;font-size:10px;text-align:right;font-variant-numeric:tabular-nums}
+.bio-kinetics-table th,.bio-kinetics-table td{padding:8px 6px;border-bottom:1px solid #334259}
+.bio-kinetics-table th:first-child{text-align:left}
+.bio-kinetics-table thead th{font:700 9px ui-monospace,monospace;color:#8acbd5;white-space:nowrap}
+.bio-kinetics-table tbody td{color:#e3f0f4;font:600 10px ui-monospace,monospace}
+#bioHumanNaKV2Details summary strong{color:#f2bb8f}
 .bio-fit-details{margin:10px 0;border:1px solid #36485d;background:#111c2a;border-radius:10px;padding:8px 10px;color:#d9e6ed}
 .bio-fit-details summary{display:flex;cursor:pointer;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;list-style:none;font-size:10px}
 .bio-fit-details summary::-webkit-details-marker{display:none}
@@ -280,6 +302,16 @@ function bioRenderEvidence(){
    setText('bioCohortCellOne',formatRow(rows[0]));
    setText('bioCohortCellTwo',formatRow(rows[1]));
    setText('bioCohortSummary','2 cellules · HH : 0 décharge reproduite');
+ }
+ const naik=e.original_NaK_human_fit_v2;
+ if(naik?.external?.length===2){
+   setText('bioNaKV2Summary','3 cellules · 1 décharge calculée / cellule');
+   setText('bioNaKV2RefSpikes',bioNumber(naik.locked_holdout.predicted_spikes,0));
+   setText('bioNaKV2RefRMSE',bioNumber(naik.locked_holdout.rmse_mV,2)+' mV');
+   setText('bioNaKV2CellA',bioNumber(naik.external[0].predicted_spikes,0));
+   setText('bioNaKV2CellARMSE',bioNumber(naik.external[0].rmse_mV,2)+' mV');
+   setText('bioNaKV2CellB',bioNumber(naik.external[1].predicted_spikes,0));
+   setText('bioNaKV2CellBRMSE',bioNumber(naik.external[1].rmse_mV,2)+' mV');
  }
  const hhComparison=e.active_reference_comparison;
  setText('bioSpikesContext',Number.isInteger(spiking.sweep_number)
