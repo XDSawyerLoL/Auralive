@@ -96,7 +96,7 @@ export function validateHumanPassiveCell(record,heldout){
     throw new TypeError('held-out trace must match the measured human specimen');
   if(heldout.used_for_fit!==false||
     heldout.source?.origin!=='Allen Cell Types Database'||
-    !idPattern.test(String(heldout.sweep_number||'')))
+    !Number.isSafeInteger(heldout.sweep_number)||heldout.sweep_number<0)
     throw new TypeError('independent held-out sweep provenance required');
   const voltage=heldout.voltage_mV;
   const current=heldout.stimulus_current_pA;
