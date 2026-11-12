@@ -73,6 +73,9 @@ class CohortSelectionTests(unittest.TestCase):
         for s in report['transfer_test_specimens']:
             self.assertTrue(s['validation_sweep_number'] > 0)
             self.assertEqual(s['validation_current_pA'], 100)
+            self.assertEqual(s['challenge_current_pA'], 200)
+            self.assertNotEqual(s['challenge_sweep_number'],
+                                s['validation_sweep_number'])
             self.assertEqual(s['available_current_conditions'], 4)
 
 
