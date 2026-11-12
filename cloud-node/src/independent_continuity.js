@@ -16,11 +16,11 @@ export class IndependentContinuity {
     if(!db||!selfInquiry||!history)throw new Error('Independent inquiry dependencies missing');
     this.db=db;this.selfInquiry=selfInquiry;this.history=history;this.clock=clock;
   }
-  async step({soul}={}){
+  async step({soul,periodMs=ONE_HOUR}={}){
     if(!soul||typeof soul!=='object')throw new Error('Soul required');
     const nowMs=this.clock(),at=iso(nowMs);
     const before=soul.independent_activity||{};
-    if(!independentInquiryDue(before,nowMs))
+    if(!independentInquiryDue(before,nowMs,periodMs))
       return {executed:false,reason:'not-due',soul};
     const signal=organSignals(soul.organism||{},nowMs);
     // An autonomous investigation must not compromise an overloaded process.
