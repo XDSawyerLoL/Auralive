@@ -2139,6 +2139,22 @@ export class CognitiveKernel {
     plan.inner_dialogue=this.innerDialogue.publicState(deliberation);
     plan.response_tone=deliberation.tone;
     this.soulCache.inner_dialogue=plan.inner_dialogue;
+    // This is the actual explicit communication decision of AURA's kernel:
+    // not a synthesized 'inner thought' from Groq or a fixed persona phrase.
+    // Expose only on the existing authenticated introspection route.
+    this.soulCache.last_communication_decision={
+      at:deliberation.at,
+      act:String(plan.act||'respond').slice(0,75),
+      intended_goal:String(plan.goal||'').slice(0,450),
+      context_source:plan.social_turn?.source
+        ||'CognitionEngine.planReply',
+      context_reason:String(plan.social_turn?.reason||'').slice(0,100),
+      selected_action:plan.inner_dialogue?.selected_action||'respond',
+      response_tone:plan.response_tone,
+      source:'recorded-kernel-decision-before-language',
+      model_selected_intention:false,
+      response_committed:false,
+    };
     await this.trace('inner-appraisal',deliberation.situation,'',{
       flow_id:brainFlowId,at:deliberation.at,
       tone:deliberation.tone,selected_action:deliberation.selected_action,
@@ -2380,6 +2396,14 @@ export class CognitiveKernel {
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
+    if(this.soulCache.last_communication_decision){
+      this.soulCache.last_communication_decision={
+        ...this.soulCache.last_communication_decision,
+        response_committed:Boolean(answer),
+        verbalization_source:answer
+          ?this.expression.lastMode:'unavailable',
+      };
+    }
     if(privateView&&answer)
       this.soulCache.history_pending_episode_id=pendingHistoryEpisode?.id??null;
     if(privateView&&answer){
