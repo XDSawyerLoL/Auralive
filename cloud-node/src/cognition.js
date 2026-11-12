@@ -455,7 +455,7 @@ export class CognitionEngine {
       ? soul.emergent_identity : {};
     const learnedCount=Math.max(0,Number(emergent.observations||0));
     const learnedPriority=normalize(emergent.current_priority||'observer_les_resultats');
-    const learnedQuestion=normalize(emergent.open_question||'Quelles tendances de mes décisions sont réellement confirmées ?');
+    const learnedQuestion=normalize(emergent.open_question||'');
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
     const relationship = organism.relationship && typeof organism.relationship === 'object' ? organism.relationship : {};
