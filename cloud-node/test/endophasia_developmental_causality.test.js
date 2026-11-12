@@ -279,3 +279,48 @@ test('canonical kernel applies relational feedback only after learned-experience
   const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
   assert.match(kernel,/if\(after\.revision>before\.revision\)\{[\s\S]{0,450}observeSocialFeedback/);
 });
+
+test('the internal counterfactual uses semantic representations, not simulated inner sound',async()=>{
+  const evidence=experienceWithCorrections();
+  const proposition=dialogue.derivePrivateInquiry({
+    experience:evidence,identity,organism,now:AT});
+  assert.equal(proposition.semantic_intent.modality,'nonverbal-symbolic');
+  assert.equal(proposition.semantic_intent.relation,
+    'compare-learned-policy-with-history-ablation');
+  assert.equal(proposition.semantic_intent.context,'dialogue_general');
+  // A French question is a rendering and cannot rewrite a causal premise.
+  const variant={
+    ...dialogue,
+    derivePrivateInquiry:()=>({...proposition,
+      question:'AN ARBITRARY AND UNTRUSTED STRING',
+    }),
+  };
+  const {db,history}=deps();
+  const step=await new IndependentContinuity({db,history,selfInquiry:inquiry,
+    innerDialogue:variant,livedExperience:lived,clock:()=>MS})
+    .step({soul:makeSoul(evidence)});
+  assert.equal(step.receipt.causal_change,true);
+  assert.equal(step.receipt.context,'dialogue_general');
+  assert.equal(step.receipt.observed_action,'clarify');
+  assert.doesNotMatch(JSON.stringify(step.receipt),/ARBITRARY/);
+  assert.equal(step.soul.endophasia.semantic_intent.modality,'nonverbal-symbolic');
+  // Only safe concept categories are returned by public introspection.
+  const publicView=dialogue.publicInquiry(step.soul.endophasia);
+  assert.equal(publicView.semantic_intent.modality,'nonverbal-symbolic');
+  assert.doesNotMatch(JSON.stringify(publicView),/ARBITRARY/);
+});
+
+test('an unrecognized semantic hypothesis cannot trigger autonomous action',async()=>{
+  const evidence=experienceWithCorrections();
+  const proposition=dialogue.derivePrivateInquiry({
+    experience:evidence,identity,organism,now:AT});
+  const invalid={derivePrivateInquiry:()=>({...proposition,
+    semantic_intent:{relation:'external-write',context:'dialogue_general'}})};
+  const {db,history,queries}=deps();
+  const result=await new IndependentContinuity({db,history,selfInquiry:inquiry,
+    innerDialogue:invalid,livedExperience:lived,clock:()=>MS})
+    .step({soul:makeSoul(evidence)});
+  assert.equal(result.executed,false);
+  assert.equal(result.reason,'semantic-proposition-invalid');
+  assert.deepEqual(queries,[]);
+});
