@@ -934,8 +934,20 @@ $('chatSend').onclick=async()=>{
      if(!answer||out.language_unavailable){
        chatLine('MOTEUR INDISPONIBLE','Aucun texte vérifiable généré ; consulter le diagnostic.');
      }else{
-       chatLine(out.nucleus_verbalization_validated
-         ?'AURA':'AURA · FORMULATION À VÉRIFIER',answer);
+       const provider=String(out.language_provider||'').toLowerCase();
+       const providerLabel=provider.includes('groq')?'Groq Free'
+         :provider.includes('openrouter')?'OpenRouter Free'
+         :provider.includes('embedded')||provider.includes('local')?'Modèle local'
+         :provider?'Fournisseur externe':'Moteur non identifié';
+       const verified=out.nucleus_verbalization_validated===true&&
+         out.nucleus_plan_origin==='AURA.nucleus.CognitionEngine.planReply'&&
+         Boolean(out.brain_flow_id);
+       const speechMs=Number(out.language_latency_ms)||0;
+       const title=verified
+         ?'AURA · plan noyau · voix '+providerLabel+
+           (speechMs>0?' · '+Math.round(speechMs)+' ms de formulation':'')
+         :'AURA · FORMULATION À VÉRIFIER';
+       chatLine(title,answer);
      }
    }
    await poll();
