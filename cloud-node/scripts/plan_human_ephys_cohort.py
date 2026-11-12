@@ -63,9 +63,33 @@ def select_cohort(human_reconstructed_cells, features, get_sweeps, *,
         except (ValueError, KeyError, TypeError) as e:
             errors.append({'specimen_id': sid, 'reason': type(e).__name__})
             continue
+        # Second predeclared evaluation: strongest positive long-square
+        # stimulus (up to 500 pA), selected on CURRENT only, never spikes.
+        stronger = []
+        for sweep in get_sweeps(sid):
+            try:
+                amp = float(sweep.get('stimulus_absolute_amplitude'))
+                num = sweep.get('sweep_number')
+                name = str(sweep.get('stimulus_name', '')).strip().lower()
+            except (ValueError, TypeError):
+                continue
+            if (isinstance(num, int) and not isinstance(num, bool)
+                and 0 < amp <= 500 and math.isfinite(amp)
+                and 'long square' in name):
+                stronger.append((amp, num))
+        if not stronger:
+            errors.append({'specimen_id': sid, 'reason': 'NoPositiveChallenge'})
+            continue
+        strongest = sorted(stronger, key=lambda row:(-row[0], row[1]))[0]
+        if strongest[1] == split['validation_sweep_numbers'][0]:
+            errors.append({'specimen_id': sid, 'reason': 'NoDistinctChallenge'})
+            continue
         chosen.append({'specimen_id': sid,
                        'validation_sweep_number': split['validation_sweep_numbers'][0],
                        'validation_current_pA': split['validation_condition_pA'],
+                       'challenge_sweep_number': strongest[1],
+                       'challenge_current_pA': strongest[0],
+                       'challenge_selection': 'strongest positive long-square amplitude up to 500 pA; no spike-count inspection',
                        'available_current_conditions': split['distinct_current_conditions']})
         if len(chosen) == count:
             break
@@ -75,7 +99,7 @@ def select_cohort(human_reconstructed_cells, features, get_sweeps, *,
     return {
         'schema': 'aura-allen-human-cohort-v1',
         'selection_seed': SEED,
-        'selection_policy': 'stable SHA256 specimen ranking, required SWC, measured passive features, positive long-square currents; holdout median current',
+        'selection_policy': 'stable SHA256 specimen ranking, required SWC/passive features; evaluate both median and strongest <=500pA long-square currents, selected without spike labels',
         'reference_specimen': reference,
         'transfer_test_specimens': chosen,
         'candidate_pool_size': len(candidates),
