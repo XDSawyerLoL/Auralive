@@ -1,4 +1,5 @@
 import {BRAIN_OPERATIONS_CSS} from './brain_operations_style.js';
+import {BRAIN_BIOPHYSICS_HTML, BRAIN_BIOPHYSICS_CSS} from './brain_biophysics_ui.js';
 import { COGNITIVE_ATLAS_CSS, COGNITIVE_ATLAS_HTML } from './cognitive_atlas_ui.js';
 import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
 import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
@@ -19,6 +20,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <style>__ATLAS_CSS__</style>
 <style>__SCIENCE_CSS__</style>
 <style>__READABLE_CSS__</style>
+<style>__BIO_CSS__</style>
 </head>
 <body>
 <div class="shell">
@@ -37,6 +39,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   <nav class="scene-nav" aria-label="Accès aux espaces d’AURA">
     <button class="scene-active" data-focus="conversation-panel" type="button">Dialogue</button>
     <button data-focus="brain" type="button">Organisme</button>
+    <button data-focus="bioEvidencePanel" type="button">Biologie mesurée</button>
     <button data-focus="neuro-lab-details" type="button">Labo / Génome</button>
     <button data-focus="atlas-v3" type="button">Atlas v3 · 18 processus</button>
     <button data-focus="homeostasis-panel" type="button">État interne</button>
@@ -195,6 +198,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
             <div class="ni-meta">Traitement routé et décision</div><strong id="niKernelTime">—</strong><small id="niKernelInfo">Aucune transition constatée</small>
           </div>
         </div>
+        __BIO_HTML__
         <div class="graph-bottom">
           <div>
             <div class="graph-legend">
@@ -340,6 +344,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 .replace('__OPS_CSS__', BRAIN_OPERATIONS_CSS)
 .replace('__REFERENCE_CSS__', BRAIN_REFERENCE_THEME)
 .replace('__READABLE_CSS__', BRAIN_READABLE_CSS)
+.replace('__BIO_CSS__', BRAIN_BIOPHYSICS_CSS)
+.replace('__BIO_HTML__', BRAIN_BIOPHYSICS_HTML)
 .replace('__SCIENCE_CSS__',BRAIN_SCIENCE_LAB_CSS)
 .replace('__SCIENCE_HTML__',BRAIN_SCIENCE_LAB_HTML)
 .replace('__ORGANISM_V5_HTML__',BRAIN_ORGANISM_V5_HTML)
