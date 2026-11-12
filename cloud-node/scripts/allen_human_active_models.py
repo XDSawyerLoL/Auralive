@@ -30,13 +30,15 @@ def model_records(specimen_id, human_cells, models):
         model_id = item.get('id')
         sample_id = item.get('specimen_id')
         template_id = item.get('neuronal_model_template_id')
-        if template_id not in ALLOWED_BIOPHYSICAL_TEMPLATES:
-            continue
         if not isinstance(model_id, int) or isinstance(model_id, bool) or model_id < 1000:
             raise ValueError('invalid Allen neuronal model ID')
         if sample_id != specimen_id:
             # No model is ever silently reassigned to a different donor cell.
             raise ValueError('neuronal model specimen differs from authenticated human cell')
+        if template_id not in ALLOWED_BIOPHYSICAL_TEMPLATES:
+            # Valid specimen data can have non-biophysical model types.
+            # We ignore those instead of pretending they are active channels.
+            continue
         results.append({'model_id': model_id, 'specimen_id': specimen_id,
                         'neuronal_model_type_id': item.get('neuronal_model_template_id'),
                         'data_origin': 'Allen Cell Types Database'})
