@@ -2389,9 +2389,14 @@ app.post('/api/chat', async (request, reply) => {
     language_unavailable: unavailable,
     retryable: unavailable,
     service_status: unavailable ? {
-      code: 'french-inference-unavailable',
-      message: 'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
-      recovery: 'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
+      code: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+        ?'local-corpus-unsupported-intent':'french-inference-unavailable',
+      message: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+        ?'Le moteur local ne sait pas encore formuler cet acte de langage. Aucun fournisseur distant sollicité.'
+        :'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
+      recovery: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+        ?'Enrichir les schémas sémantiques et le réalisateur grammatical local.'
+        :'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
     } : null,
     curiosity_question: curiosityItem,
     voice_ticket: answer ? createVoiceTicket(answer) : '',
