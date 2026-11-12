@@ -9,6 +9,8 @@ on:
       - "cloud-node/src/human_ephys_calibration.js"
       - "cloud-node/scripts/run_human_active_hh_control.py"
       - "cloud-node/scripts/allen_human_active_models.py"
+      - "cloud-node/scripts/fit_human_active_multisweep.py"
+      - "cloud-node/scripts/test_fit_human_active_multisweep.py"
   workflow_dispatch:
 
 permissions:
@@ -17,7 +19,7 @@ permissions:
 jobs:
   actual-allen-human-cell:
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    timeout-minutes: 38
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -308,6 +310,57 @@ jobs:
           report['independent_allen_active_model_availability']=availability
           (root/'validation-public.json').write_text(json.dumps(report,indent=2))
           print('Allen active model discovery:',availability)
+          PY
+      - name: Fit multiple real human NWB currents and test untouched validation current
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/aura-allen-human-643582610"
+          # Split is selected deterministically from STIMULUS metadata before
+          # examining voltage/spike counts. 2 distinct currents train and
+          # a 3rd current is locked for a single final validation pass.
+          python scripts/fit_human_active_multisweep.py \
+            --specimen-id 643582610 \
+            --swc "$ROOT/reconstruction.swc" \
+            --features "$ROOT/human-features.json" \
+            --manifest "$ROOT/cache/manifest.json" \
+            --output "$ROOT/multisweep-fit-report.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          summary=json.loads((root/'validation-public.json').read_text())
+          experiment=json.loads((root/'multisweep-fit-report.json').read_text())
+          split=experiment['selection']
+          heldout=experiment['validation_metrics']
+          assert len(split['training_sweep_numbers'])>=2
+          assert not set(split['training_sweep_numbers']).intersection(
+              split['validation_sweep_numbers'])
+          assert experiment['validation_used_for_model_selection'] is False
+          assert experiment['true_human_active_channels_reconstructed'] is False
+          assert experiment['channel_gating_source']=='historic squid HH not human kinetics'
+          assert experiment['no_llm'] and experiment['production_state_modified'] is False
+          summary['active_multisweep_fit']={
+              'version':experiment['schema'],
+              'selection':split,
+              'number_of_train_sweeps':len(split['training_sweep_numbers']),
+              'best_fit_parameters':experiment['best_fit_parameters'],
+              'training_mean_loss':experiment['training_mean_loss'],
+              'training_metrics':experiment['training_metrics'],
+              'heldout_voltage_rmse_mV':heldout['rmse_mV'],
+              'heldout_observed_spikes':heldout['observed_spikes'],
+              'heldout_simulated_spikes':heldout['predicted_spikes'],
+              'heldout_spike_count_error':heldout['spike_count_error'],
+              'heldout_sweep_number':heldout['sweep_number'],
+              'heldout_validation_used_for_fit':False,
+              'channel_kinetics':'squid-HH-reference-not-human-calibrated',
+              'human_biological_fidelity_validated':False,
+              'entire_brain_emulated':False,
+          }
+          (root/'validation-public.json').write_text(
+              json.dumps(summary,indent=2)+'\n')
+          print('Locked heldout result:',summary['active_multisweep_fit'])
           PY
       - name: Upload measurements and provenance report only
         uses: actions/upload-artifact@v4
