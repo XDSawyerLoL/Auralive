@@ -155,6 +155,18 @@ export class InnerDialogueEngine {
     return {
       version:'functional-endophasia-v1',at,focus:'test-learned-context-policy',
       context:chosen.context,experience_revision:revision,
+      // Pre-verbal proposition: this bounded semantic representation is what
+      // determines the test. The French question below is only its rendering.
+      // This is not an auditory image, inner voice or language-model reasoning.
+      semantic_intent:{
+        relation:'compare-learned-policy-with-history-ablation',
+        context:chosen.context,
+        evidence_source:'lived_experience.cases',
+        reported_failures:Number(chosen.bad.toFixed(3)),
+        verified_receipts:chosen.verified,
+        candidate_action:'evaluate-existing-policy',
+        modality:'nonverbal-symbolic',
+      },
       question:'Dans le contexte « '+chosen.context+
         ' », mes expériences changent-elles réellement ma prochaine décision ?',
       origin:'experience-derived-private-question',
@@ -175,6 +187,12 @@ export class InnerDialogueEngine {
       question:context==='unknown'?'':(
         'Dans le contexte « '+context+
         ' », mes expériences changent-elles réellement ma prochaine décision ?'),
+      semantic_intent:{
+        relation:'compare-learned-policy-with-history-ablation',
+        context,modality:'nonverbal-symbolic',
+        // The source report is never treated as independent success.
+        evidence_source:'lived_experience.cases',
+      },
       outcome:['supported','counterexample','inconclusive'].includes(input.outcome)
         ?input.outcome:'unexamined',
       causal_change:input.causal_change===true,
