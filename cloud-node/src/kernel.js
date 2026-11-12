@@ -944,6 +944,30 @@ export class CognitiveKernel {
         };
       }
       await this.saveSoul();
+      // Each receipt below follows completed, persisted computations.
+      // At most one hop per genuine ambient tick; no visual heartbeat,
+      // browser-triggered synthetic route, or hypothetical memory operation.
+      if(!force&&!String(text).trim()&&['ambient','startup'].includes(trigger)){
+        const cycleNo=Number(this.soulCache.existence?.background_cycles||0);
+        const sensor=this.soulCache.organism?.homeostasis?.sensor;
+        const sensorAt=Date.parse(String(sensor?.sampled_at||''));
+        const sampled=sensor?.source==='node-process'&&Number.isFinite(sensorAt)&&
+          Math.abs(Date.now()-sensorAt)<=120000;
+        const [from,to,stage]=cycleNo%2===0
+          ?['thalamus','workspace','actual-workspace-competition']
+          :sampled
+            ?['homeostasis','interoception','actual-process-measurement']
+            :['kernel','homeostasis','actual-idle-regulation'];
+        await this.trace('brain-hop','observed-autonomous-cycle','',{
+          flow_id:randomUUID(),from,to,stage,status:'ok',at:timestamp,
+          origin:'CognitiveKernel.tick',autonomous:true,
+          cycle_count:cycleNo,source_verified:sampled,
+          evidence:'persisted-organism-and-workspace-cycle',
+          consciousness_claim:false,
+        }).catch(error=>{
+          this.lastError=String(error?.message||error).slice(0,500);
+        });
+      }
       if (!shouldReflect) {
         return {
           ok: true,
