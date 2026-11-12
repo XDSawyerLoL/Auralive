@@ -497,3 +497,84 @@ L'archive du premier rapport de CI porte le nom
 Ne pas confondre avec la preuve de physiologie d'une amygdale,
 d'une cellule humaine active, d'un circuit entier ou d'un
 cerveau conscient.
+
+
+## Lecture expérimentale visible dans l'interface unique — 12/11/2026
+
+### Objectif d'interface
+
+La cartographie des modules Node.js est une **vue informatique** ;
+la courbe de tension et l'anatomie sont une **vue biologique de recherche**.
+Leur coexistence dans la même page ne signifie pas que le modèle humain
+contrôle déjà la politique d'AURA. Ne pas faire pulser des neurones
+graphiques fictifs pour donner une impression de vie.
+
+Une section « Biologie mesurée » est intégrée **à la page de dialogue et
+connectome**, avec boutons accessibles :
+- **Cellule humaine / RC** : réponse passive *calculée* à une
+  stimulation virtuelle −10 pA (120 ms). La courbe n'est **pas** une
+  reproduction de la trajectoire NWB mesurée.
+- **Décharges / banc HH** : uniquement sur clic et après autorisation
+  privée, véritable résolution numérique de l'HH historique de calmar
+  avec connexions illustratives « thalamus », « amygdale » ; résultat
+  explicitement étiqueté « non calibré humain » et jamais activité
+  spontanée du cerveau AURA.
+- **Structures / maturité** : cartes de statut par niveau biologique,
+  sources publiées et avertissements lorsqu'un circuit humain n'est
+  pas reconstruit. Données publiques read-only, pas d'API Groq.
+- Rapport scientifique accessible depuis le pied du panneau, et
+  aucune écriture dans le noyau ou les souvenirs via ces commandes.
+
+### Deux balayages réels du même neurone humain
+
+**Spécimen Allen 643582610** (la reconstruction 13 995 points SWC,
+269 sections et 1 081 segments NEURON est déjà rapportée plus haut).
+
+| Balayage humain (mesuré) | Stimulation | Activité | Interprétation |
+|---|---|---|---|
+| NWB n°25 | −10 pA maximum en valeur absolue | 0 potentiel d'action détecté, ΔV ≈ 2,016 mV | Comparaison passive NEURON RMSE 0,854 mV vs RC RMSE 1,061 mV |
+| NWB n°32 | courant positif atteignant ≈ 130 pA | **4 potentiels d'action détectés**, pic +21,281 mV, pente maximale 457,813 mV/ms | Données humaines actives **observées**, PAS reproduites par un modèle de canaux ioniques humains |
+
+- Le second balayage a été identifié par l'AllenSDK sur
+  `aura-allen-real-human-validation.yml`, job GitHub
+  `43277555645`. Il a été exporté puis analysé par le script
+  `scripts/analyze_human_spiking_nwb.py` avec un détecteur documenté :
+  franchissement montant de −20 mV, sommet ≥ 0 mV et temps réfractaire
+  minimal de 2 ms. Résultat **4 événements**. L'analyse requiert une
+  traçabilité expérimentale et ne prouve aucune compétence cognitive.
+- Le rapport complet produit dans le job est un artefact GitHub :
+  `aura-allen-human-real-cell-validation`.
+- La source NWB porte l'empreinte SHA-256
+  `73b89bef175547c1e0a134efa65bd075db4eecb9bfd6be01d2eae0b24e5e4687`.
+
+**Scientifiquement, la suite doit chercher à prédire** la fréquence,
+la forme, le seuil, le délai et l'adaptation de décharge du n°32 à
+partir d'un vrai modèle ionique humain, sur des enregistrements
+non utilisés pour l'optimisation, pas à inventer une propriété
+« cerveau conscient » à partir de quatre décharges.
+
+### Références pour les noyaux de l'amygdale
+
+Un atlas humain de transcriptomique spatiale des amygdales a été
+rendu public le 24 août 2026 dans NCBI GEO :
+- Visium `GSE342709` :
+  https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE342709
+- Xenium `GSE342289` :
+  https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE342289
+
+L'étude décrit 13 domaines anatomiques, des groupes de cellules
+différenciés et des îlots intercalés chez neuf donneurs. **Cela
+fournit un atlas cellulaire de référence**, pas les conductances,
+les synapses ni un connectome fonctionnel complet que nous
+pourrions immédiatement exécuter. Leur import, leur licence,
+la qualité des annotations, le couplage morpho-électrique et
+les comparaisons avec des mesures indépendantes restent à faire.
+
+### Interdictions de validation
+
+Aucune jauge d'affect dans l'application n'est décrite comme
+une concentration mesurée de neurotransmetteur ; aucune
+activité d'un modèle HH calmar n'est appelée neurone humain ;
+aucun enregistrement de spikes n'est appelé émulation d'une
+région cérébrale. Le projet reste expérimental et séparé
+de l'identité persistante de l'AURA déployée.
