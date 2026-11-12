@@ -36,16 +36,23 @@ export class IndependentContinuity {
       previous:soul.endophasia,now:at,
     });
     if(inquiry){
-      const observed=this.livedExperience.select(experience,inquiry.context,'respond');
+      // Only the structured, pre-verbal hypothesis directs the probe:
+      // replacing the French question or removing the LLM changes nothing.
+      const semantic=inquiry.semantic_intent||{};
+      const context=semantic.relation==='compare-learned-policy-with-history-ablation'
+        && /^(task|dialogue)_[a-z_]{3,50}$/.test(semantic.context)
+        ? semantic.context:null;
+      if(!context)return {executed:false,reason:'semantic-proposition-invalid',soul};
+      const observed=this.livedExperience.select(experience,context,'respond');
       const control=this.livedExperience.select(
-        this.livedExperience.defaultState(),inquiry.context,'respond');
+        this.livedExperience.defaultState(),context,'respond');
       const causalChange=observed.changed===true&&observed.strategy!==control.strategy;
       const outcome=causalChange?'supported':'counterexample';
       const probe='context_policy_ablation';
       const basis='local-strategy-ablation-not-external-outcome';
       const changed=before.last_probe!==probe||before.last_outcome!==outcome;
       const receipt={at,probe,outcome,basis,changed,
-        context:inquiry.context,experience_revision:inquiry.experience_revision,
+        context,experience_revision:inquiry.experience_revision,
         baseline_action:control.strategy,observed_action:observed.strategy,
         causal_change:causalChange,new_hypotheses_proposed:0,
         origin:'kernel-autonomous-test',external_action:false,
