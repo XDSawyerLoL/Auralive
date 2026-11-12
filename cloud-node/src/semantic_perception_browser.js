@@ -1,7 +1,7 @@
 export const SEMANTIC_PERCEPTION_BROWSER = String.raw`// Runs inside BRAIN_OPERATIONS_SCRIPT's browser closure after camera/mic setup.
 // Strictly opt-in. Browser-only model inference; model assets may be downloaded.
 const semantic={recognizer:null,visionEnabled:false,visionBusy:false,
-  classifier:null,modelPromise:null,visionTimer:null,modelId:'onnx-community/mobilenet_v2_1.0_224'};
+  classifier:null,modelPromise:null,detector:null,detectorPromise:null,visionTimer:null,detectorId:'Xenova/yolos-tiny',modelId:'onnx-community/mobilenet_v2_1.0_224'};
 const perceptionMessage=s=>setText('auraPerceptionStatus',s);
 async function emitPerception(kind,source,model,payload){
   const response=await fetch('/api/cognition/perception',{
@@ -98,6 +98,17 @@ async function ensureClassifier(){
  semantic.classifier=await semantic.modelPromise;
  return semantic.classifier;
 }
+async function ensureDetector(){
+ if(semantic.detector)return semantic.detector;
+ if(!semantic.detectorPromise){
+   semantic.detectorPromise=(async()=>{
+     const module=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');
+     return module.pipeline('object-detection',semantic.detectorId,{device:'wasm'});
+   })().catch(error=>{semantic.detectorPromise=null;throw error;});
+ }
+ semantic.detector=await semantic.detectorPromise;
+ return semantic.detector;
+}
 async function classifyCurrentView(){
  const video=$('auraCameraPreview');
  if(semantic.visionBusy||!semantic.visionEnabled||!senseState.cam||document.hidden||
@@ -118,6 +129,37 @@ async function classifyCurrentView(){
    if(!semantic.visionEnabled||!senseState.cam)return;
    await emitPerception('visual-classification','browser-ondevice-transformers',
      semantic.modelId,{label,confidence});
+   // Optional object-level localization. No frame or screenshot is sent.
+   // Failure does not suppress the already available image classification.
+   try{
+     const detector=await ensureDetector();
+     if(semantic.visionEnabled&&senseState.cam){
+       const detections=await detector(canvas,{threshold:.65});
+       const objects=(Array.isArray(detections)?detections:[]).slice(0,8)
+         .filter(x=>x?.box&&Number.isFinite(Number(x.score)))
+         .map(item=>({
+           label:String(item.label||'').replace(/[^\p{L}\p{N},.()' /_-]/gu,'').trim().slice(0,70),
+           confidence:Math.max(0,Math.min(1,Number(item.score))),
+           box:{
+             xmin:Math.max(0,Math.min(1,Number(item.box.xmin)/224)),
+             ymin:Math.max(0,Math.min(1,Number(item.box.ymin)/224)),
+             xmax:Math.max(0,Math.min(1,Number(item.box.xmax)/224)),
+             ymax:Math.max(0,Math.min(1,Number(item.box.ymax)/224)),
+           },
+         }))
+         .filter(x=>x.label.length>=2&&x.box.xmin<x.box.xmax&&x.box.ymin<x.box.ymax);
+       if(semantic.visionEnabled&&senseState.cam){
+         await emitPerception('visual-objects','browser-ondevice-transformers',
+           semantic.detectorId,{objects});
+         if(objects.length)chatLine('AURA · LOCALISATION VISUELLE LOCALE',
+           objects.slice(0,3).map(x=>x.label+' ('+Math.round(x.confidence*100)+' %)').join(', ')+
+           ' — catégories non vérifiées','aura-initiative');
+       }
+     }
+   }catch(error){
+     perceptionMessage('Classification active ; localisation indisponible : '+
+       String(error?.message||error).slice(0,85));
+   }
    chatLine('AURA · HYPOTHÈSE VISUELLE LOCALE',
      label+' · confiance du modèle '+Math.round(confidence*100)+' % (non vérifié)','aura-initiative');
    perceptionMessage('Classification calculée localement ; pas de reconnaissance générale de la scène.');
