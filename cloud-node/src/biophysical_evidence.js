@@ -1,0 +1,108 @@
+// Human biophysics research evidence, a frozen GitHub Actions receipt, not
+// live activity. Published values from run 43264994852 / Allen specimen 643582610.
+// Never treat a static receipt or a predicted waveform as AURA's real-time brain.
+import { calibrateHumanPassiveCell,simulateHumanPassiveCell } from './human_ephys_calibration.js';
+
+const record=Object.freeze({
+  schema_version:'aura-allen-cell-types-human-ephys-v1',
+  species:'Homo sapiens',specimen_id:643582610,
+  features:{vrest_mV:-73.187744140625,
+    input_resistance_MOhm:135.312497615814,
+    membrane_tau_ms:8.64352768096981},
+  source:{dataset:'Allen Cell Types Database',
+    method:'AllenSDK.CellTypesCache.get_ephys_features',
+    human_specimen_verified:true,
+    url:'https://celltypes.brain-map.org/data?donor__species=Homo+Sapiens',
+    feature_units:{vrest:'mV',ri:'MOhm',tau:'ms'},
+    extraction_software:'AllenSDK.CellTypesCache'},
+});
+export const BIOPHYSICS_HUMAN_EVIDENCE=Object.freeze({
+  source:'public-allen-record-frozen-ci-receipt',
+  observed_at:'2026-11-12',
+  workflow_run_id:43264994852,
+  workflow_url:'https://github.com/XDSawyerLoL/Auralive/actions/runs/43264994852',
+  specimen_id:643582610,
+  species:'Homo sapiens',
+  reconstruction_sha256:'d2bc685734b460bb2e256cb656c93fc85eab57f1b95cc006a60b1456ec3f78f7',
+  nwb_sha256:'73b89bef175547c1e0a134efa65bd075db4eecb9bfd6be01d2eae0b24e5e4687',
+  morphology_nodes:13995,
+  neuron_sections:269,
+  neuron_segments:1081,
+  swc_units:'micrometre',
+  baseline:record.features,
+  measured_nwb:{
+    sweep_number:25,
+    samples:10000,
+    peak_abs_current_pA:9.999999960041972,
+    stimulus_signed_pA:-9.999999960041972,
+    voltage_peak_to_peak_mV:2.0156241953372955,
+    voltage_min_mV:-75.95312967896461,
+    voltage_max_mV:-73.93750548362732,
+    action_potential_threshold_crossings:0,
+    neuron_passive_rmse_mV:.8544826572321572,
+    neuron_passive_mae_mV:.7804558664237683,
+    rc_passive_rmse_mV:1.061231,
+    independent_holdout:false,
+    active_kinetics_calibrated:false,
+  },
+});
+const stage=(id,label,status,detail,source)=>({id,label,status,detail,source});
+export function biologicalResearchSnapshot(){
+  const model=calibrateHumanPassiveCell(record);
+  // This is a *simulated RC response*, not the measured NWB sweep itself:
+  // a deliberately declared 120 ms 10 pA negative current pulse.
+  const protocol=Array.from({length:120},(_,t)=>
+    t>=25&&t<85?-10:0);
+  const simulation=simulateHumanPassiveCell(model,{
+    current_pA:protocol,dt_ms:1,
+  });
+  const measured=BIOPHYSICS_HUMAN_EVIDENCE;
+  return {
+    schema:'aura-human-biophysical-evidence-v1',
+    status:'research-readonly-frozen-receipt',
+    evidence:measured,
+    protocol:{kind:'synthetic-current-step-for-visible-rc-prediction',
+      dt_ms:1,duration_ms:120,baseline_mV:record.features.vrest_mV,
+      pulse_start_ms:25,pulse_end_ms:85,current_pA:-10,
+      measured_sweep_replayed:false},
+    model:{
+      kind:model.kind,capacitance_pF:model.capacitance_pF,
+      leak_conductance_nS:model.leak_conductance_nS,
+      validated_against_independent_specimen:false,
+      human_active_channels_fitted:false,
+    },
+    predicted_trace:{
+      units:'mV',time_unit:'ms',origin:'calculated-not-measured',
+      dt_ms:simulation.dt_ms,values:simulation.voltage_mV,
+    },
+    subsystems:[
+      stage('passive','Neurone humain passif','measured-and-modeled',
+        'SWC réel et mesures membranaires, comparaison sous-seuil NWB','Allen Cell Types / NEURON'),
+      stage('active','Canaux et potentiels d’action','not-human-validated',
+        'HH historique disponible (calmar). Données humaines actives non calibrées','Hodgkin–Huxley 1952'),
+      stage('synapse','Synapses et neuromodulation','prototype-only',
+        'AMPA / NMDA / GABA simulés ; cinétiques humaines non vérifiées','Modèle informatique'),
+      stage('amygdala','Amygdales cérébrales','atlas-only',
+        'Atlas humain de 13 domaines accessible ; aucun connectome synaptique validé',
+        'NCBI GEO GSE342709'),
+      stage('cortical','Réseaux cérébraux','not-reconstructed',
+        'Une morphologie humaine ne constitue pas un réseau neuronal','Non disponible'),
+      stage('glia','Glie et métabolisme','not-reconstructed',
+        'Astrocytes, microglies et échanges métaboliques non calibrés','Non disponible'),
+      stage('body','Corps computationnel','toy-model-only',
+        'Chaîne HPA et rythme cardiaque relatifs, sans paramètres humains validés',
+        'Modèle informatique'),
+      stage('development','Développement et plasticité','not-human-validated',
+        'Plasticité cellulaire humaine longitudinale non validée','Non disponible'),
+    ],
+    interpretation:{
+      human_neuron_reconstructed:true,
+      electrically_active_human_neuron_validated:false,
+      human_brain_emulated:false,
+      subjective_consciousness_inferred:false,
+      brain_decisions_affected_by_this_research:false,
+      source_authentication:'verified-in-CI-export-not-on-every-client-request',
+      llm_used:false,
+    },
+  };
+}
