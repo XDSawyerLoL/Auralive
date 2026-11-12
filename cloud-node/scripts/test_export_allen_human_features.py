@@ -1,6 +1,6 @@
 """Offline verification of Allen human exporter, without AllenSDK or network."""
 import unittest
-from export_allen_human_features import build_record
+from export_allen_human_features import build_record, select_heldout_trace
 
 SPECIMEN=643625553  # example identifier; test values below are SYNTHETIC
 
@@ -50,6 +50,35 @@ class HumanAllenExporterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_record(123456789,[cell()],[features()])
 
+
+
+class FakeNwbDataset:
+    def get_sweep(self, sweep_number):
+        if sweep_number!=7:raise ValueError('not found')
+        return {
+            'sampling_rate':20000,
+            'response':[-.065 + n*.000001 for n in range(100)],
+            'stimulus':[2e-11 if 20<=n<70 else 0.0 for n in range(100)],
+            'index_range':(10,90),
+        }
+
+
+class AllenHumanNwbTraceTests(unittest.TestCase):
+    def test_si_units_and_explicit_independence_uncertainty(self):
+        result=select_heldout_trace(
+            FakeNwbDataset(),specimen_id=SPECIMEN,sweep_number=7)
+        self.assertEqual(result['specimen_id'],SPECIMEN)
+        self.assertEqual(result['sweep_number'],7)
+        self.assertAlmostEqual(result['dt_ms'],.05)
+        self.assertAlmostEqual(result['voltage_mV'][0],-64.99)
+        self.assertEqual(result['stimulus_current_pA'][10],20.0)
+        self.assertFalse(result['independence_verified'])
+        self.assertEqual(result['source']['original_units']['response'],'V')
+
+    def test_invalid_sweep_fails_without_fallback(self):
+        with self.assertRaises(ValueError):
+            select_heldout_trace(FakeNwbDataset(),specimen_id=SPECIMEN,
+                                 sweep_number=6)
 
 if __name__ == '__main__':
     unittest.main()
