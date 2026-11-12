@@ -30,6 +30,7 @@ import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
+import { biologicalResearchSnapshot } from './biophysical_evidence.js';
 import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
 import { calibrateHumanPassiveCell, validateHumanPassiveCell } from './human_ephys_calibration.js';
 import {constructHumanPassiveArbor,runPassiveArbor} from './biophysical_morphology.js';
@@ -2172,6 +2173,14 @@ app.post('/api/research/biophysics/human-arbor', async (request, reply) => {
       return reply.code(422).send({error:String(error.message).slice(0,180)});
     throw error;
   }
+});
+
+// Public research-only *frozen* evidence; includes no private soul state,
+// raw donor recordings, tokens, chat text, or unsanitized research uploads.
+// Does not mutate memory or emit simulated neural activity into the connectome.
+app.get('/api/research/biophysics/evidence', async (request, reply) => {
+  reply.header('Cache-Control','public, max-age=300');
+  return biologicalResearchSnapshot();
 });
 
 app.get('/api/research/biophysics', async (request, reply) => {
