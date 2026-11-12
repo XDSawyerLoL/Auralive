@@ -133,18 +133,24 @@ export class ExpressionLayer {
 
   async diagnostic() {
     const language = await this.language.status();
+    const corpusOnly=process.env.AURA_NATIVE_FRENCH_MODE==='local-only';
+    const corpusReady=nativeFrenchCorpus.status().ready;
     return {
       version: ExpressionLayer.VERSION,
       language,
       corpus_local:nativeFrenchCorpus.status(),
       corpus_mode:String(process.env.AURA_NATIVE_FRENCH_MODE||'off'),
       corpus_is_open_domain:false,
-      natural_french_ready: Boolean(language.verified_ready),
-      mode: language.verified_ready
+      natural_french_ready: corpusOnly?false:Boolean(language.verified_ready),
+      mode: corpusOnly
+        ? (corpusReady?'native-corpus-limited':'native-corpus-not-installed')
+        : language.verified_ready
         ? 'learned-language-model'
         : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
-      scripted_normal_path: false,
+      scripted_normal_path: corpusOnly,
       strict_natural_language: Boolean(config.frenchLanguageRequired),
+      remote_language_calls_permitted: !corpusOnly,
+      native_corpus_fully_fluent:false,
       fallback_count: this.fallbackCount,
       last_mode: this.lastMode,
       last_error: this.lastError || language.last_error || '',
