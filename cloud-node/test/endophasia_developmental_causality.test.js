@@ -1,4 +1,5 @@
 import {CognitiveKernel} from '../src/kernel.js';
+import {CognitionEngine} from '../src/cognition.js';
 import {AuraOrganism} from '../src/organism.js';
 import {IdentityAutogenesis} from '../src/identity_autogenesis.js';
 import {NativePolicyLearner} from '../src/native_learning.js';
@@ -199,4 +200,34 @@ test('self-questions do not appear without repeated relevant evidence',()=>{
   assert.equal(once.open_question,null);
   const twice=self.observe(once,{kind:'outcome_failure',at:AT});
   assert.match(twice.open_question,/erreurs/);
+});
+
+test('autonomous contextual ablation is never mistaken for conversation retrieval',()=>{
+  const thoughts=new CognitionEngine().reflect({
+    stimuli:[{type:'aura.self_probe.observed',
+      source:'independent-kernel-probe',
+      payload:{probe:'context_policy_ablation',outcome:'supported',
+        context:'dialogue_general',causal_change:true,
+        basis:'local-strategy-ablation-not-external-outcome'}}],
+    intentions:[],lessons:[],outcomes:[],horizon:'',extra_text:'',
+  },{
+    organism:{stabilite:.8,clarte:.8,besoin_de_silence:.1},
+    emergent_identity:{observations:0,open_question:null},
+  },{trigger:'ambient'});
+  assert.match(thoughts.title,/stratégie acquise/);
+  assert.match(thoughts.hypothesis,/dialogue_general/);
+  assert.match(thoughts.next_action,/nouveau cas autorisé/);
+  assert.doesNotMatch(thoughts.hypothesis,/conversation passée/i);
+  assert.doesNotMatch(thoughts.summary,/prouve.*conscience/i);
+});
+
+test('autonomous activity count alone does not fabricate existential inquiry',()=>{
+  const state={
+    organism:{stabilite:.8,clarte:.8,besoin_de_silence:.1},
+    emergent_identity:{observations:9,open_question:null},
+  };
+  const thoughts=new CognitionEngine().reflect({
+    stimuli:[],intentions:[],lessons:[],outcomes:[],horizon:'',extra_text:'',
+  },state,{trigger:'ambient'});
+  assert.notEqual(thoughts.title,'Enquête autonome sur mon identité acquise');
 });
