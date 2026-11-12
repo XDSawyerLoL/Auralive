@@ -756,3 +756,68 @@ les mesures publiées. Aucun chiffre ne doit être affiché comme
 confirmé tant que le rapport de la CI n'est pas téléchargé et
 contrôlé. Les tests ne doivent jamais influencer l'identité
 persistante ou les décisions d'AURA.
+
+
+## 12 novembre : tests biologiques sur trois spécimens humains
+
+Deux nouvelles cellules ont été sélectionnées de façon déterministe par
+`plan_human_ephys_cohort.py` sans consulter leurs réponses électriques.
+La sélection utilise les ID de spécimens, la présence d'un SWC, des
+caractéristiques membranaires mesurées et les amplitudes de courant.
+Une seconde stimulation forte (plus grande amplitude positive
+« Long Square » jusqu'à 500 pA) complète le courant médian. Les
+densités Na ×2, K ×1 et proxy axonal ×1 sont **transférées sans
+réajustement** depuis le premier neurone humain `643582610`.
+
+**Exécution réelle** GitHub Actions :
+https://github.com/XDSawyerLoL/Auralive/actions/runs/43299079259
+Artefact : `aura-cross-human-specimen-active-transfer`.
+
+| Cellule humaine et balayage | Stimulation | Décharges observées NWB | Décharges HH prédites | RMSE mV |
+| --- | ---: | ---: | ---: | ---: |
+| 529898751, NWB 55 (médian) | 100 pA | 0 | 0 | 2,395047 |
+| 529898751, NWB 54 (fort) | 230 pA | **3** | **0** | **7,778253** |
+| 508410761, NWB 49 (médian) | 170 pA | 0 | 0 | 1,776803 |
+| 508410761, NWB 58 (fort) | 350 pA | **2** | **0** | **7,340096** |
+
+Avec la cellule de référence 643582610 (balayage NWB n°44 :
+2 spikes humains, 0 prédit par HH après calibration), ces résultats
+montrent l'échec du modèle historique HH sur **trois cellules humaines
+distinctes** en réponse active. La concordance 0/0 sur les courants
+moyens ne suffit pas à démontrer une fidélité électrique :
+les conditions réellement dépolarisantes produisant des
+potentiels d'action restent manquées.
+
+**Précisions obligatoires :**
+- Ce ne sont pas forcément trois donneurs indépendants. Les
+  données Allen proviennent majoritairement de tissus
+  corticaux sélectionnés. Aucune conclusion sur les noyaux
+  amygdaliens ou un cerveau entier.
+- Le modèle transfère les **densités actives effectives**,
+  mais prend vrest/ri/tau de chaque cellule. Ce n'est pas un
+  transfert intégral de tous ses paramètres.
+- Le découpage sur les conditions de courant n'a consulté
+  ni le nombre de spikes ni les tensions pour classer les
+  cellules ou leurs stimulations. Cela évite un biais de
+  sélection fondé sur les réponses, sans valider la
+  représentativité de la cohorte.
+- La cinétique HH reste celle d'un modèle historique dérivé
+  de l'axone de calmar, pas de canaux ioniques
+  spécifiquement mesurés dans ces cellules humaines.
+- La CI est passée parce que l'expérience a **été exécutée**
+  et que les métriques sont traçables : biologiquement,
+  le modèle ne reproduit pas les spikes observés.
+- Le volet « Biologie mesurée » présente une synthèse
+  compacte, fermée par défaut, **sans redimensionner le cerveau**.
+  Les chemins SWC et NWB bruts ne sont pas affichés dans
+  l'interface ni copiés en production.
+
+**Suite scientifique prioritaire :** accéder à des modèles
+ioniques de types cellulaires humains publiés et à leurs
+cinétiques Na, K et Ca avec provenance ; modéliser
+le segment initial de l'axone et les distributions
+dendritiques ; comparer seuil, latence, fréquence,
+forme d'onde et adaptation sur des conditions
+expérimentales pré-déclarées. Ne pas inventer de
+conductances ou masquer l'échec avec un nouveau
+visuel de neurones « actifs ».
