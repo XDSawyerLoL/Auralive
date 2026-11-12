@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.js';
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
+import {nativeFrenchCorpus} from './native_french_corpus.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -19,6 +20,7 @@ export class ExpressionLayer {
   }
 
   async semanticSupport(plan, context = '', options = {}) {
+    if (process.env.AURA_NATIVE_FRENCH_MODE==='local-only') return '';
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
@@ -50,6 +52,34 @@ export class ExpressionLayer {
   }
 
   async verbalize(plan, options = {}) {
+    const nativeMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
+    if(nativeMode==='local-only'||nativeMode==='prefer-local'){
+      const local=nativeFrenchCorpus.realizePlan(plan);
+      if(local?.text){
+        const checked=validateNucleusSpeech(plan,local.text);
+        this.language.lastNucleusContract={
+          ...checked,origin:'AURA.nucleus.CognitionEngine.planReply',
+        };
+        if(checked.accepted){
+          this.lastError='';
+          this.lastMode='native-corpus-language';
+          this.language.lastBackend='aura-native-corpus';
+          this.language.lastModel='ud-fr-gsd-morphological-symbolic';
+          this.language.lastLatencyMs=0;
+          this.language.lastError='';
+          return local.text;
+        }
+        this.lastError='native-corpus-contract-rejected:'+checked.code;
+      }else{
+        this.lastError=nativeFrenchCorpus.status().ready
+          ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
+      }
+      if(nativeMode==='local-only'){
+        this.lastMode='native-corpus-uncovered';
+        // No covert Groq/OpenRouter/remote fallback in local-only mode.
+        return '';
+      }
+    }
     const fallback = this.cognition.deterministicReply(plan);
     // Explicit current-turn social intent can be expressed by the kernel
     // itself. A language provider must not invent AURA's curiosity or steer
@@ -106,6 +136,9 @@ export class ExpressionLayer {
     return {
       version: ExpressionLayer.VERSION,
       language,
+      corpus_local:nativeFrenchCorpus.status(),
+      corpus_mode:String(process.env.AURA_NATIVE_FRENCH_MODE||'off'),
+      corpus_is_open_domain:false,
       natural_french_ready: Boolean(language.verified_ready),
       mode: language.verified_ready
         ? 'learned-language-model'
