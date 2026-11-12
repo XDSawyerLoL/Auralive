@@ -886,6 +886,8 @@ function stopSense(kind){
     senseState.cam?.getTracks().forEach(t=>t.stop());
     senseState.cam=null;senseState.lastFrame=null;
     const video=$('auraCameraPreview');video.pause();video.srcObject=null;video.hidden=true;
+    $('auraVisionPreview').hidden=true;
+    $('auraObjectOverlay').getContext('2d').clearRect(0,0,224,224);
     $('auraSee').textContent='Vue : inactive';
     $('auraSee').setAttribute('aria-pressed','false');
   }
@@ -978,7 +980,7 @@ $('auraSee').onclick=async()=>{
    const stream=await navigator.mediaDevices.getUserMedia({
      audio:false,video:{width:{ideal:320},height:{ideal:240},frameRate:{ideal:5,max:10}}});
    const video=$('auraCameraPreview');
-   video.srcObject=stream;video.hidden=false;await video.play();
+   video.srcObject=stream;video.hidden=false;$('auraVisionPreview').hidden=false;await video.play();
    senseState.cam=stream;
    stream.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>stopSense('cam'),{once:true}));
    $('auraSee').textContent='Vue : active';
