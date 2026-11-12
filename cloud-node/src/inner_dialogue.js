@@ -293,6 +293,52 @@ export class InnerDialogueEngine {
     };
   }
 
+  // Virtual, reversible interventions are performed on cloned inputs.
+  // They model limited computational functions, not neurons, lesions,
+  // psychiatric conditions or human subjective states.
+  simulateFunctionalPerturbations({organism={},identity={},receipt=null,
+    viability={},experience={},now=new Date().toISOString()}={}){
+    const body={organism:structuredClone(organism),identity:structuredClone(identity),
+      receipt:receipt?structuredClone(receipt):null,
+      viability:structuredClone(viability),now};
+    const choice=opts=>this.proposeSocialInitiative({...body,...opts,previous:null});
+    const base=choice({});
+    const variants=[
+      {id:'social-drive-ablated',label:'Motivation sociale neutralisée',
+        produced:Boolean(choice({organism:{...body.organism,curiosite_sociale:0}}))},
+      {id:'communication-inhibited',label:'Inhibition élevée',
+        produced:Boolean(choice({organism:{...body.organism,besoin_de_silence:1}}))},
+      {id:'compute-budget-exhausted',label:'Budget de calcul indisponible',
+        produced:Boolean(choice({viability:{...body.viability,optional_work_allowed:false}}))},
+    ];
+    const prior=this.derivePrivateInquiry({experience,identity,organism,
+      previous:null,now});
+    const innerInquiryAvailable=Boolean(prior);
+    return {
+      kind:'functional-perturbation-snapshot-v1',
+      at:Number.isFinite(Date.parse(String(now)))?new Date(now).toISOString():new Date().toISOString(),
+      procedure:'isolated-counterfactual-read-only',
+      baseline:{social_initiative_produced:Boolean(base),
+        evidence_available:Boolean(receipt),
+        input_provenance:receipt?.origin==='kernel-autonomous-test'
+          ?'kernel-independent-receipt':'no-qualified-receipt',
+        independent_inner_inquiry:innerInquiryAvailable},
+      interventions:[
+        ...variants.map(row=>({...row,
+          changed_outward_decision:Boolean(base)!==row.produced,
+          evidence:'local-computational-counterfactual'})),
+        {id:'preverbal-inquiry-ablated',
+          label:'Enquête intérieure neutralisée',
+          baseline_inquiry:innerInquiryAvailable,altered_inquiry:false,
+          changed_inner_decision:innerInquiryAvailable,
+          evidence:'local-computational-counterfactual'},
+      ],
+      persistence_mutated:false,external_actions_executed:false,
+      provider_called:false,biological_brain_emulated:false,
+      consciousness_inferred:false,
+    };
+  }
+
   publicState(input){
     if(!input||typeof input!=='object')return null;
     const situations=new Set(['mixed_or_negative','self_identity','self_inquiry','correction','uncertain_request','positive','ambient','ordinary','external_facts']);
