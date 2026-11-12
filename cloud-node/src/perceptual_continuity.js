@@ -3,7 +3,7 @@
 // Transcripts are not kept here: only their occurrence and coarse length.
 const asMs=s=>{const n=Date.parse(String(s||''));return Number.isFinite(n)?n:null;};
 const round=x=>Math.round(x*1000)/1000;
-const empty=()=>({revision:0,visual:null,last_speech_at:null,last_event:null});
+const empty=()=>({revision:0,visual:null,objects:null,last_speech_at:null,last_event:null});
 export function updatePerceptualContinuity(previous=null,reading=null,{
   maxGapMs=90000,minimumVisualAgreement=2,
 }={}){
@@ -22,6 +22,29 @@ export function updatePerceptualContinuity(previous=null,reading=null,{
     claim:'client-model-output-not-user-command'};
   return {accepted:true,event,state:{...state,revision:(Number(state.revision)||0)+1,
     last_speech_at:event.at,last_event:event}};
+ }
+ if(reading.kind==='visual-objects'){
+  const candidates=Array.isArray(reading.payload?.objects)?reading.payload.objects:[];
+  const strongest=candidates.filter(x=>Number(x.confidence)>=.6)
+    .sort((a,b)=>b.confidence-a.confidence)[0];
+  if(!strongest)return {state,event:null,accepted:false};
+  const label=String(strongest.label||'').toLowerCase().trim();
+  if(!label)return {state,event:null,accepted:false};
+  const old=state.objects,oldAt=asMs(old?.at);
+  if(oldAt!==null&&at<=oldAt)return {state,event:null,accepted:false};
+  const within=oldAt!==null&&at-oldAt<=Math.max(1000,maxGapMs);
+  const matching=within&&old.label===label;
+  const count=matching?Math.min(50,(Number(old.count)||1)+1):1;
+  const confirmed=count>=Math.max(2,minimumVisualAgreement);
+  const event=confirmed&&count===Math.max(2,minimumVisualAgreement)
+    ?{kind:'object-hypothesis-stable',at:new Date(at).toISOString(),
+       label:'browser-object-hypothesis',agreement_count:count,
+       model_label:label,verified_real_world:false,
+       claim:'repeated-client-detection-not-confirmed-object'}:null;
+  return {accepted:true,event,state:{...state,
+    revision:(Number(state.revision)||0)+1,
+    objects:{at:new Date(at).toISOString(),label,count},
+    last_event:event||state.last_event||null}};
  }
  if(reading.kind!=='visual-classification')return {state,event:null,accepted:false};
  const label=String(reading.payload?.label||'').toLowerCase().trim();
