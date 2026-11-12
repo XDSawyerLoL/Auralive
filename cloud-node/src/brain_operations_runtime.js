@@ -942,10 +942,16 @@ $('chatSend').onclick=async()=>{
        const verified=out.nucleus_verbalization_validated===true&&
          out.nucleus_plan_origin==='AURA.nucleus.CognitionEngine.planReply'&&
          Boolean(out.brain_flow_id);
-       const speechMs=Number(out.language_latency_ms)||0;
+       const phases=out.measured_chat_phases||{};
+       const kernelMs=Number(phases.preparation_ms);
+       const speechMs=Number(phases.formulation_ms);
+       const reliableTiming=phases.provenance==='node-performance-monotonic-clock'&&
+         Number.isFinite(kernelMs)&&kernelMs>=0&&
+         Number.isFinite(speechMs)&&speechMs>=0;
        const title=verified
-         ?'AURA · plan noyau · voix '+providerLabel+
-           (speechMs>0?' · '+Math.round(speechMs)+' ms de formulation':'')
+         ?'AURA · noyau '+(reliableTiming?Math.round(kernelMs)+' ms':'durée inconnue')+
+           ' · langage '+providerLabel+
+           (reliableTiming?' '+Math.round(speechMs)+' ms':'')
          :'AURA · FORMULATION À VÉRIFIER';
        chatLine(title,answer);
      }
