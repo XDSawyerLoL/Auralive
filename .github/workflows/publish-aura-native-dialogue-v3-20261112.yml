@@ -1,0 +1,99 @@
+name: Publish AURA native social dialogue and cognitive observatory v3
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-aura-native-dialogue-v3-20261112.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-dialogue-v3:
+    if: github.repository == 'XDSawyerLoL/Auralive'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve the tested canonical Hostinger build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-v3"
+          gh run download 43318976746 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-v3"
+          for path in server.js package.json \
+             src/server.js src/kernel.js src/cognition.js \
+             src/inner_dialogue.js src/social_turn_kernel.js \
+             src/expression.js src/readable_cognition.js \
+             src/brain_science_lab_ui.js src/cognitive_atlas_ui.js \
+             src/cognitive_atlas_runtime.js src/brain_operations_runtime.js \
+             src/brain_operations_console.js \
+             test/social_turn_kernel_regression.test.js \
+             test/readable_cognition.test.js \
+             test/cognitive_readout_visual.test.js \
+             docs/AURA_DIALOGUE_NATIF_COGNITION_LISIBLE_20261112.md; do
+            test -s "$RUNNER_TEMP/aura-v3/$path" || {
+              echo "Missing actual component: $path"; exit 1;
+            }
+          done
+          grep -Fq 'native-social-kernel' "$RUNNER_TEMP/aura-v3/src/expression.js"
+          grep -Fq 'current_ingress_verified:true' "$RUNNER_TEMP/aura-v3/src/kernel.js"
+          grep -Fq '/api/brain/introspection' "$RUNNER_TEMP/aura-v3/src/server.js"
+          grep -Fq 'scienceMindWhy' "$RUNNER_TEMP/aura-v3/src/brain_science_lab_ui.js"
+          grep -Fq 'AURA native · sans LLM' "$RUNNER_TEMP/aura-v3/src/brain_operations_runtime.js"
+          test ! -e "$RUNNER_TEMP/aura-v3/.env"
+          test ! -e "$RUNNER_TEMP/aura-v3/.git"
+          node --check "$RUNNER_TEMP/aura-v3/src/social_turn_kernel.js"
+          node --check "$RUNNER_TEMP/aura-v3/src/readable_cognition.js"
+          node --check "$RUNNER_TEMP/aura-v3/src/brain_science_lab_ui.js"
+      - name: Build checked downloadable archive, source proof and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/AURA_DIALOGUE_NATIF_COGNITION_V3_20261112.zip"
+          (cd "$RUNNER_TEMP/aura-v3" && zip -q -r "$OUT" .)
+          unzip -t "$OUT" | tail -n 1
+          cat > "$GITHUB_WORKSPACE/AURA_DIALOGUE_NATIF_VALIDATION_20261112.txt" <<'EOF'
+          AURA / Dialogue natif et Observatoire cognitif — 2026-11-12
+          Canonical Hostinger build workflow: 43318976746 (success).
+          AURA Cloud Node full validation workflow: 43318976563 (success).
+          PR: https://github.com/XDSawyerLoL/Auralive/pull/251
+          Scenario covered: "bonjour" -> "bien merci" -> "comment ça"
+          -> "Tu" -> "tu semble intrigué je me trompe?" -> identity.
+          Four limited same-session social acts can be handled natively.
+          The owner's literal stored communication goal, intentions and
+          appraisal are available read-only. No provider-generated thoughts
+          or human subjective experience can be inferred from these metrics.
+          The original brain visualization and conversation UI are retained.
+          Some generic conversation still requires a language provider.
+          Independent unsolicited speech requires a distinct owner opt-in
+          and an autonomous verified event; it is not simulated.
+          This research code has NOT been deployed to Hostinger.
+          Upload must preserve existing .env, MySQL database and backups.
+          EOF
+          sha256sum "$OUT" > "$GITHUB_WORKSPACE/AURA_DIALOGUE_NATIF_V3_20261112.sha256"
+      - name: Publish immutable GitHub Release and direct download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-dialogue-natif-cognition-v3-20261112"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to overwrite existing scientific release"
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "$GITHUB_WORKSPACE/AURA_DIALOGUE_NATIF_COGNITION_V3_20261112.zip" \
+            "$GITHUB_WORKSPACE/AURA_DIALOGUE_NATIF_VALIDATION_20261112.txt" \
+            "$GITHUB_WORKSPACE/AURA_DIALOGUE_NATIF_V3_20261112.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "AURA v3 — dialogue natif, intentions et observatoire cognitif" \
+            --notes "Experimental Hostinger Cloud Node build, GitHub Actions canonical package 43318976746 and full Node validation 43318976563. Fixed actual French chat regression: 'bien merci', 'comment ça', unfinished 'Tu', attributed curiosity. These short session-grounded social speech acts bypass external LLM generation and return native-kernel provenance; the computed curiosity drive can causally alter the wording without claiming consciousness. Owner-only /api/brain/introspection exposes literal persistent texts, last communication goal and appraisal. Gene atlas distinguishes three currently wired P0 parameters from five unconnected ones. Original immersive brain and dialogue preserved. No automated Hostinger deployment. Preserve .env and existing MySQL data."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets
