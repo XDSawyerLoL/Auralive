@@ -175,8 +175,9 @@ export function runPassiveArbor(model,{
   safe(duration_ms,'duration',.001,500);
   safe(dt_ms,'membrane time step',.0001,20);
   safe(soma_current_pA,'soma injection',-100000,100000);
-  if(Math.ceil(duration_ms/dt_ms)>50000)
-    throw new RangeError('excessive simulation steps');
+  if(Math.ceil(duration_ms/dt_ms)>50000||
+    Math.ceil(duration_ms/dt_ms)*model.count>400000)
+    throw new RangeError('excessive simulation steps or compartments');
   safe(initial_mV,'initial voltage',-150,150);
   let voltage=new Array(model.count).fill(initial_mV);
   const trace=[],nSteps=Math.ceil(duration_ms/dt_ms);
