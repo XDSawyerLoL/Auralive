@@ -431,7 +431,13 @@ export class CognitiveKernel {
     if(!this.semanticPerceptions)this.semanticPerceptions={};
     const old=this.semanticPerceptions[valid.kind];
     if(old&&Date.parse(old.measured_at)>=Date.parse(valid.measured_at))return null;
-    this.semanticPerceptions[valid.kind]=valid;
+    // Retain only nonverbatim speech metadata. The transcript is used once
+    // to classify an event's length, then discarded after this call.
+    const memorySafe=valid.kind==='speech-transcription'
+      ?{...valid,payload:{language:valid.payload.language,final:true,
+          text_retained:false}}
+      :valid;
+    this.semanticPerceptions[valid.kind]=memorySafe;
     const prior=this.perceptualContinuity||null;
     const processed=updatePerceptualContinuity(prior,valid);
     if(processed.accepted){
@@ -452,7 +458,7 @@ export class CognitiveKernel {
         }
       }
     }
-    return valid;
+    return memorySafe;
   }
 
   perceptualEventSnapshot(){
