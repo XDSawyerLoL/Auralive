@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {runInNewContext} from 'node:vm';
 import {CORTEX13_LAYOUT_CSS} from '../src/cortex13_layout.js';
 import {CORTEX13_SCRIPT,CORTEX13_CSS} from '../src/cortex13_connectome.js';
+import {CORTEX11_SCRIPT} from '../src/cortex11_evidence_render.js';
 import {BRAIN_OPERATIONS_HTML} from '../src/brain_operations_console.js';
 import {BRAIN_OPERATIONS_SCRIPT} from '../src/brain_operations_runtime.js';
 import {BRAIN_READABLE_CSS} from '../src/brain_readable_theme.js';
@@ -87,6 +88,8 @@ test('render is event-driven and can degrade gracefully without WebGL2',()=>{
  assert.match(CORTEX13_SCRIPT,/c13System\.webgl=false/);
  assert.match(CORTEX13_SCRIPT,/requestAnimationFrame/);
  assert.match(CORTEX13_SCRIPT,/if\(ev.active&&/);
+ assert.match(CORTEX13_SCRIPT,/if\(typeof c6RenderCanvas==='function'\)c6RenderCanvas\(\)/);
+ assert.match(CORTEX11_SCRIPT,/c13System\.angle:0/);
  assert.doesNotMatch(CORTEX13_SCRIPT,/setInterval\(/);
  assert.match(CORTEX13_CSS,/pointer-events:none/);
  assert.match(CORTEX13_SCRIPT,/jamais des neurones biologiques/);
