@@ -1,5 +1,5 @@
 // AURA biophysical research: a dimensional passive compartment fitted to
-// genuine human patch-clamp feature measurements. No fabricated donor data.
+// caller-supplied human patch-clamp feature records. No fabricated donor data.
 // This is NOT a conductance-calibrated human Hodgkin-Huxley neuron, an
 // amygdala model, or an estimate of subjective experience.
 const finite=(x)=>typeof x==='number'&&Number.isFinite(x);
@@ -54,7 +54,9 @@ export function calibrateHumanPassiveCell(record){
       feature_units:valid.source.feature_units,
       extraction_software:String(valid.source.extraction_software||'').slice(0,80)},
     fitted_features:['vrest','ri','tau'],
-    fitted_species:'human',
+    fitted_species:'Homo sapiens (caller-supplied AllenSDK record)',
+    provenance_check:'format-and-human-label-only; server has not authenticated Allen source',
+    source_authenticity_verified_by_server:false,
     ion_channel_fit:false,action_potential_fit:false,
     human_whole_brain_reproduced:false,
     status:'fit-to-human-passive-features-not-heldout-validated',
@@ -124,6 +126,7 @@ export function validateHumanPassiveCell(record,heldout){
     performance_classification:'unreviewed',
     // Errors are reported; no invented accuracy or threshold-based certification.
     externally_validated:false,
+    heldout_provenance_verified_by_server:false,
     action_potential_fidelity:'not-applicable-passive-only',
   },prediction};
 }
