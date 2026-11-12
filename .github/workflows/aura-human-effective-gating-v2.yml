@@ -1,0 +1,178 @@
+name: AURA original human-constrained NaK kinetics versus external cells
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aura-human-effective-gating-v2.yml"
+      - "cloud-node/scripts/aura_kinetics_mod/**"
+      - "cloud-node/scripts/fit_human_kinetics_v2.py"
+      - "cloud-node/scripts/evaluate_human_kinetics_transfer.py"
+      - "cloud-node/scripts/test_fit_human_kinetics_v2.py"
+      - "cloud-node/scripts/test_evaluate_human_kinetics_transfer.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  original-active-gating-v2:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install NEURON and AllenSDK (research CI only, not Hostinger)
+        run: python -m pip install --disable-pip-version-check "neuron==9.0.2" "allensdk==2.16.2"
+      - name: All offline scientific tests including isolation tests
+        working-directory: cloud-node
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Compile ONLY original AURA authored NaK NMODL sources
+        working-directory: cloud-node/scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find aura_kinetics_mod -maxdepth 1 -name '*.mod' | wc -l)" -eq 2
+          nrnivmodl aura_kinetics_mod
+          LIB="$(find "$PWD/x86_64" -name libnrnmech.so -type f -print -quit)"
+          test -s "$LIB"
+          echo "MECH_LIB=$LIB" >> "$GITHUB_ENV"
+          sha256sum aura_kinetics_mod/*.mod > /tmp/aura-original-mechanisms.sha256
+      - name: Verify original gating mechanisms solve actual voltages
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          python - <<'PY'
+          import math,os
+          from neuron import h
+          h.load_file('stdrun.hoc')
+          h.nrn_load_dll(os.environ['MECH_LIB'])
+          sec=h.Section(name='synthetic_soma')
+          sec.L=30;sec.diam=25;sec.Ra=120;sec.cm=1
+          sec.insert('pas');sec.insert('aura_na_eff');sec.insert('aura_k_eff')
+          for seg in sec:
+              seg.pas.g=.00005;seg.pas.e=-70
+              seg.aura_na_eff.gbar=.24;seg.aura_k_eff.gbar=.035
+              seg.ena=53;seg.ek=-90
+          clamp=h.IClamp(sec(.5));clamp.delay=5;clamp.dur=50;clamp.amp=.25
+          h.celsius=34;h.dt=.025;h.cvode_active(0);h.finitialize(-70)
+          volts=[]
+          for i in range(2400):
+              h.fadvance()
+              volts.append(float(sec(.5).v))
+          assert all(math.isfinite(v) and abs(v)<250 for v in volts)
+          assert max(volts)-min(volts)>2
+          print('True voltage-dependent sodium/potassium integration passed')
+          PY
+      - name: Obtain real human reference cell NWB and SWC
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aura-human-kinetics/ref/cache
+          python scripts/export_allen_human_features.py \
+            --specimen-id 643582610 \
+            --manifest /tmp/aura-human-kinetics/ref/cache/manifest.json \
+            --output /tmp/aura-human-kinetics/ref/features.json \
+            --reconstruction-output /tmp/aura-human-kinetics/ref/cell.swc
+      - name: Fit 12 NaK hypotheses to two real human currents, test frozen third
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/fit_human_kinetics_v2.py \
+            --specimen-id 643582610 \
+            --manifest /tmp/aura-human-kinetics/ref/cache/manifest.json \
+            --features /tmp/aura-human-kinetics/ref/features.json \
+            --swc /tmp/aura-human-kinetics/ref/cell.swc \
+            --mechanism-library "$MECH_LIB" \
+            --output /tmp/aura-human-kinetics/reference-fit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('/tmp/aura-human-kinetics/reference-fit.json').read_text())
+          assert r['schema']=='aura-human-effective-gating-v2'
+          assert r['selection']['training_sweep_numbers']==[26,37]
+          assert r['selection']['validation_sweep_numbers']==[44]
+          assert r['training_candidate_count']==12
+          assert r['locked_holdout_metrics']['observed_spikes']==2
+          assert r['locked_holdout_used_for_selection'] is False
+          assert r['biologically_validated_human_channel'] is False
+          print('Original Na/K effective gating fit:',r['locked_holdout_metrics'])
+          PY
+      - name: Recover the preregistered two-human-cell external cohort
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aura-human-kinetics/cohort
+          gh run download 43299079259 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cross-human-specimen-active-transfer \
+            --dir /tmp/aura-human-kinetics/cohort
+          test -s /tmp/aura-human-kinetics/cohort/cohort-public.json
+      - name: Challenge two distinct additional human cells using frozen NaK kinetics
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,subprocess,sys
+          from pathlib import Path
+          root=Path('/tmp/aura-human-kinetics')
+          cohort=json.loads((root/'cohort/cohort-public.json').read_text())
+          reference=json.loads((root/'reference-fit.json').read_text())
+          cells=cohort['transfer_test_specimens']
+          assert len(cells)==2 and len({r['specimen_id'] for r in cells})==2
+          results=[]
+          for row in cells:
+              sid=row['specimen_id']
+              outfile=root/f'external-{sid}.json'
+              subprocess.run([
+                  sys.executable,'scripts/evaluate_human_kinetics_transfer.py',
+                  '--reference-fit',str(root/'reference-fit.json'),
+                  '--cohort',str(root/'cohort/cohort-public.json'),
+                  '--specimen-id',str(sid),
+                  '--sweep-number',str(row['challenge_sweep_number']),
+                  '--manifest',str(root/f'cache-{sid}/manifest.json'),
+                  '--mechanism-library',os.environ['MECH_LIB'],
+                  '--output',str(outfile)
+              ],check=True,timeout=900)
+              result=json.loads(outfile.read_text())
+              assert result['target_active_data_used_for_fit'] is False
+              assert result['transferred_active_parameters']==reference['winner']
+              results.append(result)
+          public={
+              'schema':'aura-human-original-active-cross-specimen-report-v1',
+              'reference_specimen':643582610,
+              'active_gate_source':reference['active_mechanisms_source'],
+              'mechanism_author':'AURA independent original Na/K NMODL',
+              'noncommercial_Allen_modfiles_copied':False,
+              'reference_training':reference['training_metrics'],
+              'reference_locked_holdout':reference['locked_holdout_metrics'],
+              'original_NaK_parameters_frozen':reference['winner'],
+              'external_tests':results,
+              'external_specimens_excluded_from_fit':True,
+              'molecular_human_channel_gating_identified':False,
+              'donor_independence_verified':False,
+              'brain_emulation_proven':False,
+              'no_llm':True,
+              'hostinger_deployed':False,
+          }
+          (root/'public-results.json').write_text(json.dumps(public,indent=2)+'\n')
+          print('Observed-versus-computed cross-cell NaK:',
+              [(s['external_specimen'],s['observed_spikes'],
+                s['predicted_spikes'],s['rmse_mV']) for s in results])
+          PY
+      - name: Archive research metrics and original source fingerprints, never NWB traces
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-human-original-nak-gating-validation
+          path: |
+            /tmp/aura-human-kinetics/public-results.json
+            /tmp/aura-human-kinetics/reference-fit.json
+            /tmp/aura-original-mechanisms.sha256
+          if-no-files-found: error
+          retention-days: 30
