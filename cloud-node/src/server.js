@@ -30,6 +30,7 @@ import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
+import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
 import { ObservedProcessMonitor } from './process_observer.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
@@ -2085,6 +2086,62 @@ app.get('/api/cognition/trace', async (request, reply) => {
 // Read-only social initiative, private and opt-in by the actual visitor.
 // It is produced by the existing autonomous kernel tick, never by a
 // language model or a periodic synthetic greeting.
+// Isolated biological R&D. No Hostinger soul mutation, model provider,
+// speech generation, new memory, simulated consciousness or tool execution.
+app.get('/api/research/biophysics', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private,no-store');
+  return {
+    ok:true,
+    model:'Hodgkin-Huxley 1952 squid-axon biophysics; NOT human-calibrated',
+    status:'electrophysiology-research-pilot',
+    source:'10.1113/jphysiol.1952.sp004764',
+    endpoints:{experiment:'/api/research/biophysics/experiment'},
+    current_scope:'ionic-spikes-conductance-synapses-first-order-body-coupling',
+    not_implemented:[
+      'human-neuron-specific-electrophysiology',
+      'human-cell-morphologies-and-receptor-kinetics',
+      'measured-human-synaptic-connectome',
+      'realistic-glial-metabolic-hormone-and-immune-models',
+      'entire-human-brain-simulation',
+      'causally-validated-production-behaviour',
+    ],
+    research_only:true,production_brain_unchanged:true,
+  };
+});
+app.post('/api/research/biophysics/experiment', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  const body=request.body||{};
+  const durationMs=Number(body.duration_ms??120);
+  const stimulation=Number(body.stimulation_uA_cm2??14);
+  const dtMs=Number(body.dt_ms??.025);
+  if(!Number.isFinite(durationMs)||durationMs<=0||durationMs>300||
+    !Number.isFinite(stimulation)||Math.abs(stimulation)>40||
+    !Number.isFinite(dtMs)||dtMs<.02||dtMs>.05)
+    return reply.code(422).send({error:'Paramètres hors des limites de recherche'});
+  reply.header('Cache-Control','private,no-store');
+  const options={durationMs,dtMs,sensoryCurrent_uA_cm2:stimulation};
+  try{
+    if(body.projection_ablation){
+      const projection=String(body.projection_ablation);
+      if(!/^[a-z_]+>[a-z_]+$/.test(projection))
+        return reply.code(422).send({error:'Projection non reconnue'});
+      return {ok:true,experiment:ablateMicroProjection(options,projection),
+        changes_production_state:false,llm_used:false,
+        biological_human_fidelity:'unvalidated'};
+    }
+    return {ok:true,experiment:runMicrocircuit(options),
+      changes_production_state:false,llm_used:false,
+      biological_human_fidelity:'unvalidated'};
+  }catch(error){
+    if(error instanceof RangeError||error instanceof TypeError)
+      return reply.code(422).send({error:String(error.message).slice(0,160)});
+    throw error;
+  }
+});
+
 app.get('/api/cognition/initiative', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   reply.header('Cache-Control','private, no-store');
