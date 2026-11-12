@@ -13,7 +13,7 @@ export function pragmaticIntent(message='',priorAssistant=''){
     goal:'Accueillir cette préférence et répondre avec davantage de chaleur dans les mots, sans décrire des réglages techniques ni prétendre éprouver une émotion humaine.',
     facts:['La personne a explicitement demandé un ton plus chaleureux.']};
  }
- if(/\b(?:second degre|ironie|ironique|humour|humoristique|mdr|lol)\b/.test(q)&&
+ if(/\b(?:second degres?|ironie|ironique|humour|humoristique|mdr|lol)\b/.test(q)&&
     /\b(?:pas ton truc|tu n'as pas compris|t'as pas compris|tu prends tout|au premier degre|trop serieu|trop serieuse)\b/.test(q)){
    return {act:'playful_repair',
     goal:'Reconnaître le trait humoristique raté avec légèreté et un peu d’autodérision ; ne pas demander de preuve objective de son aptitude à plaisanter.',
