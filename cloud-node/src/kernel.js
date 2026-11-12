@@ -10,6 +10,7 @@ import { LanguageFaculty } from './language_faculty.js';
 import { AuraOrganism } from './organism.js';
 import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { InnerDialogueEngine } from './inner_dialogue.js';
+import { arbitrateConversationInitiative } from './conversation_initiative.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -954,16 +955,27 @@ export class CognitiveKernel {
             previous:this.soulCache.social_initiative,
             viability:this.soulCache.viability,now:timestamp,
           });
-          if(candidate){
-            const prior=this.soulCache.social_initiative||{};
+          const prior=this.soulCache.social_initiative||{};
+          const socialDecision=arbitrateConversationInitiative({
+            receipt:independent.receipt,candidate,previous:prior,now:timestamp,
+          });
+          // Durable evidence of deciding NOT to interrupt is as important as
+          // evidence of asking. The decision is never an LLM-written message.
+          if(socialDecision.reason!=='no-verified-cognitive-event'){
+            this.soulCache.social_decision=socialDecision;
+          }
+          if(socialDecision.act==='ask'){
             this.soulCache.social_initiative={
+              ...prior,
               revision:Math.max(0,Number(prior.revision)||0)+1,
               pending:candidate,
               last_evidence_key:candidate.evidence_key,
+              last_decision_at:timestamp,
             };
-            await this.trace('social-initiative','native-outbound-candidate','',{
+            await this.trace('social-initiative','verified-review-question-candidate','',{
               at:timestamp,source:candidate.source,kind:candidate.kind,
               evidence_scope:candidate.evidence_scope,
+              act:socialDecision.act,decision_reason:socialDecision.reason,
               decision_to_publish:false,opt_in_required:true,
               llm_used:false,subjective_experience_claim:false,
             });
