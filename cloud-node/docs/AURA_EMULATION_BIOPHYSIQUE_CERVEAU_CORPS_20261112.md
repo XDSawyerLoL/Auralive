@@ -711,3 +711,48 @@ l'artefact. Sans rapport, ne pas inventer les décharges simulées.
 
 Références : <https://alleninstitute.github.io/AllenSDK/cell_types.html>,
 <https://alleninstitute.github.io/AllenSDK/biophysical_models.html>.
+
+
+## Passage à plusieurs cellules humaines — protocole de transfert gelé
+
+Le dispositif précédent sur un seul neurone ne permettait pas de juger
+la généralisation entre cellules. Cette étape introduit :
+- `scripts/plan_human_ephys_cohort.py` : sélection reproductible
+  de **deux autres spécimens Homo sapiens** disposant d'une reconstruction
+  SWC, de caractéristiques passives Allen et d'au moins trois
+  conditions « Long Square » à courant positif distinct. Le
+  classement est fait par SHA-256 d'ID de spécimen et *jamais*
+  par le nombre de décharges, l'erreur du modèle ou les tensions.
+- `scripts/evaluate_human_transfer_cell.py` : les densités
+  Na ×2, K ×1 et proxy axonal ×1, choisies sur le spécimen
+  de référence `643582610`, sont **figées**. Pour chaque nouvelle
+  cellule, seule sa propre morphologie SWC et ses propriétés
+  passives mesurées initialisent la géométrie et le compartiment.
+  L'enregistrement NWB d'une troisième stimulation est évalué
+  sans rechercher d'autres paramètres actifs.
+- La simulation NEURON de chaque cellule a lieu dans un
+  processus Python **distinct** pour éviter le mélange de
+  sections HOC entre les morphologies.
+- `.github/workflows/aura-human-cross-specimen-validation.yml`
+  est une CI de recherche gratuite qui télécharge les données
+  Allen et publie **les métriques, identifiants et empreintes**
+  seulement ; pas les enregistrements bruts ou la mémoire d'AURA.
+- Tests hors réseau : invariance à l'ordre d'entrée, exclusion
+  des données murines et des caractéristiques absentes, rejet
+  d'une confusion d'ID de cellules, test anti-fuite sur les
+  paramètres figés, statistiques finies et falsifiabilité.
+
+**Portée** : ceci évalue le *transfert intercellulaire de coefficients
+actifs effectifs*, et non de cinétiques de canaux ioniques
+véritablement humains. Les caractéristiques passives restent
+adaptées à chaque cellule cible. Plusieurs spécimens ne prouvent
+pas plusieurs donneurs indépendants ; la représentativité de
+la population demeure inconnue. Les données proviennent
+majoritairement du cortex et ne reconstruisent pas l'amygdale.
+
+**Critère scientifique :** le succès d'une CI signifie que
+l'expérience a tourné ; une faible erreur est à établir par
+les mesures publiées. Aucun chiffre ne doit être affiché comme
+confirmé tant que le rapport de la CI n'est pas téléchargé et
+contrôlé. Les tests ne doivent jamais influencer l'identité
+persistante ou les décisions d'AURA.
