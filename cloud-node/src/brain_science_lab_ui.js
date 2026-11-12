@@ -34,6 +34,7 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
       <article class="science-mind-choice">
         <div class="science-source-index">03 <span>ARBITRAGE FONCTIONNEL</span></div>
         <strong id="scienceMindChoice">Aucun arbitrage confirmé</strong>
+        <p id="scienceMindWhy" class="science-mind-reason">Aucune intention de communication enregistrée.</p>
         <div class="science-mind-drives" id="scienceMindDrives" aria-label="Pondérations réellement calculées"></div>
         <small id="scienceMindChoiceSource">Source : InnerDialogueEngine · calcul déterministe, pas voix intérieure</small>
       </article>
@@ -184,6 +185,8 @@ export const BRAIN_SCIENCE_LAB_CSS=String.raw`
  color:#6f8fa3;overflow-wrap:anywhere}
 .science-mind-choice>strong{display:block;color:#e2f5f4;font-size:14px;line-height:1.4;
  font-weight:650;margin:15px 0 12px}
+.science-mind-reason{margin:0 0 13px;color:#aecad8;font-size:11px;
+ font-weight:420;line-height:1.55;overflow-wrap:anywhere}
 .science-mind-drives{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:5px 0 12px}
 .science-mind-drive>div:first-child{display:flex;justify-content:space-between;gap:5px;
  color:#93afc2;font:9px ui-monospace,monospace}
@@ -294,6 +297,13 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    const a=info?.arbitration||{};
    put('scienceMindChoice',actionNames[a.selected_action]||
       'Aucun arbitrage récent vérifié');
+   const decision=info?.last_communication_decision;
+   put('scienceMindWhy',decision?.intended_goal
+     ?decision.intended_goal
+     :'Le noyau ne conserve aucune intention communicative récente.');
+   if(decision?.act)put('scienceMindChoice',
+     (actionNames[decision.selected_action]||'Décision')+' · '+
+     (decision.response_committed?'formulée':'non formulée'));
    put('scienceMindChoiceSource',a.last_evaluated_at
       ?'Dernier calcul : '+a.last_evaluated_at.replace('T',' ').slice(0,19)+
        ' UTC · InnerDialogueEngine (sans Groq)'
