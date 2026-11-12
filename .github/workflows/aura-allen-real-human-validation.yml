@@ -85,6 +85,63 @@ jobs:
           },null,2));
           console.log('Real human cell passive simulation completed; uncalibrated active channels remain.');
           JS
+      - name: Compare passive NEURON voltage with a real NWB sweep
+        working-directory: cloud-node
+        run: |
+          set -euo pipefail
+          # AUCUN seuil de réussite préjugé : enregistrer l'écart physique réel.
+          python - <<'PY' > /tmp/aura-allen-human-643582610/chosen-sweep.txt
+          from allensdk.core.cell_types_cache import CellTypesCache
+          cache=CellTypesCache(manifest_file='/tmp/aura-allen-human-643582610/cache/manifest.json')
+          sweep_list=cache.get_ephys_sweeps(643582610)
+          candidates=[s for s in sweep_list if isinstance(s.get('sweep_number'),int)]
+          if not candidates:raise RuntimeError('No accessible human ephys sweep')
+          # Long-square current clamp preferred for passive membrane analysis.
+          squares=[s for s in candidates if 'long square' in str(s.get('stimulus_name','')).lower()]
+          choices=squares or candidates
+          chosen=min(choices,key=lambda s:(abs(float(s.get('stimulus_absolute_amplitude') or 0)),s['sweep_number']))
+          print(chosen['sweep_number'])
+          PY
+          SWEEP="$(cat /tmp/aura-allen-human-643582610/chosen-sweep.txt)"
+          python scripts/export_allen_human_features.py \
+            --specimen-id 643582610 \
+            --manifest /tmp/aura-allen-human-643582610/cache/manifest.json \
+            --output /tmp/aura-allen-human-643582610/human-features.json \
+            --sweep-number "$SWEEP" \
+            --heldout-output /tmp/aura-allen-human-643582610/nwb-measured-trace.json
+          python scripts/run_human_swc_neuron.py \
+            --human-features /tmp/aura-allen-human-643582610/human-features.json \
+            --swc /tmp/aura-allen-human-643582610/reconstruction.swc \
+            --heldout /tmp/aura-allen-human-643582610/nwb-measured-trace.json \
+            --output /tmp/aura-allen-human-643582610/compared-passive-result.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {validateHumanPassiveCell} from './src/human_ephys_calibration.js';
+          const root='/tmp/aura-allen-human-643582610/';
+          const features=JSON.parse(fs.readFileSync(root+'human-features.json','utf8'));
+          const measured=JSON.parse(fs.readFileSync(root+'nwb-measured-trace.json','utf8'));
+          const prediction=JSON.parse(fs.readFileSync(root+'compared-passive-result.json','utf8'));
+          const fit=validateHumanPassiveCell(features,measured);
+          const metadata=JSON.parse(fs.readFileSync(root+'validation-public.json','utf8'));
+          if(!Number.isFinite(prediction.quality?.rmse_mV)||
+             !Number.isFinite(fit.validation?.rmse_mV))
+             throw new Error('No measured voltage residuals obtained');
+          metadata.measured_voltage_comparison={
+            specimen_id:features.specimen_id,
+            sweep_number:measured.sweep_number,
+            sample_count:measured.voltage_mV.length,
+            NEURON_multicompartment_rmse_mV:prediction.quality.rmse_mV,
+            NEURON_multicompartment_mae_mV:prediction.quality.mae_mV,
+            lumped_membrane_rc_rmse_mV:fit.validation.rmse_mV,
+            NWB_source_sha256:measured.source.nwb_sha256,
+            independent_holdout:measured.independence_verified,
+            active_channels_calibrated:false,
+            biological_fidelity_certified:false,
+            observation_source:'measured Allen NWB / passive model predictions',
+          };
+          fs.writeFileSync(root+'validation-public.json',JSON.stringify(metadata,null,2));
+          console.log('Measured NWB voltage compared to NEURON and RC; no spurious validation claims.');
+          JS
       - name: Upload measurements and provenance report only
         uses: actions/upload-artifact@v4
         with:
