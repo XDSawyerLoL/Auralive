@@ -62,10 +62,8 @@ test('no overlay-only loop remains and all read-only status DOM is connected',()
  assert.match(BRAIN_OPERATIONS_SCRIPT,/c10Observe\(data\)/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="c10AutonomyTitle"/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="c10AutonomyProbe"/);
- for(const file of ['../src/kernel.js','../src/server.js']){
-  const text=readFileSync(new URL(file,import.meta.url),'utf8');
-  assert.match(text,/last_background_tick_at/);
- }
+ const api=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ assert.match(api,/background_cycle:bootstrap.runtimeReady/);
  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  assert.match(kernel,/periodMs: config\.independentProbeSeconds \* 1000/);
  assert.match(kernel,/flow_id:autonomousFlowId,from,to,stage,status:'ok'/);
