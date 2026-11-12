@@ -119,7 +119,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     </div>
     <small id="auraSenseStatus" role="status">Capteurs désactivés. Permission explicite requise. Analyse locale de volume sonore et de mouvement/lumière uniquement : aucune reconnaissance de paroles ou d’objets.</small>
     <small id="auraPerceptionStatus" role="status">Compréhension inactive. Voix : reconnaissance française locale uniquement ; vue : classification ImageNet après téléchargement du modèle. Aucune action automatique.</small>
-    <video id="auraCameraPreview" autoplay muted playsinline hidden aria-label="Aperçu caméra local"></video>
+    <div id="auraVisionPreview" class="aura-vision-preview" hidden><video id="auraCameraPreview" autoplay muted playsinline hidden aria-label="Aperçu caméra local"></video><canvas id="auraObjectOverlay" width="224" height="224" aria-label="Rectangles de détection calculés localement"></canvas></div>
   </div>
       </section>
       <details class="module-drawer" id="module-drawer">
