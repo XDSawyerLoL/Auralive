@@ -12,6 +12,7 @@ import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { InnerDialogueEngine } from './inner_dialogue.js';
 import { arbitrateConversationInitiative } from './conversation_initiative.js';
 import {validateSensoryReading} from './sensory_input.js';
+import {validateSemanticPerception} from './semantic_perception.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -417,6 +418,25 @@ export class CognitiveKernel {
       return null;
     this.sensoryReadings[valid.kind]=valid;
     return valid;
+  }
+
+  // Browser inference results are short-lived, untrusted perceptual cues.
+  // The cognitive workspace may inspect these, but no autonomous claim,
+  // action or memory promotion follows solely from this signal.
+  observeSemanticPerception(value){
+    const valid=validateSemanticPerception(value);
+    if(!valid)return null;
+    if(!this.semanticPerceptions)this.semanticPerceptions={};
+    const old=this.semanticPerceptions[valid.kind];
+    if(old&&Date.parse(old.measured_at)>=Date.parse(valid.measured_at))return null;
+    this.semanticPerceptions[valid.kind]=valid;
+    return valid;
+  }
+
+  semanticPerceptionSnapshot(){
+    const cutoff=Date.now()-15000;
+    return Object.fromEntries(Object.entries(this.semanticPerceptions||{})
+      .filter(([,v])=>Date.parse(v.measured_at)>=cutoff));
   }
 
   sensorySnapshot(){
