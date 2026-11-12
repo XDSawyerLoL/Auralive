@@ -62,7 +62,14 @@ test('biological lab is embedded in same AURA brain-and-dialogue page',()=>{
  assert.match(BRAIN_OPERATIONS_HTML,/id="graphCanvas"/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="chatInput"/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="bioVoltageCanvas"/);
- assert.match(BRAIN_OPERATIONS_HTML,/data-focus="bioEvidencePanel"/);
+ assert.match(BRAIN_OPERATIONS_HTML,/id="bioLabTrigger"/);
+ assert.match(BRAIN_OPERATIONS_HTML,/aria-controls="bioEvidencePanel" aria-expanded="false"/);
+ assert.match(BRAIN_OPERATIONS_HTML,/id="bioBackdrop"[^>]*hidden/);
+ assert.match(BRAIN_OPERATIONS_HTML,/id="bioEvidencePanel"[^>]*hidden/);
+ assert.doesNotMatch(BRAIN_OPERATIONS_HTML,/data-focus="bioEvidencePanel"/);
+ assert.match(BRAIN_BIOPHYSICS_CSS,/#bioEvidencePanel\[hidden\]/);
+ assert.match(BRAIN_BIOPHYSICS_CSS,/#bioEvidencePanel\.bio-research\{position:absolute/);
+ assert.match(BRAIN_BIOPHYSICS_SCRIPT,/bioSetOpen\(/);
  assert.doesNotMatch(BRAIN_OPERATIONS_HTML,/__BIO_HTML__|__BIO_CSS__/);
  assert.ok(BRAIN_BIOPHYSICS_HTML.includes('aucune donnée')===false);
  assert.match(BRAIN_BIOPHYSICS_CSS,/bio-research/);
