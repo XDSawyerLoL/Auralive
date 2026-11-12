@@ -961,6 +961,9 @@ export class CognitiveKernel {
             payload:{probe:independent.receipt.probe,
               outcome:independent.receipt.outcome,
               basis:independent.receipt.basis,
+              context:independent.receipt.context||null,
+              causal_change:independent.receipt.causal_change===true,
+              experience_revision:Math.max(0,Number(independent.receipt.experience_revision)||0),
               new_hypotheses:independent.receipt.new_hypotheses_proposed},
           });
         }
