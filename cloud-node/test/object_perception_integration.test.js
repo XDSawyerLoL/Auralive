@@ -38,3 +38,15 @@ test('two detected objects of same class permit attention only as hypothesis',()
  const receipt=competeInWorkspace(candidates,{nowMs:time+20000,capacity:5});
  assert.equal(receipt.selected.some(x=>x.label==='browser-object-hypothesis'),true);
 });
+
+test('same class in different image location is not silently tracked as one object',()=>{
+ const first=validateSemanticPerception(base,time);
+ const distant=validateSemanticPerception({...base,
+  measured_at:new Date(time+20000).toISOString(),
+  payload:{objects:[{label:'chair',confidence:.93,
+   box:{xmin:.6,ymin:.1,xmax:.95,ymax:.7}}]}},time+20000);
+ const a=updatePerceptualContinuity(null,first);
+ const b=updatePerceptualContinuity(a.state,distant);
+ assert.equal(b.event,null);
+ assert.equal(b.state.objects.count,1);
+});
