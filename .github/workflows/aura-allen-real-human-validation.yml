@@ -133,6 +133,17 @@ jobs:
             specimen_id:features.specimen_id,
             sweep_number:measured.sweep_number,
             sample_count:measured.voltage_mV.length,
+            stimulus_min_pA:Math.min(...measured.stimulus_current_pA),
+            stimulus_max_pA:Math.max(...measured.stimulus_current_pA),
+            stimulus_peak_abs_pA:Math.max(...measured.stimulus_current_pA.map(Math.abs)),
+            fraction_samples_with_abs_current_gt_1pA:
+              measured.stimulus_current_pA.filter(v=>Math.abs(v)>1).length/measured.stimulus_current_pA.length,
+            measured_voltage_min_mV:Math.min(...measured.voltage_mV),
+            measured_voltage_max_mV:Math.max(...measured.voltage_mV),
+            measured_voltage_peak_to_peak_mV:
+              Math.max(...measured.voltage_mV)-Math.min(...measured.voltage_mV),
+            measured_threshold_crossings_minus20mV:
+              measured.voltage_mV.slice(1).filter((v,i)=>v>=-20&&measured.voltage_mV[i]<-20).length,
             NEURON_multicompartment_rmse_mV:prediction.quality.rmse_mV,
             NEURON_multicompartment_mae_mV:prediction.quality.mae_mV,
             lumped_membrane_rc_rmse_mV:fit.validation.rmse_mV,
