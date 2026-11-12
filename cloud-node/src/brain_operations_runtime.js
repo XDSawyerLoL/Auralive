@@ -8,6 +8,7 @@ import {CORTEX08_FLOW_SCRIPT} from './cortex08_flow.js';
 import {CORTEX08_FOCUS_SCRIPT} from './cortex08_focus.js';
 import {CORTEX08_SCENE_SCRIPT} from './cortex08_scene.js';
 import {CORTEX09_SCRIPT} from './cortex09_neural_volume.js';
+import {CORTEX10_SCRIPT} from './cortex10_autonomous_live.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -799,6 +800,7 @@ async function poll(){
    v5IngestEvidence(earlierState,data);
    c6Ingest(data);
    c8Observe(data);
+   c10Observe(data);
    if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
    // Select once the latest persisted route, but do NOT replay it and never
    // present a historical route as an event happening right now.
@@ -979,6 +981,7 @@ ${CORTEX08_FLOW_SCRIPT}
 ${CORTEX08_MATERIAL_SCRIPT}
 ${CORTEX08_SCENE_SCRIPT}
 ${CORTEX09_SCRIPT}
+${CORTEX10_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');

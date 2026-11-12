@@ -89,6 +89,32 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     test_execution_recorded:true,
     origin:'IndependentContinuity.step',
   }:null;
+  // Real server-side ambient ticks, independent of browser sessions.
+  // A tick is evidence of software evaluation, not autonomous reasoning success.
+  const observedCycle=extra.background_cycle||{};
+  const backgroundFreshness=evaluateTelemetryFreshness(observedCycle.last_background_tick_at,nowMs);
+  const cycleAt=backgroundFreshness.updated_at;
+  const autonomousCycle=live&&cycleAt?{
+    at:cycleAt,
+    count:Math.max(0,Math.min(1000000000,Math.trunc(Number(observedCycle.background_cycles)||0))),
+    freshness:backgroundFreshness,
+    source:'CognitiveKernel.tick / persisted aura_soul_state',
+    activity_kind:'organism-and-workspace-evaluation',
+    current_task_verified:false,
+    independent_probe_period_seconds:Math.max(60,Math.min(3600,
+      Math.trunc(Number(extra.independent_probe_seconds)||180))),
+  }:null;
+  const curious=extra.curiosity_cycle||{};
+  const curiosityFreshness=evaluateTelemetryFreshness(curious.last_run_at,nowMs);
+  const curiosityCycle=live&&curiosityFreshness.updated_at?{
+    last_run_at:curiosityFreshness.updated_at,
+    last_research_at:evaluateTelemetryFreshness(curious.last_research_at,nowMs).updated_at,
+    freshness:curiosityFreshness,
+    questions_last_hour:Math.max(0,Math.min(1000,
+      Math.trunc(Number(curious.questions_last_hour)||0))),
+    source:'CuriosityEngine.status',
+    recorded_question_is_reasoning_proof:false,
+  }:null;
   const savedWorkspace=extra.global_workspace||null;
   const workspaceFreshness=evaluateTelemetryFreshness(savedWorkspace?.at,nowMs);
   const globalWorkspace=savedWorkspace&&live?{
@@ -313,6 +339,8 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     failure_ema:live&&source.status==='recent'
       ?boundedMetric(organism.homeostasis?.failure_ema):null,
     independent_activity:live?independentActivity:null,
+    autonomous_cycle:autonomousCycle,
+    curiosity_cycle:curiosityCycle,
     global_workspace:globalWorkspace,
     prediction,attention_schema:attentionSchema,viability,consolidation,
     verified_loop:verifiedLoop,autonomous_admission:admission,

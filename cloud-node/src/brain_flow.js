@@ -93,6 +93,8 @@ const CATEGORIES=Object.freeze({
  'brain-causal':'Bilan causal corrélé à une requête',
  'organ-regulation':'Arbitrage de ressources enregistré',
  'independent-self-test':'Auto-vérification réelle hors dialogue',
+ 'curiosity-question':'Question autonome enregistrée',
+ 'curiosity-research':'Enquête autonome enregistrée',
  'workspace-broadcast':'Compétition et diffusion attestées',
  'prediction-error':'Erreur de prédiction observée',
  'memory-consolidation':'Consolidation de mémoire vérifiée',
@@ -240,6 +242,7 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
     ev.type==='operator'||ev.type==='command-event'?'command':
     ev.type==='organism-event'?'homeostasis':
     ev.type==='organ-regulation'?'interoception':
+    ['curiosity-question','curiosity-research'].includes(ev.type)?'curiosity':
     ev.type==='independent-self-test'?'selfaudit':
     ev.type==='workspace-broadcast'?'workspace':
     ev.type==='prediction-error'?'metacognition':
