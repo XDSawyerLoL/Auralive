@@ -219,8 +219,10 @@ function bioRenderEvidence(){
  const spiking=e.measured_spiking||{};
  setText('bioSpikes',Number.isInteger(spiking.observed_spike_count)
    ?bioNumber(spiking.observed_spike_count,0)+' mesurées':'—');
+ const hhComparison=e.active_reference_comparison;
  setText('bioSpikesContext',Number.isInteger(spiking.sweep_number)
-   ?'NWB '+spiking.sweep_number+' · +'+bioNumber(spiking.injected_current_max_pA,0)+' pA · aucun modèle actif validé'
+   ?'NWB '+spiking.sweep_number+' · +'+bioNumber(spiking.injected_current_max_pA,0)+' pA'+
+     (hhComparison?' · HH témoin : '+bioNumber(hhComparison.simulated_reference_spikes,0)+' simulée(s)':'')
    :'Balayage actif humain non enregistré');
  setText('bioProvenance','Allen Cell Types · NWB n° '+
    String(measurement.sweep_number||'—')+' · simulation NEURON · 12/11/2026 · aucune donnée en direct');
