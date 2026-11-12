@@ -3,10 +3,10 @@ import { ProcessSomaticSensor } from './somatic_dynamics.js';
 // Independent process observer. Sampling CPU/RAM is never labelled a thought.
 // Starts with Node, not with a browser request, and keeps a bounded in-memory history.
 export class ObservedProcessMonitor {
-  constructor({sensor=new ProcessSomaticSensor(),intervalMs=5000,
+  constructor({sensor=new ProcessSomaticSensor(),intervalMs=200,
     clock=()=>Date.now(),schedule=setInterval,unschedule=clearInterval}={}){
     this.sensor=sensor;
-    this.intervalMs=Math.max(2000,Math.min(60000,Number(intervalMs)||5000));
+    this.intervalMs=Math.max(100,Math.min(5000,Number(intervalMs)||200));
     this.clock=clock;
     this.schedule=schedule;this.unschedule=unschedule;
     this.timer=null;this.records=[];this.sequence=0;
@@ -24,7 +24,7 @@ export class ObservedProcessMonitor {
       sequence:++this.sequence,
     };
     this.records.push(normalized);
-    if(this.records.length>60)this.records.splice(0,this.records.length-60);
+    if(this.records.length>180)this.records.splice(0,this.records.length-180);
     return normalized;
   }
   start(){
@@ -46,7 +46,7 @@ export class ObservedProcessMonitor {
     return {
       version:'node-observed-process-v1',interval_ms:this.intervalMs,
       active:this.timer!==null,latest:available.at(-1)||null,
-      history:available.slice(-60).map(r=>({
+      history:available.slice(-180).map(r=>({
         at:r.sampled_at,sequence:r.sequence,cpu:r.cpu_utilization,
         heap:r.heap_utilization,pressure:r.compute_pressure,
       })),
