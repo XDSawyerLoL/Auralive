@@ -4,13 +4,13 @@ import {ExpressionLayer} from '../src/expression.js';
 test('strict local-only speech uses corpus and makes zero Groq/federation calls',async()=>{
  const prior=process.env.AURA_NATIVE_FRENCH_MODE;
  process.env.AURA_NATIVE_FRENCH_MODE='local-only';
- let externalCalls=0;
+ let externalCalls=0,legacyFallbackCalls=0;
  try{
   const ai={enabled:true,
    groq:{enabled:true,generate:async()=>{externalCalls++;throw Error('remote call forbidden');}},
    federation:{enabled:true,generate:async()=>{externalCalls++;throw Error('remote call forbidden');}},
    generate:async()=>{externalCalls++;throw Error('remote call forbidden');}};
-  const e=new ExpressionLayer(ai,{deterministicReply:()=>{throw Error('no canned fallback');}});
+  const e=new ExpressionLayer(ai,{deterministicReply:()=>{legacyFallbackCalls++;return 'Secours prédéfini.';}});
   const name=await e.verbalize({act:'self_name',facts:[],user_text:'Comment tu t’appelles?'});
   assert.equal(name,'Je m’appelle AURA.');
   assert.equal(e.lastMode,'native-corpus-language');
@@ -22,6 +22,7 @@ test('strict local-only speech uses corpus and makes zero Groq/federation calls'
   const support=await e.semanticSupport({needs_semantic_support:true,semantic_query:'quelque chose'});
   assert.equal(support,'');
   assert.equal(externalCalls,0);
+  assert.equal(legacyFallbackCalls,2); // computed, but never returned in strict corpus mode
  }finally{
   if(prior===undefined)delete process.env.AURA_NATIVE_FRENCH_MODE;
   else process.env.AURA_NATIVE_FRENCH_MODE=prior;
