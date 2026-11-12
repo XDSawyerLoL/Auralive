@@ -434,7 +434,7 @@ export class CognitiveKernel {
   }
 
   semanticPerceptionSnapshot(){
-    const cutoff=Date.now()-15000;
+    const cutoff=Date.now()-120000;
     return Object.fromEntries(Object.entries(this.semanticPerceptions||{})
       .filter(([,v])=>Date.parse(v.measured_at)>=cutoff));
   }
@@ -899,6 +899,7 @@ export class CognitiveKernel {
         plan:{act:'respond'},previous:priorWorkspace,
         prediction:currentPredictionSignal(this.soulCache.prediction_bus),
         consolidation:this.soulCache.consolidation,
+        sensorySignals:Object.values(this.semanticPerceptionSnapshot()),
       });
       const priorAttention=predictAttention(this.soulCache.attention_schema,idleCandidates);
       const idleWorkspace=competeInWorkspace(
