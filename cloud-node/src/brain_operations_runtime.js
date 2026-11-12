@@ -868,6 +868,57 @@ setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
 const history=$('chatHistory');
 $('chatExpand').onclick=()=>{$('conversation-panel').scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'});};
 function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;}
+// Explicit in-page opt-in, off by default and never persisted as a
+// subscription. Polling reads existing kernel output; it never calls
+// an LLM, schedules a fake question or activates a cognition cycle.
+const initiativeConsent=$('auraInitiativeOptIn');
+let initiativeChecking=false;
+let initiativeShownId='';
+async function pollSocialInitiative(){
+  if(!initiativeConsent?.checked||initiativeChecking||document.hidden||
+    state.busy)return;
+  initiativeChecking=true;
+  try{
+    const response=await fetch('/api/cognition/initiative',{
+      credentials:'same-origin',cache:'no-store',
+      headers:{Accept:'application/json'},
+    });
+    if(response.status===401||response.status===403){
+      initiativeConsent.checked=false;
+      chatLine('INITIATIVE · ACCÈS PRIVÉ',
+        'L’affichage spontané est réservé à la session propriétaire.');
+      return;
+    }
+    if(!response.ok)return;
+    const data=await response.json();
+    const pending=data?.pending;
+    const id=String(pending?.id||'');
+    if(!/^[a-f\d]{24}$/.test(id)||id===initiativeShownId||
+      pending?.llm_used!==false||pending?.requires_opt_in!==true||
+      pending?.evidence_scope!=='local-counterfactual-only')return;
+    const message=String(pending?.message||'').trim().slice(0,1000);
+    if(!message)return;
+    // Text content only: no HTML or arbitrary remote content.
+    chatLine('AURA · INITIATIVE NATIVE (SANS LLM)',message,'aura-initiative');
+    initiativeShownId=id;
+    const ack=await fetch('/api/cognition/initiative/ack',{
+      method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({id}),
+    });
+    if(!ack.ok)throw Error('ack unavailable');
+    const receipt=await ack.json();
+    if(receipt.acknowledged!==true)throw Error('ack rejected');
+  }catch{
+    // A read-only display or failed acknowledgement is not a cognitive
+    // success. Keep the receipt in the server until a valid ack is saved.
+  }finally{initiativeChecking=false;}
+}
+initiativeConsent?.addEventListener('change',()=>{
+  if(initiativeConsent.checked)void pollSocialInitiative();
+});
+setInterval(()=>{if(initiativeConsent?.checked)void pollSocialInitiative();},6000);
+
 $('chatMode').addEventListener('change',()=>{
  const mission=$('chatMode').value==='mission';
  $('chatInput').placeholder=mission
