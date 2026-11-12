@@ -96,7 +96,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   <section class="workspace">
     <aside class="rail dialogue-rail">
       <section class="panel conversation-workspace" id="conversation-panel" aria-label="Dialogue avec AURA">
-        <div class="panel-header"><h2>Dialogue avec AURA</h2><small>Conversation de cette session</small></div>
+        <div class="panel-header"><h2>Dialogue avec AURA</h2><small>Conversation de cette session · initiatives natives, sans Groq</small>
+          <label class="aura-initiative-consent" for="auraInitiativeOptIn"><input id="auraInitiativeOptIn" type="checkbox" aria-label="Afficher les initiatives natives autonomes d'AURA, sans LLM"> Initiatives spontanées</label></div>
         <div id="chatHistory" role="log" aria-live="polite" aria-label="Échanges de la session"></div>
   <div id="chatDock" class="chat" aria-label="Console de requête AURA">
     <div class="chat-main">
