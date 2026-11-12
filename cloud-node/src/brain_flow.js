@@ -126,6 +126,21 @@ const validHop=(raw,at,nowMs)=>{
   provider:safe(context.provider||'',70),stage:safe(context.stage||'',70),
   evidence:'aura_cognitive_traces.brain-hop'};
 };
+// Compound kernel receipt: expand only a finite allowlisted path actually
+// emitted by the completed ambient tick. Never accept hypothetical routes.
+function validHops(row,nowMs){
+ const context=parse(row?.context);
+ if(row?.kind==='brain-hop'&&context.origin==='CognitiveKernel.tick'&&
+    Array.isArray(context.path)&&context.status==='ok'){
+   return context.path.slice(0,5).map((step,i)=>
+     validHop({...row,id:String(row.id||'').slice(0,36)+':'+i,
+       context:{from:step.from,to:step.to,stage:step.stage,
+         status:'ok',at:context.at,flow_id:context.flow_id}},
+       row.created_at,nowMs)).filter(Boolean);
+ }
+ const single=validHop(row,row?.created_at,nowMs);
+ return single?[single]:[];
+}
 // Strongly typed public projection: never copy free-form trace context to the browser.
 const CAUSAL_METRICS = Object.freeze([
  'stabilite','clarte','confiance','satisfaction','frustration',
@@ -184,8 +199,8 @@ export function buildBrainFlowGraph({telemetry={},traceRows=[],commandRows=[],or
   if(!older||Date.parse(receipt.at)>Date.parse(older.at))
    lastCausalByFlow.set(receipt.flow_id,receipt);
  }
- const hops=traceRows.filter(row=>row?.kind==='brain-hop').map(row=>validHop(row,row.created_at,nowMs))
-   .filter(Boolean).sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).slice(-160);
+ const hops=traceRows.filter(row=>row?.kind==='brain-hop').flatMap(row=>validHops(row,nowMs))
+   .sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)).slice(-160);
  const flows=new Map();
  for(const hop of hops){
   if(!hop.flow_id)continue;
