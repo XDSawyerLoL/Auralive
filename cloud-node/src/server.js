@@ -1523,7 +1523,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   if(bootstrap.dbReady){
     const results=await Promise.allSettled([
       readBrainTraceRows(
-        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event','organ-regulation','independent-self-test','workspace-broadcast','prediction-error','memory-consolidation','workspace-denial','curiosity-question','curiosity-research') ORDER BY id DESC LIMIT 250"),
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event','organ-regulation','independent-self-test','endophasia','workspace-broadcast','prediction-error','memory-consolidation','workspace-denial','curiosity-question','curiosity-research') ORDER BY id DESC LIMIT 250"),
       readBrainTraceRows(
         'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
       readBrainTraceRows(
@@ -1547,6 +1547,9 @@ app.get('/api/brain/graph', async (request, reply) => {
       : null,
     inner_dialogue: bootstrap.runtimeReady
       ? kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue)
+      : null,
+    endophasia: bootstrap.runtimeReady
+      ? kernel.innerDialogue.publicInquiry(kernel.soulCache?.endophasia)
       : null,
     atlas_v3:{available:true,stages:18,source:'instrumented-kernel-events',session_isolated:true},
     runtime_diagnostic: publicRuntimeDiagnostic(bootstrap, {
