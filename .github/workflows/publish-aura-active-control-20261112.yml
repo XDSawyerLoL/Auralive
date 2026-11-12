@@ -1,0 +1,70 @@
+name: Publish AURA measured-versus-simulated human neuron control
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-aura-active-control-20261112.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release-active-control:
+    if: github.repository == 'XDSawyerLoL/Auralive'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover validated canonical Hostinger research archive
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-active"
+          gh run download 43290455394 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-active"
+          for file in server.js package.json \
+            src/biophysical_evidence.js \
+            src/brain_biophysics_ui.js \
+            scripts/run_human_active_hh_control.py \
+            scripts/test_run_human_active_hh_control.py \
+            docs/AURA_EMULATION_BIOPHYSIQUE_CERVEAU_CORPS_20261112.md \
+            test/biophysical_evidence_ui.test.js; do
+            test -s "$RUNNER_TEMP/aura-active/$file"
+          done
+          grep -q 'workflow_run_id:43289598017' \
+            "$RUNNER_TEMP/aura-active/src/biophysical_evidence.js"
+          grep -q 'simulated_reference_spikes:0' \
+            "$RUNNER_TEMP/aura-active/src/biophysical_evidence.js"
+          grep -q 'HH témoin' "$RUNNER_TEMP/aura-active/src/brain_biophysics_ui.js"
+          grep -q 'rna' "$RUNNER_TEMP/aura-active/src/biophysical_evidence.js" && exit 1 || true
+      - name: Produce immutable archive and verify member CRCs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$GITHUB_WORKSPACE/AURA_NEURONE_ACTIF_CONTROLE_20261112.zip"
+          (cd "$RUNNER_TEMP/aura-active" && zip -q -r "$ZIP" .)
+          unzip -t "$ZIP" | tail -1
+          sha256sum "$ZIP" > "$GITHUB_WORKSPACE/AURA_NEURONE_ACTIF_CONTROLE_20261112.sha256"
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-human-active-control-20261112"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable release already exists; no silent overwrite"
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "$GITHUB_WORKSPACE/AURA_NEURONE_ACTIF_CONTROLE_20261112.zip" \
+            "$GITHUB_WORKSPACE/AURA_NEURONE_ACTIF_CONTROLE_20261112.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "AURA — premier test actif humain : 4 observés, 0 simulé" \
+            --notes "CI real NWB experiment 43289598017, specimen 643582610, sweep 32. Four measured human action potentials; NEURON soma-only HH squid-kinetics control predicts zero, even with sodium conductance increased by 50 percent. RMSE 7.042124 mV, changed control 6.652577 mV. Allen API yielded zero already-fitted biophysical active models for this specimen. This is a scientifically negative comparison, not a faithful human active neuron. Frontend retains immersive brain and hidden opt-in biological panel. No deployment or MySQL changes."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets
