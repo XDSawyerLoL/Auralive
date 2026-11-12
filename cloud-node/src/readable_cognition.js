@@ -39,6 +39,22 @@ export function readableCognitionSnapshot({
   const storedThought=safeText(soul?.dominant_thought,700);
   const storedIntention=safeText(soul?.current_intention,700);
   const actualFocus=safeText(soul?.existence?.current_focus,700);
+  const communication=soul?.last_communication_decision||null;
+  const explicitDecision=communication&&typeof communication==='object'?{
+    at:iso(communication.at),
+    act:safeText(communication.act,75)||null,
+    intended_goal:safeText(communication.intended_goal,450)||null,
+    source:safeText(communication.source,95),
+    context_source:safeText(communication.context_source,95),
+    context_reason:safeText(communication.context_reason,100)||null,
+    selected_action:allowedActions.has(communication.selected_action)
+      ?communication.selected_action:null,
+    response_tone:safeText(communication.response_tone,30)||null,
+    response_committed:communication.response_committed===true,
+    verbalization_source:safeText(communication.verbalization_source,50)||null,
+    llm_cannot_override_intention:true,
+    evidence:'explicit-kernel-plan-before-language-not-private-reasoning',
+  }:null;
   const decision=allowedActions.has(inner?.selected_action)?inner.selected_action:null;
   return {
     version:READABLE_COGNITION_VERSION,
@@ -46,6 +62,7 @@ export function readableCognitionSnapshot({
     scope:'owner-private-readonly',
     truth_label:'persisted-reports-and-functional-computation-not-subjective-thoughts',
     available:!!(storedThought||storedIntention||actualFocus||recent.length||decision),
+    last_communication_decision:explicitDecision,
     declared_thought:{
       text:storedThought||null,
       origin:'aura_soul_state.dominant_thought',
