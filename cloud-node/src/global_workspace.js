@@ -38,7 +38,9 @@ export function workspaceInput({
     const age=nowMs-Date.parse(String(signal.measured_at||''));
     if(!Number.isFinite(age)||age<0||age>120000)continue;
     const label=signal.kind==='speech-transcription'?'browser-speech-hypothesis':
-      signal.kind==='visual-classification'?'browser-visual-hypothesis':null;
+      signal.kind==='visual-classification'?'browser-visual-hypothesis':
+      signal.kind==='visual-objects'?'browser-object-hypothesis':
+      signal.kind==='multimodal-temporal'?'browser-multimodal-hypothesis':null;
     if(label)push('perception',label,.48,.38,{act:'verify'});
   }
   push('executive','current-plan',.52,.85,{act:tag(plan.act||'respond')});
