@@ -49,7 +49,7 @@ test('missing records never invent spontaneous thoughts',()=>{
 test('redacts arbitrary context, SQL identifiers, and dubious text and action',()=>{
  const out=readableCognitionSnapshot({
   soul:{dominant_thought:'Texte réel\n',person_secret:'NOPE'},
-  intentions:[{id:'secret-id',context:'{\"bearer\":\"token\"}',
+  intentions:[{id:'secret-id',context:'{"bearer":"token"}',
     statement:'Lire une donnée',status:'working',source:'evil',
     priority:5000,updated_at:'invalid'}],
   appraisal:{options:[{secret:'raw prompts'}],selected_action:'run-shell',
@@ -68,7 +68,7 @@ test('redacts arbitrary context, SQL identifiers, and dubious text and action',(
 
 test('private endpoint is GET-only, guarded, no untrusted data in public endpoints',()=>{
  const code=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
- const path=\"app.get('/api/brain/introspection', async (request,reply)=>{\";
+ const path="app.get('/api/brain/introspection', async (request,reply)=>{";
  const i=code.indexOf(path);
  assert.ok(i>0);
  const route=code.slice(i,code.indexOf('});',i)+3);
@@ -77,6 +77,6 @@ test('private endpoint is GET-only, guarded, no untrusted data in public endpoin
  assert.match(route,/readableCognitionSnapshot\(/);
  assert.match(route,/kernel\.intentions\(12\)/);
  assert.doesNotMatch(route,/app\.log|saveSoul|query\(|sendPrivate|fetch\(/);
- const pub=code.slice(code.indexOf(\"app.get('/api/brain/graph'\"),code.indexOf(\"app.get('/api/language/embedded/status'\"));
+ const pub=code.slice(code.indexOf("app.get('/api/brain/graph'"),code.indexOf("app.get('/api/language/embedded/status'"));
  assert.ok(!pub.includes('readableCognitionSnapshot('));
 });
