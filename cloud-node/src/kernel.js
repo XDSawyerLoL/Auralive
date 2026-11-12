@@ -952,7 +952,7 @@ export class CognitiveKernel {
           ||(continuity.due && underLimit)));
       // Record a background cycle only after completing actual organism and
       // workspace computations. This is operational continuity, not reflection.
-      if(!force&&!String(text).trim()&&['ambient','startup'].includes(trigger)){
+      if(!force&&!String(text).trim()&&['ambient','startup','cron'].includes(trigger)){
         const existence=this.soulCache.existence||{};
         this.soulCache.existence={
           ...existence,
@@ -964,7 +964,7 @@ export class CognitiveKernel {
       await this.saveSoul();
       // A single database receipt contains only stages that actually ran.
       // This documents a SOFTWARE call chain, not biological neurons.
-      if(!force&&!String(text).trim()&&['ambient','startup'].includes(trigger)){
+      if(!force&&!String(text).trim()&&['ambient','startup','cron'].includes(trigger)){
         const cycleNo=Number(this.soulCache.existence?.background_cycles||0);
         const sensor=this.soulCache.organism?.homeostasis?.sensor;
         const sensorAt=Date.parse(String(sensor?.sampled_at||''));
