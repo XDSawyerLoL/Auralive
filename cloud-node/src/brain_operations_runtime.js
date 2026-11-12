@@ -10,6 +10,7 @@ import {CORTEX08_SCENE_SCRIPT} from './cortex08_scene.js';
 import {CORTEX09_SCRIPT} from './cortex09_neural_volume.js';
 import {CORTEX10_SCRIPT} from './cortex10_autonomous_live.js';
 import {CORTEX11_SCRIPT} from './cortex11_evidence_render.js';
+import {CORTEX12_SCRIPT} from './cortex12_realtime.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -984,6 +985,7 @@ ${CORTEX08_SCENE_SCRIPT}
 ${CORTEX09_SCRIPT}
 ${CORTEX10_SCRIPT}
 ${CORTEX11_SCRIPT}
+${CORTEX12_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
