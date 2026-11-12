@@ -297,6 +297,21 @@ function renderCognitiveGraph(){
    :state==='error'?'Exécution interrompue'
    :failed.length?'Terminé avec anomalie':'Exécution terminée';
  $('cogState').textContent=status+(available&&cogTraceOrigin==='reply'?' · instantané joint':'');
+ const latestName=lastSignificant?(cogStages().find(s=>s.id===lastSignificant.stage)?.name||lastSignificant.stage):null;
+ const stateLabel=lastSignificant?.status==='done'?'terminé'
+  :lastSignificant?.status==='running'?'en traitement'
+  :lastSignificant?.status==='error'?'en échec'
+  :lastSignificant?.status==='skipped'?'non sollicité':'en attente';
+ $('cogReadableSummary').textContent=available&&latestName
+  ?'Dernier jalon confirmé : '+latestName+' · '+stateLabel+
+    (lastSignificant?.elapsed_ms!=null?' · t+'+cogFormatMs(lastSignificant.elapsed_ms):'')
+  :'Aucun trajet attesté reçu. Le noyau ne publie pas un faux monologue pour remplir le graphique.';
+ $('cogReadableEvidence').textContent=available
+  ?'Source : '+String(cogTrace.id||'trace instrumentée').slice(0,16)+
+    ' · '+done.length+' étapes distinctes terminées'+
+    (failed.length?' · '+failed.length+' anomalie(s) enregistrée(s)':'')+
+    ' · aucune activité subjective inférée.'
+  :'La carte décrit des modules logiciels ; seules leurs transitions réellement enregistrées peuvent être déclarées actives.';
  $('cogStatsEvents').textContent=available?String(new Set(done.map(function(e){return e.stage;})).size)+' / '+cogStages().length:'—';
  $('cogDuration').textContent=available?cogFormatMs(cogTrace.duration_ms??last?.elapsed_ms):'—';
  $('cogStatsErrors').textContent=available?String(new Set(failed.map(function(e){return e.stage;})).size):'—';
