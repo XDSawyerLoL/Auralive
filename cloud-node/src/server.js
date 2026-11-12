@@ -379,7 +379,7 @@ const capabilityScout = new CapabilityScout({
 const cognitiveTrace = new CognitiveTraceLedger();
 const fallbackSoul = kernel.defaultSoul();
 
-const processObserver = new ObservedProcessMonitor();
+const processObserver = new ObservedProcessMonitor({intervalMs:config.processObserverMs});
 
 const bootstrap = {
   serverReady: true,
@@ -1430,6 +1430,69 @@ app.get('/api/brain/telemetry', async (_request, reply) => {
   });
 });
 
+// Read-only low-bandwidth live stream. No SQL queries or private state
+// per frame; sends observed process samples and measured kernel scheduling.
+// EventSource may be buffered by reverse proxies: client retains polling fallback.
+let liveBrainClients=0;
+app.get('/api/brain/live', async (request,reply)=>{
+  reply.header('Cache-Control','no-store');
+  if(!bootstrap.runtimeReady)return reply.code(503).send({error:'runtime-unavailable'});
+  if(liveBrainClients>=24)return reply.code(429).send({error:'live-stream-capacity'});
+  reply.hijack();
+  const out=reply.raw;
+  out.writeHead(200,{
+    'Content-Type':'text/event-stream; charset=utf-8',
+    'Cache-Control':'no-store, no-transform',
+    'Connection':'keep-alive','X-Accel-Buffering':'no',
+  });
+  out.flushHeaders?.();
+  liveBrainClients++;
+  let timer=null;
+  let closed=false,previousSample=0,previousCycle=-1,lastSent=0;
+  const close=()=>{
+    if(closed)return;
+    closed=true;clearInterval(timer);liveBrainClients=Math.max(0,liveBrainClients-1);
+    if(!out.writableEnded)out.end();
+  };
+  const emit=()=>{
+    if(closed||out.destroyed)return close();
+    if(out.writableLength>262144)return; // never queue unbounded socket writes
+    const now=Date.now(),sample=processObserver.snapshot().latest;
+    const cycle=kernel.soulCache?.existence||{};
+    const sequence=Number(sample?.sequence)||0;
+    const completed=Number(cycle.background_cycles)||0;
+    const micro=kernel.microReflex?.snapshot?.()||null;
+    if(sequence===previousSample&&completed===previousCycle&&now-lastSent<1500)return;
+    previousSample=sequence;previousCycle=completed;lastSent=now;
+    const payload={
+      at:new Date(now).toISOString(),ready:bootstrap.runtimeReady,
+      process:sample?{
+        at:sample.sampled_at,seq:sequence,
+        cpu:sample.cpu_utilization,heap:sample.heap_utilization,
+        pressure:sample.compute_pressure,
+      }:null,
+      micro:micro?{
+        requested_ms:micro.requested_interval_ms,hz:micro.effective_hz,
+        lag_ms:micro.lag_ms,checks:micro.total_checks,
+        observed_at:micro.observed_at,freshness:micro.freshness,
+        pending_reflex:micro.reflex_busy,reflexes:micro.interrupted_cycles,
+        decision:micro.last_decision,
+      }:null,
+      cognition:{
+        completed,at:String(cycle.last_background_tick_at||''),
+        main_tick_seconds:config.cognitiveTickSeconds,
+        running:kernel.tickRunning===true,
+      },
+      evidence:'node-observed-live-without-llm-inference',
+    };
+    try{out.write('event: observation\ndata: '+JSON.stringify(payload)+'\n\n');}
+    catch{close();}
+  };
+  out.on('close',close);
+  timer=setInterval(emit,250);
+  timer.unref?.();emit();
+});
+
 // Public read-only neural observations. Load persisted metadata for every viewer;
 // strictly whitelist response fields so prompts, command parameters, DB IDs,
 // credentials, and private context never leave the server.
@@ -1574,6 +1637,39 @@ app.get('/api/kernel/organism', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return { ready: false };
   return kernel.organismState({ publicView: false });
+});
+
+// Hostinger Web/Cloud does not guarantee always-on background workers.
+// A protected cron invocation can restart the Node site and execute one
+// bounded autonomous cycle, without claiming millisecond persistence.
+let lastCronContinuityAt=0;
+let cronContinuityRunning=false;
+app.post('/api/cron/continuity', async (request,reply)=>{
+  if(!requirePrivate(request,reply))return;
+  reply.header('Cache-Control','private, no-store');
+  if(!bootstrap.runtimeReady)await startRuntime();
+  if(!requireRuntime(reply))return;
+  const since=Date.now()-lastCronContinuityAt;
+  if(cronContinuityRunning)return reply.code(409).send({
+    ok:false,reason:'cron-already-running',
+  });
+  if(lastCronContinuityAt&&since<55000)return {
+    ok:true,skipped:true,reason:'cron-cooldown',
+  };
+  const last=Date.parse(String(kernel.soulCache?.existence?.last_background_tick_at||''));
+  if(Number.isFinite(last)&&Date.now()-last<20000)return {
+    ok:true,skipped:true,reason:'autonomous-kernel-already-active',
+    background_cycles:Number(kernel.soulCache?.existence?.background_cycles)||0,
+  };
+  cronContinuityRunning=true;lastCronContinuityAt=Date.now();
+  try{
+    const result=await kernel.tick({trigger:'cron',text:'',force:false});
+    return {ok:result?.ok===true,skipped:result?.skipped===true,
+      reason:String(result?.reason||'cron-cycle').slice(0,100),
+      background_cycles:Number(kernel.soulCache?.existence?.background_cycles)||0,
+      at:String(kernel.soulCache?.existence?.last_background_tick_at||''),
+    };
+  }finally{cronContinuityRunning=false;}
 });
 
 app.post('/api/kernel/tick', async (request, reply) => {

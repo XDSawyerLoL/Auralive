@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
+import {MillisecondReflex} from './millisecond_reflex.js';
 import { one, query, getDb } from './db.js';
 import { HistoryLedger,historyChoice } from './history_provenance.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
@@ -152,6 +153,16 @@ export class CognitiveKernel {
     this.routineSweepRunning = false;
     this.soulCache = null;
     this.stimuli = [];
+    this.stimulusSeq = 0;
+    this.microReflex = new MillisecondReflex({
+      intervalMs:config.microReflexIntervalMs,
+      inspect:()=>({
+        stimulusSeq:this.stimulusSeq,cognitiveBusy:this.tickRunning,
+        optionalAllowed:this.soulCache?.viability?.optional_work_allowed!==false,
+        cpuPressure:this.soulCache?.organism?.homeostasis?.sensor?.compute_pressure||0,
+      }),
+      onStimulus:()=>this.tick({trigger:'reflex',force:false}),
+    });
     this.lastReflectionAtMs = 0;
     this.lastContinuityReflectionAtMs = 0;
     this.tickRunning = false;
@@ -347,6 +358,7 @@ export class CognitiveKernel {
   async start() {
     await this.init();
     this.started = true;
+    if(config.cognitiveEnabled&&config.microReflexEnabled)this.microReflex.start();
     if (config.cognitiveEnabled) {
       this.timer = setInterval(() => {
         // The cognitive loop must not wait on potentially slow external routines.
@@ -374,6 +386,7 @@ export class CognitiveKernel {
 
   stop() {
     if (this.timer) clearInterval(this.timer);
+    this.microReflex.stop();
     this.timer = null;
     this.started = false;
   }
@@ -400,6 +413,11 @@ export class CognitiveKernel {
   pushStimulus(stimulus) {
     this.stimuli.push(stimulus);
     if (this.stimuli.length > 120) this.stimuli.splice(0, this.stimuli.length - 120);
+    // Respond quickly to genuine external stimulus, not internal reflection
+    // recursively prompting itself or browser observations.
+    const source=String(stimulus?.source||'');
+    if(!['cognitive','global-workspace','independent-kernel-probe','cognitive-math'].includes(source))
+      this.stimulusSeq++;
   }
 
   async trace(kind, title, content = '', context = {}) {
@@ -934,7 +952,7 @@ export class CognitiveKernel {
           ||(continuity.due && underLimit)));
       // Record a background cycle only after completing actual organism and
       // workspace computations. This is operational continuity, not reflection.
-      if(!force&&!String(text).trim()&&['ambient','startup'].includes(trigger)){
+      if(!force&&!String(text).trim()&&['ambient','startup','cron'].includes(trigger)){
         const existence=this.soulCache.existence||{};
         this.soulCache.existence={
           ...existence,
@@ -946,7 +964,7 @@ export class CognitiveKernel {
       await this.saveSoul();
       // A single database receipt contains only stages that actually ran.
       // This documents a SOFTWARE call chain, not biological neurons.
-      if(!force&&!String(text).trim()&&['ambient','startup'].includes(trigger)){
+      if(!force&&!String(text).trim()&&['ambient','startup','cron'].includes(trigger)){
         const cycleNo=Number(this.soulCache.existence?.background_cycles||0);
         const sensor=this.soulCache.organism?.homeostasis?.sensor;
         const sensorAt=Date.parse(String(sensor?.sampled_at||''));
@@ -2812,6 +2830,7 @@ export class CognitiveKernel {
       enabled: config.cognitiveEnabled,
       started: this.started,
       tick_seconds: config.cognitiveTickSeconds,
+      micro_reflex:this.microReflex.snapshot(),
       reflection_seconds: config.cognitiveReflectionSeconds,
       max_reflections_per_hour: config.cognitiveMaxReflectionsPerHour,
       continuity: {

@@ -230,7 +230,11 @@ export const config = Object.freeze({
   voiceFabricStrictIdentity: true,
 
   cognitiveEnabled: bool('AURA_COGNITIVE_ENABLED', true),
-  cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
+  // A 1ms observation/reflex scheduler is NOT a 1ms MySQL/LLM thought.
+  microReflexEnabled: bool('AURA_MICRO_REFLEX_ENABLED', true),
+  microReflexIntervalMs: int('AURA_MICRO_REFLEX_INTERVAL_MS', 1, 1, 100),
+  processObserverMs: int('AURA_PROCESS_OBSERVER_INTERVAL_MS', 200, 100, 5000),
+  cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 5, 5, 86400),
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
   // Read-only self-tests between user messages. Bounded and free.

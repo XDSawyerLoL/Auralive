@@ -21,7 +21,7 @@ test('observer samples the actual process on the server with no browser',()=>{
   heap_utilization:.5387,compute_pressure:0,rss_bytes:25200000,
  }}};
  const monitor=new ObservedProcessMonitor({
-  sensor,clock:()=>current,schedule:(fn,ms)=>{scheduled=fn;assert.equal(ms,5000);return {unref(){}};},
+  sensor,intervalMs:5000,clock:()=>current,schedule:(fn,ms)=>{scheduled=fn;assert.equal(ms,5000);return {unref(){}};},
   unschedule:()=>{stopped=true;},
  });
  monitor.start();
