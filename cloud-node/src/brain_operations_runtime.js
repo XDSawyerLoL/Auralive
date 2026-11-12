@@ -11,6 +11,7 @@ import {CORTEX09_SCRIPT} from './cortex09_neural_volume.js';
 import {CORTEX10_SCRIPT} from './cortex10_autonomous_live.js';
 import {CORTEX11_SCRIPT} from './cortex11_evidence_render.js';
 import {CORTEX12_SCRIPT} from './cortex12_realtime.js';
+import {CORTEX13_SCRIPT} from './cortex13_connectome.js';
 
 export const BRAIN_OPERATIONS_SCRIPT = String.raw`(function(){
 'use strict';
@@ -803,6 +804,7 @@ async function poll(){
    c6Ingest(data);
    c8Observe(data);
    c10Observe(data);
+   c13Observe(data);
    if(state.flow)state.flow=data.flows.find(f=>f.id===state.flow.id)||null;
    // Select once the latest persisted route, but do NOT replay it and never
    // present a historical route as an event happening right now.
@@ -986,6 +988,7 @@ ${CORTEX09_SCRIPT}
 ${CORTEX10_SCRIPT}
 ${CORTEX11_SCRIPT}
 ${CORTEX12_SCRIPT}
+${CORTEX13_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
