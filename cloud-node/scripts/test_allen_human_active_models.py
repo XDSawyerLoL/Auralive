@@ -34,7 +34,7 @@ class HumanBiophysicalModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_records(SPECIMEN,human(),[{'id':MODEL_ID,'specimen_id':9999999}])
         with self.assertRaises(ValueError):
-            model_records(SPECIMEN,human(),[{'id':'bad','specimen_id':SPECIMEN}])
+            model_records(SPECIMEN,human(),[{'id':'bad','specimen_id':SPECIMEN, 'neuronal_model_template_id':491455321}])
 
     def test_non_biophysical_glif_templates_cannot_be_fetched_as_active_neurons(self):
         invalid=[{'id': MODEL_ID, 'specimen_id': SPECIMEN,
