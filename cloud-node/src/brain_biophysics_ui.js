@@ -101,6 +101,8 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw`
 .bio-system strong{font-size:11px;color:#e9f1fa}
 .bio-system p{margin:8px 0;color:#9bb0bf;font-size:10px;line-height:1.55}
 .bio-system small{color:#6e98a6;font:9px ui-monospace,monospace}
+.bio-system-source{display:inline-block;color:#79d2ca;font:10px ui-monospace,monospace;text-decoration:underline;text-underline-offset:3px}
+.bio-system-source:hover{color:#eafff9}
 .bio-system-level{font:700 9px ui-monospace,monospace;padding:3px 5px;border-radius:4px;border:1px solid #45576a;color:#b0bdcb}
 .bio-system-level[data-stage=measured-and-modeled]{border-color:#357d68;color:#9cddc1;background:#18352c}
 .bio-system-level[data-stage=prototype-only],.bio-system-level[data-stage=toy-model-only]{border-color:#8b7241;color:#eed19e;background:#2a2418}
@@ -174,7 +176,18 @@ function bioRenderEvidence(){
      tag.dataset.stage=item.status||'not-reconstructed';
      top.append(h,tag);
      card.append(top,element('p','',item.detail||'Aucune mesure'));
-     card.append(element('small','',item.source||'Source absente'));
+     // Whitelisted research links, never arbitrary URLs from a response.
+     const publications={
+       passive:'https://celltypes.brain-map.org/',
+       active:'https://github.com/XDSawyerLoL/Auralive/actions/runs/43277555645',
+       amygdala:'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE342709',
+     };
+     if(publications[item.id]){
+       const source=element('a','bio-system-source',item.source||'Document scientifique');
+       source.href=publications[item.id];
+       source.target='_blank';source.rel='noopener noreferrer';
+       card.append(source);
+     }else card.append(element('small','',item.source||'Source absente'));
      grid.append(card);
    }
  }
