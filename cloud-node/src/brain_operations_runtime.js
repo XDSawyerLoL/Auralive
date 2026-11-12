@@ -1,4 +1,5 @@
 import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
+import {SEMANTIC_PERCEPTION_BROWSER} from './semantic_perception_browser.js';
 import {BRAIN_BIOPHYSICS_SCRIPT} from './brain_biophysics_ui.js';
 import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
@@ -1180,6 +1181,7 @@ ${CORTEX11_SCRIPT}
 ${CORTEX12_SCRIPT}
 ${CORTEX13_SCRIPT}
 ${BRAIN_BIOPHYSICS_SCRIPT}
+${SEMANTIC_PERCEPTION_BROWSER}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
