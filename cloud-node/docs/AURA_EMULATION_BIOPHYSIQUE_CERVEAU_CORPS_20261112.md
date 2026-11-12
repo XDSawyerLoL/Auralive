@@ -297,7 +297,7 @@ de spécimen, licence, originaux Allen, empreintes et contrôles
 
 ### Modèles ACTIFS humains existants — voie NEURON
 
-Le script facultatif `scripts/download_allen_human_active_model.py`
+Le script facultatif `scripts/allen_human_active_models.py`
 interroge le **catalogue des modèles biophysiques Allen** pour un
 spécimen effectivement présent dans la liste `CellTypesApi.HUMAN`.
 Un modèle doit pointer sur **ce même spécimen humain** et appartenir
@@ -316,9 +316,10 @@ AllenSDK dans une **station de recherche isolée et fiable**.
 ```bash
 # Recherche hors Hostinger, dans un environnement Python/NEURON préparé
 cd cloud-node
-python scripts/download_allen_human_active_model.py \
+python scripts/allen_human_active_models.py \
   --specimen-id <IDENTIFIANT_HUMAIN_REEL> \
-  --output /chemin/vers/modele
+  --model-id <IDENTIFIANT_MODELE_HUMAIN_EXISTANT> \
+  --out-dir /chemin/vers/modele
 python scripts/run_verified_allen_model.py \
   --model-dir /chemin/vers/modele --verify-only
 # Après inspection des mécanismes et installation de NEURON :
@@ -352,3 +353,16 @@ https://allensdk.readthedocs.io/en/latest/allensdk.api.queries.biophysical_api.h
   complet :** non reconstruits avec fidélité humaine. Les quelques
   régions du pilote HH restent des hypothèses topologiques.
 - **Conscience subjective :** aucune conclusion possible.
+
+
+**Consolidation :** `scripts/allen_human_active_models.py` est
+l'unique exporteur de modèles actifs, et produit
+`aura-model-provenance.json`. `scripts/run_verified_allen_model.py`
+vérifie ce même manifeste et ses SHA-256 avant tout essai NEURON.
+Sans `--model-id`, l'exporteur liste les modèles réellement
+disponibles pour le spécimen humain. Aucun modèle n'est fabriqué
+si la base n'en fournit pas.
+
+`scripts/run_human_swc_neuron.py` reste la référence passive sous
+NEURON pour comparer le câble morphologique aux données humaines.
+Elle ne représente pas encore une calibration humaine des canaux actifs.
