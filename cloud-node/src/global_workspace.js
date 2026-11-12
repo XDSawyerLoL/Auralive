@@ -40,6 +40,7 @@ export function workspaceInput({
     const label=signal.kind==='speech-transcription'?'browser-speech-hypothesis':
       signal.kind==='visual-classification'?'browser-visual-hypothesis':
       signal.kind==='visual-objects'?'browser-object-hypothesis':
+      signal.kind==='visual-motion'?'browser-motion-hypothesis':
       signal.kind==='multimodal-temporal'?'browser-multimodal-hypothesis':null;
     if(label)push('perception',label,.48,.38,{act:'verify'});
   }
