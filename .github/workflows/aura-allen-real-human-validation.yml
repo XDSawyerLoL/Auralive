@@ -156,6 +156,73 @@ jobs:
           fs.writeFileSync(root+'validation-public.json',JSON.stringify(metadata,null,2));
           console.log('Measured NWB voltage compared to NEURON and RC; no spurious validation claims.');
           JS
+      - name: Find a real positive-spiking human NWB sweep
+        id: spiking-choice
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/aura-allen-human-643582610/spiking-choice.txt
+          from allensdk.core.cell_types_cache import CellTypesCache
+          c=CellTypesCache(manifest_file='/tmp/aura-allen-human-643582610/cache/manifest.json')
+          records=c.get_ephys_sweeps(643582610)
+          valid=[s for s in records
+            if isinstance(s.get('sweep_number'),int) and
+            isinstance(s.get('num_spikes'),(int,float)) and s['num_spikes']>=2 and
+            'long square' in str(s.get('stimulus_name','')).lower()]
+          if valid:
+            chosen=min(valid,key=lambda s:(abs(s['num_spikes']-5),s['sweep_number']))
+            print(chosen['sweep_number'])
+          PY
+          SWEEP="$(cat /tmp/aura-allen-human-643582610/spiking-choice.txt)"
+          echo "sweep=$SWEEP" >> "$GITHUB_OUTPUT"
+          if [ -z "$SWEEP" ]; then
+            echo "No accessible long-square human spiking sweep: no model claim."
+          else
+            echo "Selected actual human NWB long-square sweep $SWEEP"
+          fi
+      - name: Characterize recorded human spiking (not a neuronal model)
+        if: steps.spiking-choice.outputs.sweep != ''
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/aura-allen-human-643582610"
+          python scripts/export_allen_human_features.py \
+            --specimen-id 643582610 \
+            --manifest "$ROOT/cache/manifest.json" \
+            --output "$ROOT/human-features.json" \
+            --heldout-output "$ROOT/active-NWB-trace.json" \
+            --sweep-number "${{ steps.spiking-choice.outputs.sweep }}"
+          python scripts/analyze_human_spiking_nwb.py \
+            --trace "$ROOT/active-NWB-trace.json" \
+            --report "$ROOT/recorded-spikes.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          evidence=json.loads((root/'validation-public.json').read_text())
+          spikes=json.loads((root/'recorded-spikes.json').read_text())
+          # Observations are published; the detailed voltage/current arrays
+          # remain in the disposable research runner.
+          evidence['measured_active_sweep']={
+            'specimen_id':spikes['specimen_id'],
+            'sweep_number':spikes['sweep_number'],
+            'spike_count':spikes['spike_count'],
+            'peak_voltage_mV':spikes['peak_voltage_mV'],
+            'peak_dvdt_mV_per_ms':spikes['peak_dvdt_mV_per_ms'],
+            'stimulus_current_min_pA':spikes['injected_current_min_pA'],
+            'stimulus_current_max_pA':spikes['injected_current_max_pA'],
+            'sampling_interval_ms':spikes['sampling_interval_ms'],
+            'source_nwb_sha256':spikes['source_recording_sha256'],
+            'detector':spikes['threshold_algorithm'],
+            'measured_not_simulated':True,
+            'active_human_ion_channels_calibrated':False,
+            'human_brain_emulated':False,
+          }
+          (root/'validation-public.json').write_text(json.dumps(evidence,indent=2))
+          print('Measured human active voltage sweep recorded separately from model.')
+          PY
       - name: Upload measurements and provenance report only
         uses: actions/upload-artifact@v4
         with:
