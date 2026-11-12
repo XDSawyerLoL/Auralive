@@ -578,3 +578,68 @@ activité d'un modèle HH calmar n'est appelée neurone humain ;
 aucun enregistrement de spikes n'est appelé émulation d'une
 région cérébrale. Le projet reste expérimental et séparé
 de l'identité persistante de l'AURA déployée.
+
+
+## 12 novembre 2026 — Premier contrôle ACTIF réellement confronté au neurone humain
+
+**Objectif expérimental :** tester si des canaux ioniques actifs génériques
+Hodgkin–Huxley, placés sur la morphologie SWC réelle du spécimen
+humain Allen `643582610`, reproduisent les 4 potentiels d'action
+mesurés dans le NWB n°32.
+
+Ce contrôle est maintenant **exécuté et falsifiable**, et n'est pas un
+nouveau graphique décoratif. Script :
+`scripts/run_human_active_hh_control.py`. Il instancie une
+morphologie réelle dans le solveur NEURON, règle les propriétés
+passives sur les caractéristiques humaines vrest/ri/tau,
+ajoute une membrane HH sur le soma uniquement, puis injecte
+la forme d'onde de courant réellement enregistrée.
+Les cinétiques Na/K HH restent celles de la référence historique
+**non humaine** et les distributions spatiales des canaux humains
+ne sont pas calibrées.
+
+### Résultats de l'exécution GitHub `43289598017`
+
+| Contrôle / mesure NWB n°32 | Décharges | RMSE tension |
+| --- | ---: | ---: |
+| Enregistrement humain réel | **4** | Sans objet (référence) |
+| NEURON + HH historique, conductances de référence | **0** | **7,042124 mV** |
+| Même NEURON, densité de sodium × 1,5, densité K inchangée | **0** | **6,652577 mV** |
+
+- La CI réussit car le protocole a été **exécuté et vérifié** ; cela
+  ne signifie pas que le modèle réussit à reproduire la biologie.
+  **Le résultat scientifique de cette tentative est négatif**.
+- Aucune des deux simulations ne reproduit les quatre décharges
+  humaines. Le fait de réduire l'erreur de tension en modifiant
+  un paramètre ne valide pas la forme, le seuil ou le nombre de spikes.
+- La recherche réelle `BiophysicalApi.get_neuronal_models` a
+  réussi mais retourné **zéro modèle déjà ajusté chez Allen pour ce
+  spécimen précis**. Ne pas présenter comme une panne réseau.
+- L'identifiant et les paramètres de l'expérience témoin sont
+  rattachés à `src/biophysical_evidence.js` ; l'interface affiche
+  « 4 mesurées / 0 simulée par HH témoin ». Le volet reste fermé
+  par défaut afin de préserver la visualisation neuronale immersive.
+
+### Conséquence pour la recherche
+
+Il faut maintenant obtenir **au moins deux protocoles de stimulation
+distincts** sur le même spécimen et ne jamais optimiser puis valider
+sur exactement le même balayage. Le prochain modèle doit inclure,
+avec provenance et une incertitude déclarée :
+- canaux sodiques et potassiques à propriétés effectivement mesurées
+  dans le type cellulaire humain concerné ;
+- compartiments axonaux / segment initial et excitabilité locale,
+  résistivité et morphologie détaillées ;
+- calibration sur des balayages d'entraînement distincts ;
+- tests retenus avant ajustement : nombre, seuil, latence, forme,
+  fréquence, adaptation et courbe courant–fréquence ;
+- contrôle de sensibilité, reproductibilité et éventuelle
+  non-identifiabilité des paramètres.
+
+Cette étape n'infère ni émotion, ni pensée, ni conscience, ni
+connectivité humaine d'une amygdale. Elle établit un **échec
+quantifié de la référence HH**, utile pour remplacer progressivement
+les analogies par des modèles validés.
+
+Source NEURON : https://www.neuronsimulator.org/en/latest/progref/simctrl/programmatic.html
+Source AllenSDK : https://alleninstitute.github.io/AllenSDK/biophysical_models.html
