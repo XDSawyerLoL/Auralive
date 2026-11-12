@@ -2275,6 +2275,26 @@ app.post('/api/cognition/senses', async (request, reply) => {
     used_as_independent_evidence:false,automatic_speech:false};
 });
 
+// Explicit user-activated on-device inference. This endpoint never
+// receives images or audio, just an untrusted short-lived model output.
+app.post('/api/cognition/perception', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private, no-store');
+  const reading=kernel.observeSemanticPerception(request.body);
+  if(!reading)return reply.code(422).send({error:'Perception sémantique invalide ou périmée'});
+  return {ok:true,reading,stored_only_in_process:true,
+    machine_verified:false,automatic_speech:false};
+});
+
+app.get('/api/cognition/perception', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  return {ok:true,perceptions:kernel.semanticPerceptionSnapshot(),
+    evidence_scope:'unverified-client-model-output'};
+});
+
 app.get('/api/cognition/senses', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   reply.header('Cache-Control','private, no-store');
