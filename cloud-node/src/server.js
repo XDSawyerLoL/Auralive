@@ -29,6 +29,7 @@ import { BRAIN_HTML } from './brain_console.js';
 import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
+import {readableCognitionSnapshot} from './readable_cognition.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { biologicalResearchSnapshot } from './biophysical_evidence.js';
 import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
@@ -562,6 +563,23 @@ app.addHook('onSend', async (_request, reply, payload) => {
   reply.header('Referrer-Policy', 'no-referrer');
   reply.header('Cache-Control', 'no-store');
   return payload;
+});
+
+// Confidential observability: a faithful reading of AURA's explicit persisted
+// intentions, declared task focus and deterministic appraisal — NOT private
+// reasoning inside any language model. Never expose these texts on public
+// /api/brain/graph, in SSE, logs, HTML, or cached responses.
+app.get('/api/brain/introspection', async (request,reply)=>{
+  if(!requirePrivate(request,reply) || !requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  reply.header('Pragma','no-cache');
+  const intents=await kernel.intentions(12);
+  return readableCognitionSnapshot({
+    soul:kernel.soulCache||{},
+    intentions:intents,
+    appraisal:kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue),
+    at:new Date().toISOString(),
+  });
 });
 
 // Computational science lab: deterministic sandbox data ONLY, no mutation
