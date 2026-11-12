@@ -1,0 +1,94 @@
+name: AURA Allen real-human-cell research validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aura-allen-real-human-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-allen-human-cell:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned public scientific tools
+        run: python -m pip install --disable-pip-version-check "allensdk==2.16.2" "neuron==9.0.2"
+      - name: Download genuine adult human cell ephys and SWC from Allen
+        working-directory: cloud-node
+        env:
+          SPECIMEN_ID: "643582610"
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aura-allen-human-643582610
+          python scripts/export_allen_human_features.py \
+            --specimen-id "$SPECIMEN_ID" \
+            --manifest /tmp/aura-allen-human-643582610/cache/manifest.json \
+            --output /tmp/aura-allen-human-643582610/human-features.json \
+            --reconstruction-output /tmp/aura-allen-human-643582610/reconstruction.swc
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          record=json.loads((root/'human-features.json').read_text())
+          swc=(root/'reconstruction.swc').read_text()
+          assert record['species']=='Homo sapiens'
+          assert record['specimen_id']==643582610
+          assert any(line and not line.startswith('#') for line in swc.splitlines())
+          print('Real Allen human specimen and SWC successfully acquired')
+          PY
+      - name: Run morphologically detailed passive NEURON simulation
+        working-directory: cloud-node
+        run: |
+          set -euo pipefail
+          python scripts/run_human_swc_neuron.py \
+            --human-features /tmp/aura-allen-human-643582610/human-features.json \
+            --swc /tmp/aura-allen-human-643582610/reconstruction.swc \
+            --duration-ms 200 --current-pa 20 \
+            --output /tmp/aura-allen-human-643582610/passive-result.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {inspectSwc} from './src/human_morphology.js';
+          import {calibrateHumanPassiveCell} from './src/human_ephys_calibration.js';
+          const folder='/tmp/aura-allen-human-643582610/';
+          const feature=JSON.parse(fs.readFileSync(folder+'human-features.json','utf8'));
+          const swc=fs.readFileSync(folder+'reconstruction.swc','utf8');
+          const morphology=inspectSwc(swc,{specimenId:feature.specimen_id});
+          const model=calibrateHumanPassiveCell(feature);
+          const simulation=JSON.parse(fs.readFileSync(folder+'passive-result.json','utf8'));
+          if(morphology.node_count<10||simulation.n_sections<2||
+            !simulation.voltage_mV.every(Number.isFinite)||
+            simulation.synaptic_and_active_ion_channels_calibrated!==false)
+            throw new Error('Real human morphology quality gate failed');
+          // Only report feature values and hashes, not donor Nwb/SWC raw bytes.
+          fs.writeFileSync(folder+'validation-public.json',JSON.stringify({
+            specimen_id:feature.specimen_id,
+            biological_origin:'Allen Cell Types Database',
+            species:'Homo sapiens',
+            source_swc_sha256:morphology.source_hash_sha256,
+            morphology_nodes:morphology.node_count,
+            NEURON_sections:simulation.n_sections,
+            NEURON_segments:simulation.n_segments,
+            passive_model_parameters:model,
+            human_action_potentials_validated:false,
+            active_human_ion_channels_validated:false,
+            human_brain_reproduced:false,
+          },null,2));
+          console.log('Real human cell passive simulation completed; uncalibrated active channels remain.');
+          JS
+      - name: Upload measurements and provenance report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-allen-human-real-cell-validation
+          path: /tmp/aura-allen-human-643582610/validation-public.json
+          if-no-files-found: error
+          retention-days: 30
