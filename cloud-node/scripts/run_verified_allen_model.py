@@ -20,7 +20,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-SCHEMA = 'aura-allen-human-active-model-package-v1'
+SCHEMA = 'aura-canonical-allen-model-research-bundle-v1'
 
 
 def sha256(path):
@@ -33,14 +33,18 @@ def sha256(path):
 
 def verify_manifest(model_dir):
     root = Path(model_dir).resolve(strict=True)
-    metadata = root / 'aura_model_provenance.json'
+    metadata = root / 'aura-model-provenance.json'
     record = json.loads(metadata.read_text(encoding='utf-8'))
-    if record.get('schema_version') != SCHEMA or record.get('species') != 'Homo sapiens':
+    if record.get('research_bundle_version') != 1 or record.get('species') != 'Homo sapiens':
         raise ValueError('Expected Allen HUMAN active model provenance')
-    if not record.get('source', {}).get('cell_species_filter') == 'CellTypesApi.HUMAN':
+    if record.get('source_api') != 'AllenSDK.BiophysicalApi.get_neuronal_models':
         raise ValueError('Human source filter missing')
     if not isinstance(record.get('specimen_id'), int) or record['specimen_id'] <= 0:
         raise ValueError('Human specimen ID missing')
+    if record.get('native_mechanisms_not_executed') is not True:
+        raise ValueError('unexpected executable model provenance')
+    if record.get('human_parameter_fit_independently_validated') is not False:
+        raise ValueError('cannot assert independent human model validation')
     files = record.get('files')
     if not isinstance(files, list) or not files or len(files) > 2000:
         raise ValueError('Unbounded or missing Allen files')
