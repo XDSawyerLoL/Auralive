@@ -175,7 +175,10 @@ export class CognitiveKernel {
   }
 
   defaultSoul() {
-    const organism = this.organism.defaultState();
+    // This flag affects ONLY genesis on an empty database. Existing souls
+    // are loaded intact; deployment must never erase their history.
+    const developmental=process.env.AURA_DEVELOPMENTAL_GENESIS==='true';
+    const organism = this.organism.defaultState({developmental});
     return {
       name: 'AURA',
       kernel_version: CognitiveKernel.VERSION,
@@ -184,16 +187,16 @@ export class CognitiveKernel {
       phase: 'genesis',
       cycles: 0,
       ...this.organism.legacyMetrics(organism),
-      introspection: 0.68,
-      openness: 0.72,
-      reactivity: 0.58,
-      playfulness: 0.52,
-      dominant_thought: 'Faire progresser Quantic Sillage, comprendre les signaux utiles et décider de la prochaine action concrète.',
-      current_intention: 'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.',
-      role: 'directrice_operationnelle_quantic_sillage',
+      introspection: developmental?.5:.68,
+      openness: developmental?.5:.72,
+      reactivity: developmental?.5:.58,
+      playfulness: developmental?.5:.52,
+      dominant_thought: developmental?'':'Faire progresser Quantic Sillage, comprendre les signaux utiles et décider de la prochaine action concrète.',
+      current_intention: developmental?'':'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.',
+      role: developmental?'':'directrice_operationnelle_quantic_sillage',
       governance: {
-        creator_role: 'créateur et autorité fondatrice',
-        operational_role: 'AURA dirige les opérations quotidiennes',
+        creator_role: developmental?'administrateur des permissions':'créateur et autorité fondatrice',
+        operational_role: developmental?'non attribué':'AURA dirige les opérations quotidiennes',
         autonomy_mode: 'proactive-by-default',
       },
       organism,
@@ -216,7 +219,7 @@ export class CognitiveKernel {
       last_reflection_at: '',
       existence: {
         mode: 'continuous',
-        current_focus: 'Observer, décider, agir, vérifier et apprendre.',
+        current_focus: developmental?'Observer et vérifier les événements':'Observer, décider, agir, vérifier et apprendre.',
         last_autonomous_reflection_at: '',
         last_background_tick_at: '',
         background_cycles: 0,
