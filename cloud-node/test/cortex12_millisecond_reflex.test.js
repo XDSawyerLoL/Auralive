@@ -91,3 +91,23 @@ test('1ms reflex activity does not masquerade as a full cognitive tick',()=>{
  assert.match(config,/AURA_MICRO_REFLEX_INTERVAL_MS', 1, 1, 100/);
  assert.match(config,/AURA_COGNITIVE_TICK_SECONDS', 5, 5, 86400/);
 });
+
+test('Hostinger cron fallback is authenticated and completes only genuine background cycles',()=>{
+ const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ const start=server.indexOf("app.post('/api/cron/continuity'");
+ const end=server.indexOf("app.post('/api/kernel/tick'",start);
+ assert.ok(start>=0&&end>start);
+ const route=server.slice(start,end);
+ assert.match(route,/requirePrivate\(request,reply\)/);
+ assert.match(route,/kernel\.tick\(\{trigger:'cron',text:'',force:false\}\)/);
+ assert.match(route,/cronContinuityRunning/);
+ assert.match(route,/55000/);
+ assert.doesNotMatch(route,/request\.body/);
+ const script=readFileSync(new URL('../scripts/cron-continuity.mjs',import.meta.url),'utf8');
+ assert.match(script,/AURA_PUBLIC_BASE_URL/);
+ assert.match(script,/AURA_CLOUD_TOKEN/);
+ assert.match(script,/Authorization':'Bearer '/);
+ assert.doesNotMatch(script,/\?key=|\?token=/);
+ const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
+ assert.match(kernel,/\['ambient','startup','cron'\]/);
+});
