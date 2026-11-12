@@ -383,6 +383,14 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
 .incident-actions button:hover{background:#754054}
 .incident-actions button:disabled{opacity:.38;cursor:not-allowed}
 @media(max-width:760px){.runtime-incident{grid-template-columns:26px minmax(0,1fr)}.incident-actions{grid-column:1/-1;justify-content:start}}
+#auraPerceptionStatus{display:block;padding:3px 8px;color:#a7c4b4;font-size:10px;line-height:1.4}
+.chat-main #auraRecognizeSpeech,.chat-main #auraUnderstandScene{
+  font-size:10px;white-space:normal;padding:8px 7px;
+}
+.chat-main #auraRecognizeSpeech[aria-pressed="true"],
+.chat-main #auraUnderstandScene[aria-pressed="true"]{
+  background:#124e44;color:#c4ffee;border-color:#44b58c
+}
 /* Sensory controls stay compact inside the existing single brain interface. */
 #auraSenseStatus{display:block;padding:3px 8px;font-size:10px;line-height:1.4;color:#9bb5bb}
 #auraCameraPreview{max-width:160px;max-height:110px;object-fit:cover;border-radius:7px;margin:4px 8px}
@@ -391,7 +399,7 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
   border-color:#4dba9e;background:#163f3d;color:#bffbe6
 }
 .chat-main #auraListen,.chat-main #auraSee{font-size:10px;white-space:nowrap;padding:9px 8px}
-.chat-main{grid-template-columns:auto 100px minmax(140px,1fr) auto auto auto auto}
+.chat-main{grid-template-columns:auto 90px minmax(140px,1fr) repeat(5,auto)}
 @media(max-width:1000px){
  .chat-main{grid-template-columns:minmax(100px,1fr) auto auto auto;gap:5px}
  .chat-main strong,#chatMode{grid-column:auto}
