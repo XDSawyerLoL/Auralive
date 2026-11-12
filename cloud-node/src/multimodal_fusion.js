@@ -3,7 +3,8 @@
 const time=x=>{const v=Date.parse(String(x||''));return Number.isFinite(v)?v:null;};
 export function fusePerceptualEvents(previous={},event=null,{windowMs=15000}={}){
  const state={speech_at:previous?.speech_at||null,vision_at:previous?.vision_at||null,
-   vision_kind:previous?.vision_kind||null,last_pair_key:previous?.last_pair_key||null};
+   vision_kind:previous?.vision_kind||null,last_pair_key:previous?.last_pair_key||null,
+   speech_motion_cue:previous?.speech_motion_cue||null};
  if(!event||!['speech-detected','object-hypothesis-stable','object-image-displacement-hypothesis','visual-hypothesis-changed']
   .includes(event.kind)||event.verified_real_world!==false)return {state,event:null};
  const at=time(event.at);
@@ -12,6 +13,7 @@ export function fusePerceptualEvents(previous={},event=null,{windowMs=15000}={})
    const prior=time(state.speech_at);
    if(prior!==null&&at<=prior)return {state,event:null};
    state.speech_at=event.at;
+   state.speech_motion_cue=event.motion_language_cue||null;
  }else{
    const prior=time(state.vision_at);
    if(prior!==null&&at<=prior)return {state,event:null};
@@ -33,6 +35,10 @@ export function fusePerceptualEvents(previous={},event=null,{windowMs=15000}={})
     ?'speech-near-image-space-displacement-no-causal-attribution'
     :'speech-and-visual-output-near-in-time-not-causal-relation',
    image_displacement_hypothesis:state.vision_kind==='object-image-displacement-hypothesis',
+   movement_in_speech_mentioned:state.speech_motion_cue?.motion_mentioned===true,
+   movement_speech_negated:state.speech_motion_cue?.motion_negated===true,
+   movement_speech_questioned:state.speech_motion_cue?.motion_questioned===true,
+   speech_object_reference_verified:false,
    person_moved_object_verified:false,
  }};
 }
