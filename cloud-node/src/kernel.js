@@ -2600,7 +2600,8 @@ export class CognitiveKernel {
       brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
       response_kind: languageUnavailable ? 'model-unavailable'
-        :['native-social-kernel','native-corpus-language'].includes(this.expression.lastMode)
+        :(this.expression.lastMode==='native-social-kernel'
+          ||this.expression.lastMode==='native-corpus-language')
           ?'native-kernel':'model-generated',
       retryable: languageUnavailable,
       act: plan.act,
