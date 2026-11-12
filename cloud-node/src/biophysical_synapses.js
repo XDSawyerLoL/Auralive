@@ -102,7 +102,9 @@ export function simulateSynapticArbor(model,synapses,{
   if(duration_ms<=0||duration_ms>200||dt_ms<.01||dt_ms>2)
     throw new RangeError('simulation outside resource bounds');
   const steps=Math.ceil(duration_ms/dt_ms);
-  if(steps>12000)throw new RangeError('simulation too long');
+  if(steps>12000||steps*model.count>400000||
+    synapses.length*steps>250000)
+    throw new RangeError('simulation exceeds CPU research budget');
   const voltages=new Array(model.count).fill(initial_mV);
   let membrane=voltages;
   const trace=[];
