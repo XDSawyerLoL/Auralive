@@ -1,0 +1,70 @@
+name: Publish AURA human neuron cross-stimulus calibration
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-aura-human-heldout-calibration.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-scientific-calibration:
+    if: github.repository == 'XDSawyerLoL/Auralive'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download canonical Hostinger build from validated code revision
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-calibration"
+          gh run download 43295359951 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-calibration"
+          for path in \
+              server.js package.json \
+              src/biophysical_evidence.js src/brain_biophysics_ui.js \
+              scripts/fit_human_active_multisweep.py \
+              scripts/test_fit_human_active_multisweep.py \
+              scripts/run_human_active_hh_control.py \
+              test/biophysical_evidence_ui.test.js \
+              docs/AURA_EMULATION_BIOPHYSIQUE_CERVEAU_CORPS_20261112.md; do
+            test -s "$RUNNER_TEMP/aura-calibration/$path"
+          done
+          grep -Fq 'validation_used_for_model_selection' \
+            "$RUNNER_TEMP/aura-calibration/scripts/fit_human_active_multisweep.py"
+          grep -Fq 'workflow_run_id:43294699060' \
+            "$RUNNER_TEMP/aura-calibration/src/biophysical_evidence.js"
+          grep -Fq 'bioFitDetails' \
+            "$RUNNER_TEMP/aura-calibration/src/brain_biophysics_ui.js"
+      - name: ZIP integrity and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="$GITHUB_WORKSPACE/AURA_CALIBRATION_HUMAINE_MULTIBALAYAGES_20261112.zip"
+          (cd "$RUNNER_TEMP/aura-calibration" && zip -q -r "$FILE" .)
+          unzip -t "$FILE" | tail -n 1
+          sha256sum "$FILE" > "$GITHUB_WORKSPACE/AURA_CALIBRATION_HUMAINE_MULTIBALAYAGES_20261112.sha256"
+      - name: Publish immutable GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-human-multisweep-heldout-20261112"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Refusing to overwrite an existing scientific release."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "$GITHUB_WORKSPACE/AURA_CALIBRATION_HUMAINE_MULTIBALAYAGES_20261112.zip" \
+            "$GITHUB_WORKSPACE/AURA_CALIBRATION_HUMAINE_MULTIBALAYAGES_20261112.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "AURA — validation multibalayages sur neurone humain" \
+            --notes "Research-only Hostinger package; tested canonical artifact run 43295359951; real Allen human cell run 43294699060. Train sweep 26 (10pA; 0 human spikes, 0 modeled), train sweep 37 (230pA; 14 human spikes, 0 modeled). Held-out sweep 44 (120pA; 2 human spikes, 0 modeled; RMSE 4.343179mV). 8 predeclared Na/K/axon-proxy candidates, selected from training currents only, validation not used in selection. Channel gating remains NONHUMAN historical squid Hodgkin-Huxley, hence this is a negative test of human active-spike fidelity. Only a collapsed research details panel added; original central connectome and chat remain untouched. Not deployed on Hostinger; do not reset MySQL memory or .env."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets
