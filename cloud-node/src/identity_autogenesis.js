@@ -30,7 +30,7 @@ export class IdentityAutogenesis {
       // Evidence is an encoded event taxonomy only. Never copy free text.
       evidence:[],
       current_priority:'observer_les_resultats',
-      open_question:'Quelles tendances de mes décisions sont réellement confirmées ?',
+      open_question:null, // Do not script existential self-questioning at genesis.
       last_observation_at:null,
     };
   }
@@ -86,6 +86,13 @@ export class IdentityAutogenesis {
     else if(c.autonomous_reflections>=2)
       state.current_priority='comparer_mes_reflexions_a_mes_actes';
     else state.current_priority='observer_les_resultats';
+    // A count of greetings or private cycles alone is not enough to
+    // manufacture a self-question. Require repeated observed corrections
+    // or recorded action outcomes before constructing one.
+    if(c.outcome_success+c.outcome_failure+c.corrections_received<2){
+      state.open_question=null;
+      return state;
+    }
     state.open_question={
       examiner_les_malentendus:'Quelles corrections se répètent et comment les prévenir ?',
       verifier_avant_d_affirmer:'Comment réduire les erreurs avant ma prochaine décision ?',
