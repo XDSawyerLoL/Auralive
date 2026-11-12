@@ -51,6 +51,18 @@ test('published real human NWB receipt has stable grounded specimen, scope and h
  assert.equal(cohort.selected_on_voltage_or_spike_labels,false);
  assert.equal(cohort.distinct_donors_verified,false);
  assert.equal(cohort.human_channel_kinetics_fitted,false);
+ const naive=e.original_NaK_human_fit_v2;
+ assert.equal(naive.workflow_run_id,43302961099);
+ assert.equal(naive.locked_holdout.observed_spikes,2);
+ assert.equal(naive.locked_holdout.predicted_spikes,1);
+ assert.equal(naive.locked_holdout.rmse_mV,12.562798);
+ assert.deepEqual(naive.external.map(x=>x.specimen_id),[529898751,508410761]);
+ assert.deepEqual(naive.external.map(x=>x.predicted_spikes),[1,1]);
+ assert.deepEqual(naive.external.map(x=>x.observed_spikes),[3,2]);
+ assert.equal(naive.waveform_rmse_improved_over_HH,false);
+ assert.equal(naive.physiologically_validated_human_channels,false);
+ assert.equal(naive.other_specimens_retrained,false);
+
 
 
 
@@ -108,6 +120,10 @@ test('biological lab is embedded in same AURA brain-and-dialogue page',()=>{
  assert.match(BRAIN_BIOPHYSICS_SCRIPT,/bioFitSummary/);
  assert.match(BRAIN_BIOPHYSICS_HTML,/<details class="bio-fit-details"/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="bioCohortDetails"/);
+ assert.match(BRAIN_OPERATIONS_HTML,/id="bioHumanNaKV2Details"/);
+ assert.match(BRAIN_BIOPHYSICS_SCRIPT,/bioNaKV2Summary/);
+ assert.doesNotMatch(BRAIN_BIOPHYSICS_HTML,/<details class="bio-fit-details" id="bioHumanNaKV2Details" open/);
+
  assert.match(BRAIN_BIOPHYSICS_SCRIPT,/bioCohortSummary/);
  assert.doesNotMatch(BRAIN_BIOPHYSICS_HTML,/<details class="bio-fit-details" id="bioCohortDetails" open/);
 
