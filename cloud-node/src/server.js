@@ -2329,7 +2329,8 @@ app.post('/api/chat', async (request, reply) => {
     trace:cognitiveTrace.snapshot(chatSessionId,traceId),
     ok: !unavailable,
     answer,
-    response_kind: unavailable ? 'model-unavailable' : 'model-generated',
+    response_kind: unavailable ? 'model-unavailable'
+      : response?.response_kind==='native-kernel' ? 'native-kernel':'model-generated',
     language_unavailable: unavailable,
     retryable: unavailable,
     service_status: unavailable ? {
