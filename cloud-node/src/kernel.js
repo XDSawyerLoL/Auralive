@@ -149,6 +149,7 @@ export class CognitiveKernel {
     this.recentReflexDecisions = [];
     this.started = false;
     this.timer = null;
+    this.routineSweepRunning = false;
     this.soulCache = null;
     this.stimuli = [];
     this.lastReflectionAtMs = 0;
@@ -202,6 +203,8 @@ export class CognitiveKernel {
         mode: 'continuous',
         current_focus: 'Observer, décider, agir, vérifier et apprendre.',
         last_autonomous_reflection_at: '',
+        last_background_tick_at: '',
+        background_cycles: 0,
         last_reason: 'genesis',
         unfinished_work: false,
       },
@@ -346,12 +349,21 @@ export class CognitiveKernel {
     this.started = true;
     if (config.cognitiveEnabled) {
       this.timer = setInterval(() => {
-        (this.soulCache?.viability?.optional_work_allowed===false
-          ?Promise.resolve():this.runDueRoutines())
-          .then(() => this.tick({ trigger: 'ambient', force: false }))
+        // The cognitive loop must not wait on potentially slow external routines.
+        void this.tick({ trigger: 'ambient', force: false })
           .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
+        if(!this.routineSweepRunning &&
+          this.soulCache?.viability?.optional_work_allowed!==false){
+          this.routineSweepRunning=true;
+          void Promise.resolve().then(()=>this.runDueRoutines())
+            .catch((error)=>{this.lastError=String(error?.message||error).slice(0,500);})
+            .finally(()=>{this.routineSweepRunning=false;});
+        }
       }, config.cognitiveTickSeconds * 1000);
       this.timer.unref?.();
+      // First actual endogenous cycle after startup, without waiting for a visitor.
+      void this.tick({trigger:'startup',force:false})
+        .catch((error)=>{this.lastError=String(error?.message||error).slice(0,500);});
     }
   }
 
@@ -858,6 +870,7 @@ export class CognitiveKernel {
       if(!force && !String(text).trim() && config.continuityEnabled && this.soulCache.viability.optional_work_allowed){
         const independent=await this.independentContinuity.step({
           soul:this.soulCache,
+          periodMs: config.independentProbeSeconds * 1000,
         }).catch(()=>({executed:false,reason:'probe-unavailable'}));
         if(independent.executed){
           const prospective=predictModule(this.soulCache.prediction_bus,{
@@ -883,6 +896,21 @@ export class CognitiveKernel {
               candidate_hypotheses:independent.receipt.new_hypotheses_proposed,
               autonomous:true,external_action:false,
             });
+          // Typed brain-hop receipts only after the independent DB/history
+          // operation produced independently checkable evidence.
+          if(['supported','counterexample'].includes(independent.receipt.outcome)){
+            const autonomousFlowId=randomUUID();
+            for(const [from,to,stage] of [
+              ['memory','selfaudit','read-independent-evidence'],
+              ['selfaudit','cognition','compare-probe-outcome'],
+            ]){
+              await this.trace('brain-hop','autonomous-probe-'+stage,'',{
+                flow_id:autonomousFlowId,from,to,stage,status:'ok',
+                at:independent.receipt.at,origin:'IndependentContinuity.step',
+                provenance:independent.receipt.basis,autonomous:true,
+              });
+            }
+          }
           this.pushStimulus({
             type:'aura.self_probe.observed',
             source:'independent-kernel-probe',
@@ -899,6 +927,17 @@ export class CognitiveKernel {
         || (this.soulCache.viability.optional_work_allowed&&
           ((dueByTime && this.stimuli.length > 0 && underLimit)
           ||(continuity.due && underLimit)));
+      // Record a background cycle only after completing actual organism and
+      // workspace computations. This is operational continuity, not reflection.
+      if(!force&&!String(text).trim()&&['ambient','startup'].includes(trigger)){
+        const existence=this.soulCache.existence||{};
+        this.soulCache.existence={
+          ...existence,
+          last_background_tick_at:timestamp,
+          background_cycles:Math.min(1000000000,
+            Math.max(0,Number(existence.background_cycles)||0)+1),
+        };
+      }
       await this.saveSoul();
       if (!shouldReflect) {
         return {
