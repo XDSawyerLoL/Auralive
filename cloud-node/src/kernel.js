@@ -11,6 +11,7 @@ import { AuraOrganism } from './organism.js';
 import { IdentityAutogenesis } from './identity_autogenesis.js';
 import { InnerDialogueEngine } from './inner_dialogue.js';
 import { arbitrateConversationInitiative } from './conversation_initiative.js';
+import {validateSensoryReading} from './sensory_input.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -401,6 +402,27 @@ export class CognitiveKernel {
     this.microReflex.stop();
     this.timer = null;
     this.started = false;
+  }
+
+  // Short-lived browser sensory features, clearly NOT independent evidence.
+  // They never authorize conversations, claims about objects or people,
+  // nor any modification to learned autobiographical memories.
+  observeBrowserSense(reading){
+    const valid=validateSensoryReading(reading);
+    if(!valid)return null;
+    if(!this.sensoryReadings)this.sensoryReadings={};
+    const previous=this.sensoryReadings[valid.kind];
+    const previousAt=Date.parse(String(previous?.measured_at||''));
+    if(Number.isFinite(previousAt)&&Date.parse(valid.measured_at)<=previousAt)
+      return null;
+    this.sensoryReadings[valid.kind]=valid;
+    return valid;
+  }
+
+  sensorySnapshot(){
+    const limit=Date.now()-15000;
+    return Object.fromEntries(Object.entries(this.sensoryReadings||{})
+      .filter(([,v])=>Date.parse(String(v?.measured_at||''))>=limit));
   }
 
   // Read-only, safe projection. No browser, service or model can author
