@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from allen_human_active_models import model_records, download_human_model
+from run_verified_allen_model import verify_manifest
 
 SPECIMEN=643625553
 MODEL_ID=758443311  # synthetic test ID, never asserted to exist at Allen
@@ -56,6 +57,25 @@ class HumanBiophysicalModelTests(unittest.TestCase):
             self.assertEqual(len(result['files']),1)
             with self.assertRaises(FileExistsError):
                 download_human_model(SPECIMEN,MODEL_ID,out,human(),record(),api)
+
+
+    def test_checksum_verified_and_tampering_fail_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)/'model'
+            download_human_model(SPECIMEN,MODEL_ID,root,human(),record(),StubAPI())
+            report=verify_manifest(root)
+            self.assertTrue(report['sha256_verified'])
+            self.assertFalse(report['human_biological_fidelity_validated'])
+            (root/'manifest.json').write_text('tampered!',encoding='utf-8')
+            with self.assertRaises(ValueError):
+                verify_manifest(root)
+            import json
+            provenance=root/'aura-model-provenance.json'
+            data=json.loads(provenance.read_text(encoding='utf-8'))
+            data['files'][0]['path']='../escape'
+            provenance.write_text(json.dumps(data),encoding='utf-8')
+            with self.assertRaises(ValueError):
+                verify_manifest(root)
 
 
 if __name__=='__main__': unittest.main()
