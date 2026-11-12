@@ -472,6 +472,7 @@ export class CognitiveKernel {
       .map(event=>({
         kind:event.kind==='speech-detected'?'speech-transcription':
           event.kind==='audio-visual-temporal-coincidence'?'multimodal-temporal':
+          event.kind==='object-image-displacement-hypothesis'?'visual-motion':
           event.kind==='object-hypothesis-stable'?'visual-objects':'visual-classification',
         measured_at:event.at,trusted:false,verified_real_world:false,
         evidence_scope:'repeated-or-once-client-model-output-not-ground-truth',
