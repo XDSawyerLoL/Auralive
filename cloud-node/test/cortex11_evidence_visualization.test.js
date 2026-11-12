@@ -87,7 +87,7 @@ test('one actual autonomous tick yields a source-stamped module hop, not a timer
  assert.match(code,/path,status:'ok',at:timestamp/);
  assert.match(code,/workspace-competition-completed/);
  assert.match(code,/persisted-organism-and-workspace-cycle/);
- assert.match(code,/await this\.saveSoul\(\);\s+\/\/ Each receipt below/);
+ assert.match(code,/await this\.saveSoul\(\);\s+\/\/ A single database receipt/);
  const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
  assert.match(server,/processObserver\.start\(\)/);
  assert.match(server,/process_monitor:bootstrap.runtimeReady\?processObserver\.snapshot\(\):null/);
