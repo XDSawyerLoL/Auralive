@@ -2082,6 +2082,30 @@ app.get('/api/cognition/trace', async (request, reply) => {
 });
 
 
+// Read-only social initiative, private and opt-in by the actual visitor.
+// It is produced by the existing autonomous kernel tick, never by a
+// language model or a periodic synthetic greeting.
+app.get('/api/cognition/initiative', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  const pending=kernel.pendingSocialInitiative();
+  return {ok:true,pending,producer:'AURA.native-inner-dialogue',
+    language_model_used:false,
+    consent_required:true,
+    available_only_with_independent_evidence:true};
+});
+
+app.post('/api/cognition/initiative/ack', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  const id=String(request.body?.id||'');
+  if(!/^[a-f\d]{24}$/.test(id))
+    return reply.code(422).send({error:'Reçu d’initiative invalide'});
+  const acknowledged=await kernel.acknowledgeSocialInitiative(id);
+  return {ok:acknowledged,acknowledged};
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
