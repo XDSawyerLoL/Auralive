@@ -31,7 +31,7 @@ test('native micro-circuit resolves the five actual conversation turns with no i
  const b=plan('comment ça',turns.slice(1,5));
  assert.equal(b.act,'clarify_unrequested_continuation');
  assert.match(engine.deterministicReply(b),/poursuivre notre échange/);
- assert.doesNotMatch(engine.deterministicReply(b),/CI|GitHub|Quantic/i);
+ assert.doesNotMatch(engine.deterministicReply(b),/\\bCI\\b|GitHub|Quantic/i);
  const c=plan('Tu',turns.slice(3,7));
  assert.equal(c.act,'unfinished_address');
  assert.equal(engine.deterministicReply(c),'Oui, je t’écoute.');
