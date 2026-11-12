@@ -10,6 +10,39 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
     </div>
     <div class="science-status" id="scienceLabState">SIMULATION · EN ATTENTE DES DONNÉES</div>
   </div>
+  <section class="science-mind" aria-label="Lecture des intentions et arbitrages effectivement conservés">
+    <div class="science-mind-heading">
+      <div><div class="science-minicap">OBSERVATOIRE COGNITIF / DONNÉES DU NOYAU</div>
+        <h3>Ce qu’AURA a <em>réellement enregistré.</em></h3>
+        <p>Lecture littérale des textes mémorisés, de ses intentions et du dernier arbitrage. Ce n’est ni une transcription de pensées conscientes ni le raisonnement caché du LLM.</p>
+      </div>
+      <div class="science-mind-actions"><span id="scienceMindState" role="status">Lecture privée · non chargée</span>
+        <button type="button" id="scienceMindRefresh" aria-label="Actualiser la lecture du noyau">Actualiser</button>
+      </div>
+    </div>
+    <div class="science-mind-grid">
+      <article class="science-mind-focus">
+        <div class="science-source-index">01 <span>ÉNONCÉ DOMINANT EN MÉMOIRE</span></div>
+        <blockquote id="scienceMindThought">Aucun texte du noyau reçu. Les énoncés ne sont jamais inventés pour remplir cet espace.</blockquote>
+        <small id="scienceMindThoughtSource">Source : aura_soul_state.dominant_thought · lecture privée</small>
+      </article>
+      <article class="science-mind-intention">
+        <div class="science-source-index">02 <span>INTENTION CONSIGNÉE</span></div>
+        <p id="scienceMindIntention">En attente de l'intention réellement persistée.</p>
+        <small id="scienceMindIntentionSource">Source : aura_soul_state.current_intention · pas une action accomplie</small>
+      </article>
+      <article class="science-mind-choice">
+        <div class="science-source-index">03 <span>ARBITRAGE FONCTIONNEL</span></div>
+        <strong id="scienceMindChoice">Aucun arbitrage confirmé</strong>
+        <div class="science-mind-drives" id="scienceMindDrives" aria-label="Pondérations réellement calculées"></div>
+        <small id="scienceMindChoiceSource">Source : InnerDialogueEngine · calcul déterministe, pas voix intérieure</small>
+      </article>
+    </div>
+    <details class="science-mind-ledger" id="scienceMindLedger">
+      <summary><span>Journal des intentions persistées</span><small id="scienceMindCount">Aucune entrée chargée</small></summary>
+      <div id="scienceMindRows" class="science-mind-rows"><p>Lecture protégée en attente.</p></div>
+    </details>
+  </section>
   <div class="science-lab-main">
     <article class="science-genome-block" aria-label="Carte interactive des bases du génome numérique">
       <header class="science-block-header">
@@ -20,6 +53,15 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
         <canvas id="scienceGenomeCanvas" role="img" aria-label="Double hélice informatique basée sur les 48 bases ACGT calculées"></canvas>
         <div class="science-genome-hint">Sélectionner une zone du génome pour inspecter le paramètre décodé</div>
       </div>
+      <section class="science-gene-insight" aria-label="Interprétation du gène sélectionné">
+        <div class="science-gene-insight-head">
+          <span class="science-minicap" id="scienceGeneLocus">LOCUS G01 / BASES 01–06</span>
+          <code id="scienceGeneSequence">------</code>
+        </div>
+        <strong id="scienceGeneInterpretation">Sélectionner un gène pour lire son sens dans le simulateur.</strong>
+        <p id="scienceGeneCausality">Seules les variables effectivement reliées au calcul sont présentées comme causales.</p>
+        <div class="science-gene-range"><span id="scienceGeneRange">Plage de réglage : —</span><span id="scienceGeneWiring">Connexion inconnue</span></div>
+      </section>
       <div class="science-genome-bottom">
         <span>GÈNE SÉLECTIONNÉ <strong id="scienceGeneName">—</strong></span>
         <span>EXPRESSION <strong id="scienceGeneValue">—</strong></span>
@@ -40,6 +82,7 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
         <div class="science-plot-head"><span>Taux de vérification préalable</span><span>0 <i></i> 25 <i></i> 50 <i></i> 75 <i></i> 100 %</span></div>
         <div id="scienceEffectsChart" class="science-effects-chart"><p>En attente des observations du simulateur.</p></div>
       </div>
+      <p class="science-effect-reading" id="scienceEffectReading">Les effets calculés apparaîtront ici avec leur protocole et leurs limites.</p>
       <div class="science-metrics-row">
         <div><span>DIFFÉRENCE A − B</span><strong id="scienceDiD">—</strong></div>
         <div><span>EFFET D’ABLATION</span><strong id="scienceAblation">—</strong></div>
