@@ -74,6 +74,8 @@ test('CORTEX 11 only illuminates dated real receipts and has no decorative parti
  assert.doesNotMatch(CORTEX11_SCRIPT,/c9BuildVolume|c9Volume\.points|c9Volume\.fibres/);
  assert.doesNotMatch(CORTEX11_SCRIPT,/Math\.random|Math\.sin|requestAnimationFrame/);
  assert.match(CORTEX11_CSS,/#cortex07Canvas\{display:none!important\}/);
+ assert.match(CORTEX11_CSS,/pointer-events:auto/);
+ assert.match(CORTEX11_SCRIPT,/c6State\.replay\?\.steps/);
  assert.match(CORTEX06_SCRIPT,/typeof c11PaintVolume==='function'/);
  assert.match(BRAIN_OPERATIONS_SCRIPT,/CORTEX11_SCRIPT|function c11PaintVolume/);
  assert.match(BRAIN_OPERATIONS_HTML,/CORTEX 11/);
