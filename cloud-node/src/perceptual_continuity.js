@@ -3,6 +3,15 @@
 // Transcripts are not kept here: only their occurrence and coarse length.
 const asMs=s=>{const n=Date.parse(String(s||''));return Number.isFinite(n)?n:null;};
 const round=x=>Math.round(x*1000)/1000;
+const intersectionOverUnion=(a,b)=>{
+ if(!a||!b)return 0;
+ const left=Math.max(a.xmin,b.xmin),top=Math.max(a.ymin,b.ymin);
+ const right=Math.min(a.xmax,b.xmax),bottom=Math.min(a.ymax,b.ymax);
+ const inter=Math.max(0,right-left)*Math.max(0,bottom-top);
+ const aa=(a.xmax-a.xmin)*(a.ymax-a.ymin);
+ const bb=(b.xmax-b.xmin)*(b.ymax-b.ymin);
+ return aa+bb-inter>0?inter/(aa+bb-inter):0;
+};
 const empty=()=>({revision:0,visual:null,objects:null,last_speech_at:null,last_event:null});
 export function updatePerceptualContinuity(previous=null,reading=null,{
   maxGapMs=90000,minimumVisualAgreement=2,
@@ -33,7 +42,10 @@ export function updatePerceptualContinuity(previous=null,reading=null,{
   const old=state.objects,oldAt=asMs(old?.at);
   if(oldAt!==null&&at<=oldAt)return {state,event:null,accepted:false};
   const within=oldAt!==null&&at-oldAt<=Math.max(1000,maxGapMs);
-  const matching=within&&old.label===label;
+  // Repeated category alone does not prove an individual object persisted.
+  // Require spatial overlap of two normalized model bounding boxes.
+  const matching=within&&old.label===label&&
+    intersectionOverUnion(old.box,strongest.box)>=.25;
   const count=matching?Math.min(50,(Number(old.count)||1)+1):1;
   const confirmed=count>=Math.max(2,minimumVisualAgreement);
   const event=confirmed&&count===Math.max(2,minimumVisualAgreement)
@@ -43,7 +55,7 @@ export function updatePerceptualContinuity(previous=null,reading=null,{
        claim:'repeated-client-detection-not-confirmed-object'}:null;
   return {accepted:true,event,state:{...state,
     revision:(Number(state.revision)||0)+1,
-    objects:{at:new Date(at).toISOString(),label,count},
+    objects:{at:new Date(at).toISOString(),label,count,box:{...strongest.box}},
     last_event:event||state.last_event||null}};
  }
  if(reading.kind!=='visual-classification')return {state,event:null,accepted:false};
