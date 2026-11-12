@@ -31,6 +31,7 @@ import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
+import { calibrateHumanPassiveCell, validateHumanPassiveCell } from './human_ephys_calibration.js';
 import { ObservedProcessMonitor } from './process_observer.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
@@ -2088,6 +2089,33 @@ app.get('/api/cognition/trace', async (request, reply) => {
 // language model or a periodic synthetic greeting.
 // Isolated biological R&D. No Hostinger soul mutation, model provider,
 // speech generation, new memory, simulated consciousness or tool execution.
+// Human measurements are caller-supplied AllenSDK exports with checked
+// provenance and SI-compatible units. Never fit human ionic-channel dynamics
+// from squid HH parameters, and never write to the production soul.
+app.post('/api/research/biophysics/human-passive', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private,no-store');
+  try{
+    const body=request.body||{};
+    if(!body.record||typeof body.record!=='object')
+      return reply.code(422).send({error:'AllenSDK human specimen record required'});
+    const result=body.heldout
+      ?validateHumanPassiveCell(body.record,body.heldout)
+      :{model:calibrateHumanPassiveCell(body.record),validation:null};
+    // Return only model/report, not raw potentially sensitive donor traces.
+    return {ok:true,model:result.model,validation:result.validation,
+      evidence_kind:'human-passive-cell-features',
+      externally_validated:result.validation?.externally_validated===true,
+      no_llm:true,production_brain_unchanged:true};
+  }catch(error){
+    if(error instanceof TypeError||error instanceof RangeError)
+      return reply.code(422).send({error:String(error.message).slice(0,180)});
+    throw error;
+  }
+});
+
 app.get('/api/research/biophysics', async (request, reply) => {
   if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
   reply.header('Cache-Control','private,no-store');
