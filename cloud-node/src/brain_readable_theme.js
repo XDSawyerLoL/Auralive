@@ -1,5 +1,6 @@
 import {CORTEX06_CSS} from './cortex06_visual.js';
 import {CORTEX10_CSS} from './cortex10_autonomous_live.js';
+import {CORTEX12_CSS} from './cortex12_realtime.js';
 import {CORTEX11_CSS} from './cortex11_evidence_render.js';
 import {CORTEX09_CSS} from './cortex09_neural_volume.js';
 import {BRAIN_ORGANISM_V5_CSS} from './brain_organism_v5.js';
@@ -383,4 +384,4 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
  .graph-bottom .graph-focus-summary{grid-column:2;grid-row:1 / 3;margin:0}
  .graph-bottom .graph-caption{grid-column:1}
 }
-`+BRAIN_ORGANISM_V5_CSS+CORTEX06_CSS+CORTEX09_CSS+CORTEX10_CSS+CORTEX11_CSS;
+`+BRAIN_ORGANISM_V5_CSS+CORTEX06_CSS+CORTEX09_CSS+CORTEX10_CSS+CORTEX11_CSS+CORTEX12_CSS;
