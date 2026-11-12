@@ -393,6 +393,10 @@ html,body{background:radial-gradient(ellipse at 35% -10%,#281336 0,transparent 3
 }
 /* Sensory controls stay compact inside the existing single brain interface. */
 #auraSenseStatus{display:block;padding:3px 8px;font-size:10px;line-height:1.4;color:#9bb5bb}
+#auraVisionPreview{position:relative;display:inline-block;width:160px;height:110px;margin:4px 8px;overflow:hidden;border-radius:7px}
+#auraVisionPreview[hidden]{display:none!important}
+#auraVisionPreview #auraCameraPreview{display:block;width:100%;height:100%;max-width:none;max-height:none;object-fit:fill;border-radius:0;margin:0}
+#auraObjectOverlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #auraCameraPreview{max-width:160px;max-height:110px;object-fit:cover;border-radius:7px;margin:4px 8px}
 #auraCameraPreview[hidden]{display:none!important}
 #auraListen[aria-pressed="true"],#auraSee[aria-pressed="true"]{
