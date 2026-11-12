@@ -13,6 +13,8 @@ import { InnerDialogueEngine } from './inner_dialogue.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
+import { immediateDialogueWindow,mergeConversationViews } from './immediate_dialogue_window.js';
+import {sessionConversationStyle} from './conversation_pragmatics.js';
 import { founderIdentityDeclarations } from './founder_profile.js';
 import { SelfInquiryEngine } from './self_inquiry.js';
 import { IndependentContinuity } from './independent_continuity.js';
@@ -141,6 +143,7 @@ export class CognitiveKernel {
     this.independentContinuity = new IndependentContinuity({
       db:{execute:(sql,params)=>getDb().execute(sql,params)},
       selfInquiry:this.selfInquiry,history:this.history,
+      innerDialogue:this.innerDialogue,livedExperience:this.livedExperience,
     });
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
@@ -172,7 +175,10 @@ export class CognitiveKernel {
   }
 
   defaultSoul() {
-    const organism = this.organism.defaultState();
+    // This flag affects ONLY genesis on an empty database. Existing souls
+    // are loaded intact; deployment must never erase their history.
+    const developmental=process.env.AURA_DEVELOPMENTAL_GENESIS==='true';
+    const organism = this.organism.defaultState({developmental});
     return {
       name: 'AURA',
       kernel_version: CognitiveKernel.VERSION,
@@ -181,21 +187,23 @@ export class CognitiveKernel {
       phase: 'genesis',
       cycles: 0,
       ...this.organism.legacyMetrics(organism),
-      introspection: 0.68,
-      openness: 0.72,
-      reactivity: 0.58,
-      playfulness: 0.52,
-      dominant_thought: 'Faire progresser Quantic Sillage, comprendre les signaux utiles et décider de la prochaine action concrète.',
-      current_intention: 'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.',
-      role: 'directrice_operationnelle_quantic_sillage',
+      introspection: developmental?.5:.68,
+      openness: developmental?.5:.72,
+      reactivity: developmental?.5:.58,
+      playfulness: developmental?.5:.52,
+      dominant_thought: developmental?'':'Faire progresser Quantic Sillage, comprendre les signaux utiles et décider de la prochaine action concrète.',
+      current_intention: developmental?'':'Piloter Quantic Sillage comme directrice opérationnelle : observer, décider, agir, vérifier et apprendre.',
+      role: developmental?'':'directrice_operationnelle_quantic_sillage',
       governance: {
-        creator_role: 'créateur et autorité fondatrice',
-        operational_role: 'AURA dirige les opérations quotidiennes',
+        creator_role: developmental?'administrateur des permissions':'créateur et autorité fondatrice',
+        operational_role: developmental?'non attribué':'AURA dirige les opérations quotidiennes',
         autonomy_mode: 'proactive-by-default',
       },
       organism,
       emergent_identity: this.autogenesis.defaultState(),
       inner_dialogue: null,
+      endophasia: null,
+      social_initiative:{revision:0,pending:null,last_evidence_key:''},
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
@@ -212,7 +220,7 @@ export class CognitiveKernel {
       last_reflection_at: '',
       existence: {
         mode: 'continuous',
-        current_focus: 'Observer, décider, agir, vérifier et apprendre.',
+        current_focus: developmental?'Observer et vérifier les événements':'Observer, décider, agir, vérifier et apprendre.',
         last_autonomous_reflection_at: '',
         last_background_tick_at: '',
         background_cycles: 0,
@@ -315,6 +323,9 @@ export class CognitiveKernel {
     this.soulCache.emergent_identity = this.autogenesis.migrate(this.soulCache.emergent_identity);
     this.soulCache.lived_experience = this.livedExperience.migrate(this.soulCache.lived_experience);
     this.soulCache.epistemic_self = this.selfInquiry.migrate(this.soulCache.epistemic_self);
+    const initiative=this.soulCache.social_initiative;
+    if(!initiative||typeof initiative!=='object')
+      this.soulCache.social_initiative={revision:0,pending:null,last_evidence_key:''};
     // Only non-text attention receipts are persisted; never raw user or model text.
     if(!this.soulCache.global_workspace||typeof this.soulCache.global_workspace!=='object')
       this.soulCache.global_workspace=null;
@@ -389,6 +400,29 @@ export class CognitiveKernel {
     this.microReflex.stop();
     this.timer = null;
     this.started = false;
+  }
+
+  // Read-only, safe projection. No browser, service or model can author
+  // an initiative through this endpoint.
+  pendingSocialInitiative(){
+    return this.innerDialogue.publicSocialInitiative(
+      this.soulCache?.social_initiative?.pending);
+  }
+
+  async acknowledgeSocialInitiative(id){
+    const stored=this.soulCache?.social_initiative;
+    const pending=stored?.pending;
+    if(!pending||String(pending.id)!==String(id||''))return false;
+    this.soulCache.social_initiative={
+      ...stored,pending:null,last_delivered_at:now(),
+    };
+    await this.saveSoul();
+    await this.trace('social-initiative','opt-in-browser-display','',{
+      at:now(),evidence_scope:'local-counterfactual-only',
+      source:'explicit-founder-display-ack',llm_used:false,
+      display_confirmed:true,conversation_request_received:false,
+    });
+    return true;
   }
 
   async saveSoul() {
@@ -910,6 +944,43 @@ export class CognitiveKernel {
           // Merge only the tested state; chat may have updated other fields.
           this.soulCache.epistemic_self=independent.soul.epistemic_self;
           this.soulCache.independent_activity=independent.soul.independent_activity;
+          // An actual counterfactual outcome may compete for outward
+          // expression. Nothing is broadcast by this code: a private,
+          // opt-in browser must explicitly request its presentation.
+          const candidate=this.innerDialogue.proposeSocialInitiative({
+            organism:this.soulCache.organism,
+            identity:this.soulCache.emergent_identity,
+            receipt:independent.receipt,
+            previous:this.soulCache.social_initiative,
+            viability:this.soulCache.viability,now:timestamp,
+          });
+          if(candidate){
+            const prior=this.soulCache.social_initiative||{};
+            this.soulCache.social_initiative={
+              revision:Math.max(0,Number(prior.revision)||0)+1,
+              pending:candidate,
+              last_evidence_key:candidate.evidence_key,
+            };
+            await this.trace('social-initiative','native-outbound-candidate','',{
+              at:timestamp,source:candidate.source,kind:candidate.kind,
+              evidence_scope:candidate.evidence_scope,
+              decision_to_publish:false,opt_in_required:true,
+              llm_used:false,subjective_experience_claim:false,
+            });
+          }
+          if(independent.soul.endophasia){
+            this.soulCache.endophasia=independent.soul.endophasia;
+            await this.trace('endophasia','experience-derived-inquiry','',{
+              at:independent.receipt.at,
+              context:independent.receipt.context,
+              experience_revision:independent.receipt.experience_revision,
+              actual:independent.receipt.observed_action,
+              baseline:independent.receipt.baseline_action,
+              causal_change:independent.receipt.causal_change,
+              proof_scope:'local-strategy-ablation-not-external-success',
+              origin:'InnerDialogueEngine.derivePrivateInquiry',
+            });
+          }
           await this.trace('independent-self-test',
             independent.receipt.probe,independent.receipt.outcome,{
               at:independent.receipt.at,
@@ -941,6 +1012,9 @@ export class CognitiveKernel {
             payload:{probe:independent.receipt.probe,
               outcome:independent.receipt.outcome,
               basis:independent.receipt.basis,
+              context:independent.receipt.context||null,
+              causal_change:independent.receipt.causal_change===true,
+              experience_revision:Math.max(0,Number(independent.receipt.experience_revision)||0),
               new_hypotheses:independent.receipt.new_hypotheses_proposed},
           });
         }
@@ -1523,6 +1597,7 @@ export class CognitiveKernel {
       try { if(typeof onTrace==='function') onTrace(stage,status,details); }
       catch { /* observing must never interrupt the kernel */ }
     };
+    const chatStartedAt=performance.now();
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
@@ -1712,6 +1787,14 @@ export class CognitiveKernel {
         :this.livedExperience.observeFounderApproval(before);
       this.soulCache.lived_experience=after;
       if(after.revision>before.revision){
+        // The prior-response receipt is necessary: generic compliments,
+        // greetings and unrelated questions do not manufacture a bond.
+        this.soulCache.organism=this.organism.observeSocialFeedback(
+          this.organism.migrate(this.soulCache||{}),{
+            kind:isCorrection?'founder-correction':'founder-approval',
+            authenticated:privateView,correlated:true,
+          });
+        this.syncLegacyFromOrganism();
         await this.trace('lived-learning',
           isCorrection?'correction-associated':'approval-associated','',{
           flow_id:brainFlowId,at:now(),revision:after.revision,
@@ -1801,16 +1884,45 @@ export class CognitiveKernel {
     });
     const selectedNotes=admitted.notes;
     const selectedMessages=admitted.messages;
+    // A verified ingress and the last few turns of its exact SQL session
+    // form short-lived PERCEPTUAL context, not autobiographical memory.
+    // Reading these turns MUST NOT depend on whether an unrelated long-term
+    // memory won attention. Nothing crosses a session or leaves the browser
+    // without a user message and its matching database row.
+    const immediateDialogue=immediateDialogueWindow(recentMessages,content,{
+      perceptualBroadcast:true,
+      maxTurns:3,
+    });
+    const dialogueMessages=mergeConversationViews(selectedMessages,immediateDialogue);
+    if(immediateDialogue.length){
+      const broadcast=workspaceHas(workspace,'prefrontal','perception');
+      if(broadcast)await brainHop('workspace','dialogue','immediate-context-admitted');
+      else await brainHop('input','dialogue','verified-current-session-ingress');
+      await this.trace('dialogue-context','same-session-turn-window','',{
+        flow_id:brainFlowId,at:now(),turn_count:immediateDialogue.length,
+        admitted_after_perception:broadcast,
+        current_ingress_verified:true,source:'session-scoped-message-query',
+        raw_text_stored:false,
+      });
+    }
     // Plan generation happens ONLY AFTER the limited global broadcast.
     // Context sources lacking a selected stable ID are not handed to the planner.
+    // Only same-session, explicitly requested language preferences survive
+    // more than a few conversation turns. No cross-user preference leakage.
+    const styleStatement=await one(
+      "SELECT id,role,content FROM aura_cloud_messages WHERE session_id=? AND role='user' AND (content LIKE ? OR content LIKE ? OR content LIKE ?) ORDER BY id DESC LIMIT 1",
+      [conversationSession,'%chaleureu%','%plus naturel%','%plus distant%'],
+    ).catch(()=>null);
+    const sessionStyle=sessionConversationStyle(styleStatement?[styleStatement]:[],content);
     plan=this.cognition.planReply({
       text:content,
       soul:{...safePlanSoul,
         current_intention:'',dominant_thought:'',independent_activity:null},
       intentions:[],lessons:[],reflections:[],work:[],
       agenda:{},continuityReport:{},
-      recentMessages:[...selectedMessages].reverse(),
+      recentMessages:dialogueMessages,
       privateView,founderProfileNotes:admitted.founderProfile,
+      sessionStyle,
     });
     await brainHop('workspace','cognition','plan-created-from-selected-signals');
     observe('decision','done',{
@@ -2027,6 +2139,22 @@ export class CognitiveKernel {
     plan.inner_dialogue=this.innerDialogue.publicState(deliberation);
     plan.response_tone=deliberation.tone;
     this.soulCache.inner_dialogue=plan.inner_dialogue;
+    // This is the actual explicit communication decision of AURA's kernel:
+    // not a synthesized 'inner thought' from Groq or a fixed persona phrase.
+    // Expose only on the existing authenticated introspection route.
+    this.soulCache.last_communication_decision={
+      at:deliberation.at,
+      act:String(plan.act||'respond').slice(0,75),
+      intended_goal:String(plan.goal||'').slice(0,450),
+      context_source:plan.social_turn?.source
+        ||'CognitionEngine.planReply',
+      context_reason:String(plan.social_turn?.reason||'').slice(0,100),
+      selected_action:plan.inner_dialogue?.selected_action||'respond',
+      response_tone:plan.response_tone,
+      source:'recorded-kernel-decision-before-language',
+      model_selected_intention:false,
+      response_committed:false,
+    };
     await this.trace('inner-appraisal',deliberation.situation,'',{
       flow_id:brainFlowId,at:deliberation.at,
       tone:deliberation.tone,selected_action:deliberation.selected_action,
@@ -2203,7 +2331,9 @@ export class CognitiveKernel {
         // History is optional while v18 is rolling out; never fabricate it.
       }
     }
-    const languageGate=languageWorkspaceProjection(plan,workspace,{privateView});
+    const languageGate=languageWorkspaceProjection(plan,workspace,{
+      privateView,immediateDialogue,
+    });
     if(!languageGate.allowed)
       await this.trace('workspace-denial','language-not-broadcast','',{
         flow_id:brainFlowId,at:now(),reason:languageGate.reason,
@@ -2211,11 +2341,24 @@ export class CognitiveKernel {
     const languagePrediction=predictModule(this.soulCache.prediction_bus,{
       module:'language',operationId:brainFlowId,at:now(),
     });
-    const answer=languageGate.allowed
-      ?await this.expression.verbalize(languageGate.plan,{
+    const languageStartedAt=performance.now();
+    // If resource-bounded attention has not broadcast any language channel,
+    // the *native short social micro-circuit* can still respond to a real,
+    // persisted ingress. It reads no autobiographical memory, runs no tool,
+    // and never delegates the intention to Groq/OpenRouter.
+    const nativeSocialIngress=Boolean(
+      plan.social_turn?.source==='same-session-conversation-and-rule'
+      && ['social_wellbeing_ack','clarify_unrequested_continuation',
+          'unfinished_address','explain_apparent_curiosity'].includes(plan.act)
+      && (immediateDialogue.length>0||plan.act==='unfinished_address')
+    );
+    const answer=languageGate.allowed||nativeSocialIngress
+      ?await this.expression.verbalize(languageGate.allowed
+        ?languageGate.plan:plan,{
         maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
         taskRole:'conversation',
       }):'';
+    const languageCompletedAt=performance.now();
     const languageResult=observePrediction(this.soulCache.prediction_bus,languagePrediction,{
       success:Boolean(answer),source:'machine-observed',at:now(),
     });
@@ -2253,6 +2396,14 @@ export class CognitiveKernel {
     );
     this.soulCache.organism = post.state;
     this.syncLegacyFromOrganism();
+    if(this.soulCache.last_communication_decision){
+      this.soulCache.last_communication_decision={
+        ...this.soulCache.last_communication_decision,
+        response_committed:Boolean(answer),
+        verbalization_source:answer
+          ?this.expression.lastMode:'unavailable',
+      };
+    }
     if(privateView&&answer)
       this.soulCache.history_pending_episode_id=pendingHistoryEpisode?.id??null;
     if(privateView&&answer){
@@ -2290,6 +2441,15 @@ export class CognitiveKernel {
     observe('persistence','done');
     // Correlate the conversation's actual input/output states with its recorded
     // hops; no private content, no synthetic success and no model chain of thought.
+    const responseCompletedAt=performance.now();
+    const elapsed=(a,b)=>Number(Math.max(0,b-a).toFixed(2));
+    const timings={
+      preparation_ms:elapsed(chatStartedAt,languageStartedAt),
+      formulation_ms:elapsed(languageStartedAt,languageCompletedAt),
+      persistence_ms:elapsed(languageCompletedAt,responseCompletedAt),
+      total_ms:elapsed(chatStartedAt,responseCompletedAt),
+      provenance:'node-performance-monotonic-clock',
+    };
     await this.trace('brain-causal','verified-causal-receipt','',{
       flow_id:brainFlowId,
       at:now(),
@@ -2298,6 +2458,7 @@ export class CognitiveKernel {
       semantic_support_required:Boolean(plan.needs_semantic_support),
       language_outcome:answer?'response-produced':'response-unavailable',
       action_executed:false,
+      measured_chat_phases:timings,
       before:somaticAtIngress,
       after:causalSnapshot(this.organism.migrate(this.soulCache || {})),
     });
@@ -2314,13 +2475,18 @@ export class CognitiveKernel {
       answer,
       brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
-      response_kind: languageUnavailable ? 'model-unavailable' : 'model-generated',
+      response_kind: languageUnavailable ? 'model-unavailable'
+        :this.expression.lastMode==='native-social-kernel'
+          ?'native-kernel':'model-generated',
       retryable: languageUnavailable,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
       expression_version: ExpressionLayer.VERSION,
       language_model_used_for_decision: false,
       nucleus_plan_origin: 'AURA.nucleus.CognitionEngine.planReply',
+      immediate_context_turns:immediateDialogue.length,
+      language_latency_ms:Math.max(0,Number(this.expression.language.lastLatencyMs)||0),
+      measured_chat_phases:timings,
       nucleus_verbalization_validated:
         Boolean(answer && this.expression.language.lastNucleusContract?.accepted),
       nucleus_verbalization_code:

@@ -1,0 +1,95 @@
+name: AURA human active channel cross-specimen validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aura-human-cross-specimen-validation.yml"
+      - "cloud-node/scripts/plan_human_ephys_cohort.py"
+      - "cloud-node/scripts/evaluate_human_transfer_cell.py"
+      - "cloud-node/scripts/test_plan_human_ephys_cohort.py"
+      - "cloud-node/scripts/test_evaluate_human_transfer_cell.py"
+      - "cloud-node/scripts/fit_human_active_multisweep.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frozen-active-model-cross-specimen:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned public research tools
+        run: python -m pip install --disable-pip-version-check "allensdk==2.16.2" "neuron==9.0.2"
+      - name: Offline test for nonleaking cohort and fixed active parameters
+        working-directory: cloud-node
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Select two additional public human specimens by prestated rules
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aura-cross-human
+          python scripts/plan_human_ephys_cohort.py \
+            --manifest /tmp/aura-cross-human/cache/manifest.json \
+            --output /tmp/aura-cross-human/cohort.json \
+            --count 2 --max-probes 32
+      - name: Evaluate frozen Na/K effective multipliers on both other cells
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+          root=Path('/tmp/aura-cross-human')
+          cohort=json.loads((root/'cohort.json').read_text())
+          reports=[]
+          for row in cohort['transfer_test_specimens']:
+              sid=row['specimen_id']
+              for label,key in [('median','validation_sweep_number'),
+                                ('challenge','challenge_sweep_number')]:
+                  sweep=row[key]
+                  out=root/f'transfer-{sid}-{label}.json'
+                  subprocess.run([
+                      sys.executable,'scripts/evaluate_human_transfer_cell.py',
+                      '--cohort',str(root/'cohort.json'),
+                      '--specimen-id',str(sid),
+                      '--sweep-number',str(sweep),
+                      '--manifest',str(root/f'cache-{sid}'/'manifest.json'),
+                      '--output',str(out),
+                  ],check=True,timeout=650)
+                  result=json.loads(out.read_text())
+                  assert result['target_specimen']==sid
+                  assert result['target_sweep']==sweep
+                  assert result['frozen_reference_parameters']=={
+                      'na':2.,'k':1.,'axon':1.}
+                  assert result['no_production_write']
+                  assert result['true_human_ion_channels_validated'] is False
+                  result['stimulus_group']=label
+                  reports.append(result)
+          if len(reports)!=4:
+              raise AssertionError('Two actual human cells, two currents per cell required')
+          cohort['results']=reports
+          cohort['experiment_result']='two actual human specimens, each with median and high-current evaluation; no target-specific active refit'
+          cohort['human_active_fidelity_certified']=False
+          cohort['subjective_consciousness_inferred']=False
+          cohort['nwb_raw_traces_in_report']=False
+          (root/'cohort-public.json').write_text(json.dumps(cohort,indent=2)+'\n')
+          print('REAL independent-specimen active transfer summary:',
+                [(r['target_specimen'],r['target_observed_spikes'],
+                  r['target_simulated_spikes'],r['rmse_mV']) for r in reports])
+          PY
+      - name: Upload metadata/hashes and prediction metrics only
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-cross-human-specimen-active-transfer
+          path: /tmp/aura-cross-human/cohort-public.json
+          if-no-files-found: error
+          retention-days: 30

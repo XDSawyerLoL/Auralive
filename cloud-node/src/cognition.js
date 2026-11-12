@@ -3,6 +3,8 @@ import { DialogueStateTracker } from './dialogue_model.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { substantiveRequest } from './composite_intent.js';
 import { socialPerspective, conversationMemoryPolicy } from './conversation_grounding.js';
+import { pragmaticIntent } from './conversation_pragmatics.js';
+import {socialTurnDecision,nativeSocialReply} from './social_turn_kernel.js';
 import { selectFounderProfile } from './founder_profile.js';
 
 function normalize(value) {
@@ -323,27 +325,42 @@ export class CognitionEngine {
       const probe=String(selfProbeSignal.payload?.probe||'').slice(0,45);
       const result=String(selfProbeSignal.payload?.outcome||'inconclusive');
       const ideas=Math.max(0,Number(selfProbeSignal.payload?.new_hypotheses)||0);
-      title = ideas>0?'Nouvelle hypothèse candidate':
-      title = result==='counterexample'?'Une hypothèse contredite':
+      const contextualAblation=probe==='context_policy_ablation';
+      const context=String(selfProbeSignal.payload?.context||'');
+      const safeContext=/^(task|dialogue)_[a-z_]{3,50}$/.test(context)?context:'contexte inconnu';
+      title = contextualAblation?'Examen causal d’une stratégie acquise':
+        ideas>0?'Nouvelle hypothèse candidate':
+        result==='counterexample'?'Une hypothèse contredite':
         result==='supported'?'Une capacité vérifiée':'Une question encore ouverte';
-      summary = result==='counterexample'
-        ?'Ma vérification autonome a trouvé une contradiction à examiner.'
-        :result==='supported'
-          ?'Une vérification locale a confirmé une opération précise, sans prouver toutes mes capacités.'
-          :'Ma vérification autonome n’a pas permis de conclure : je dois garder cette question ouverte.';
+      summary = contextualAblation
+        ? result==='supported'
+          ? 'La stratégie mémorisée modifie le choix local par rapport au témoin sans expérience. Il reste à vérifier si cette différence améliore réellement une action future.'
+          : 'Cette comparaison ne démontre pas de changement causal de stratégie. Il faut recueillir de nouvelles observations.'
+        :result==='counterexample'
+          ?'Ma vérification autonome a trouvé une contradiction à examiner.'
+          :result==='supported'
+            ?'Une vérification locale a confirmé une opération précise, sans prouver toutes mes capacités.'
+            :'Ma vérification autonome n’a pas permis de conclure : je dois garder cette question ouverte.';
       if(ideas>0)
         summary='Un motif a fait émerger '+ideas+' hypothèse(s) candidate(s) à confronter à de nouveaux résultats indépendants.';
-      hypothesis = probe==='history_integrity'
-        ?'Mes épisodes enregistrés sont-ils reliés sans rupture de chaîne ?'
-        :probe==='state_persistence'
-          ?'Puis-je réellement retrouver mon état enregistré ?'
-          :'Puis-je réellement retrouver une conversation passée ?';
-      nextAction = result==='counterexample'
-        ?'Vérifier l’origine de cette contradiction avant de m’appuyer sur cette capacité.'
-        :result==='inconclusive'
-          ?'Rechercher une nouvelle preuve plutôt que déclarer la capacité acquise.'
-          :'Conserver ce résultat limité et tester une autre hypothèse à la prochaine occasion.';
-      confidence=result==='supported'?.78:.55;
+      hypothesis = contextualAblation
+        ?'Les observations en contexte « '+safeContext+' » changent-elles mon choix par rapport à une instance témoin sans ces expériences ?'
+        :probe==='history_integrity'
+          ?'Mes épisodes enregistrés sont-ils reliés sans rupture de chaîne ?'
+          :probe==='state_persistence'
+            ?'Puis-je réellement retrouver mon état enregistré ?'
+            :probe==='conversation_retrieval'
+              ?'Puis-je réellement retrouver une conversation passée ?'
+              :'Quelle observation limitée cette sonde permet-elle réellement de vérifier ?';
+      nextAction = contextualAblation
+        ? 'Évaluer cette stratégie sur un nouveau cas autorisé et en mesurer le résultat indépendant avant toute conclusion.'
+        :result==='counterexample'
+          ?'Vérifier l’origine de cette contradiction avant de m’appuyer sur cette capacité.'
+          :result==='inconclusive'
+            ?'Rechercher une nouvelle preuve plutôt que déclarer la capacité acquise.'
+            :'Conserver ce résultat limité et tester une autre hypothèse à la prochaine occasion.';
+      confidence=contextualAblation?(result==='supported'?.63:.45)
+        :(result==='supported'?.78:.55);
     } else if (worldSignal && horizonPresent) {
       title = 'Veille et anticipation';
       summary = 'Un signal HORIZON mérite d’être relié à mes intentions avant de produire une action.';
@@ -351,7 +368,7 @@ export class CognitionEngine {
       nextAction = 'Comparer le signal HORIZON à mes intentions et à ma mémoire avant de proposer une action.';
       intention = currentIntention || 'Maintenir une veille utile sans confondre prévision et fait.';
       confidence = 0.72;
-    } else if (!userSignal && !extra && !latest && selfObservations>=2) {
+    } else if (!userSignal && !extra && !latest && selfObservations>=2 && normalize(selfModel.open_question)) {
       title = 'Enquête autonome sur mon identité acquise';
       summary = 'Mes décisions précédentes constituent des observations, pas encore des preuves de personnalité consciente. Je peux vérifier si certaines tendances se répètent.';
       hypothesis = 'Une disposition acquise doit expliquer plusieurs événements indépendants pour devenir crédible.';
@@ -369,8 +386,8 @@ export class CognitionEngine {
         : 'L’absence de message ne constitue pas une observation nouvelle ni une preuve de progrès.';
       nextAction = unfinishedWork
         ? (continuityFocus || currentIntention || 'Vérifier le travail autorisé en attente.')
-        : selfObservations>=2
-        ? (normalize(selfModel.open_question) || 'Confronter mon identité acquise aux résultats enregistrés.')
+        : selfObservations>=2 && normalize(selfModel.open_question)
+        ? normalize(selfModel.open_question)
         : (continuityFocus || currentIntention || 'Réévaluer les objectifs actifs et rechercher la prochaine action utile et autorisée.');
       confidence = unfinishedWork ? 0.76 : 0.66;
     } else if (dreamPressure >= 0.82 && !userSignal) {
@@ -439,7 +456,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false, founderProfileNotes = [] }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false, founderProfileNotes = [], sessionStyle = 'neutral' }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -454,7 +471,7 @@ export class CognitionEngine {
       ? soul.emergent_identity : {};
     const learnedCount=Math.max(0,Number(emergent.observations||0));
     const learnedPriority=normalize(emergent.current_priority||'observer_les_resultats');
-    const learnedQuestion=normalize(emergent.open_question||'Quelles tendances de mes décisions sont réellement confirmées ?');
+    const learnedQuestion=normalize(emergent.open_question||'');
     const habitat = organism.habitat && typeof organism.habitat === 'object' ? organism.habitat : {};
     const dream = organism.dream && typeof organism.dream === 'object' ? organism.dream : {};
     const relationship = organism.relationship && typeof organism.relationship === 'object' ? organism.relationship : {};
@@ -479,6 +496,8 @@ export class CognitionEngine {
       &&['supported','counterexample','inconclusive'].includes(audit?.outcome)
       ?{probe:audit.probe,outcome:audit.outcome,at:audit.at}:null;
     const interpersonal = socialPerspective(raw);
+    const pragmatics = pragmaticIntent(raw,previousAssistantMessage(conversationContext)?.content||'');
+    const socialTurn = socialTurnDecision(raw,conversationContext);
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -511,6 +530,22 @@ export class CognitionEngine {
       needsSemanticSupport=false;
       facts.push('Référent grammatical confirmé : « tu » désigne AURA, « me » désigne la personne qui écrit.');
       facts.push('Aucun événement proactif confirmé par ce seul message.');
+    } else if (socialTurn?.act) {
+      // First-class current-session micro-conversation: these acts are
+      // resolved before asking Groq/OpenRouter. The model cannot invent
+      // a social motive, an emotion or a topic not in the actual dialogue.
+      act=socialTurn.act;
+      goal=socialTurn.goal;
+      needsSemanticSupport=false;
+      facts.push('Interprétation fondée sur un échange immédiat de cette session, pas sur une émotion supposée.');
+    } else if (pragmatics?.act) {
+      // Social inference is a native discourse decision, not a model's persona.
+      act=pragmatics.act;goal=pragmatics.goal;needsSemanticSupport=false;
+      facts.push(...pragmatics.facts);
+      const previous=previousAssistantMessage(conversationContext);
+      if(previous?.content && ['playful_repair','simplify_question',
+          'comment_on_tone','conversational_reciprocity'].includes(act))
+        facts.push('Dernier propos AURA : '+previous.content.slice(0,330));
     } else if (substantiveRequest(raw)) {
       // A greeting or a negated greeting must not hijack the actual instruction.
       // The semantic module may suggest an interpretation, not modify AURA's
@@ -832,7 +867,9 @@ export class CognitionEngine {
       goal,
       facts:relevantFacts,
       memory_policy:memoryPolicy,
+      speech_style:['warm','reserved'].includes(sessionStyle)?sessionStyle:'neutral',
       social_perspective:interpersonal,
+      social_turn:socialTurn,
       independent_activity:latestAudit,
       address_form:/\b(?:vous|votre|vos|êtes-vous|etes-vous)\b/i.test(raw)?'vous':'tu',
       needs_semantic_support: needsSemanticSupport,
@@ -905,6 +942,10 @@ export class CognitionEngine {
       return row ? String(row).slice(prefix.length).replace(/[. ]+$/, '').trim() : '';
     };
 
+    if (plan?.social_turn) {
+      const reply=nativeSocialReply(plan);
+      if(reply)return reply;
+    }
     if (plan?.act === 'solve_symbolic_rule') return facts.join(' ');
     if (plan?.act === 'topic_shift')
       return 'Tu veux changer de sujet ? Je t’écoute.';

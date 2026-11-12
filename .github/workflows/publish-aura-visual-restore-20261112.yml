@@ -1,0 +1,70 @@
+name: Publish AURA fixed immersive visual
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-aura-visual-restore-20261112.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  fixed-visual-release:
+    if: github.repository == 'XDSawyerLoL/Auralive'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve full seven-check validated canonical Hostinger build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-restored"
+          gh run download 43285159425 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-restored"
+          for name in server.js package.json DEPLOYMENT.json \
+            src/brain_operations_console.js src/brain_biophysics_ui.js \
+            src/biophysical_evidence.js \
+            test/biophysical_evidence_ui.test.js; do
+            test -s "$RUNNER_TEMP/aura-restored/$name"
+          done
+          grep -Fq 'id="bioLabTrigger"' "$RUNNER_TEMP/aura-restored/src/brain_operations_console.js"
+          grep -Fq 'id="bioBackdrop"' "$RUNNER_TEMP/aura-restored/src/brain_operations_console.js"
+          grep -Fq 'id="bioEvidencePanel" role="region" tabindex="-1" hidden' \
+            "$RUNNER_TEMP/aura-restored/src/brain_biophysics_ui.js"
+          grep -Fq '#bioEvidencePanel[hidden],#bioBackdrop[hidden]' \
+            "$RUNNER_TEMP/aura-restored/src/brain_biophysics_ui.js"
+          grep -Fq 'bioSetOpen(' "$RUNNER_TEMP/aura-restored/src/brain_biophysics_ui.js"
+          grep -Fq 'aria-controls="bioEvidencePanel"' \
+            "$RUNNER_TEMP/aura-restored/src/brain_operations_console.js"
+      - name: Build complete ZIP and SHA-256 checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$GITHUB_WORKSPACE/AURA_CERVEAU_VISUEL_RESTAURE_20261112.zip"
+          (cd "$RUNNER_TEMP/aura-restored" && zip -q -r "$ZIP" .)
+          unzip -t "$ZIP" | tail -1
+          sha256sum "$ZIP" > "$GITHUB_WORKSPACE/AURA_CERVEAU_VISUEL_RESTAURE_20261112.sha256"
+      - name: Publish immutable artifact to GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-visual-restored-20261112"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable tag already exists. Refusing replacement."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "$GITHUB_WORKSPACE/AURA_CERVEAU_VISUEL_RESTAURE_20261112.zip" \
+            "$GITHUB_WORKSPACE/AURA_CERVEAU_VISUEL_RESTAURE_20261112.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "AURA — visualisation neuronale restaurée (Hostinger)" \
+            --notes "Réparation du rendu de la PR #251. Le laboratoire biologique n'occupe plus en permanence la surface du connectome. Vue secondaire cachée à l'ouverture et affichée dans un volet à la demande via le bouton Biologie de l'en-tête, y compris sur mobile; croix, clic extérieur et Échap ferment le volet sans redimensionner le cerveau. Tests Node, NEURON, Allen, canary et package valides lors de la compilation 43285159425. Le package ne déploie pas automatiquement sur Hostinger et préserve la mémoire existante. Modèles biologiques encore expérimentaux et non validés comme cerveau humain complet."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

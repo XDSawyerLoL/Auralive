@@ -26,6 +26,21 @@ export const COGNITIVE_ATLAS_CSS = String.raw`
 .cog-stat small{font-size:11px;color:#799bb0;text-transform:uppercase;letter-spacing:.14em;display:block;margin-bottom:4px}
 .cog-stat strong{font-size:19px;font-weight:650;color:#e8f8ff;font-variant-numeric:tabular-nums;display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .cog-stat span{font-size:11px;color:#7391a4}
+.cog-reading{margin:11px 16px 13px;border:1px solid #315064;border-radius:10px;
+ background:linear-gradient(100deg,#0e2432,#0a1827);display:flex;align-items:center;
+ justify-content:space-between;gap:18px;padding:15px 17px}
+.cog-reading-text{min-width:0}
+.cog-reading-text small{font:700 9px ui-monospace,monospace;letter-spacing:.13em;color:#8addd9}
+.cog-reading-text p{font-size:14px;line-height:1.55;letter-spacing:-.012em;color:#e7f3f7;
+ margin:7px 0 6px;font-weight:570;overflow-wrap:anywhere}
+.cog-reading-text span{color:#87a9ba;font-size:10px;line-height:1.5;display:block}
+#cogReadIntents{border:1px solid #5396a4;border-radius:8px;color:#d5f4ef;
+ background:#173c49;min-width:155px;min-height:37px;padding:9px 13px;
+ font:600 11px inherit;cursor:pointer}
+#cogReadIntents:hover{background:#245561;border-color:#8fddd5}
+#cogReadIntents:focus-visible{outline:2px solid #a3f5ec;outline-offset:2px}
+@media(max-width:650px){.cog-reading{margin:8px;flex-direction:column;align-items:stretch}
+ #cogReadIntents{width:100%}}
 .cog-stage{display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:530px}
 .cog-viewport{position:relative;overflow:hidden;min-height:510px;background:radial-gradient(ellipse at 46% 46%,rgba(28,102,133,.16),transparent 60%),radial-gradient(circle at 81% 81%,rgba(135,64,132,.11),transparent 42%),linear-gradient(170deg,#06121e,#040a13)}
 .cog-viewport:before{content:'';position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(129,199,224,.22) .7px,transparent 1px);background-size:25px 25px;opacity:.38}
@@ -133,6 +148,14 @@ export const COGNITIVE_ATLAS_HTML = String.raw`
           <div class="cog-stat"><small>Durée totale</small><strong id="cogDuration">—</strong><span>mesure du serveur</span></div>
           <div class="cog-stat"><small>Anomalies</small><strong id="cogStatsErrors">—</strong><span>étapes en échec</span></div>
           <div class="cog-stat"><small>Dernier événement</small><strong id="cogStatsLatest">—</strong><span>jalon horodaté</span></div>
+        </div>
+        <div class="cog-reading" aria-label="Interprétation des étapes réellement instrumentées">
+          <div class="cog-reading-text">
+            <small>LECTURE DU TRAJET · ÉVÉNEMENTS ENREGISTRÉS</small>
+            <p id="cogReadableSummary">Aucun cycle reçu. Une activité ne sera annoncée que lorsqu'une trace serveur l'atteste.</p>
+            <span id="cogReadableEvidence">Source : mesures et événements horodatés du noyau, pas transcription des pensées d’un LLM.</span>
+          </div>
+          <button id="cogReadIntents" type="button" title="Ouvrir le laboratoire et ses lectures privées" aria-controls="neuro-lab-details">Lire ses intentions</button>
         </div>
         <div class="cog-stage">
           <div class="cog-viewport" id="cogViewport">

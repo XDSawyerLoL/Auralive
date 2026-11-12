@@ -1,0 +1,89 @@
+name: Publish AURA cross-human-neuron research
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-aura-cross-human-neurons-20261112.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release-human-cross-specimen:
+    if: github.repository == 'XDSawyerLoL/Auralive'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve canonical Hostinger artifact and experimental cohort report
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-build" "$RUNNER_TEMP/aura-science"
+          gh run download 43299797726 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-build"
+          gh run download 43299079259 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cross-human-specimen-active-transfer \
+            --dir "$RUNNER_TEMP/aura-science"
+          for f in server.js package.json src/brain_biophysics_ui.js \
+            src/biophysical_evidence.js \
+            scripts/plan_human_ephys_cohort.py \
+            scripts/evaluate_human_transfer_cell.py \
+            scripts/test_plan_human_ephys_cohort.py \
+            scripts/test_evaluate_human_transfer_cell.py \
+            docs/AURA_EMULATION_BIOPHYSIQUE_CERVEAU_CORPS_20261112.md; do
+            test -s "$RUNNER_TEMP/aura-build/$f"
+          done
+          grep -q 'workflow_run_id:43299079259' "$RUNNER_TEMP/aura-build/src/biophysical_evidence.js"
+          grep -q 'bioCohortDetails' "$RUNNER_TEMP/aura-build/src/brain_biophysics_ui.js"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base=Path('/tmp')  # File locations below use the runner's RUNNER_TEMP.
+          import os
+          folder=Path(os.environ['RUNNER_TEMP'])/'aura-science'
+          data=json.loads((folder/'cohort-public.json').read_text())
+          results=data['results']
+          assert len(results)==4
+          high=[r for r in results if r['stimulus_group']=='challenge']
+          assert sorted(r['target_observed_spikes'] for r in high)==[2,3]
+          assert all(r['target_simulated_spikes']==0 for r in high)
+          assert data['selection_used_spike_count'] is False
+          assert data['selection_used_voltage'] is False
+          assert data['distinct_donors_verified'] is False
+          assert all(r['true_human_ion_channels_validated'] is False for r in results)
+          print('Human specimen data verified, negative active results not suppressed')
+          PY
+      - name: Package verified code with separate machine-readable evidence and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$GITHUB_WORKSPACE/AURA_COHORTE_NEURONES_HUMAINS_20261112.zip"
+          REPORT="$GITHUB_WORKSPACE/AURA_COHORTE_HUMAINE_PREUVES_20261112.json"
+          cp "$RUNNER_TEMP/aura-science/cohort-public.json" "$REPORT"
+          (cd "$RUNNER_TEMP/aura-build" && zip -q -r "$ZIP" .)
+          unzip -t "$ZIP" | tail -1
+          sha256sum "$ZIP" "$REPORT" > "$GITHUB_WORKSPACE/AURA_COHORTE_NEURONES_HUMAINS_20261112.sha256"
+      - name: Publish immutable GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-human-neuron-cohort-20261112"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "The research release is immutable and already exists."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "$GITHUB_WORKSPACE/AURA_COHORTE_NEURONES_HUMAINS_20261112.zip" \
+            "$GITHUB_WORKSPACE/AURA_COHORTE_HUMAINE_PREUVES_20261112.json" \
+            "$GITHUB_WORKSPACE/AURA_COHORTE_NEURONES_HUMAINS_20261112.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "AURA — étude de trois neurones humains et transfert actif intercellulaire" \
+            --notes "Verified biological research on Allen Homo sapiens specimens 643582610, 529898751 and 508410761. On the two additional specimens, frozen HH Na/K/axon-proxy coefficients from reference cell were NOT refit. Strong-current NWB 54 (230pA) recorded 3 human spikes but simulated 0; strong-current NWB 58 (350pA) recorded 2 human spikes but simulated 0. RMSE values 7.778253mV and 7.340096mV. Median currents were 0/0 with weaker RMSE, not evidence of active fidelity. Different specimens, donor independence unverified. HH ion kinetics still derived from squid, not validated human active channels. The attached JSON reports four measured-versus-computed conditions, no raw NWB waveforms. Cloud Node Hostinger bundle is from successful canonical action 43299797726, scientific observations from successful action 43299079259. Compact scientific drawer only; no deployment or MySQL memory reset."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

@@ -10,6 +10,40 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
     </div>
     <div class="science-status" id="scienceLabState">SIMULATION · EN ATTENTE DES DONNÉES</div>
   </div>
+  <section class="science-mind" aria-label="Lecture des intentions et arbitrages effectivement conservés">
+    <div class="science-mind-heading">
+      <div><div class="science-minicap">OBSERVATOIRE COGNITIF / DONNÉES DU NOYAU</div>
+        <h3>Ce qu’AURA a <em>réellement enregistré.</em></h3>
+        <p>Lecture littérale des textes mémorisés, de ses intentions et du dernier arbitrage. Ce n’est ni une transcription de pensées conscientes ni le raisonnement caché du LLM.</p>
+      </div>
+      <div class="science-mind-actions"><span id="scienceMindState" role="status">Lecture privée · non chargée</span>
+        <button type="button" id="scienceMindRefresh" aria-label="Actualiser la lecture du noyau">Actualiser</button>
+      </div>
+    </div>
+    <div class="science-mind-grid">
+      <article class="science-mind-focus">
+        <div class="science-source-index">01 <span>ÉNONCÉ DOMINANT EN MÉMOIRE</span></div>
+        <blockquote id="scienceMindThought">Aucun texte du noyau reçu. Les énoncés ne sont jamais inventés pour remplir cet espace.</blockquote>
+        <small id="scienceMindThoughtSource">Source : aura_soul_state.dominant_thought · lecture privée</small>
+      </article>
+      <article class="science-mind-intention">
+        <div class="science-source-index">02 <span>INTENTION CONSIGNÉE</span></div>
+        <p id="scienceMindIntention">En attente de l'intention réellement persistée.</p>
+        <small id="scienceMindIntentionSource">Source : aura_soul_state.current_intention · pas une action accomplie</small>
+      </article>
+      <article class="science-mind-choice">
+        <div class="science-source-index">03 <span>ARBITRAGE FONCTIONNEL</span></div>
+        <strong id="scienceMindChoice">Aucun arbitrage confirmé</strong>
+        <p id="scienceMindWhy" class="science-mind-reason">Aucune intention de communication enregistrée.</p>
+        <div class="science-mind-drives" id="scienceMindDrives" aria-label="Pondérations réellement calculées"></div>
+        <small id="scienceMindChoiceSource">Source : InnerDialogueEngine · calcul déterministe, pas voix intérieure</small>
+      </article>
+    </div>
+    <details class="science-mind-ledger" id="scienceMindLedger">
+      <summary><span>Journal des intentions persistées</span><small id="scienceMindCount">Aucune entrée chargée</small></summary>
+      <div id="scienceMindRows" class="science-mind-rows"><p>Lecture protégée en attente.</p></div>
+    </details>
+  </section>
   <div class="science-lab-main">
     <article class="science-genome-block" aria-label="Carte interactive des bases du génome numérique">
       <header class="science-block-header">
@@ -20,6 +54,15 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
         <canvas id="scienceGenomeCanvas" role="img" aria-label="Double hélice informatique basée sur les 48 bases ACGT calculées"></canvas>
         <div class="science-genome-hint">Sélectionner une zone du génome pour inspecter le paramètre décodé</div>
       </div>
+      <section class="science-gene-insight" aria-label="Interprétation du gène sélectionné">
+        <div class="science-gene-insight-head">
+          <span class="science-minicap" id="scienceGeneLocus">LOCUS G01 / BASES 01–06</span>
+          <code id="scienceGeneSequence">------</code>
+        </div>
+        <strong id="scienceGeneInterpretation">Sélectionner un gène pour lire son sens dans le simulateur.</strong>
+        <p id="scienceGeneCausality">Seules les variables effectivement reliées au calcul sont présentées comme causales.</p>
+        <div class="science-gene-range"><span id="scienceGeneRange">Plage de réglage : —</span><span id="scienceGeneWiring">Connexion inconnue</span></div>
+      </section>
       <div class="science-genome-bottom">
         <span>GÈNE SÉLECTIONNÉ <strong id="scienceGeneName">—</strong></span>
         <span>EXPRESSION <strong id="scienceGeneValue">—</strong></span>
@@ -40,6 +83,7 @@ export const BRAIN_SCIENCE_LAB_HTML=String.raw`
         <div class="science-plot-head"><span>Taux de vérification préalable</span><span>0 <i></i> 25 <i></i> 50 <i></i> 75 <i></i> 100 %</span></div>
         <div id="scienceEffectsChart" class="science-effects-chart"><p>En attente des observations du simulateur.</p></div>
       </div>
+      <p class="science-effect-reading" id="scienceEffectReading">Les effets calculés apparaîtront ici avec leur protocole et leurs limites.</p>
       <div class="science-metrics-row">
         <div><span>DIFFÉRENCE A − B</span><strong id="scienceDiD">—</strong></div>
         <div><span>EFFET D’ABLATION</span><strong id="scienceAblation">—</strong></div>
@@ -99,6 +143,119 @@ export const BRAIN_SCIENCE_LAB_CSS=String.raw`
 .science-proof-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:6px;align-items:center;font-size:9px;margin-top:11px}.science-proof-grid span{color:#7a95a5}.science-proof-grid strong{color:#c8f3e5;font-size:10px;word-break:break-all}.science-proof-grid code{font-size:9px;color:#93bad4;overflow-wrap:anywhere}
 @media(max-width:1170px){.science-lab-main{grid-template-columns:1fr}.science-bottom-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.science-lab-head{padding:17px;align-items:start;flex-direction:column}.science-lab-main{padding:9px}.science-bottom-grid{padding:0 9px 9px;grid-template-columns:1fr}.science-metrics-row{grid-template-columns:repeat(2,1fr)}.science-bar-row{grid-template-columns:90px minmax(0,1fr) 34px;gap:6px}.science-genome-bottom{grid-template-columns:1fr 1fr}.science-block-header{flex-direction:column}.science-neutral{text-align:left;max-width:none}}
+
+/* Atelier 2.0 — controlled editorial hierarchy, transparent scientific sourcing. */
+.science-lab{margin:9px 0 14px;border-radius:13px;background:#070e18;
+ box-shadow:none;border-color:#26374a}
+.science-lab::before{opacity:.25}
+.science-lab-head{padding:22px 23px 18px;background:linear-gradient(96deg,rgba(40,75,105,.10),transparent 62%)}
+.science-lab h2{font-size:clamp(22px,1.8vw,28px);font-weight:620;letter-spacing:-.035em}
+.science-lab-head p{font-size:11px;line-height:1.7;max-width:680px}
+.science-status{font-size:9px;border-radius:8px;min-width:135px;background:#102332;padding:9px}
+.science-mind{position:relative;margin:15px 16px 0;padding:20px 21px 15px;
+ border:1px solid rgba(128,168,194,.24);border-radius:12px;
+ background:linear-gradient(110deg,#0d1b2a,#0a1623 51%,#0c1726);
+ box-shadow:inset 0 1px 0 #ffffff05}
+.science-mind::before{content:'';position:absolute;left:20px;top:0;right:30%;height:1px;
+ background:linear-gradient(90deg,#7ae4dc80,transparent)}
+.science-mind-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:18px}
+.science-mind-heading h3{font-weight:590;font-size:clamp(18px,1.7vw,23px);
+ letter-spacing:-.03em;color:#eff8fb;margin:7px 0 5px}
+.science-mind-heading h3 em{font-weight:550;font-style:normal;color:#a4e6dd}
+.science-mind-heading p{margin:0;font-size:11px;line-height:1.65;
+ color:#8da5b7;max-width:710px}
+.science-mind-actions{display:flex;gap:9px;align-items:center;flex-shrink:0}
+.science-mind-actions span{font:700 9px ui-monospace,monospace;letter-spacing:.04em;
+ color:#9bbac9;text-align:right}
+.science-mind-actions button{font:600 10px inherit;border:1px solid #4d687b;
+ color:#daedf3;background:#142a3c;border-radius:7px;padding:8px 12px;cursor:pointer}
+.science-mind-actions button:hover{border-color:#80d9d7;background:#184051}
+.science-mind-grid{display:grid;grid-template-columns:1.4fr 1fr .95fr;
+ gap:0;border:1px solid #294255;border-radius:9px;overflow:hidden;background:#0b1826}
+.science-mind-grid>article{min-width:0;padding:17px 17px 14px}
+.science-mind-grid>article+article{border-left:1px solid #2b4254}
+.science-source-index{display:flex;gap:10px;align-items:center;color:#6fd3d2;
+ font:700 10px ui-monospace,monospace;letter-spacing:.08em}
+.science-source-index span{color:#86a5b7;font-size:9px;letter-spacing:.10em}
+.science-mind-focus blockquote{font-size:17px;line-height:1.46;font-weight:540;letter-spacing:-.015em;
+ border:0;padding:0;margin:16px 0 13px;color:#f0fbfa;overflow-wrap:anywhere}
+.science-mind-intention p{font-size:14px;color:#d0e6eb;line-height:1.5;margin:16px 0 14px;
+ overflow-wrap:anywhere}
+.science-mind-grid small{display:block;margin-top:auto;font-size:9px;line-height:1.5;
+ color:#6f8fa3;overflow-wrap:anywhere}
+.science-mind-choice>strong{display:block;color:#e2f5f4;font-size:14px;line-height:1.4;
+ font-weight:650;margin:15px 0 12px}
+.science-mind-reason{margin:0 0 13px;color:#aecad8;font-size:11px;
+ font-weight:420;line-height:1.55;overflow-wrap:anywhere}
+.science-mind-drives{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:5px 0 12px}
+.science-mind-drive>div:first-child{display:flex;justify-content:space-between;gap:5px;
+ color:#93afc2;font:9px ui-monospace,monospace}
+.science-mind-drive strong{color:#b8e9e2;font-weight:600}
+.science-mind-track{height:3px;border-radius:3px;background:#2a394a;margin-top:4px;overflow:hidden}
+.science-mind-fill{height:100%;background:linear-gradient(90deg,#477f9c,#83dcd0)}
+.science-mind-ledger{border-top:1px solid #294050;margin-top:14px}
+.science-mind-ledger summary{display:flex;align-items:center;justify-content:space-between;gap:15px;
+ padding:12px 2px 0;cursor:pointer;color:#c6dee9;font-size:11px;font-weight:600}
+.science-mind-ledger summary small{color:#8cb1c1;font:10px ui-monospace,monospace}
+.science-mind-ledger summary:focus-visible{outline:2px solid #80dcd2}
+.science-mind-rows{display:grid;gap:7px;padding:12px 0 3px}
+.science-mind-rows>p{font-size:11px;color:#8299a9}
+.science-mind-entry{padding:11px 13px;background:#0c1c2b;border-left:2px solid #6ebcc3;
+ border-radius:4px;min-width:0}
+.science-mind-entry-top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.science-mind-entry-top span{color:#88e0d6;font:700 9px ui-monospace,monospace;text-transform:uppercase}
+.science-mind-entry-top small{font:9px ui-monospace,monospace;color:#7698ad;overflow-wrap:anywhere}
+.science-mind-entry p{margin:5px 0 0;font-size:12px;color:#d2e3ee;line-height:1.6;overflow-wrap:anywhere}
+.science-lab-main{gap:12px;padding:13px 16px}
+.science-genome-block,.science-causal-block{border-color:#273d50;border-radius:10px;
+ box-shadow:none;background:#0b1724;min-height:0}
+.science-block-header{padding:14px 16px;align-items:center}
+.science-genome-stage{height:218px;background:radial-gradient(ellipse at 50% 54%,#1338485e,transparent 67%)}
+.science-genome-hint{font-size:9px;bottom:4px}
+.science-gene-insight{margin:0 13px 12px;padding:14px 15px;
+ background:#0e2330;border:1px solid #315467;border-radius:9px}
+.science-gene-insight-head{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.science-gene-insight-head code{font:700 14px ui-monospace,monospace;
+ color:#a9f1dd;letter-spacing:.21em}
+.science-gene-insight>strong{display:block;color:#e4f2fa;font-size:15px;
+ font-weight:620;margin:10px 0 4px}
+.science-gene-insight p{font-size:11px;color:#9ab5c5;line-height:1.55;margin:0 0 9px}
+.science-gene-range{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;
+ border-top:1px solid #335365;padding-top:8px;color:#8da7bb;font:10px ui-monospace,monospace}
+#scienceGeneWiring{color:#f0c396}
+.science-genome-bottom{margin:0 13px 10px}
+.science-genome-bottom span{background:#0d1d2a;border-radius:6px;border-color:#283e4e}
+.science-gene-list{padding-bottom:15px;gap:6px}
+.science-gene-list button{background:#0d2130;font-size:10px;border-radius:6px;min-height:32px}
+.science-gene-list button[aria-pressed=true]{background:#1c4851;color:#e4fcf6}
+.science-context-tabs{margin-top:15px}
+.science-plot{min-height:160px;border-radius:9px;margin-bottom:8px}
+.science-effects-chart{gap:19px}
+.science-effect-reading{margin:0 16px 13px;font-size:10px;line-height:1.6;color:#a1b7c5}
+.science-metrics-row strong{font-size:15px}
+.science-bottom-grid{padding-bottom:15px;gap:10px}
+.science-status-card{border-radius:9px;background:#0b1725}
+@media(max-width:1250px){
+ .science-mind-grid{grid-template-columns:1.2fr 1fr}
+ .science-mind-choice{grid-column:1/-1;border-top:1px solid #2b4254}
+ .science-mind-grid>article:nth-child(3){border-left:0}
+}
+@media(max-width:880px){
+ .science-mind-heading{flex-direction:column}
+ .science-mind-actions{width:100%;justify-content:space-between}
+ .science-mind{margin:10px 9px 0;padding:15px 13px}
+ .science-lab-main{padding:10px 9px}
+}
+@media(max-width:630px){
+ .science-mind-grid{grid-template-columns:1fr}
+ .science-mind-grid>article{padding:13px 14px}
+ .science-mind-grid>article+article{border-left:0;border-top:1px solid #294255}
+ .science-mind-choice{grid-column:auto}
+ .science-mind-focus blockquote{font-size:16px}
+ .science-mind-heading h3{font-size:19px}
+ .science-mind-actions{flex-wrap:wrap}
+ .science-gene-range{flex-direction:column}
+}
 @media(prefers-reduced-motion:reduce){.science-bar-fill{transition:none}}
 `;
 
@@ -110,10 +267,112 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
  let snapshot=null,context='A',selectedGene=0,loading=false;
  const geneNames=['Biais d’inspection','Période d’exploration','Pénalité d’échec','Gain attentionnel','Seuil d’incertitude','Récupération','Plasticité','Décroissance mémoire'];
  const traitKeys=['inspection_bias','exploration_period','failure_penalty','attention_gain','uncertainty_threshold','homeostasis_recovery','plasticity','memory_decay'];
+ const geneMeaning=[
+  {range:'−2 à 2',desc:'Influence la probabilité simulée d’inspecter avant d’agir.',role:'Utilisé dans l’expérience P0'},
+  {range:'3 à 10 cycles',desc:'Définit la fréquence de l’exploration dans la session simulée.',role:'Utilisé dans l’expérience P0'},
+  {range:'1 à 8',desc:'Modifie le coût simulé d’un échec dans le protocole.',role:'Utilisé dans l’expérience P0'},
+  {range:'0 à 0,08',desc:'Paramètre encodé mais non consommé par le calcul du score actuel.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,50 à 0,95',desc:'Seuil encodé ; aucun effet causal sur cette expérience n’a été établi.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,001 à 0,14',desc:'Récupération encodée ; le simulateur P0 ne lit pas cette valeur.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,05 à 0,90',desc:'Plasticité encodée ; aucune synapse biologique ni politique vivante modifiée.',role:'NON RELIÉ AU PROTOCOLE'},
+  {range:'0,001 à 0,10',desc:'Décroissance mémoire encodée ; aucun souvenir d’AURA n’est effacé.',role:'NON RELIÉ AU PROTOCOLE'},
+ ];
  const baseColors={A:'#7cebd3',C:'#f7bb83',G:'#a89cff',T:'#8ac9f8'};
  const number=x=>Number.isFinite(Number(x))?Number(x):0;
- const fmt=x=>Number.isFinite(Number(x))?Number(x).toFixed(2):'—';
+ const fmt=x=>x!==null&&x!==undefined&&x!==''&&Number.isFinite(Number(x))?Number(x).toFixed(2):'—';
  const put=(id,v)=>{const e=labEl(id);if(e)e.textContent=String(v??'—');};
+ let readingBusy=false,privateForbidden=false,readingCounter=0;
+ const actionNames={respond:'Répondre',clarify:'Demander une précision',verify:'Vérifier une preuve',defer:'Différer'};
+ const driveNames={initiative:'Initiative',care:'Attention à autrui',curiosity:'Curiosité',caution:'Prudence'};
+ function renderReadout(info){
+   const thought=info?.declared_thought?.text;
+   const intent=info?.current_intention?.text;
+   const focus=info?.current_focus?.text;
+   put('scienceMindThought',thought||'Aucun énoncé dominant enregistré dans la mémoire persistante.');
+   put('scienceMindIntention',intent||focus||'Aucune intention actuellement persistée.');
+   put('scienceMindThoughtSource','Source : aura_soul_state.dominant_thought · texte enregistré, pas pensée cachée du modèle');
+   put('scienceMindIntentionSource',intent
+     ?'Source : aura_soul_state.current_intention · intention non exécutée par défaut'
+     :'Source : existence.current_focus · objectif déclaré, pas résultat');
+   const a=info?.arbitration||{};
+   put('scienceMindChoice',actionNames[a.selected_action]||
+      'Aucun arbitrage récent vérifié');
+   const decision=info?.last_communication_decision;
+   put('scienceMindWhy',decision?.intended_goal
+     ?decision.intended_goal
+     :'Le noyau ne conserve aucune intention communicative récente.');
+   if(decision?.act)put('scienceMindChoice',
+     (actionNames[decision.selected_action]||'Décision')+' · '+
+     (decision.response_committed?'formulée':'non formulée'));
+   put('scienceMindChoiceSource',a.last_evaluated_at
+      ?'Dernier calcul : '+a.last_evaluated_at.replace('T',' ').slice(0,19)+
+       ' UTC · InnerDialogueEngine (sans Groq)'
+      :'Aucune évaluation fonctionnelle persistée à ce jour');
+   const holder=labEl('scienceMindDrives');holder.replaceChildren();
+   for(const ch of a.competition||[]){
+     if(!Number.isFinite(ch.value))continue;
+     const item=document.createElement('div');item.className='science-mind-drive';
+     const line=document.createElement('div');
+     const name=document.createElement('span');name.textContent=driveNames[ch.channel]||ch.channel;
+     const number=document.createElement('strong');number.textContent=ch.value.toFixed(2);
+     line.append(name,number);
+     const bar=document.createElement('div');bar.className='science-mind-track';
+     const fill=document.createElement('div');fill.className='science-mind-fill';
+     fill.style.width=Math.round(Math.max(0,Math.min(1,ch.value))*100)+'%';
+     bar.append(fill);item.append(line,bar);holder.append(item);
+   }
+   const entries=Array.isArray(info?.intentions)?info.intentions:[];
+   put('scienceMindCount',entries.length+' intention(s) documentée(s)');
+   const list=labEl('scienceMindRows');list.replaceChildren();
+   if(!entries.length){
+     const empty=document.createElement('p');empty.textContent='Aucune intention persistée accessible.';
+     list.append(empty);
+   } else for(const item of entries){
+     const row=document.createElement('div');row.className='science-mind-entry';
+     const top=document.createElement('div');top.className='science-mind-entry-top';
+     const state=document.createElement('span');state.textContent=item.status||'non renseigné';
+     const from=document.createElement('small');
+     from.textContent=(item.source||'source non précisée')+' · '+
+       (item.updated_at?item.updated_at.replace('T',' ').slice(0,19)+' UTC':'date inconnue');
+     top.append(state,from);
+     const label=document.createElement('p');label.textContent=item.statement||'';
+     row.append(top,label);list.append(row);
+   }
+   put('scienceMindState','REGISTRES LUS · '+(info?.observed_at?.replace('T',' ').slice(11,19)||'—'));
+ }
+ async function readMind(force=false){
+   if(readingBusy||(privateForbidden&&!force))return;
+   readingBusy=true;
+   put('scienceMindState','Lecture privée du noyau…');
+   try{
+     const response=await fetch('/api/brain/introspection',
+       {credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+     if(response.status===401||response.status===403){
+       privateForbidden=true;
+       put('scienceMindThought','Lecture réservée à la session fondatrice authentifiée.');
+       put('scienceMindIntention','Les intentions privées ne sont pas publiées à tous les visiteurs.');
+       put('scienceMindChoice','Accès privé requis');
+       labEl('scienceMindDrives').replaceChildren();
+       labEl('scienceMindRows').replaceChildren();
+       put('scienceMindState','SESSION FONDATRICE REQUISE');
+       put('scienceMindCount','Registre privé');
+       return;
+     }
+     if(!response.ok)throw Error('HTTP '+response.status);
+     const data=await response.json();
+     if(data.version!=='aura-readable-cognition-v1')throw Error('Format de noyau incompatible');
+     privateForbidden=false;
+     renderReadout(data);
+   }catch(error){
+     put('scienceMindState','LECTURE INDISPONIBLE');
+     put('scienceMindThought','Impossible de vérifier le texte mémorisé par le noyau.');
+     put('scienceMindChoice','Non vérifié');
+     put('scienceMindIntention','Aucune donnée fiable reçue.');
+     labEl('scienceMindDrives').replaceChildren();
+     labEl('scienceMindRows').replaceChildren();
+   }finally{readingBusy=false;}
+ }
+ labEl('scienceMindRefresh').addEventListener('click',()=>void readMind(true));
  function canvasDraw(){
    const can=labEl('scienceGenomeCanvas'),ctx=can.getContext('2d');
    const bounds=can.getBoundingClientRect();
@@ -155,6 +414,15 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    const genome=snapshot?.genome;
    put('scienceGeneName',geneNames[selectedGene]);
    put('scienceGeneValue',genome?.traits?.[traitKeys[selectedGene]]??'—');
+   const meanings=geneMeaning[selectedGene];
+   put('scienceGeneLocus','LOCUS G'+String(selectedGene+1).padStart(2,'0')+
+     ' / BASES '+String(selectedGene*6+1).padStart(2,'0')+'–'+
+     String(selectedGene*6+6).padStart(2,'0'));
+   put('scienceGeneSequence',genome?.dna?.slice(selectedGene*6,selectedGene*6+6)||'------');
+   put('scienceGeneInterpretation',geneNames[selectedGene]);
+   put('scienceGeneCausality',meanings.desc);
+   put('scienceGeneRange','Plage : '+meanings.range);
+   put('scienceGeneWiring',meanings.role);
    const list=labEl('scienceGeneList');list.replaceChildren();
    for(let i=0;i<8;i++){
      const button=document.createElement('button');button.type='button';
@@ -169,19 +437,19 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    const d=snapshot?.sandbox?.sample?.policies;
    if(!d){holder.textContent='Aucune distribution A/B vérifiable disponible.';return;}
    const rows=[
-     ['Référence S0',0,'baseline'],
-     ['Après apprentissage S1',Number(d.after?.[context]?.inspect), 'after'],
+     ['Après apprentissage',d.after?.[context]?.inspect, 'after'],
      ['Ablation de A',Number(d.ablated?.[context]?.inspect),'ablation'],
      ['Placebo B',Number(d.placebo?.[context]?.inspect),'placebo'],
    ];
    for(const [label,raw,kind] of rows){
-     const val=Math.max(0,Math.min(1,number(raw)));
+     const valid=raw!==null&&raw!==undefined&&Number.isFinite(Number(raw));
+     const val=valid?Math.max(0,Math.min(1,Number(raw))):null;
      const row=document.createElement('div');row.className='science-bar-row';
      const name=document.createElement('span');name.textContent=label;
      const track=document.createElement('div');track.className='science-bar-track';
      const bar=document.createElement('div');bar.className='science-bar-fill '+kind;
-     bar.style.width=Math.round(val*100)+'%';track.append(bar);
-     const pct=document.createElement('strong');pct.textContent=Math.round(val*100)+' %';
+     bar.style.width=valid?Math.round(val*100)+'%':'0%';track.append(bar);
+     const pct=document.createElement('strong');pct.textContent=valid?Math.round(val*100)+' %':'—';
      row.append(name,track,pct);holder.append(row);
    }
  }
@@ -211,6 +479,11 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
    put('scienceDiD',fmt(metrics.difference_in_differences));
    put('scienceAblation',fmt(metrics.causal_ablation_A));
    put('scienceNoise',fmt(metrics.noise_floor));
+   put('scienceEffectReading',s.executed
+     ?'Effet calculé en bac à sable : ablation A = '+fmt(metrics.causal_ablation_A)+
+      ' ; différence A − B = '+fmt(metrics.difference_in_differences)+
+      '. Ce résultat compare des politiques simulées, pas les décisions vivantes d’AURA.'
+     :'Aucune expérience P0 exécutée : les différences causales restent inconnues.');
    put('scienceDraws',s.draws??'—');
    put('scienceProtocolProof','Vérificateur arithmétique du simulateur. La validation indépendante du protocole PDF, avec processus séparé, signature et intervalle bootstrap, n’est PAS encore acquise.');
    put('scienceStudyProof','SIMULATION / NON CERTIFIÉE P0');
@@ -253,7 +526,10 @@ export const BRAIN_SCIENCE_LAB_SCRIPT=String.raw`
  });
  window.addEventListener('resize',()=>{if(snapshot)canvasDraw();},{passive:true});
  const drawer=document.getElementById('neuro-lab-details');
- if(drawer)drawer.addEventListener('toggle',()=>{if(drawer.open)void loadLab();});
- else void loadLab();
+ if(drawer)drawer.addEventListener('toggle',()=>{if(drawer.open){void loadLab();void readMind(true);}});
+ else {void loadLab();void readMind(true);}
+ // Private readout is refreshed only while visible, never in the background.
+ setInterval(()=>{if(drawer?.open&&!document.hidden&&!privateForbidden&&!readingBusy)
+   void readMind();},7000);
 })();
 `;

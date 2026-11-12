@@ -1,0 +1,81 @@
+name: AURA Biological NEURON research validation
+
+on:
+  pull_request:
+    paths:
+      - "cloud-node/src/human_morphology.js"
+      - "cloud-node/test/human_morphology.test.js"
+      - "cloud-node/scripts/run_human_swc_neuron.py"
+      - "cloud-node/scripts/allen_human_active_models.py"
+      - "cloud-node/scripts/test_run_human_swc_neuron.py"
+      - "cloud-node/scripts/test_allen_human_active_models.py"
+      - ".github/workflows/aura-neuron-biophysics-research.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  passive-cable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install scientific simulator (no human data or donor files)
+        run: python -m pip install --disable-pip-version-check "neuron==9.0.2"
+      - name: Check research Python and importer tests
+        working-directory: cloud-node
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
+      - name: Execute actual multi-compartment NEURON on synthetic SWC control
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aura-neuron-research
+          cat > /tmp/aura-neuron-research/synthetic-control.swc <<'SWC'
+          # SYNTHETIC morphology control, NOT an Allen human reconstruction
+          1 1 0 0 0 8 -1
+          2 3 0 0 20 1 1
+          3 3 0 0 70 0.8 2
+          4 3 0 0 170 0.6 3
+          5 2 12 0 0 0.5 1
+          6 2 60 0 0 0.4 5
+          SWC
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          # Numerical test fixture: synthetic parameters, not donor data.
+          Path('/tmp/aura-neuron-research/parameters.json').write_text(json.dumps({
+            'schema_version': 'aura-allen-cell-types-human-ephys-v1',
+            'species':'Homo sapiens','specimen_id':643625553,
+            'features':{'vrest_mV':-65,'input_resistance_MOhm':200,
+                        'membrane_tau_ms':20},
+            'source':{'dataset':'Allen Cell Types Database',
+              'species_filter':'CellTypesApi.HUMAN',
+              'human_specimen_verified':True,
+              'feature_units':{'vrest':'mV','ri':'MOhm','tau':'ms'},
+              'extraction_software':'synthetic-CI-numerical-test-not-from-donor'}
+          }), encoding='utf-8')
+          PY
+          python scripts/run_human_swc_neuron.py \
+            --swc /tmp/aura-neuron-research/synthetic-control.swc \
+            --human-features /tmp/aura-neuron-research/parameters.json \
+            --duration-ms 180 --current-pa 45 \
+            --output /tmp/aura-neuron-research/result.json
+          python - <<'PY'
+          import json, math
+          with open('/tmp/aura-neuron-research/result.json') as stream:
+              data=json.load(stream)
+          assert data['n_sections']>=2, data
+          assert data['n_segments']>=data['n_sections'], data
+          assert len(data['voltage_mV'])>=3000, data
+          assert all(math.isfinite(v) for v in data['voltage_mV'])
+          assert max(data['voltage_mV'])>-65
+          assert data['synaptic_and_active_ion_channels_calibrated'] is False
+          assert data['human_whole_brain_reproduced'] is False
+          assert data['production_state_changed'] is False
+          print('Real NEURON cable equations passed synthetic numerical control')
+          PY

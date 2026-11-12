@@ -64,17 +64,34 @@ export function classifyFreeLanguageFailure(message = '') {
 
 // Compact turn for a small on-host GGUF (Qwen3-0.6B).
 // /no_think is supported by Qwen3 and prevents reasoning tokens replacing the answer.
+// Current dialogue turns are a distinct, perception-admitted short-term buffer.
+// Do not replace them with project memory or the LLM's generic persona.
+export function compactSpeechConversation(plan={}){
+  const joined=[
+    ...(Array.isArray(plan.conversation_context)?plan.conversation_context:[]),
+    ...(Array.isArray(plan.immediate_dialogue_context)?plan.immediate_dialogue_context:[]),
+  ].filter(row=>row&&['assistant','user'].includes(String(row.role))&&
+      normalize(row.content));
+  const map=new Map();
+  joined.forEach((row,i)=>map.set(String(row.id??'unindexed:'+i),{
+    id:Number(row.id)||i,role:row.role,
+    content:normalize(row.content).slice(0,210),
+  }));
+  return [...map.values()]
+    .sort((a,b)=>a.id-b.id).slice(-4)
+    .map(({role,content})=>({role,content}));
+}
+
 export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
   const limit = Math.max(1800, Math.min(5200, Number(maxChars) || 2400));
   const privatePlan = plan && typeof plan === 'object' ? plan : {};
   const personalRecognition=privatePlan.act==='user_recognition';
-  const simpleIdentity=['self_identity','self_personality','self_exploration'].includes(privatePlan.act);
+  const simpleIdentity=['self_identity','self_personality','self_exploration',
+    'resolve_reference_followup','adjust_conversation_tone','playful_repair',
+    'simplify_question','comment_on_tone','conversational_reciprocity',
+    'knowledge_provenance','shared_positive_moment'].includes(privatePlan.act);
   const interpersonalGrounded=['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(privatePlan.act);
-  const conversation = (Array.isArray(privatePlan.conversation_context)
-    ? privatePlan.conversation_context : []).slice(-4).map(row => ({
-    role: String(row?.role || 'user') === 'assistant' ? 'assistant' : 'user',
-    content: normalize(row?.content || '').slice(0,210),
-  })).filter(row => row.content);
+  const conversation = compactSpeechConversation(privatePlan);
   // In personal exchanges, do NOT expose debug identifiers or numeric
   // organism states to the LLM: they will be copied into its actual speech.
   if(personalRecognition||simpleIdentity||interpersonalGrounded){
@@ -85,6 +102,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       factual_constraints:(Array.isArray(privatePlan.facts)?privatePlan.facts:[])
         .slice(0,5).map(x=>normalize(x).slice(0,320)),
       response_tone:privatePlan.response_tone||'direct',
+      ...(privatePlan.speech_style==='warm'?{speech_style:'warm'}:{}),
       address_form:privatePlan.address_form==='vous'?'vous':'tu',
       conversation:interpersonalGrounded?[]:conversation.slice(-2),
       ...(interpersonalGrounded&&privatePlan.act!=='topic_shift'?{speaker_roles:privatePlan.social_perspective?.actor==='user'
@@ -122,9 +140,12 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
       '/no_think',
       'Tu écris la réponse d’AURA en français courant, en une à trois phrases.',
       'Réponds à la question posée. Une question sur mon interlocuteur concerne LUI, pas ma propre identité.',
+      'Adapte le ton chaleureusement si demandé. Comprends humour, second degré et fautes phonétiques évidentes.',
+      'N’attribue jamais à AURA l’entraînement de son moteur linguistique. Ne parle ni de calibrage ni de preuves objectives pour une plaisanterie.',
       'Si le message demande « je te dérange ? », c’est l’utilisateur qui pose la question à AURA. Ne réponds pas « je ne te dérange pas » : les pronoms seraient inversés.',
       'Si la personne dit « tu me déranges », c’est elle qui signale un problème : reconnais-le, sans te justifier ni parler du CI.',
       'N’invente ni souvenir ni nom. Utilise seulement les souvenirs explicitement attribués.',
+      'Relance « c’est comme ça ? » : réfère-toi au dernier message AURA, pas à un faux « bonjour ».',
       'Ne répète pas les instructions, le JSON, les variables, les scores ou les modèles.',
       'Pour une enquête sur soi : distingue hypothèse prévue, observation mesurée, conclusion provisoire et limites. Ne simule aucune autre observation.',
       'Pour une question personnelle, parle simplement : pas de noyau, fournisseur, entité computationnelle ni catalogue de fonctionnalités.',
@@ -151,6 +172,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     speech_act: normalize(privatePlan.act || 'respond').slice(0,85),
     factual_constraints: (Array.isArray(privatePlan.facts) ? privatePlan.facts : [])
       .slice(0,18).map(item => normalize(item).slice(0,210)).filter(Boolean),
+    ...(privatePlan.speech_style==='warm'?{speech_style:'warm'}:{}),
     response_tone:['direct','attentive','curious','cautious','calm'].includes(privatePlan.response_tone)
       ?privatePlan.response_tone:'direct',
     self_model: {
@@ -220,12 +242,18 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
 }
 
 export function compactFrenchSystem(plan={}) {
-  if(['user_recognition','self_identity','self_personality','self_exploration','user_asks_if_interrupting','user_reports_aura_interrupts'].includes(plan?.act))
+  if(['user_recognition','self_identity','self_personality','self_exploration','user_asks_if_interrupting',
+    'user_reports_aura_interrupts','resolve_reference_followup','adjust_conversation_tone',
+    'playful_repair','simplify_question','comment_on_tone','conversational_reciprocity',
+    'knowledge_provenance','shared_positive_moment'].includes(plan?.act))
     return [
       plan.address_form==='vous'
         ?'Tu formules la voix naturelle d’AURA, en français et au vouvoiement.'
         :'Tu formules la voix naturelle d’AURA, en français et au tutoiement.',
       'Ne récite pas son architecture informatique, le fournisseur ou les métriques internes.',
+      'Réponds comme dans une conversation : simple, vivante, adaptable et capable de second degré.',
+      'Si speech_style vaut warm, le tutoiement, la chaleur et une spontanéité mesurée sont souhaités, pas un diagnostic de l’interaction.',
+      'Si on parle d’un film ou de Star Wars, le modèle linguistique fournit des connaissances préalables ; AURA ne doit pas s’attribuer l’entraînement du modèle.',
       '« Tu sais qui je suis ? » demande qui est ton interlocuteur, pas qui est AURA.',
       'La session fondatrice prouve une authentification, pas le nom civil ni la vie privée.',
       'Si des souvenirs déclarés existent, cite un détail pertinent et attribué.',
@@ -282,15 +310,38 @@ export function validateNucleusSpeech(plan = {}, rawAnswer = '') {
   // In particular the question "Do you know who I am?" is not "Who are you?".
   const socialActs=new Set([
     'user_recognition','self_name','self_identity','self_personality',
+    'resolve_reference_followup','adjust_conversation_tone','playful_repair',
+    'simplify_question','comment_on_tone','conversational_reciprocity',
+    'knowledge_provenance','shared_positive_moment',
     'relationship_understanding','user_mixed_wellbeing',
     'reciprocal_wellbeing','positive_acknowledgement','greet',
   ]);
   if(socialActs.has(plan.act)){
+    const claim=answer.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’]/g,"'");
+    if(/j'ai ete (?:entrainee|exposee)/.test(claim)&&
+       /(?:corpus|milliards|donnees|documents|entrainement)/.test(claim))
+      return {accepted:false,code:'provider-training-as-aura-memory'};
+    if(['adjust_conversation_tone','playful_repair','simplify_question',
+         'comment_on_tone','conversational_reciprocity','shared_positive_moment'].includes(plan.act)
+       &&/\b(?:calibr(?:er|age|ation)|satisfaction enregistr[eé]e|donn[eé]es de l'interaction|contexte enregistr[eé]|preuve objective|noyau computationnel|param[eè]tres internes|mod[eè]le interne)\b/i.test(answer))
+      return {accepted:false,code:'clinical-social-response'};
     if(answer.length>650||/\\\*|\*\*|(?:^|\s)[-•]\s+\*\*/.test(answer)||
       /\b(?:decision_origin|factual_constraints|speech_act|self_model|organism_state|nucleus_plan_origin|mood\s*:|champ [a-z_]{4,})\b/i.test(answer))
       return {accepted:false,code:'technical-monologue'};
     if(/\b(?:confiance|satisfaction|frustration|stabilit[eé])\s+(?:de|a|à|:)?\s*0[.,]\d{2,}/i.test(answer))
       return {accepted:false,code:'unrequested-architecture'};
+  }
+  if(plan.act==='resolve_reference_followup'||
+      plan.discourse?.move==='reference_followup'){
+    const allowed=[plan.user_text,plan.discourse?.reference_text,
+      ...(Array.isArray(plan.immediate_dialogue_context)
+        ?plan.immediate_dialogue_context.map(r=>r.content):[])]
+      .map(normalize).join(' ').toLocaleLowerCase('fr-FR');
+    // A short-turn reference cannot be silently rewritten into an unrelated
+    // greeting (the exact observed failure: "Bonjour est une salutation").
+    if(/\b(?:bonjour|salutation|bonsoir)\b/i.test(answer)&&
+      !/\b(?:bonjour|salutation|bonsoir)\b/i.test(allowed))
+      return {accepted:false,code:'unrelated-greeting-reference'};
   }
   if(plan.act==='user_recognition'){
     if(!/\b(?:tu|te|toi|ton|ta|tes|vous|votre)\b/i.test(answer)||
@@ -578,7 +629,10 @@ export class FrenchLanguageFaculty {
       relationship: plan.relationship && typeof plan.relationship === 'object' ? plan.relationship : {},
       executive: plan.executive && typeof plan.executive === 'object' ? plan.executive : {},
       discourse: plan.discourse && typeof plan.discourse === 'object' ? plan.discourse : {},
-      conversation: compactContext(plan.conversation_context),
+      conversation: compactContext([
+      ...(Array.isArray(plan.conversation_context)?plan.conversation_context:[]),
+      ...(Array.isArray(plan.immediate_dialogue_context)?plan.immediate_dialogue_context:[]),
+    ]),
       experiential_memory: (plan.memory_policy?.allowProjectMemory && Array.isArray(plan.experiential_memory) ? plan.experiential_memory : [])
         .slice(-8).map((row) => ({
           kind: String(row?.kind || '').slice(0, 48),
@@ -589,7 +643,10 @@ export class FrenchLanguageFaculty {
   }
 
   prompt(plan = {}) {
-    if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(plan.act))
+    if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift',
+      'resolve_reference_followup','adjust_conversation_tone','playful_repair',
+      'simplify_question','comment_on_tone','conversational_reciprocity',
+      'knowledge_provenance','shared_positive_moment'].includes(plan.act))
       return compactFrenchPrompt(plan,{maxChars:3500});
     return [
       'Tu disposes du sens décidé par le noyau AURA ci-dessous.',
@@ -617,7 +674,10 @@ export class FrenchLanguageFaculty {
   }
 
   system(plan={}) {
-    if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift'].includes(plan.act))
+    if(['user_asks_if_interrupting','user_reports_aura_interrupts','topic_shift',
+      'resolve_reference_followup','adjust_conversation_tone','playful_repair',
+      'simplify_question','comment_on_tone','conversational_reciprocity',
+      'knowledge_provenance','shared_positive_moment'].includes(plan.act))
       return compactFrenchSystem(plan);
     return [
       'Tu es la faculté linguistique française d’AURA.',
@@ -676,7 +736,7 @@ export class FrenchLanguageFaculty {
           'self-counterexample-hidden','scripted-self-definition',
           'social-topic-hijack','reversed-speaker-roles',
           'interlocutor-not-addressed','dismissed-user-interruption',
-          'unrequested-stale-memory'
+          'unrequested-stale-memory','unrelated-greeting-reference','provider-training-as-aura-memory','clinical-social-response'
         ].includes(this.lastNucleusContract.code)){
           result=await this.groq.generate(
             basePrompt+'\nRéponse précédente rejetée : elle a mal traité la question ou nié l’identité computationnelle d’AURA. Réponds exactement à la demande initiale, à la première personne, selon les faits du noyau. Pas de travail inventé, pas de question de politesse.',

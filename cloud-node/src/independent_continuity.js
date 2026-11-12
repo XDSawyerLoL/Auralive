@@ -12,9 +12,10 @@ export function independentInquiryDue(state={},nowMs=Date.now(),periodMs=ONE_HOU
   return previous===null||nowMs-previous>=Math.max(60000,Number(periodMs)||ONE_HOUR);
 }
 export class IndependentContinuity {
-  constructor({db,selfInquiry,history,clock=()=>Date.now()}={}){
+  constructor({db,selfInquiry,history,innerDialogue=null,livedExperience=null,clock=()=>Date.now()}={}){
     if(!db||!selfInquiry||!history)throw new Error('Independent inquiry dependencies missing');
     this.db=db;this.selfInquiry=selfInquiry;this.history=history;this.clock=clock;
+    this.innerDialogue=innerDialogue;this.livedExperience=livedExperience;
   }
   async step({soul,periodMs=ONE_HOUR}={}){
     if(!soul||typeof soul!=='object')throw new Error('Soul required');
@@ -26,6 +27,49 @@ export class IndependentContinuity {
     // An autonomous investigation must not compromise an overloaded process.
     if(signal.resource_pressure>=.75)
       return {executed:false,reason:'resource-pressure',soul};
+    // An existing lived-experience revision may produce a new, private
+    // question. Its local counterfactual is evaluated BEFORE the next
+    // ordinary self-probe; no external success is inferred from it.
+    const experience=this.livedExperience?.migrate(soul.lived_experience);
+    const inquiry=experience&&this.innerDialogue?.derivePrivateInquiry({
+      experience,identity:soul.emergent_identity,organism:soul.organism,
+      previous:soul.endophasia,now:at,
+    });
+    if(inquiry){
+      // Only the structured, pre-verbal hypothesis directs the probe:
+      // replacing the French question or removing the LLM changes nothing.
+      const semantic=inquiry.semantic_intent||{};
+      const context=semantic.relation==='compare-learned-policy-with-history-ablation'
+        && /^(task|dialogue)_[a-z_]{3,50}$/.test(semantic.context)
+        ? semantic.context:null;
+      if(!context)return {executed:false,reason:'semantic-proposition-invalid',soul};
+      const observed=this.livedExperience.select(experience,context,'respond');
+      const control=this.livedExperience.select(
+        this.livedExperience.defaultState(),context,'respond');
+      const causalChange=observed.changed===true&&observed.strategy!==control.strategy;
+      const outcome=causalChange?'supported':'counterexample';
+      const probe='context_policy_ablation';
+      const basis='local-strategy-ablation-not-external-outcome';
+      const changed=before.last_probe!==probe||before.last_outcome!==outcome;
+      const receipt={at,probe,outcome,basis,changed,
+        context,experience_revision:inquiry.experience_revision,
+        baseline_action:control.strategy,observed_action:observed.strategy,
+        causal_change:causalChange,new_hypotheses_proposed:0,
+        origin:'kernel-autonomous-test',external_action:false,
+        external_success_verified:false,consciousness_claim:false};
+      return {executed:true,reason:'experience-derived-private-inquiry',
+        soul:{...soul,endophasia:{...inquiry,outcome,
+          causal_change:causalChange,baseline_action:control.strategy,
+          observed_action:observed.strategy,
+          proof_scope:'local-policy-counterfactual-not-external-success'},
+          independent_activity:{...before,
+            last_probe_at:at,last_probe:probe,last_outcome:outcome,
+            last_evidence_source:basis,
+            last_changed_at:changed?at:before.last_changed_at||null,
+            completed_tests:Math.min(100000,Math.max(0,Number(before.completed_tests)||0)+1),
+            last_receipt:receipt}},
+        receipt};
+    }
     const probe=this.selfInquiry.chooseProbe(soul.epistemic_self,{
       privateView:true,topic:'',
     });

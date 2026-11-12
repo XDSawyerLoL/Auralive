@@ -29,7 +29,13 @@ import { BRAIN_HTML } from './brain_console.js';
 import { BRAIN_OPERATIONS_HTML } from './brain_operations_console.js';
 import {runABStudy,runSandboxSession,preRegisterProtocol} from './p0_ab_sandbox.js';
 import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './digital_protogenome.js';
+import {readableCognitionSnapshot} from './readable_cognition.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
+import { biologicalResearchSnapshot } from './biophysical_evidence.js';
+import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
+import { calibrateHumanPassiveCell, validateHumanPassiveCell } from './human_ephys_calibration.js';
+import {constructHumanPassiveArbor,runPassiveArbor} from './biophysical_morphology.js';
+import {simulateSynapticArbor} from './biophysical_synapses.js';
 import { ObservedProcessMonitor } from './process_observer.js';
 import { buildBrainFlowGraph, toPublicBrainFlowGraph } from './brain_flow.js';
 import { classifyRuntimeFailure, publicRuntimeDiagnostic } from './runtime_diagnostics.js';
@@ -557,6 +563,23 @@ app.addHook('onSend', async (_request, reply, payload) => {
   reply.header('Referrer-Policy', 'no-referrer');
   reply.header('Cache-Control', 'no-store');
   return payload;
+});
+
+// Confidential observability: a faithful reading of AURA's explicit persisted
+// intentions, declared task focus and deterministic appraisal — NOT private
+// reasoning inside any language model. Never expose these texts on public
+// /api/brain/graph, in SSE, logs, HTML, or cached responses.
+app.get('/api/brain/introspection', async (request,reply)=>{
+  if(!requirePrivate(request,reply) || !requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  reply.header('Pragma','no-cache');
+  const intents=await kernel.intentions(12);
+  return readableCognitionSnapshot({
+    soul:kernel.soulCache||{},
+    intentions:intents,
+    appraisal:kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue),
+    at:new Date().toISOString(),
+  });
 });
 
 // Computational science lab: deterministic sandbox data ONLY, no mutation
@@ -1523,7 +1546,7 @@ app.get('/api/brain/graph', async (request, reply) => {
   if(bootstrap.dbReady){
     const results=await Promise.allSettled([
       readBrainTraceRows(
-        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event','organ-regulation','independent-self-test','workspace-broadcast','prediction-error','memory-consolidation','workspace-denial','curiosity-question','curiosity-research') ORDER BY id DESC LIMIT 250"),
+        "SELECT id,kind,title,context,created_at FROM aura_cognitive_traces WHERE kind IN ('brain-hop','brain-causal','operator','agent','swarm','web-research','web-research-error','reflection','expression','event','organ-regulation','independent-self-test','endophasia','workspace-broadcast','prediction-error','memory-consolidation','workspace-denial','curiosity-question','curiosity-research') ORDER BY id DESC LIMIT 250"),
       readBrainTraceRows(
         'SELECT id,kind,created_at FROM aura_command_events ORDER BY id DESC LIMIT 80'),
       readBrainTraceRows(
@@ -1547,6 +1570,9 @@ app.get('/api/brain/graph', async (request, reply) => {
       : null,
     inner_dialogue: bootstrap.runtimeReady
       ? kernel.innerDialogue.publicState(kernel.soulCache?.inner_dialogue)
+      : null,
+    endophasia: bootstrap.runtimeReady
+      ? kernel.innerDialogue.publicInquiry(kernel.soulCache?.endophasia)
       : null,
     atlas_v3:{available:true,stages:18,source:'instrumented-kernel-events',session_isolated:true},
     runtime_diagnostic: publicRuntimeDiagnostic(bootstrap, {
@@ -2079,6 +2105,184 @@ app.get('/api/cognition/trace', async (request, reply) => {
 });
 
 
+// Read-only social initiative, private and opt-in by the actual visitor.
+// It is produced by the existing autonomous kernel tick, never by a
+// language model or a periodic synthetic greeting.
+// Isolated biological R&D. No Hostinger soul mutation, model provider,
+// speech generation, new memory, simulated consciousness or tool execution.
+// Human measurements are caller-supplied AllenSDK exports with checked
+// provenance and SI-compatible units. Never fit human ionic-channel dynamics
+// from squid HH parameters, and never write to the production soul.
+app.post('/api/research/biophysics/human-passive', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private,no-store');
+  try{
+    const body=request.body||{};
+    if(!body.record||typeof body.record!=='object')
+      return reply.code(422).send({error:'AllenSDK human specimen record required'});
+    const result=body.heldout
+      ?validateHumanPassiveCell(body.record,body.heldout)
+      :{model:calibrateHumanPassiveCell(body.record),validation:null};
+    // Return only model/report, not raw potentially sensitive donor traces.
+    return {ok:true,model:result.model,validation:result.validation,
+      evidence_kind:'human-passive-cell-features',
+      externally_validated:result.validation?.externally_validated===true,
+      no_llm:true,production_brain_unchanged:true};
+  }catch(error){
+    if(error instanceof TypeError||error instanceof RangeError)
+      return reply.code(422).send({error:String(error.message).slice(0,180)});
+    throw error;
+  }
+});
+
+// Morphologically explicit, passive cable and typed synaptic research.
+// Never modify human features, persistent AURA history, production choices
+// or silently call an LLM. The HTTP version uses a small CPU budget;
+// larger cells belong in the offline scientific runner.
+app.post('/api/research/biophysics/human-arbor', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private,no-store');
+  const body=request.body||{};
+  if(typeof body.swc_text!=='string'||body.swc_text.length>120000||
+    typeof body.record!=='object'||!body.record)
+    return reply.code(422).send({error:'SWC and matching human passive-feature record required'});
+  const durationMs=Number(body.duration_ms??30);
+  const dtMs=Number(body.dt_ms??.1);
+  const injection=Number(body.soma_current_pA??0);
+  if(!Number.isFinite(durationMs)||durationMs<=0||durationMs>50||
+    !Number.isFinite(dtMs)||dtMs<.05||dtMs>1||
+    !Number.isFinite(injection)||Math.abs(injection)>5000)
+    return reply.code(422).send({error:'Research CPU/current bounds exceeded'});
+  try{
+    const model=constructHumanPassiveArbor({
+      swcText:body.swc_text,humanFeatures:body.record,
+      axialResistivity_ohm_cm:body.axial_resistivity_ohm_cm??150,
+    });
+    if(model.count>256||Math.ceil(durationMs/dtMs)*model.count>100000)
+      return reply.code(422).send({error:'Too many morphological segments for online research; run offline'});
+    const synapses=body.synapses??[];
+    if(!Array.isArray(synapses)||synapses.length>32||
+      synapses.reduce((sum,s)=>sum+(Array.isArray(s?.release_times_ms)?s.release_times_ms.length:1001),0)>1000)
+      return reply.code(422).send({error:'Too many release events for online research'});
+    const experiment=synapses.length
+      ?simulateSynapticArbor(model,synapses,{
+        duration_ms:durationMs,dt_ms:dtMs,
+        injected_pA:{[model.node_ids[0]]:injection}})
+      :runPassiveArbor(model,{
+        duration_ms:durationMs,dt_ms:dtMs,
+        soma_current_pA:injection,
+      });
+    return {ok:true,
+      morphology:{compartments:model.count,specimen_id:model.specimen_id,
+        total_surface_um2:model.total_surface_um2,
+        axial_resistivity_ohm_cm:model.axialResistivity_ohm_cm},
+      experiment,
+      claims:{human_cell_source_authenticated:false,
+        active_channel_calibration:false,
+        human_neuroanatomical_circuit_validated:false,
+        biologically_faithful_brain:false},
+      read_only:true,llm_used:false};
+  }catch(error){
+    if(error instanceof TypeError||error instanceof RangeError)
+      return reply.code(422).send({error:String(error.message).slice(0,180)});
+    throw error;
+  }
+});
+
+// Public research-only *frozen* evidence; includes no private soul state,
+// raw donor recordings, tokens, chat text, or unsanitized research uploads.
+// Does not mutate memory or emit simulated neural activity into the connectome.
+app.get('/api/research/biophysics/evidence', async (request, reply) => {
+  reply.header('Cache-Control','public, max-age=300');
+  return biologicalResearchSnapshot();
+});
+
+app.get('/api/research/biophysics', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private,no-store');
+  return {
+    ok:true,
+    model:'Hodgkin-Huxley 1952 squid-axon biophysics; NOT human-calibrated',
+    status:'electrophysiology-research-pilot',
+    source:'10.1113/jphysiol.1952.sp004764',
+    endpoints:{
+      experiment:'/api/research/biophysics/experiment',
+      human_passive:'/api/research/biophysics/human-passive',
+      morphology_and_synapses:'/api/research/biophysics/human-arbor',
+    },
+    current_scope:'HH squid reference, human passive RC/SWC arbor, AMPA/NMDA/GABA conductances, simplified brain-body coupling',
+    active_model_download:'optional offline AllenSDK+NEURON research script; not executed on Hostinger',
+    human_morphology_authenticated:false,
+    not_implemented:[
+      'human-active-ionic-model-fit-and-validation',
+      'receptor-specific-human-kinetic-calibration',
+      'anatomically-verified-human-amygdala-subnuclear-connectome',
+      'measured-human-synaptic-connectome',
+      'realistic-glial-metabolic-hormone-and-immune-models',
+      'entire-human-brain-simulation',
+      'causally-validated-production-behaviour',
+    ],
+    research_only:true,production_brain_unchanged:true,
+  };
+});
+app.post('/api/research/biophysics/experiment', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  const body=request.body||{};
+  const durationMs=Number(body.duration_ms??120);
+  const stimulation=Number(body.stimulation_uA_cm2??14);
+  const dtMs=Number(body.dt_ms??.025);
+  if(!Number.isFinite(durationMs)||durationMs<=0||durationMs>300||
+    !Number.isFinite(stimulation)||Math.abs(stimulation)>40||
+    !Number.isFinite(dtMs)||dtMs<.02||dtMs>.05)
+    return reply.code(422).send({error:'Paramètres hors des limites de recherche'});
+  reply.header('Cache-Control','private,no-store');
+  const options={durationMs,dtMs,sensoryCurrent_uA_cm2:stimulation};
+  try{
+    if(body.projection_ablation){
+      const projection=String(body.projection_ablation);
+      if(!/^[a-z_]+>[a-z_]+$/.test(projection))
+        return reply.code(422).send({error:'Projection non reconnue'});
+      return {ok:true,experiment:ablateMicroProjection(options,projection),
+        changes_production_state:false,llm_used:false,
+        biological_human_fidelity:'unvalidated'};
+    }
+    return {ok:true,experiment:runMicrocircuit(options),
+      changes_production_state:false,llm_used:false,
+      biological_human_fidelity:'unvalidated'};
+  }catch(error){
+    if(error instanceof RangeError||error instanceof TypeError)
+      return reply.code(422).send({error:String(error.message).slice(0,160)});
+    throw error;
+  }
+});
+
+app.get('/api/cognition/initiative', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  const pending=kernel.pendingSocialInitiative();
+  return {ok:true,pending,producer:'AURA.native-inner-dialogue',
+    language_model_used:false,
+    consent_required:true,
+    available_only_with_independent_evidence:true};
+});
+
+app.post('/api/cognition/initiative/ack', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  const id=String(request.body?.id||'');
+  if(!/^[a-f\d]{24}$/.test(id))
+    return reply.code(422).send({error:'Reçu d’initiative invalide'});
+  const acknowledged=await kernel.acknowledgeSocialInitiative(id);
+  return {ok:acknowledged,acknowledged};
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
@@ -2113,11 +2317,11 @@ app.post('/api/chat', async (request, reply) => {
   // Never append a curiosity prompt to an empty/unavailable model reply.
   // This distinguishes a real AI answer from a server diagnostic.
   const unavailable = Boolean(response?.language_unavailable) || !baseAnswer;
-  const curiosityItem = unavailable ? null
-    : await curiosity.questionForInteraction(text).catch(() => null);
-  const curiosityQuestion = String(curiosityItem?.question || '').trim();
-  const answer = unavailable ? ''
-    : curiosityQuestion ? `${baseAnswer}\n\n${curiosityQuestion}` : baseAnswer;
+  // Do not append a separately generated question AFTER the kernel
+  // validated and persisted its actual answer. Such a post-processing
+  // addition was neither planned nor part of the stored dialogue.
+  const curiosityItem = null;
+  const answer = unavailable ? '' : baseAnswer;
   cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
@@ -2125,7 +2329,8 @@ app.post('/api/chat', async (request, reply) => {
     trace:cognitiveTrace.snapshot(chatSessionId,traceId),
     ok: !unavailable,
     answer,
-    response_kind: unavailable ? 'model-unavailable' : 'model-generated',
+    response_kind: unavailable ? 'model-unavailable'
+      : response?.response_kind==='native-kernel' ? 'native-kernel':'model-generated',
     language_unavailable: unavailable,
     retryable: unavailable,
     service_status: unavailable ? {

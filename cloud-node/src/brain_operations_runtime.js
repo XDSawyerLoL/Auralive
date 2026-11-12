@@ -1,4 +1,5 @@
 import { COGNITIVE_ATLAS_SCRIPT } from './cognitive_atlas_runtime.js';
+import {BRAIN_BIOPHYSICS_SCRIPT} from './brain_biophysics_ui.js';
 import { BRAIN_CONNECTOME_V4 } from './brain_connectome_v4.js';
 import {BRAIN_SCIENCE_LAB_SCRIPT} from './brain_science_lab_ui.js';
 import {BRAIN_ORGANISM_V5_SCRIPT} from './brain_organism_v5_runtime.js';
@@ -868,6 +869,57 @@ setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
 const history=$('chatHistory');
 $('chatExpand').onclick=()=>{$('conversation-panel').scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'});};
 function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;}
+// Explicit in-page opt-in, off by default and never persisted as a
+// subscription. Polling reads existing kernel output; it never calls
+// an LLM, schedules a fake question or activates a cognition cycle.
+const initiativeConsent=$('auraInitiativeOptIn');
+let initiativeChecking=false;
+let initiativeShownId='';
+async function pollSocialInitiative(){
+  if(!initiativeConsent?.checked||initiativeChecking||document.hidden||
+    state.busy)return;
+  initiativeChecking=true;
+  try{
+    const response=await fetch('/api/cognition/initiative',{
+      credentials:'same-origin',cache:'no-store',
+      headers:{Accept:'application/json'},
+    });
+    if(response.status===401||response.status===403){
+      initiativeConsent.checked=false;
+      chatLine('INITIATIVE · ACCÈS PRIVÉ',
+        'L’affichage spontané est réservé à la session propriétaire.');
+      return;
+    }
+    if(!response.ok)return;
+    const data=await response.json();
+    const pending=data?.pending;
+    const id=String(pending?.id||'');
+    if(!/^[a-f\d]{24}$/.test(id)||id===initiativeShownId||
+      pending?.llm_used!==false||pending?.requires_opt_in!==true||
+      pending?.evidence_scope!=='local-counterfactual-only')return;
+    const message=String(pending?.message||'').trim().slice(0,1000);
+    if(!message)return;
+    // Text content only: no HTML or arbitrary remote content.
+    chatLine('AURA · INITIATIVE NATIVE (SANS LLM)',message,'aura-initiative');
+    initiativeShownId=id;
+    const ack=await fetch('/api/cognition/initiative/ack',{
+      method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({id}),
+    });
+    if(!ack.ok)throw Error('ack unavailable');
+    const receipt=await ack.json();
+    if(receipt.acknowledged!==true)throw Error('ack rejected');
+  }catch{
+    // A read-only display or failed acknowledgement is not a cognitive
+    // success. Keep the receipt in the server until a valid ack is saved.
+  }finally{initiativeChecking=false;}
+}
+initiativeConsent?.addEventListener('change',()=>{
+  if(initiativeConsent.checked)void pollSocialInitiative();
+});
+setInterval(()=>{if(initiativeConsent?.checked)void pollSocialInitiative();},6000);
+
 $('chatMode').addEventListener('change',()=>{
  const mission=$('chatMode').value==='mission';
  $('chatInput').placeholder=mission
@@ -934,8 +986,28 @@ $('chatSend').onclick=async()=>{
      if(!answer||out.language_unavailable){
        chatLine('MOTEUR INDISPONIBLE','Aucun texte vérifiable généré ; consulter le diagnostic.');
      }else{
-       chatLine(out.nucleus_verbalization_validated
-         ?'AURA':'AURA · FORMULATION À VÉRIFIER',answer);
+       const provider=String(out.language_provider||'').toLowerCase();
+       const isNative=out.response_kind==='native-kernel'&&provider.includes('aura-native');
+       const providerLabel=isNative?'AURA native · sans LLM'
+         :provider.includes('groq')?'Groq Free'
+         :provider.includes('openrouter')?'OpenRouter Free'
+         :provider.includes('embedded')||provider.includes('local')?'Modèle local'
+         :provider?'Fournisseur externe':'Moteur non identifié';
+       const verified=out.nucleus_verbalization_validated===true&&
+         out.nucleus_plan_origin==='AURA.nucleus.CognitionEngine.planReply'&&
+         Boolean(out.brain_flow_id);
+       const phases=out.measured_chat_phases||{};
+       const kernelMs=Number(phases.preparation_ms);
+       const speechMs=Number(phases.formulation_ms);
+       const reliableTiming=phases.provenance==='node-performance-monotonic-clock'&&
+         Number.isFinite(kernelMs)&&kernelMs>=0&&
+         Number.isFinite(speechMs)&&speechMs>=0;
+       const title=verified
+         ?'AURA · noyau '+(reliableTiming?Math.round(kernelMs)+' ms':'durée inconnue')+
+           (isNative?' · noyau communicant ':' · langage ')+providerLabel+
+           (reliableTiming?' '+Math.round(speechMs)+' ms':'')
+         :'AURA · FORMULATION À VÉRIFIER';
+       chatLine(title,answer);
      }
    }
    await poll();
@@ -989,12 +1061,18 @@ ${CORTEX10_SCRIPT}
 ${CORTEX11_SCRIPT}
 ${CORTEX12_SCRIPT}
 ${CORTEX13_SCRIPT}
+${BRAIN_BIOPHYSICS_SCRIPT}
 let atlasInitialized=false;
 const atlasDetails=$('atlas-v3');
 $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
 $('cogModeAutonomy').onclick=()=>switchCognitiveMode('autonomy');
 $('cogReplay').onclick=replayCognitiveTrace;
 $('cogDiagnostics').onclick=()=>{$('diagnostics-details').open=true;$('diagnostics-details').scrollIntoView({behavior:reduced?'auto':'smooth'});};
+$('cogReadIntents').onclick=()=>{
+ const lab=$('neuro-lab-details');
+ lab.open=true;
+ lab.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+};
 atlasDetails.addEventListener('toggle',()=>{
  if(atlasDetails.open){
    if(!atlasInitialized){atlasInitialized=true;try{initCognitiveGraph();}catch(error){setText('cogState','Atlas indisponible');return;}}

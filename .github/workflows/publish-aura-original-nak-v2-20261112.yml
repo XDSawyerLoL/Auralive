@@ -1,0 +1,95 @@
+name: Publish AURA original human-NWB-constrained NaK research v2
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-aura-original-nak-v2-20261112.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-original-nak-v2:
+    if: github.repository == 'XDSawyerLoL/Auralive'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch canonical checked Hostinger archive and REAL validated human-cell experiment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-code" "$RUNNER_TEMP/aura-ephys"
+          gh run download 43303857354 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-code"
+          gh run download 43302961099 --repo "$GITHUB_REPOSITORY" \
+            --name aura-human-original-nak-gating-validation \
+            --dir "$RUNNER_TEMP/aura-ephys"
+          for file in server.js package.json \
+              src/biophysical_evidence.js src/brain_biophysics_ui.js \
+              scripts/fit_human_kinetics_v2.py \
+              scripts/evaluate_human_kinetics_transfer.py \
+              scripts/aura_kinetics_mod/aura_na_eff.mod \
+              scripts/aura_kinetics_mod/aura_k_eff.mod \
+              scripts/test_fit_human_kinetics_v2.py \
+              scripts/test_evaluate_human_kinetics_transfer.py \
+              docs/AURA_KINETIQUE_IONIQUE_HUMAINE_V2_20261112.md; do
+            test -s "$RUNNER_TEMP/aura-code/$file"
+          done
+          grep -Fq 'workflow_run_id:43302961099' "$RUNNER_TEMP/aura-code/src/biophysical_evidence.js"
+          grep -Fq 'bioHumanNaKV2Details' "$RUNNER_TEMP/aura-code/src/brain_biophysics_ui.js"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ['RUNNER_TEMP'])/'aura-ephys/aura-human-kinetics/public-results.json'
+          q=Path(os.environ['RUNNER_TEMP'])/'aura-ephys/aura-human-kinetics/reference-fit.json'
+          x=json.loads(p.read_text())
+          fit=json.loads(q.read_text())
+          assert fit['schema']=='aura-human-effective-gating-v2'
+          assert fit['locked_holdout_used_for_selection'] is False
+          assert (x['reference_locked_holdout']['observed_spikes'],
+                  x['reference_locked_holdout']['predicted_spikes'])==(2,1)
+          assert x['reference_locked_holdout']['rmse_mV']>4.343179
+          assert len(x['external_tests'])==2
+          assert sorted((v['observed_spikes'],v['predicted_spikes'])
+                         for v in x['external_tests'])==[(2,1),(3,1)]
+          assert all(v['target_active_data_used_for_fit'] is False
+                     and v['model_biological_fidelity_validated'] is False
+                     for v in x['external_tests'])
+          assert x['noncommercial_Allen_modfiles_copied'] is False
+          print('All 3 real human-cell responses verified, negative RMSE not hidden.')
+          PY
+      - name: Repackage Node artifact with separated scientific results and SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          BUNDLE="$GITHUB_WORKSPACE/AURA_CERVEAU_NAK_HUMAIN_V2_20261112.zip"
+          REPORT="$GITHUB_WORKSPACE/AURA_NAK_HUMAIN_V2_PREUVES_20261112.json"
+          cp "$RUNNER_TEMP/aura-ephys/aura-human-kinetics/public-results.json" "$REPORT"
+          (cd "$RUNNER_TEMP/aura-code" && zip -q -r "$BUNDLE" .)
+          unzip -t "$BUNDLE" | tail -1
+          sha256sum "$BUNDLE" "$REPORT" > \
+            "$GITHUB_WORKSPACE/AURA_NAK_HUMAIN_V2_20261112.sha256"
+      - name: Publish immutable GitHub direct download and results JSON
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-human-nak-kinetics-v2-20261112"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable human neuroscience archive already exists; refusing overwrite."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            "$GITHUB_WORKSPACE/AURA_CERVEAU_NAK_HUMAIN_V2_20261112.zip" \
+            "$GITHUB_WORKSPACE/AURA_NAK_HUMAIN_V2_PREUVES_20261112.json" \
+            "$GITHUB_WORKSPACE/AURA_NAK_HUMAIN_V2_20261112.sha256" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "AURA — Na/K actif original, trois neurones humains, validation scientifique" \
+            --notes "Experimental research only. Real Allen human cell current clamp, original independent AURA NMODL Na/K gates (no copied Allen noncommercial files), compiled and simulated using NEURON 9.0.2. Fit reference cell 643582610 NWB 26/37; locked NWB 44 had 2 observed action potentials and 1 modeled (NaK RMSE 12.562798mV versus older HH 4.343179mV). External cells 529898751 NWB 54: 3 measured vs 1 modeled; 508410761 NWB 58: 2 measured vs 1 modeled. All three demonstrate first active depolarization but WORSE voltage RMSE than old HH. These are human-current-clamp-constrained phenomenological gate parameters, NOT verified molecular human sodium/potassium channel kinetics. Original immersive AURA brain preserved; biological results collapsed in optional drawer. Source code packaged from successful canonical run 43303857354; measured results from successful workflow 43302961099. No Hostinger deployment, no MySQL/memory change, no LLM used to generate numerical results."
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url,assets

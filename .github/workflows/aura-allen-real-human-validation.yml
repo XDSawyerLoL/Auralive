@@ -1,0 +1,371 @@
+name: AURA Allen real-human-cell research validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aura-allen-real-human-validation.yml"
+      - "cloud-node/scripts/export_allen_human_features.py"
+      - "cloud-node/scripts/run_human_swc_neuron.py"
+      - "cloud-node/src/human_ephys_calibration.js"
+      - "cloud-node/scripts/run_human_active_hh_control.py"
+      - "cloud-node/scripts/allen_human_active_models.py"
+      - "cloud-node/scripts/fit_human_active_multisweep.py"
+      - "cloud-node/scripts/test_fit_human_active_multisweep.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-allen-human-cell:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned public scientific tools
+        run: python -m pip install --disable-pip-version-check "allensdk==2.16.2" "neuron==9.0.2"
+      - name: Download genuine adult human cell ephys and SWC from Allen
+        working-directory: cloud-node
+        env:
+          SPECIMEN_ID: "643582610"
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/aura-allen-human-643582610
+          python scripts/export_allen_human_features.py \
+            --specimen-id "$SPECIMEN_ID" \
+            --manifest /tmp/aura-allen-human-643582610/cache/manifest.json \
+            --output /tmp/aura-allen-human-643582610/human-features.json \
+            --reconstruction-output /tmp/aura-allen-human-643582610/reconstruction.swc
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          record=json.loads((root/'human-features.json').read_text())
+          swc=(root/'reconstruction.swc').read_text()
+          assert record['species']=='Homo sapiens'
+          assert record['specimen_id']==643582610
+          assert any(line and not line.startswith('#') for line in swc.splitlines())
+          print('Real Allen human specimen and SWC successfully acquired')
+          PY
+      - name: Run morphologically detailed passive NEURON simulation
+        working-directory: cloud-node
+        run: |
+          set -euo pipefail
+          python scripts/run_human_swc_neuron.py \
+            --human-features /tmp/aura-allen-human-643582610/human-features.json \
+            --swc /tmp/aura-allen-human-643582610/reconstruction.swc \
+            --duration-ms 200 --current-pa 20 \
+            --output /tmp/aura-allen-human-643582610/passive-result.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {inspectSwc} from './src/human_morphology.js';
+          import {calibrateHumanPassiveCell} from './src/human_ephys_calibration.js';
+          const folder='/tmp/aura-allen-human-643582610/';
+          const feature=JSON.parse(fs.readFileSync(folder+'human-features.json','utf8'));
+          const swc=fs.readFileSync(folder+'reconstruction.swc','utf8');
+          const morphology=inspectSwc(swc,{specimenId:feature.specimen_id});
+          const model=calibrateHumanPassiveCell(feature);
+          const simulation=JSON.parse(fs.readFileSync(folder+'passive-result.json','utf8'));
+          if(morphology.node_count<10||simulation.n_sections<2||
+            !simulation.voltage_mV.every(Number.isFinite)||
+            simulation.synaptic_and_active_ion_channels_calibrated!==false)
+            throw new Error('Real human morphology quality gate failed');
+          // Only report feature values and hashes, not donor Nwb/SWC raw bytes.
+          fs.writeFileSync(folder+'validation-public.json',JSON.stringify({
+            specimen_id:feature.specimen_id,
+            biological_origin:'Allen Cell Types Database',
+            species:'Homo sapiens',
+            source_swc_sha256:morphology.source_hash_sha256,
+            morphology_nodes:morphology.node_count,
+            NEURON_sections:simulation.n_sections,
+            NEURON_segments:simulation.n_segments,
+            passive_model_parameters:model,
+            human_action_potentials_validated:false,
+            active_human_ion_channels_validated:false,
+            human_brain_reproduced:false,
+          },null,2));
+          console.log('Real human cell passive simulation completed; uncalibrated active channels remain.');
+          JS
+      - name: Compare passive NEURON voltage with a real NWB sweep
+        working-directory: cloud-node
+        run: |
+          set -euo pipefail
+          # AUCUN seuil de réussite préjugé : enregistrer l'écart physique réel.
+          python - <<'PY' > /tmp/aura-allen-human-643582610/chosen-sweep.txt
+          from allensdk.core.cell_types_cache import CellTypesCache
+          cache=CellTypesCache(manifest_file='/tmp/aura-allen-human-643582610/cache/manifest.json')
+          sweep_list=cache.get_ephys_sweeps(643582610)
+          candidates=[s for s in sweep_list if isinstance(s.get('sweep_number'),int)]
+          if not candidates:raise RuntimeError('No accessible human ephys sweep')
+          # Long-square current clamp preferred for passive membrane analysis.
+          squares=[s for s in candidates if 'long square' in str(s.get('stimulus_name','')).lower()]
+          choices=squares or candidates
+          chosen=min(choices,key=lambda s:(abs(float(s.get('stimulus_absolute_amplitude') or 0)),s['sweep_number']))
+          print(chosen['sweep_number'])
+          PY
+          SWEEP="$(cat /tmp/aura-allen-human-643582610/chosen-sweep.txt)"
+          python scripts/export_allen_human_features.py \
+            --specimen-id 643582610 \
+            --manifest /tmp/aura-allen-human-643582610/cache/manifest.json \
+            --output /tmp/aura-allen-human-643582610/human-features.json \
+            --sweep-number "$SWEEP" \
+            --heldout-output /tmp/aura-allen-human-643582610/nwb-measured-trace.json
+          python scripts/run_human_swc_neuron.py \
+            --human-features /tmp/aura-allen-human-643582610/human-features.json \
+            --swc /tmp/aura-allen-human-643582610/reconstruction.swc \
+            --heldout /tmp/aura-allen-human-643582610/nwb-measured-trace.json \
+            --output /tmp/aura-allen-human-643582610/compared-passive-result.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import {validateHumanPassiveCell} from './src/human_ephys_calibration.js';
+          const root='/tmp/aura-allen-human-643582610/';
+          const features=JSON.parse(fs.readFileSync(root+'human-features.json','utf8'));
+          const measured=JSON.parse(fs.readFileSync(root+'nwb-measured-trace.json','utf8'));
+          const prediction=JSON.parse(fs.readFileSync(root+'compared-passive-result.json','utf8'));
+          const fit=validateHumanPassiveCell(features,measured);
+          const metadata=JSON.parse(fs.readFileSync(root+'validation-public.json','utf8'));
+          if(!Number.isFinite(prediction.quality?.rmse_mV)||
+             !Number.isFinite(fit.validation?.rmse_mV))
+             throw new Error('No measured voltage residuals obtained');
+          metadata.measured_voltage_comparison={
+            specimen_id:features.specimen_id,
+            sweep_number:measured.sweep_number,
+            sample_count:measured.voltage_mV.length,
+            stimulus_min_pA:Math.min(...measured.stimulus_current_pA),
+            stimulus_max_pA:Math.max(...measured.stimulus_current_pA),
+            stimulus_peak_abs_pA:Math.max(...measured.stimulus_current_pA.map(Math.abs)),
+            fraction_samples_with_abs_current_gt_1pA:
+              measured.stimulus_current_pA.filter(v=>Math.abs(v)>1).length/measured.stimulus_current_pA.length,
+            measured_voltage_min_mV:Math.min(...measured.voltage_mV),
+            measured_voltage_max_mV:Math.max(...measured.voltage_mV),
+            measured_voltage_peak_to_peak_mV:
+              Math.max(...measured.voltage_mV)-Math.min(...measured.voltage_mV),
+            measured_threshold_crossings_minus20mV:
+              measured.voltage_mV.slice(1).filter((v,i)=>v>=-20&&measured.voltage_mV[i]<-20).length,
+            NEURON_multicompartment_rmse_mV:prediction.quality.rmse_mV,
+            NEURON_multicompartment_mae_mV:prediction.quality.mae_mV,
+            lumped_membrane_rc_rmse_mV:fit.validation.rmse_mV,
+            NWB_source_sha256:measured.source.nwb_sha256,
+            independent_holdout:measured.independence_verified,
+            active_channels_calibrated:false,
+            biological_fidelity_certified:false,
+            observation_source:'measured Allen NWB / passive model predictions',
+          };
+          fs.writeFileSync(root+'validation-public.json',JSON.stringify(metadata,null,2));
+          console.log('Measured NWB voltage compared to NEURON and RC; no spurious validation claims.');
+          JS
+      - name: Find a real positive-spiking human NWB sweep
+        id: spiking-choice
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' > /tmp/aura-allen-human-643582610/spiking-choice.txt
+          from allensdk.core.cell_types_cache import CellTypesCache
+          c=CellTypesCache(manifest_file='/tmp/aura-allen-human-643582610/cache/manifest.json')
+          records=c.get_ephys_sweeps(643582610)
+          valid=[s for s in records
+            if isinstance(s.get('sweep_number'),int) and
+            isinstance(s.get('num_spikes'),(int,float)) and s['num_spikes']>=2 and
+            'long square' in str(s.get('stimulus_name','')).lower()]
+          if valid:
+            chosen=min(valid,key=lambda s:(abs(s['num_spikes']-5),s['sweep_number']))
+            print(chosen['sweep_number'])
+          PY
+          SWEEP="$(cat /tmp/aura-allen-human-643582610/spiking-choice.txt)"
+          echo "sweep=$SWEEP" >> "$GITHUB_OUTPUT"
+          if [ -z "$SWEEP" ]; then
+            echo "No accessible long-square human spiking sweep: no model claim."
+          else
+            echo "Selected actual human NWB long-square sweep $SWEEP"
+          fi
+      - name: Characterize recorded human spiking (not a neuronal model)
+        if: steps.spiking-choice.outputs.sweep != ''
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/aura-allen-human-643582610"
+          python scripts/export_allen_human_features.py \
+            --specimen-id 643582610 \
+            --manifest "$ROOT/cache/manifest.json" \
+            --output "$ROOT/human-features.json" \
+            --heldout-output "$ROOT/active-NWB-trace.json" \
+            --sweep-number "${{ steps.spiking-choice.outputs.sweep }}"
+          python scripts/analyze_human_spiking_nwb.py \
+            --trace "$ROOT/active-NWB-trace.json" \
+            --report "$ROOT/recorded-spikes.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          evidence=json.loads((root/'validation-public.json').read_text())
+          spikes=json.loads((root/'recorded-spikes.json').read_text())
+          # Observations are published; the detailed voltage/current arrays
+          # remain in the disposable research runner.
+          evidence['measured_active_sweep']={
+            'specimen_id':spikes['specimen_id'],
+            'sweep_number':spikes['sweep_number'],
+            'spike_count':spikes['spike_count'],
+            'peak_voltage_mV':spikes['peak_voltage_mV'],
+            'peak_dvdt_mV_per_ms':spikes['peak_dvdt_mV_per_ms'],
+            'stimulus_current_min_pA':spikes['injected_current_min_pA'],
+            'stimulus_current_max_pA':spikes['injected_current_max_pA'],
+            'sampling_interval_ms':spikes['sampling_interval_ms'],
+            'source_nwb_sha256':spikes['source_recording_sha256'],
+            'detector':spikes['threshold_algorithm'],
+            'measured_not_simulated':True,
+            'active_human_ion_channels_calibrated':False,
+            'human_brain_emulated':False,
+          }
+          (root/'validation-public.json').write_text(json.dumps(evidence,indent=2))
+          print('Measured human active voltage sweep recorded separately from model.')
+          PY
+      - name: Compare actual human spiking versus squid-kinetics active NEURON control
+        if: steps.spiking-choice.outputs.sweep != ''
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/aura-allen-human-643582610"
+          # No fitting to this NWB sweep: fixed reference channels, and an
+          # independent predeclared perturbation for sensitivity testing.
+          python scripts/run_human_active_hh_control.py \
+            --swc "$ROOT/reconstruction.swc" \
+            --human-features "$ROOT/human-features.json" \
+            --nwb-trace "$ROOT/active-NWB-trace.json" \
+            --gna-scale 1 --gk-scale 1 \
+            --output "$ROOT/reference-hh-active.json"
+          python scripts/run_human_active_hh_control.py \
+            --swc "$ROOT/reconstruction.swc" \
+            --human-features "$ROOT/human-features.json" \
+            --nwb-trace "$ROOT/active-NWB-trace.json" \
+            --gna-scale 1.5 --gk-scale 1 \
+            --output "$ROOT/reference-hh-na-perturbation.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          report=json.loads((root/'validation-public.json').read_text())
+          base=json.loads((root/'reference-hh-active.json').read_text())
+          changed=json.loads((root/'reference-hh-na-perturbation.json').read_text())
+          observed=report['measured_active_sweep']['spike_count']
+          assert base['experimental_observed']['spike_count']==observed
+          assert base['model_predicted']['rmse_mV']>=0
+          assert base['human_channels_calibrated'] is False
+          assert changed['human_channels_calibrated'] is False
+          report['active_hh_reference_comparison']={
+            'experiment':'human-SWC-with-nonhuman-HH-somatic-reference',
+            'same_human_specimen':base['specimen_id'],
+            'nwb_sweep':base['sweep_number'],
+            'recorded_human_spikes':observed,
+            'reference_simulated_spikes':base['model_predicted']['spike_count'],
+            'reference_rmse_mV':base['model_predicted']['rmse_mV'],
+            'reference_mae_mV':base['model_predicted']['mae_mV'],
+            'sodium_density_1p5_simulated_spikes':
+              changed['model_predicted']['spike_count'],
+            'sodium_density_1p5_rmse_mV':
+              changed['model_predicted']['rmse_mV'],
+            'active_kinetics_origin':'historical squid HH, NOT fitted human',
+            'model_human_spiking_validated':False,
+            'heldout_validation':False,
+            'active_model_artifacts_downloaded_or_executed':False,
+          }
+          (root/'validation-public.json').write_text(json.dumps(report,indent=2))
+          print('Honest measured-vs-computed active HH control:',report['active_hh_reference_comparison'])
+          PY
+      - name: Check availability of independently fitted Allen active model for same human cell
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from allensdk.api.queries.biophysical_api import BiophysicalApi
+          from allensdk.core.cell_types_cache import CellTypesCache
+          from allensdk.api.queries.cell_types_api import CellTypesApi
+          from scripts.allen_human_active_models import model_records
+          root=Path('/tmp/aura-allen-human-643582610')
+          report=json.loads((root/'validation-public.json').read_text())
+          specimen=643582610
+          try:
+              cells=CellTypesCache(manifest_file=str(root/'cache/manifest.json')).get_cells(
+                  species=[CellTypesApi.HUMAN])
+              models=BiophysicalApi().get_neuronal_models(specimen_ids=[specimen])
+              selected=model_records(specimen,cells,models)
+              availability={'query_status':'success','count':len(selected),
+                  'ids':[v['model_id'] for v in selected[:12]],
+                  'model_executed':False,'channel_fit_validated':False}
+          except Exception as err:
+              availability={'query_status':'query-failed',
+                  'error_type':type(err).__name__,
+                  'model_executed':False,'channel_fit_validated':False}
+          report['independent_allen_active_model_availability']=availability
+          (root/'validation-public.json').write_text(json.dumps(report,indent=2))
+          print('Allen active model discovery:',availability)
+          PY
+      - name: Fit multiple real human NWB currents and test untouched validation current
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/aura-allen-human-643582610"
+          # Split is selected deterministically from STIMULUS metadata before
+          # examining voltage/spike counts. 2 distinct currents train and
+          # a 3rd current is locked for a single final validation pass.
+          python scripts/fit_human_active_multisweep.py \
+            --specimen-id 643582610 \
+            --swc "$ROOT/reconstruction.swc" \
+            --features "$ROOT/human-features.json" \
+            --manifest "$ROOT/cache/manifest.json" \
+            --output "$ROOT/multisweep-fit-report.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          summary=json.loads((root/'validation-public.json').read_text())
+          experiment=json.loads((root/'multisweep-fit-report.json').read_text())
+          split=experiment['selection']
+          heldout=experiment['validation_metrics']
+          assert len(split['training_sweep_numbers'])>=2
+          assert not set(split['training_sweep_numbers']).intersection(
+              split['validation_sweep_numbers'])
+          assert experiment['validation_used_for_model_selection'] is False
+          assert experiment['true_human_active_channels_reconstructed'] is False
+          assert experiment['channel_gating_source']=='historic squid HH not human kinetics'
+          assert experiment['no_llm'] and experiment['production_state_modified'] is False
+          summary['active_multisweep_fit']={
+              'version':experiment['schema'],
+              'selection':split,
+              'number_of_train_sweeps':len(split['training_sweep_numbers']),
+              'best_fit_parameters':experiment['best_fit_parameters'],
+              'training_mean_loss':experiment['training_mean_loss'],
+              'training_metrics':experiment['training_metrics'],
+              'heldout_voltage_rmse_mV':heldout['rmse_mV'],
+              'heldout_observed_spikes':heldout['observed_spikes'],
+              'heldout_simulated_spikes':heldout['predicted_spikes'],
+              'heldout_spike_count_error':heldout['spike_count_error'],
+              'heldout_sweep_number':heldout['sweep_number'],
+              'heldout_validation_used_for_fit':False,
+              'channel_kinetics':'squid-HH-reference-not-human-calibrated',
+              'human_biological_fidelity_validated':False,
+              'entire_brain_emulated':False,
+          }
+          (root/'validation-public.json').write_text(
+              json.dumps(summary,indent=2)+'\n')
+          print('Locked heldout result:',summary['active_multisweep_fit'])
+          PY
+      - name: Upload measurements and provenance report only
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-allen-human-real-cell-validation
+          path: /tmp/aura-allen-human-643582610/validation-public.json
+          if-no-files-found: error
+          retention-days: 30

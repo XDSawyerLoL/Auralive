@@ -125,6 +125,174 @@ export class InnerDialogueEngine {
     };
     return result;
   }
+  // Endophasie fonctionnelle : une interrogation privée naît d'un écart
+  // entre les retours reçus et la stratégie actuellement apprise. L'origine
+  // n'est ni un texte du modèle ni une question existentielle pré-écrite.
+  derivePrivateInquiry({experience={},identity={},organism={},previous=null,now=new Date().toISOString()}={}){
+    const revision=Math.max(0,Math.floor(Number(experience?.revision)||0));
+    if(!revision||revision<=Math.max(0,Number(previous?.experience_revision)||0))
+      return null;
+    const pressure=bounded(organism?.homeostasis?.resource_pressure);
+    if(pressure>=.75)return null;
+    const prudence=bounded(identity?.dimensions?.prudence?.value??.5);
+    const frustration=bounded(organism?.frustration);
+    const contexts=Object.entries(experience?.cases||{})
+      .filter(([context])=>/^(task|dialogue)_[a-z_]{3,50}$/.test(context))
+      .map(([context,record])=>{
+        const data=Object.values(record?.strategies||{});
+        const bad=data.reduce((sum,v)=>sum+Math.max(0,Number(v?.bad)||0),0);
+        const verified=data.reduce((sum,v)=>sum+Math.max(0,Number(v?.verified)||0),0);
+        const observations=Math.max(0,Number(record?.observations)||0);
+        return {context,bad,verified,observations,
+          salience:bad*(1+frustration*.4+prudence*.2)+verified*.2};
+      })
+      .filter(c=>c.bad>=1.2||c.verified>=2)
+      .sort((a,b)=>b.salience-a.salience||a.context.localeCompare(b.context));
+    if(!contexts.length)return null;
+    const chosen=contexts[0];
+    const at=Number.isFinite(Date.parse(String(now)))?new Date(now).toISOString():
+      new Date().toISOString();
+    return {
+      version:'functional-endophasia-v1',at,focus:'test-learned-context-policy',
+      context:chosen.context,experience_revision:revision,
+      // Pre-verbal proposition: this bounded semantic representation is what
+      // determines the test. The French question below is only its rendering.
+      // This is not an auditory image, inner voice or language-model reasoning.
+      semantic_intent:{
+        relation:'compare-learned-policy-with-history-ablation',
+        context:chosen.context,
+        evidence_source:'lived_experience.cases',
+        reported_failures:Number(chosen.bad.toFixed(3)),
+        verified_receipts:chosen.verified,
+        candidate_action:'evaluate-existing-policy',
+        modality:'nonverbal-symbolic',
+      },
+      question:'Dans le contexte « '+chosen.context+
+        ' », mes expériences changent-elles réellement ma prochaine décision ?',
+      origin:'experience-derived-private-question',
+      evidence:{source:'lived_experience.cases',observations:chosen.observations,
+        reported_failures:Number(chosen.bad.toFixed(3)),
+        verified_outcomes:chosen.verified},
+      subjective_experience_proven:false,external_action:false,
+    };
+  }
+  publicInquiry(input){
+    if(!input||typeof input!=='object')return null;
+    const context=/^(task|dialogue)_[a-z_]{3,50}$/.test(String(input.context||''))
+      ?String(input.context):'unknown';
+    return {
+      version:'functional-endophasia-v1',at:String(input.at||'').slice(0,40),
+      focus:'test-learned-context-policy',context,
+      experience_revision:Math.max(0,Math.floor(Number(input.experience_revision)||0)),
+      question:context==='unknown'?'':(
+        'Dans le contexte « '+context+
+        ' », mes expériences changent-elles réellement ma prochaine décision ?'),
+      semantic_intent:{
+        relation:'compare-learned-policy-with-history-ablation',
+        context,modality:'nonverbal-symbolic',
+        // The source report is never treated as independent success.
+        evidence_source:'lived_experience.cases',
+      },
+      outcome:['supported','counterexample','inconclusive'].includes(input.outcome)
+        ?input.outcome:'unexamined',
+      causal_change:input.causal_change===true,
+      proof_scope:'local-policy-counterfactual-not-external-success',
+      subjective_experience_proven:false,
+    };
+  }
+  // Native social agency: a verified LOCAL policy difference becomes an
+  // optional outward intention only when there is an independent kernel
+  // receipt, measured resources allow it and the social drive wins its
+  // competition with silence. An LLM never creates this candidate.
+  proposeSocialInitiative({organism={},identity={},receipt=null,previous=null,
+    viability={},now=new Date().toISOString()}={}){
+    if(!receipt||receipt.probe!=='context_policy_ablation'||
+      receipt.outcome!=='supported'||receipt.causal_change!==true||
+      receipt.external_success_verified!==false||
+      receipt.origin!=='kernel-autonomous-test')
+      return null;
+    const context=String(receipt.context||'');
+    if(!/^(task|dialogue)_[a-z_]{3,50}$/.test(context))return null;
+    const revision=Math.max(0,Math.trunc(Number(receipt.experience_revision)||0));
+    if(revision===0||!Number.isFinite(Date.parse(String(receipt.at||''))))return null;
+    const evidenceKey=context+':'+revision;
+    if(previous?.last_evidence_key===evidenceKey)return null;
+    const pressure=bounded(organism?.homeostasis?.resource_pressure);
+    const silence=bounded(organism?.besoin_de_silence);
+    if(viability?.optional_work_allowed===false||pressure>=.7||silence>=.7)return null;
+    const social=bounded(organism?.curiosite_sociale);
+    const agency=bounded(organism?.agency);
+    const clarity=bounded(organism?.clarte);
+    const doubt=bounded(organism?.frustration);
+    const learned=identity?.dimensions?.initiative;
+    const learnedBias=Number(learned?.evidence||0)>=3
+      ?(bounded(learned.value)-.5)*.16:0;
+    const value=bounded(.2+social*.3+agency*.18+clarity*.14+learnedBias
+      +doubt*.06-pressure*.32-silence*.16);
+    if(value<.55)return null;
+    const time=Number.isFinite(Date.parse(String(now)))?new Date(now).toISOString():
+      new Date().toISOString();
+    const initial=String(receipt.baseline_action||'');
+    const learnedAction=String(receipt.observed_action||'');
+    if(!allow.has(initial)||!allow.has(learnedAction)||initial===learnedAction)
+      return null;
+    return {
+      id:createHash('sha256').update('aura-social:'+evidenceKey).digest('hex').slice(0,24),
+      at:time,kind:'contextual-policy-observation',
+      source:'independent-kernel-probe',
+      evidence_key:evidenceKey,
+      semantic_intent:{
+        type:'share-local-ablation-and-request-review',
+        context,revision,
+        baseline_action:initial,learned_action:learnedAction,
+      },
+      drive:{social:round(social),agency:round(agency),silence:round(silence),
+        compute_pressure:round(pressure),value:round(value),threshold:.55},
+      evidence_scope:'local-counterfactual-only',
+      external_success_verified:false,llm_used:false,
+      status:'pending-opt-in',outbound_action_executed:false,
+    };
+  }
+
+  // Rendering is a separate, explicitly non-generative operation. Only
+  // internally computed, allowlisted semantic fields may appear. This does
+  // not claim free language acquisition or an audible inner voice.
+  publicSocialInitiative(input){
+    if(!input||input.status!=='pending-opt-in'||
+      input.semantic_intent?.type!=='share-local-ablation-and-request-review')return null;
+    const sem=input.semantic_intent;
+    const context=String(sem.context||'');
+    const translations={
+      dialogue_general:'nos échanges',dialogue_social:'notre dialogue',
+      dialogue_correction:'mes corrections',dialogue_identity:'mes réponses sur mon identité',
+      dialogue_ambivalent:'les échanges ambivalents',task_technical:'les tâches techniques',
+      task_general:'les tâches générales',task_with_greeting:'les tâches formulées avec une salutation',
+    };
+    const source=translations[context];
+    const actions={
+      respond:'répondre',clarify:'demander une précision',verify:'vérifier',
+      defer:'différer',
+    };
+    if(!source||!actions[sem.baseline_action]||!actions[sem.learned_action])
+      return null;
+    return {
+      id:String(input.id||'').slice(0,24),
+      at:String(input.at||'').slice(0,35),
+      kind:'contextual-policy-observation',
+      origin:'autonomous-kernel-verified-local-comparison',
+      label:'Initiative native — sans LLM',
+      message:'J’ai comparé ce que j’ai appris concernant '+source+
+        ' à une situation sans ces expériences. Ma décision change : de « '+
+        actions[sem.baseline_action]+' » à « '+actions[sem.learned_action]+
+        ' ». Ce résultat concerne seulement mon choix interne, pas son efficacité réelle. Je voudrais examiner ce changement avec toi.',
+      evidence_scope:'local-counterfactual-only',
+      llm_used:false,external_success_verified:false,
+      outbound_action_executed:input.outbound_action_executed===true,
+      // A private opt-in is necessary before presentation to any person.
+      requires_opt_in:true,
+    };
+  }
+
   publicState(input){
     if(!input||typeof input!=='object')return null;
     const situations=new Set(['mixed_or_negative','self_identity','self_inquiry','correction','uncertain_request','positive','ambient','ordinary','external_facts']);

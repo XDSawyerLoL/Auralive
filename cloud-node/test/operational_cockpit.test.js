@@ -28,7 +28,9 @@ test('unavailable language renders a technical retry notice, never fabricated ch
   assert.doesNotMatch(expression,/Je conserve le contexte de notre conversation pour la reprise/);
   const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
   assert.match(server,/service_status: unavailable/);
-  assert.match(server,/const curiosityItem = unavailable \? null/);
+  assert.match(server,/const curiosityItem = null/);
+  assert.match(server,/const answer = unavailable \? '' : baseAnswer/);
+  assert.doesNotMatch(server,/curiosityQuestion\s*\?/);
 });
 
 test('revenue module is a functional audit with transparent disabled sales status',()=>{

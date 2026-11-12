@@ -117,6 +117,14 @@ button,input{font:inherit}
 .empty{color:#7f97a4;font-size:11px;line-height:1.6}
 .chat{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;z-index:20;width:min(98%,1680px);border:1px solid #32504f;background:linear-gradient(180deg,rgba(15,24,31,.96),rgba(10,16,21,.98));border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.58);backdrop-filter:blur(14px);padding:10px}
 .chat-main{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px;align-items:center}.chat-main strong{font-size:11px;letter-spacing:.16em;color:#b8f7e2;white-space:nowrap}.chat-main input{width:100%;min-width:0;padding:12px 13px;border-radius:10px;border:1px solid #2d4e50;background:#090f16;color:#eef8fb;font-size:12px}.chat-main button{padding:11px 13px;border-radius:10px;border:1px solid #3a7a67;background:#1d5348;color:#c5f4e3}.chat-main button.secondary{border-color:#385266;background:#15212c;color:#d4e3ea}
+
+.aura-initiative-consent{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+  font-size:10px;color:#c6d6e5;cursor:pointer;max-width:100%}
+.aura-initiative-consent input{accent-color:#b880d9;width:14px;height:14px;flex:none}
+#chatHistory .chat-message.aura-initiative{border-color:#ac71ca;background:#24172c;
+  max-width:97%;white-space:pre-wrap}
+@media(max-width:640px){.aura-initiative-consent{font-size:9px;white-space:normal}}
+
 #chatHistory{display:none;max-height:290px;overflow:auto;scrollbar-width:thin;padding:5px 2px 8px;gap:8px}#chatHistory.open{display:grid}
 .chat-message{max-width:92%;padding:10px 11px;border-radius:11px;border:1px solid #253845;background:#13202a;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;line-height:1.6}.chat-message.user{justify-self:end;background:#173038;border-color:#2c6865}.chat-message small{display:block;margin-bottom:4px;color:#90cdc5;font-size:9px;font-weight:760;letter-spacing:.1em}
 @media(max-width:1560px){.workspace{grid-template-columns:280px minmax(0,1fr) 330px}.graph-canvas{height:730px}}

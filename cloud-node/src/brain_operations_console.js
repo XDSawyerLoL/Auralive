@@ -1,4 +1,5 @@
 import {BRAIN_OPERATIONS_CSS} from './brain_operations_style.js';
+import {BRAIN_BIOPHYSICS_HTML, BRAIN_BIOPHYSICS_CSS} from './brain_biophysics_ui.js';
 import { COGNITIVE_ATLAS_CSS, COGNITIVE_ATLAS_HTML } from './cognitive_atlas_ui.js';
 import {BRAIN_REFERENCE_THEME} from './brain_reference_theme.js';
 import {BRAIN_READABLE_CSS} from './brain_readable_theme.js';
@@ -18,6 +19,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 <style>__REFERENCE_CSS__</style>
 <style>__ATLAS_CSS__</style>
 <style>__SCIENCE_CSS__</style>
+<style>__BIO_CSS__</style>
 <style>__READABLE_CSS__</style>
 </head>
 <body>
@@ -29,6 +31,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     </div>
     <div class="top-actions">
       <span id="onlineState" class="live" data-state="unknown"><i></i><span id="onlineLabel">Connexion au noyau…</span></span>
+      <button id="bioLabTrigger" class="top-btn bio-top-trigger" type="button" aria-controls="bioEvidencePanel" aria-expanded="false">Biologie <span>mesurée</span></button>
       <button id="refreshMap" class="top-btn primary" type="button">Actualiser</button>
       <span class="build-mark">AURA · CONNECTOME 4 / AUDITABLE</span>
     </div>
@@ -96,7 +99,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   <section class="workspace">
     <aside class="rail dialogue-rail">
       <section class="panel conversation-workspace" id="conversation-panel" aria-label="Dialogue avec AURA">
-        <div class="panel-header"><h2>Dialogue avec AURA</h2><small>Conversation de cette session</small></div>
+        <div class="panel-header"><h2>Dialogue avec AURA</h2><small>Conversation de cette session · initiatives natives, sans Groq</small>
+          <label class="aura-initiative-consent" for="auraInitiativeOptIn"><input id="auraInitiativeOptIn" type="checkbox" aria-label="Afficher les initiatives natives autonomes d'AURA, sans LLM"> Initiatives spontanées</label></div>
         <div id="chatHistory" role="log" aria-live="polite" aria-label="Échanges de la session"></div>
   <div id="chatDock" class="chat" aria-label="Console de requête AURA">
     <div class="chat-main">
@@ -194,6 +198,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
             <div class="ni-meta">Traitement routé et décision</div><strong id="niKernelTime">—</strong><small id="niKernelInfo">Aucune transition constatée</small>
           </div>
         </div>
+        <button id="bioBackdrop" class="bio-backdrop" type="button" hidden aria-label="Fermer les mesures biologiques"></button>
+        __BIO_HTML__
         <div class="graph-bottom">
           <div>
             <div class="graph-legend">
@@ -298,11 +304,11 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   </section>
 
   <details class="v5-lab-details" id="neuro-lab-details">
-    <summary>NEUROGENÈSE NUMÉRIQUE · LABORATOIRE CAUSAL <span>Ouvrir la double hélice, les ablations et le protocole P0</span></summary>
+    <summary>Observatoire cognitif <span>Intentions et délibérations réelles · génome expérimental · protocole P0</span></summary>
     __SCIENCE_HTML__
   </details>
   <details class="atlas-details" id="atlas-v3">
-    <summary>Atlas Cognitif v3 · 18 opérations et chronologie vérifiées</summary>
+    <summary>Atlas des décisions <span>18 modules instrumentés · événements réellement observés</span></summary>
     ${COGNITIVE_ATLAS_HTML}
   </details>
   <details class="diagnostics-details" id="diagnostics-details">
@@ -339,6 +345,8 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
 .replace('__OPS_CSS__', BRAIN_OPERATIONS_CSS)
 .replace('__REFERENCE_CSS__', BRAIN_REFERENCE_THEME)
 .replace('__READABLE_CSS__', BRAIN_READABLE_CSS)
+.replace('__BIO_CSS__', BRAIN_BIOPHYSICS_CSS)
+.replace('__BIO_HTML__', BRAIN_BIOPHYSICS_HTML)
 .replace('__SCIENCE_CSS__',BRAIN_SCIENCE_LAB_CSS)
 .replace('__SCIENCE_HTML__',BRAIN_SCIENCE_LAB_HTML)
 .replace('__ORGANISM_V5_HTML__',BRAIN_ORGANISM_V5_HTML)

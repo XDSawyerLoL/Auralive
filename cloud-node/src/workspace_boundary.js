@@ -27,7 +27,7 @@ export function selectBroadcastMemories(workspace,{
   return {notes:selectedNotes,messages:selectedMessages,
     founderProfile:selectedFounder,refs:[...refs]};
 }
-export function languageWorkspaceProjection(plan={},workspace,{privateView=false}={}){
+export function languageWorkspaceProjection(plan={},workspace,{privateView=false,immediateDialogue=[]}={}){
   if(!workspaceHas(workspace,'prefrontal','perception'))
     return {allowed:false,reason:'no-perceptual-broadcast',plan:null};
   const refs=selectedMemoryRefs(workspace);
@@ -43,6 +43,15 @@ export function languageWorkspaceProjection(plan={},workspace,{privateView=false
   result.conversation_context=(Array.isArray(plan.conversation_context)
     ?plan.conversation_context:[]).filter(row=>
       refs.has(rowReference(row,'message'))).slice(-3);
+  // Perception-gated immediate dialogue is NOT a grant for long-term memory.
+  // Only the trusted kernel passes the last few rows from the same session.
+  result.immediate_dialogue_context=(Array.isArray(immediateDialogue)
+    ?immediateDialogue:[]).filter(row=>
+      row?.source==='same-session-immediate-turn'&&
+      ['user','assistant'].includes(String(row?.role))&&
+      /^\d+$/.test(String(row?.id??''))).slice(-3).map(row=>({
+      id:row.id,role:row.role,content:String(row.content||'').slice(0,550),
+    }));
   result.founder_profile=(Array.isArray(plan.founder_profile)
     ?plan.founder_profile:[]).filter(row=>
       refs.has(rowReference(row,'note'))).slice(0,3);
