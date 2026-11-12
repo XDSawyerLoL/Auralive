@@ -277,7 +277,8 @@ def main():
     from allensdk.core.cell_types_cache import CellTypesCache
     cache=CellTypesCache(manifest_file=str(args.manifest))
     selection=select_prespecified_sweeps(cache.get_ephys_sweeps(args.specimen_id))
-    nwbdataset=cache.get_ephys_data(args.specimen_id)
+    nwb_path=args.manifest.parent/('specimen_'+str(args.specimen_id))/'ephys.nwb'
+    nwbdataset=cache.get_ephys_data(args.specimen_id,file_name=str(nwb_path))
     records={}
     for num in selection['training_sweep_numbers']+selection['validation_sweep_numbers']:
         record=select_heldout_trace(nwbdataset,specimen_id=args.specimen_id,
