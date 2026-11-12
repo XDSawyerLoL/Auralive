@@ -18,6 +18,13 @@ test('published real human NWB receipt has stable grounded specimen, scope and h
  assert.equal(e.measured_nwb.sweep_number,25);
  assert.equal(e.measured_nwb.samples,10000);
  assert.equal(e.measured_nwb.action_potential_threshold_crossings,0);
+ assert.equal(e.measured_spiking.sweep_number,32);
+ assert.equal(e.measured_spiking.observed_spike_count,4);
+ assert.equal(e.measured_spiking.recording_workflow_run_id,43277555645);
+ assert.equal(e.measured_spiking.original_nwb_sha256,e.nwb_sha256);
+ assert.equal(e.measured_spiking.measured_not_simulated,true);
+ assert.equal(e.measured_spiking.ion_channels_calibrated,false);
+
  assert.equal(e.measured_nwb.independent_holdout,false);
  assert.equal(e.measured_nwb.active_kinetics_calibrated,false);
  assert.equal(e.workflow_run_id,43264994852);
