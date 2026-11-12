@@ -866,6 +866,124 @@ setInterval(()=>{if(!document.hidden&&!state.busy)void poll();},2800);
 // committed module hops BEFORE the model produces its final answer.
 setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
 
+// Optional and explicitly activated browser sensors. All images and audio
+// remain on the visitor's device: only coarse, numeric features leave it.
+const senseState={mic:null,cam:null,context:null,analyser:null,video:null,
+  timer:null,lastFrame:null,lastSent:{},busy:false};
+const senseStatus=msg=>setText('auraSenseStatus',msg);
+function stopSense(kind){
+  if(kind==='mic'){
+    senseState.mic?.getTracks().forEach(t=>t.stop());
+    senseState.mic=null;senseState.analyser=null;
+    if(senseState.context){void senseState.context.close().catch(()=>{});senseState.context=null;}
+    $('auraListen').textContent='Ouïe : inactive';
+    $('auraListen').setAttribute('aria-pressed','false');
+  }else{
+    senseState.cam?.getTracks().forEach(t=>t.stop());
+    senseState.cam=null;senseState.lastFrame=null;
+    const video=$('auraCameraPreview');video.pause();video.srcObject=null;video.hidden=true;
+    $('auraSee').textContent='Vue : inactive';
+    $('auraSee').setAttribute('aria-pressed','false');
+  }
+  if(!senseState.mic&&!senseState.cam&&senseState.timer){
+    clearInterval(senseState.timer);senseState.timer=null;
+  }
+  senseStatus('Capteurs : micro '+(senseState.mic?'actif':'inactif')+
+    ' ; caméra '+(senseState.cam?'active':'inactive')+
+    '. Mesures numériques locales uniquement, aucune transcription ou image transmise.');
+}
+async function postSense(kind,features){
+  if(senseState.busy||document.hidden||!((kind==='audio-level'&&senseState.mic)||
+    (kind==='visual-luminance-motion'&&senseState.cam)))return;
+  const now=Date.now();if(now-(senseState.lastSent[kind]||0)<4500)return;
+  senseState.busy=true;
+  try{
+    const response=await fetch('/api/cognition/senses',{
+      method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json',Accept:'application/json'},
+      body:JSON.stringify({kind,features,source:'browser-opt-in-local-measurement',
+        measured_at:new Date(now).toISOString()}),
+    });
+    if(response.status===401||response.status===403){
+      stopSense('mic');stopSense('cam');
+      senseStatus('Capteurs arrêtés : accès privé au noyau requis.');
+    }else if(response.ok)senseState.lastSent[kind]=now;
+  }catch{senseStatus('Mesures locales actives, mais la liaison au noyau est indisponible.');}
+  finally{senseState.busy=false;}
+}
+function sampleSenses(){
+ if(document.hidden)return;
+ if(senseState.analyser&&senseState.mic){
+   const values=new Float32Array(senseState.analyser.fftSize);
+   senseState.analyser.getFloatTimeDomainData(values);
+   let sum=0;for(const v of values)sum+=v*v;
+   void postSense('audio-level',{level:Math.min(1,Math.sqrt(sum/values.length)*5)});
+ }
+ const video=$('auraCameraPreview');
+ if(senseState.cam&&video.videoWidth&&video.videoHeight){
+   if(!senseState.video){
+     senseState.video=document.createElement('canvas');
+     senseState.video.width=32;senseState.video.height=24;
+   }
+   const ctx=senseState.video.getContext('2d',{willReadFrequently:true});
+   if(!ctx)return;
+   ctx.drawImage(video,0,0,32,24);
+   const data=ctx.getImageData(0,0,32,24).data;
+   const values=new Float32Array(32*24);
+   let total=0,movement=0;
+   for(let i=0;i<values.length;i++){
+     const offset=i*4;
+     const luminance=(data[offset]*.2126+data[offset+1]*.7152+
+       data[offset+2]*.0722)/255;
+     values[i]=luminance;total+=luminance;
+     if(senseState.lastFrame)movement+=Math.abs(luminance-senseState.lastFrame[i]);
+   }
+   const diff=senseState.lastFrame?movement/values.length:0;
+   senseState.lastFrame=values;
+   void postSense('visual-luminance-motion',{
+     luminance:Math.min(1,total/values.length),motion:Math.min(1,diff*3)});
+ }
+}
+function startSenseSampling(){
+ if(!senseState.timer)senseState.timer=setInterval(sampleSenses,1000);
+}
+$('auraListen').onclick=async()=>{
+ if(senseState.mic){stopSense('mic');return;}
+ if(!navigator.mediaDevices?.getUserMedia){
+   senseStatus('Microphone indisponible : navigateur ou HTTPS requis.');return;
+ }
+ try{
+   const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+   const context=new (window.AudioContext||window.webkitAudioContext)();
+   const source=context.createMediaStreamSource(stream);
+   const analyser=context.createAnalyser();analyser.fftSize=1024;
+   source.connect(analyser);
+   senseState.mic=stream;senseState.context=context;senseState.analyser=analyser;
+   stream.getAudioTracks().forEach(t=>t.addEventListener('ended',()=>stopSense('mic'),{once:true}));
+   $('auraListen').textContent='Ouïe : active';
+   $('auraListen').setAttribute('aria-pressed','true');
+   startSenseSampling();senseStatus('Ouïe active : niveau sonore uniquement. Pas de compréhension des paroles.');
+ }catch{stopSense('mic');senseStatus('Microphone non autorisé ou indisponible.');}
+};
+$('auraSee').onclick=async()=>{
+ if(senseState.cam){stopSense('cam');return;}
+ if(!navigator.mediaDevices?.getUserMedia){
+   senseStatus('Caméra indisponible : navigateur ou HTTPS requis.');return;
+ }
+ try{
+   const stream=await navigator.mediaDevices.getUserMedia({
+     audio:false,video:{width:{ideal:320},height:{ideal:240},frameRate:{ideal:5,max:10}}});
+   const video=$('auraCameraPreview');
+   video.srcObject=stream;video.hidden=false;await video.play();
+   senseState.cam=stream;
+   stream.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>stopSense('cam'),{once:true}));
+   $('auraSee').textContent='Vue : active';
+   $('auraSee').setAttribute('aria-pressed','true');
+   startSenseSampling();senseStatus('Vue active : luminosité et mouvement uniquement. Pas de reconnaissance d’objets.');
+ }catch{stopSense('cam');senseStatus('Caméra non autorisée ou indisponible.');}
+};
+window.addEventListener('pagehide',()=>{stopSense('mic');stopSense('cam');});
+
 const history=$('chatHistory');
 $('chatExpand').onclick=()=>{$('conversation-panel').scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'});};
 function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;}
