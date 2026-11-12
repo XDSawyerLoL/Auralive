@@ -172,7 +172,7 @@ export function compactFrenchPrompt(plan = {}, {maxChars = 2400} = {}) {
     speech_act: normalize(privatePlan.act || 'respond').slice(0,85),
     factual_constraints: (Array.isArray(privatePlan.facts) ? privatePlan.facts : [])
       .slice(0,18).map(item => normalize(item).slice(0,210)).filter(Boolean),
-    speech_style:privatePlan.speech_style==='warm'?'warm':'neutral',
+    ...(privatePlan.speech_style==='warm'?{speech_style:'warm'}:{}),
     response_tone:['direct','attentive','curious','cautious','calm'].includes(privatePlan.response_tone)
       ?privatePlan.response_tone:'direct',
     self_model: {
