@@ -351,14 +351,19 @@ export class CognitiveKernel {
       this.timer = setInterval(() => {
         // The cognitive loop must not wait on potentially slow external routines.
         void this.tick({ trigger: 'ambient', force: false })
-          .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
-        if(!this.routineSweepRunning &&
-          this.soulCache?.viability?.optional_work_allowed!==false){
-          this.routineSweepRunning=true;
-          void Promise.resolve().then(()=>this.runDueRoutines())
-            .catch((error)=>{this.lastError=String(error?.message||error).slice(0,500);})
-            .finally(()=>{this.routineSweepRunning=false;});
-        }
+          .catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); })
+          .finally(() => {
+            // Optional routines must never delay the next independent tick.
+            // Start them after the ambient transaction, avoiding an immediate
+            // collision with routine-driven forced reflections.
+            if(!this.routineSweepRunning &&
+              this.soulCache?.viability?.optional_work_allowed!==false){
+              this.routineSweepRunning=true;
+              void Promise.resolve().then(()=>this.runDueRoutines())
+                .catch((error)=>{this.lastError=String(error?.message||error).slice(0,500);})
+                .finally(()=>{this.routineSweepRunning=false;});
+            }
+          });
       }, config.cognitiveTickSeconds * 1000);
       this.timer.unref?.();
       // First actual endogenous cycle after startup, without waiting for a visitor.
