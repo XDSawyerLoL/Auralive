@@ -233,6 +233,8 @@ export const config = Object.freeze({
   cognitiveTickSeconds: int('AURA_COGNITIVE_TICK_SECONDS', 30, 5, 86400),
   cognitiveReflectionSeconds: int('AURA_COGNITIVE_REFLECTION_SECONDS', 300, 30, 86400),
   cognitiveMaxReflectionsPerHour: int('AURA_COGNITIVE_MAX_REFLECTIONS_PER_HOUR', 6, 1, 60),
+  // Read-only self-tests between user messages. Bounded and free.
+  independentProbeSeconds: int('AURA_INDEPENDENT_PROBE_SECONDS', 180, 60, 3600),
 
   // Continuous Existence: AURA periodically re-evaluates unfinished work even
   // when no human message or external event arrives. This is native cognition
