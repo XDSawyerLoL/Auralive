@@ -245,3 +245,110 @@ isolé à « l'humain » entier.
 - https://celltypes.brain-map.org/data?donor__species=Homo+Sapiens
 - https://alleninstitute.github.io/AllenSDK/cell_types.html
 - https://brain-map.org/support/documentation/cell-types-database-api
+
+
+## Tranche morpho-synaptique réelle (recherche, non calibrée sur cerveau humain entier)
+
+**État de code à la date de cette révision :**
+
+- `src/biophysical_morphology.js` charge une véritable arborescence
+  morphologique **SWC** (soma, axone et dendrites), vérifie topologie et unités
+  micrométriques, calcule surfaces et conductances axiales à partir des
+  longueurs/rayons et d'une résistivité axiale explicite. La membrane
+  est découpée en compartiments avec capacité en pF et conductance en nS,
+  réparties depuis les mesures passives du spécimen fournies à l'API.
+  Le potentiel membranaire est résolu par un schéma implicite pour un
+  arbre électrique, pas par une animation de réseau.
+- `src/biophysical_synapses.js` ajoute des récepteurs **AMPA, NMDA,
+  GABA_A et GABA_B** ; les conductances sont produites par des événements
+  synaptiques horodatés, une montée/descente exponentielle et la
+  dépendance du NMDA au voltage et au magnésium extracellulaire.
+  Les paramètres de cinétique sont des points de départ **explicites,
+  non encore calibrés sur chaque neurone humain**.
+- `src/server.js` expose une expérience privée et bornée :
+  `POST /api/research/biophysics/human-arbor`. Un échantillon d'arbre SWC
+  avec un enregistrement humain passif compatible, et éventuellement
+  des synapses et événements de libération, permettent de calculer les
+  tensions temporelles. Ce n'est pas une interface d'entraînement à
+  partir de données patient et l'API ne stocke ni trace brute ni
+  connexion au dialogue.
+- Les sorties affichent explicitement :
+  `active_ion_channels=false`, `source_authenticity_verified_by_server=false`,
+  `receptor_parameters_human_calibrated=false`, aucun apprentissage
+  psychologique, aucune preuve d'expérience subjective.
+- Les tests `test/biophysical_morphology_synapses.test.js` vérifient
+  segmentation, branches SWC, lois de courant électrique, stabilité
+  quand le pas de temps diminue, excitation AMPA, inhibition GABA,
+  blocage NMDA et non-mutation de la source.
+
+**Source technique :**
+- AllenSWC et NEURON : https://alleninstitute.github.io/AllenSDK/cell_types.html
+  et https://www.neuronsimulator.org/en/8.2.4/guide/bio_faq.html
+- Exemple de cinétique synaptique AMPA 0,2/2 ms et NMDA 3/35 ms,
+  conductances `Exp2Syn` et blocage Mg²⁺ :
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC6120902/
+
+**Important :** un fichier `.swc` modifié à la main n'est pas une
+morphologie humaine authentifiée. L'API accepte des documents
+fournis par le client pour les calculs, et **n'affirme jamais** que
+leur source a été auditée. Une vraie étude nécessite identifiants
+de spécimen, licence, originaux Allen, empreintes et contrôles
+électrophysiologiques indépendants.
+
+### Modèles ACTIFS humains existants — voie NEURON
+
+Le script facultatif `scripts/download_allen_human_active_model.py`
+interroge le **catalogue des modèles biophysiques Allen** pour un
+spécimen effectivement présent dans la liste `CellTypesApi.HUMAN`.
+Un modèle doit pointer sur **ce même spécimen humain** et appartenir
+à une catégorie biophysique autorisée. Aucun modèle murin n'est
+« converti » en humain et **une absence de modèle produit une erreur**.
+S'il existe, l'archive contient les fichiers Allen, les données
+d'électrophysiologie et les MOD du simulateur NEURON ; un manifeste
+local répertorie les empreintes SHA-256.
+
+`scripts/run_verified_allen_model.py` contrôle d'abord ces
+empreintes. Son mode `--verify-only` n'exécute aucun mécanisme. Le
+mode `--run`, explicitement choisi par l'opérateur, compile
+les mécanismes `MOD` et lance la commande de simulation officielle
+AllenSDK dans une **station de recherche isolée et fiable**.
+
+```bash
+# Recherche hors Hostinger, dans un environnement Python/NEURON préparé
+cd cloud-node
+python scripts/download_allen_human_active_model.py \
+  --specimen-id <IDENTIFIANT_HUMAIN_REEL> \
+  --output /chemin/vers/modele
+python scripts/run_verified_allen_model.py \
+  --model-dir /chemin/vers/modele --verify-only
+# Après inspection des mécanismes et installation de NEURON :
+python scripts/run_verified_allen_model.py \
+  --model-dir /chemin/vers/modele --run
+```
+
+Les mécanismes NEURON téléchargés peuvent être des programmes natifs
+compilés ; le mode `--run` ne doit jamais être appelé automatiquement
+depuis un navigateur, un serveur Hostinger ou une tâche GitHub non
+approuvée. La **disponibilité d'un modèle actif humain** dans Allen
+est une condition vérifiée à l'exécution, et non une promesse de
+disponibilité.
+
+Source API d'association modèle↔spécimen :
+https://allensdk.readthedocs.io/en/latest/allensdk.api.queries.biophysical_api.html
+
+### Niveau de maturité réaliste après cette tranche
+
+- **Électrophysiologie passive humaine :** ajustement possible aux
+  caractéristiques Allen, mais les exports disponibles ici n'ont
+  pas encore subi de validation scientifique indépendante.
+- **Morphologie SWC :** géométrie et cable couplés dans un vrai
+  solveur discret ; vérification anatomique par spécimen nécessaire.
+- **Synapses :** dynamique et blocage NMDA calculés ; cinétiques
+  spécifiques aux populations et plasticité à valider.
+- **Neurone humain actif :** voie de téléchargement + exécution
+  officielle NEURON préparée, **aucun modèle humain réel n'a encore
+  été exécuté dans cette CI**.
+- **Amygdales, hippocampe, cortex, glie, métabolisme et corps humain
+  complet :** non reconstruits avec fidélité humaine. Les quelques
+  régions du pilote HH restent des hypothèses topologiques.
+- **Conscience subjective :** aucune conclusion possible.
