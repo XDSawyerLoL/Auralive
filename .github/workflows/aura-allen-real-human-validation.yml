@@ -7,6 +7,8 @@ on:
       - "cloud-node/scripts/export_allen_human_features.py"
       - "cloud-node/scripts/run_human_swc_neuron.py"
       - "cloud-node/src/human_ephys_calibration.js"
+      - "cloud-node/scripts/run_human_active_hh_control.py"
+      - "cloud-node/scripts/allen_human_active_models.py"
   workflow_dispatch:
 
 permissions:
@@ -222,6 +224,90 @@ jobs:
           }
           (root/'validation-public.json').write_text(json.dumps(evidence,indent=2))
           print('Measured human active voltage sweep recorded separately from model.')
+          PY
+      - name: Compare actual human spiking versus squid-kinetics active NEURON control
+        if: steps.spiking-choice.outputs.sweep != ''
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="/tmp/aura-allen-human-643582610"
+          # No fitting to this NWB sweep: fixed reference channels, and an
+          # independent predeclared perturbation for sensitivity testing.
+          python scripts/run_human_active_hh_control.py \
+            --swc "$ROOT/reconstruction.swc" \
+            --human-features "$ROOT/human-features.json" \
+            --nwb-trace "$ROOT/active-NWB-trace.json" \
+            --gna-scale 1 --gk-scale 1 \
+            --output "$ROOT/reference-hh-active.json"
+          python scripts/run_human_active_hh_control.py \
+            --swc "$ROOT/reconstruction.swc" \
+            --human-features "$ROOT/human-features.json" \
+            --nwb-trace "$ROOT/active-NWB-trace.json" \
+            --gna-scale 1.5 --gk-scale 1 \
+            --output "$ROOT/reference-hh-na-perturbation.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/aura-allen-human-643582610')
+          report=json.loads((root/'validation-public.json').read_text())
+          base=json.loads((root/'reference-hh-active.json').read_text())
+          changed=json.loads((root/'reference-hh-na-perturbation.json').read_text())
+          observed=report['measured_active_sweep']['spike_count']
+          assert base['experimental_observed']['spike_count']==observed
+          assert base['model_predicted']['rmse_mV']>=0
+          assert base['human_channels_calibrated'] is False
+          assert changed['human_channels_calibrated'] is False
+          report['active_hh_reference_comparison']={
+            'experiment':'human-SWC-with-nonhuman-HH-somatic-reference',
+            'same_human_specimen':base['specimen_id'],
+            'nwb_sweep':base['sweep_number'],
+            'recorded_human_spikes':observed,
+            'reference_simulated_spikes':base['model_predicted']['spike_count'],
+            'reference_rmse_mV':base['model_predicted']['rmse_mV'],
+            'reference_mae_mV':base['model_predicted']['mae_mV'],
+            'sodium_density_1p5_simulated_spikes':
+              changed['model_predicted']['spike_count'],
+            'sodium_density_1p5_rmse_mV':
+              changed['model_predicted']['rmse_mV'],
+            'active_kinetics_origin':'historical squid HH, NOT fitted human',
+            'model_human_spiking_validated':False,
+            'heldout_validation':False,
+            'active_model_artifacts_downloaded_or_executed':False,
+          }
+          (root/'validation-public.json').write_text(json.dumps(report,indent=2))
+          print('Honest measured-vs-computed active HH control:',report['active_hh_reference_comparison'])
+          PY
+      - name: Check availability of independently fitted Allen active model for same human cell
+        working-directory: cloud-node
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from allensdk.api.queries.biophysical_api import BiophysicalApi
+          from allensdk.core.cell_types_cache import CellTypesCache
+          from allensdk.api.queries.cell_types_api import CellTypesApi
+          from scripts.allen_human_active_models import model_records
+          root=Path('/tmp/aura-allen-human-643582610')
+          report=json.loads((root/'validation-public.json').read_text())
+          specimen=643582610
+          try:
+              cells=CellTypesCache(manifest_file=str(root/'cache/manifest.json')).get_cells(
+                  species=[CellTypesApi.HUMAN])
+              models=BiophysicalApi().get_neuronal_models(specimen_ids=[specimen])
+              selected=model_records(specimen,cells,models)
+              availability={'query_status':'success','count':len(selected),
+                  'ids':[v['model_id'] for v in selected[:12]],
+                  'model_executed':False,'channel_fit_validated':False}
+          except Exception as err:
+              availability={'query_status':'query-failed',
+                  'error_type':type(err).__name__,
+                  'model_executed':False,'channel_fit_validated':False}
+          report['independent_allen_active_model_availability']=availability
+          (root/'validation-public.json').write_text(json.dumps(report,indent=2))
+          print('Allen active model discovery:',availability)
           PY
       - name: Upload measurements and provenance report only
         uses: actions/upload-artifact@v4
