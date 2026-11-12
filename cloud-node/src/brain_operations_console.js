@@ -31,6 +31,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
     </div>
     <div class="top-actions">
       <span id="onlineState" class="live" data-state="unknown"><i></i><span id="onlineLabel">Connexion au noyau…</span></span>
+      <button id="bioLabTrigger" class="top-btn bio-top-trigger" type="button" aria-controls="bioEvidencePanel" aria-expanded="false">Biologie <span>mesurée</span></button>
       <button id="refreshMap" class="top-btn primary" type="button">Actualiser</button>
       <span class="build-mark">AURA · CONNECTOME 4 / AUDITABLE</span>
     </div>
@@ -39,7 +40,6 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
   <nav class="scene-nav" aria-label="Accès aux espaces d’AURA">
     <button class="scene-active" data-focus="conversation-panel" type="button">Dialogue</button>
     <button data-focus="brain" type="button">Organisme</button>
-    <button data-focus="bioEvidencePanel" type="button">Biologie mesurée</button>
     <button data-focus="neuro-lab-details" type="button">Labo / Génome</button>
     <button data-focus="atlas-v3" type="button">Atlas v3 · 18 processus</button>
     <button data-focus="homeostasis-panel" type="button">État interne</button>
@@ -198,6 +198,7 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
             <div class="ni-meta">Traitement routé et décision</div><strong id="niKernelTime">—</strong><small id="niKernelInfo">Aucune transition constatée</small>
           </div>
         </div>
+        <button id="bioBackdrop" class="bio-backdrop" type="button" hidden aria-label="Fermer les mesures biologiques"></button>
         __BIO_HTML__
         <div class="graph-bottom">
           <div>
