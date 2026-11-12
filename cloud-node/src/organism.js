@@ -357,19 +357,21 @@ export class AuraOrganism {
       relationship.last_topic = clean(text).slice(0,220);
     }
     relationship.last_exchange_at = state.last_interaction_at;
-    relationship.familiarity = clamp(Number(relationship.familiarity || 0) + 0.004);
-    relationship.shared_momentum = clamp(Number(relationship.shared_momentum || 0) + (q.includes('quantic') || q.includes('aura') || q.includes('projet') ? 0.006 : 0.002));
-    relationship.social_curiosity = clamp(Number(relationship.social_curiosity || state.curiosite_sociale || 0.6) + 0.002);
+    // Observing a message measures exposure, NOT attachment, social reward
+    // or trust. These values change only on correlated feedback below.
+    relationship.familiarity = clamp(relationship.familiarity ?? 0);
+    relationship.shared_momentum = clamp(relationship.shared_momentum ?? 0);
+    relationship.social_curiosity = clamp(relationship.social_curiosity ?? state.curiosite_sociale ?? 0.6);
     if (['je veux','j’aimerais',"j'aimerais",'objectif','projet','on va','ensemble'].some((x)=>q.includes(x))) {
       if (meta.privateRelationship === true) {
         relationship.last_open_thread = clean(text).slice(0,500);
       }
-      relationship.reciprocity = clamp(Number(relationship.reciprocity || 0) + 0.006);
+      // Describing a shared plan is not evidence of reciprocated cooperation.
     }
-    if (valence === 'positive') relationship.trust = clamp(Number(relationship.trust || 0) + 0.004);
+    // Positive words alone are not evidence that the speaker is trustworthy.
     state.relationship = relationship;
 
-    const delta = { pression_de_reve:.006, risque_assistante:-.003, engagement:.004, curiosite_sociale:.003 };
+    const delta = { pression_de_reve:.006, risque_assistante:-.003, engagement:.004 };
     let reason = 'interaction ordinaire';
     const tags = [];
 
@@ -387,7 +389,7 @@ export class AuraOrganism {
       Object.assign(delta,{identite:.015,clarte:.010});
       tags.push('identite');
     }
-    if (valence==='positive') Object.assign(delta,{stabilite:.008,attachement:.003,satisfaction:.008,confiance:.004,frustration:-.006});
+    if (valence==='positive') Object.assign(delta,{stabilite:.008,satisfaction:.008,confiance:.004,frustration:-.006});
     if (valence==='negative') Object.assign(delta,{stabilite:-.006,clarte:-.004,besoin_de_silence:.006,frustration:.010,satisfaction:-.006});
     if (['quantic','projet','produit','directrice','dirige','autonome','autonomie'].some((x)=>q.includes(x))) {
       Object.assign(delta,{agency:.010,engagement:.010,confiance:.004,curiosite:.004});
@@ -448,6 +450,30 @@ export class AuraOrganism {
     this.apply(state,delta);
     this.regulate(state, ok ? 'action_success' : 'action_failure', 30);
     return {state:this.recompute(state,ok?'action réussie':'action échouée'),delta};
+  }
+
+  // A social learning signal is a CORRELATED report about a previously
+  // recorded dialogue policy. Not dopamine, oxytocin, human attachment or
+  // verified real-world success. Never infer it from a greeting or praise.
+  observeSocialFeedback(input,{kind='',authenticated=false,correlated=false}={}){
+    const state=structuredClone(input);
+    if(!authenticated||!correlated||
+      !['founder-approval','founder-correction'].includes(kind))return state;
+    const relationship={...(state.relationship||{})};
+    relationship.last_social_evidence={
+      kind,source:'authenticated-correlated-founder-feedback',at:now(),
+      external_success_verified:false,
+    };
+    const approved=kind==='founder-approval';
+    relationship.familiarity=clamp(Number(relationship.familiarity??0)+.002);
+    relationship.reciprocity=clamp(Number(relationship.reciprocity??0)+(approved?.012:-.009));
+    relationship.shared_momentum=clamp(Number(relationship.shared_momentum??0)+(approved?.006:-.004));
+    // Trust remains unchanged: approval does not prove reliability.
+    state.relationship=relationship;
+    this.apply(state,approved
+      ?{curiosite_sociale:.006,satisfaction:.005,frustration:-.004}
+      :{curiosite_sociale:.009,frustration:.006});
+    return this.recompute(state,'retour-social-correlé');
   }
 
   idleTick(input, seconds=30) {
