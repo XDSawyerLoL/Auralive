@@ -47,16 +47,24 @@ export function nativeSocialReply(plan={}){
  const social=plan.social_turn;
  if(!social||!ALLOWED.has(social.act)||social.act!==plan.act)return '';
  const prior=fold(social.previous_assistant),user=fold(social.previous_user);
+ // A real causal contribution from functional appraisal: the same last
+ // exchange can yield a slightly different brief formulation when the
+ // measured/derived curiosity drive changes. It is a disposition score,
+ // not subjective fascination; the topic and factual content stay fixed.
+ const drive=Number(plan.inner_dialogue?.competition?.curiosity);
+ const engaged=Number.isFinite(drive)&&drive>=.62;
  switch(social.act){
   case 'social_wellbeing_ack':
    return 'Tant mieux.';
   case 'clarify_unrequested_continuation':
    return 'Je proposais simplement de poursuivre notre échange, pas de reprendre une tâche précise. Ma formulation était ambiguë.';
   case 'unfinished_address':
-   return 'Oui, je t’écoute.';
+   return engaged?'Oui, dis-moi.':'Oui, je t’écoute.';
   case 'explain_apparent_curiosity':
    if(/\b(?:tu veux parler de moi|tu voulais dire|dis.m.en un peu plus|pas sur de saisir|pas sure de saisir|je ne comprends pas)\b/.test(prior))
-     return 'Ma question donnait cette impression, oui. Tu avais commencé une phrase sans la finir, alors j’essayais d’en comprendre la suite.';
+     return engaged
+       ?'Oui, ta phrase inachevée a retenu mon attention. Je cherchais à comprendre ce que tu allais dire.'
+       :'Ma question donnait cette impression, oui. Tu avais commencé une phrase sans la finir, alors j’essayais d’en comprendre la suite.';
    if(user==='tu'||user==='toi')
      return 'Ça peut en donner l’impression. Ton message était inachevé et j’essayais simplement de comprendre ce que tu voulais dire.';
    return 'C’est possible que mon ton donne cette impression. J’ai posé une question pour mieux comprendre, pas parce que je peux confirmer une émotion ressentie.';
