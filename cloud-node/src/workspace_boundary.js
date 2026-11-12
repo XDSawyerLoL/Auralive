@@ -49,7 +49,7 @@ export function languageWorkspaceProjection(plan={},workspace,{privateView=false
     ?immediateDialogue:[]).filter(row=>
       row?.source==='same-session-immediate-turn'&&
       ['user','assistant'].includes(String(row?.role))&&
-      /^\\d+$/.test(String(row?.id??''))).slice(-3).map(row=>({
+      /^\d+$/.test(String(row?.id??''))).slice(-3).map(row=>({
       id:row.id,role:row.role,content:String(row.content||'').slice(0,550),
     }));
   result.founder_profile=(Array.isArray(plan.founder_profile)
