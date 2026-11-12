@@ -21,6 +21,7 @@ test('one cockpit, no always-open second dashboard: introspection requires the l
  assert.ok(html.includes('id="scienceGenomeCanvas"'));
  assert.ok(html.includes('id="scienceGeneSequence"'));
  assert.ok(html.includes('id="scienceGeneWiring"'));
+ assert.ok(html.includes('id="scienceMindWhy"'));
 });
 
 test('the intentions readout never generates a fictional inner monologue or exposes secret values',()=>{
@@ -29,6 +30,7 @@ test('the intentions readout never generates a fictional inner monologue or expo
  assert.match(script,/credentials:'same-origin'/);
  assert.match(script,/response\.status===401\|\|response\.status===403/);
  assert.match(script,/privateForbidden=true/);
+ assert.match(script,/last_communication_decision/);
  assert.match(script,/item\.statement\|\|''/);
  assert.match(script,/\.textContent=/);
  assert.doesNotMatch(script,/innerHTML\s*=/);
