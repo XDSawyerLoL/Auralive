@@ -14,6 +14,7 @@ import { arbitrateConversationInitiative } from './conversation_initiative.js';
 import {validateSensoryReading} from './sensory_input.js';
 import {validateSemanticPerception} from './semantic_perception.js';
 import {updatePerceptualContinuity} from './perceptual_continuity.js';
+import {fusePerceptualEvents,decidePerceptualIntervention} from './multimodal_fusion.js';
 import { LivedExperience, contextForExperience, isExplicitCorrection, isExplicitApproval } from './lived_experience.js';
 import { substantiveRequest } from './composite_intent.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
@@ -438,6 +439,17 @@ export class CognitiveKernel {
       if(processed.event){
         if(!this.recentPerceptualEvents)this.recentPerceptualEvents={};
         this.recentPerceptualEvents[valid.kind]=processed.event;
+        const merged=fusePerceptualEvents(this.multimodalState||{},processed.event);
+        this.multimodalState=merged.state;
+        if(merged.event){
+          this.recentPerceptualEvents.multimodal=merged.event;
+          // A multimodal observation is not an unsolicited conversational
+          // message, nor a statement that an actual object is present.
+          this.multimodalDecision=decidePerceptualIntervention(merged.event,{
+            resource_pressure:Number(this.soulCache?.organism?.homeostasis?.resource_pressure)||0,
+            conversation_busy:this.chatRunning===true,
+          });
+        }
       }
     }
     return valid;
@@ -448,7 +460,9 @@ export class CognitiveKernel {
     return Object.values(this.recentPerceptualEvents||{})
       .filter(event=>Date.parse(String(event.at||''))>=cutoff)
       .map(event=>({
-        kind:event.kind==='speech-detected'?'speech-transcription':'visual-classification',
+        kind:event.kind==='speech-detected'?'speech-transcription':
+          event.kind==='audio-visual-temporal-coincidence'?'multimodal-temporal':
+          event.kind==='object-hypothesis-stable'?'visual-objects':'visual-classification',
         measured_at:event.at,trusted:false,verified_real_world:false,
         evidence_scope:'repeated-or-once-client-model-output-not-ground-truth',
       }));
