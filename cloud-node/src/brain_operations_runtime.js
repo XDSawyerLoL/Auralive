@@ -873,6 +873,9 @@ const senseState={mic:null,cam:null,context:null,analyser:null,video:null,
   timer:null,lastFrame:null,lastSent:{},busy:false};
 const senseStatus=msg=>setText('auraSenseStatus',msg);
 function stopSense(kind){
+  // A revoked browser sensor also revokes its semantic processor.
+  if(kind==='mic'&&typeof stopLocalSpeech==='function')stopLocalSpeech();
+  if(kind!=='mic'&&typeof stopVisualMeaning==='function')stopVisualMeaning();
   if(kind==='mic'){
     senseState.mic?.getTracks().forEach(t=>t.stop());
     senseState.mic=null;senseState.analyser=null;
