@@ -2146,8 +2146,9 @@ app.post('/api/research/biophysics/human-arbor', async (request, reply) => {
     if(model.count>256||Math.ceil(durationMs/dtMs)*model.count>100000)
       return reply.code(422).send({error:'Too many morphological segments for online research; run offline'});
     const synapses=body.synapses??[];
-    if(!Array.isArray(synapses)||synapses.length>32)
-      return reply.code(422).send({error:'Too many synaptic contacts for online research'});
+    if(!Array.isArray(synapses)||synapses.length>32||
+      synapses.reduce((sum,s)=>sum+(Array.isArray(s?.release_times_ms)?s.release_times_ms.length:1001),0)>1000)
+      return reply.code(422).send({error:'Too many release events for online research'});
     const experiment=synapses.length
       ?simulateSynapticArbor(model,synapses,{
         duration_ms:durationMs,dt_ms:dtMs,
@@ -2181,11 +2182,18 @@ app.get('/api/research/biophysics', async (request, reply) => {
     model:'Hodgkin-Huxley 1952 squid-axon biophysics; NOT human-calibrated',
     status:'electrophysiology-research-pilot',
     source:'10.1113/jphysiol.1952.sp004764',
-    endpoints:{experiment:'/api/research/biophysics/experiment'},
-    current_scope:'ionic-spikes-conductance-synapses-first-order-body-coupling',
+    endpoints:{
+      experiment:'/api/research/biophysics/experiment',
+      human_passive:'/api/research/biophysics/human-passive',
+      morphology_and_synapses:'/api/research/biophysics/human-arbor',
+    },
+    current_scope:'HH squid reference, human passive RC/SWC arbor, AMPA/NMDA/GABA conductances, simplified brain-body coupling',
+    active_model_download:'optional offline AllenSDK+NEURON research script; not executed on Hostinger',
+    human_morphology_authenticated:false,
     not_implemented:[
-      'human-neuron-specific-electrophysiology',
-      'human-cell-morphologies-and-receptor-kinetics',
+      'human-active-ionic-model-fit-and-validation',
+      'receptor-specific-human-kinetic-calibration',
+      'anatomically-verified-human-amygdala-subnuclear-connectome',
       'measured-human-synaptic-connectome',
       'realistic-glial-metabolic-hormone-and-immune-models',
       'entire-human-brain-simulation',
