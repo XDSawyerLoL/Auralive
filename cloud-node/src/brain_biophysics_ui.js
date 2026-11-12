@@ -49,6 +49,15 @@ export const BRAIN_BIOPHYSICS_HTML=String.raw`
     <p>Modèle HH historique à cinétique non humaine. Les paramètres ont été choisis sur les deux premières stimulations. La troisième n'a pas participé au choix.</p>
     <a href="https://github.com/XDSawyerLoL/Auralive/actions/runs/43294699060" target="_blank" rel="noopener noreferrer">Consulter la preuve expérimentale (GitHub Actions)</a>
   </details>
+  <details class="bio-fit-details" id="bioCohortDetails">
+    <summary><span>TRANSFERT ENTRE CELLULES HUMAINES</span><strong id="bioCohortSummary">Résultats à charger</strong></summary>
+    <div class="bio-fit-grid" id="bioCohortGrid">
+      <div><small>Spécimen · NWB · stimulation</small><b id="bioCohortCellOne">—</b></div>
+      <div><small>Spécimen · NWB · stimulation</small><b id="bioCohortCellTwo">—</b></div>
+    </div>
+    <p>Paramètres Na/K gelés depuis la cellule 643582610. Les caractéristiques passives restent propres à chaque cellule. Même si les décharges expérimentales sont réelles, la cinétique HH reste d'origine non humaine.</p>
+    <a href="https://github.com/XDSawyerLoL/Auralive/actions/runs/43299079259" target="_blank" rel="noopener noreferrer">Rapport de simulation sur les cellules humaines (GitHub)</a>
+  </details>
   <div class="bio-anatomy" id="bioAnatomyPane" hidden>
     <div class="bio-anatomy-head"><b>Cartographie des preuves par système biologique</b><small>Les noms de régions ne prouvent aucune émulation humaine.</small></div>
     <div class="bio-system-grid" id="bioSystemGrid"><p>Chargement des états de validation…</p></div>
@@ -254,6 +263,20 @@ function bioRenderEvidence(){
    write('bioFitTrainLow',fit.training?.[0]);
    write('bioFitTrainHigh',fit.training?.[1]);
    write('bioFitHoldout',hold);
+ }
+ const cohort=e.human_cross_specimen_transfer;
+ if(cohort?.additional_human_specimens?.length===2){
+   const rows=cohort.additional_human_specimens;
+   const formatRow=(row)=>{
+     const test=row.high_current||{};
+     return String(row.specimen_id)+' · NWB '+String(test.sweep||'—')+
+       ' · '+bioNumber(test.current_pA,0)+' pA · '+
+       bioNumber(test.observed_spikes,0)+' mesurées / '+
+       bioNumber(test.simulated_spikes,0)+' simulées';
+   };
+   setText('bioCohortCellOne',formatRow(rows[0]));
+   setText('bioCohortCellTwo',formatRow(rows[1]));
+   setText('bioCohortSummary','2 cellules · HH : 0 décharge reproduite');
  }
  const hhComparison=e.active_reference_comparison;
  setText('bioSpikesContext',Number.isInteger(spiking.sweep_number)
