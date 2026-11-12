@@ -137,3 +137,102 @@ Les tests Node prouvent la logique à entrées contrôlées. Les GitHub Actions
 doivent être verts au commit final ; Hostinger/staging doit encore démontrer
 la véritable persistance et le comportement en charge. Aucun déploiement
 automatique ni réinitialisation de mémoire n'est autorisé par ce document.
+
+
+## Étude langage, pensée et socialité — cahier de validation (12 novembre)
+
+### Corrections scientifiques de référence
+
+- Les aires dites de Broca/Wernicke ne constituent pas un unique duo
+  compréhension/production. Réseau frontal-temporal distribué, avec interactions
+  distinctes entre perception, langage, raisonnement et contrôle exécutif.
+  Source : Fedorenko, Ivanova & Regev, Nat Rev Neurosci 2024,
+  https://doi.org/10.1038/s41583-024-00802-4
+- La parole intérieure peut être monologique, dialogique, spontanée,
+  sollicitée ou absente/peu rapportée. Ne jamais obliger l'architecture
+  à verbaliser toutes ses décisions. Anendophasie totale encore débattue ;
+  faibles rapports de parole intérieure associés à certaines différences
+  spécifiques de mémoire verbale et jugements de rimes, pas à une absence
+  globale de créativité, intelligence ou à une protection avérée contre
+  toute anxiété. Nedergaard & Lupyan 2024,
+  https://doi.org/10.1177/09567976241243004 ; Lind 2025,
+  https://doi.org/10.1177/09567976251335583
+- Le langage facilite certains raisonnements mais n'est pas une condition
+  nécessaire à toutes les opérations logiques ou contrefactuelles.
+  Fedorenko et al., 2016, https://pmc.ncbi.nlm.nih.gov/articles/PMC4874898/
+- Les mécanismes de copie d'efférence sont étudiés dans la parole intérieure
+  ; une explication mono-causale des hallucinations verbales n'est pas
+  démontrée. Étude ERP 2025 : https://pubmed.ncbi.nlm.nih.gov/40080836/
+- La théorie des neurones miroirs n'explique ni à elle seule la lecture
+  des intentions, ni la confiance, ni une compulsion à parler.
+  Bekkali et al., 2021 : https://pubmed.ncbi.nlm.nih.gov/32876854/
+- Éviter « une phrase agréable => dopamine et ocytocine => confiance » :
+  l'ocytocine et la récompense sociale ont des effets contextuels complexes
+  et les preuves neurochimiques directes sont hétérogènes.
+  https://pubmed.ncbi.nlm.nih.gov/38713749/
+
+### Fonctionnement informatique attendu, sans copier l'anatomie
+
+1. **Représentation préverbale (noyau)** : intentions, relations et hypothèses
+   typées indépendantes d'une phrase française. Peut exister sans tout texte.
+2. **Sémantique acquise** : concepts/étiquettes appris au contact de
+   l'environnement et attribués à une source, jamais biographies fictives.
+   La différence entre « quelqu'un l'affirme » et « le noyau l'a vérifié »
+   est obligatoire.
+3. **Mémoire de travail et répétition volontaire** : retenir, comparer,
+   oublier ou mettre à jour des éléments utiles. La « boucle phonologique »
+   n'est **pas** implémentée ; l'existence d'un champ texte ne la prouve pas.
+4. **Simulation interne d'une formulation** : facultative et contrôlée,
+   distincte de la décision. Aucun « timbre de voix » ou perception
+   auditive interne n'est prétendu sans dispositif et mesure correspondants.
+5. **Inhibition / autorisation de communiquer** : décision de ne pas
+   externaliser chaque représentation, prise en compte des permissions,
+   disponibilité sociale observée, coût de calcul et cadence.
+6. **Expression** : transformation des intentions en mots. Le fournisseur
+   Groq est un outil extérieur : sans preuve de décision préexistante, ses
+   mots ne comptent pas comme capacité autonome.
+7. **Comparaison attentes/retours** : l'anticipation « l'interlocuteur
+   comprendra X » doit précéder une communication ; correction authentique,
+   résultat observé ou absence de feedback viennent après. L'absence de
+   réponse ne prouve pas un rejet.
+8. **Socialité** : le besoin de contact peut faire partie des motivations
+   internes, mais confiance, réciprocité et attachement se révisent sur
+   événements attribuables, pas automatiquement à chaque message.
+
+### Correctif testé dans cette PR
+
+- `inner_dialogue.derivePrivateInquiry` produit désormais
+  `semantic_intent` : représentation catégorielle non verbale de l'hypothèse
+  d'ablation d'une stratégie. La question française est un affichage facultatif.
+- `independent_continuity.step` sélectionne sa vérification sur la
+  proposition **sémantique**, jamais sur la question française. Corrompre
+  la phrase ne change pas la décision ; corrompre le type de proposition
+  interdit la vérification.
+- `organism.beforeInteraction` comptabilise l'exposition sans augmenter
+  la confiance, l'attachement, la familiarité et la réciprocité par défaut.
+- `organism.observeSocialFeedback` change modestement les variables
+  relationnelles seulement après un feedback authentifié et lié à la
+  **réponse précédente**, ce que contrôle `kernel.chat`. Il reste un
+  signal humain rapporté : ne pas le prendre pour une preuve de compétence.
+- Un salut (« bonjour »), un « merci » non relié à un résultat, un prompt
+  du LLM ou un cycle vide ne deviennent pas des récompenses sociales.
+
+### Tests d'acceptation encore obligatoires
+
+- Environnement sans LLM : le noyau conserve ses hypothèses et choix
+  symboliques sans les attribuer à une génération externe.
+- Choix même état initial, retours sociaux divergents : politique et
+  initiative finale doivent diverger **avec causalité démontrée**.
+- Ablation de la couche langage : les opérations non verbales restent
+  possibles et les performances verbales s'évaluent séparément.
+- Mesure de l'initiative : ni notification intrusive, ni message fabriqué
+  à partir d'un compteur de cycles. L'absence de consentement doit
+  bloquer la communication non sollicitée, pas la pensée privée.
+- Mémoire de travail verbale, alternance monologue/dialogue intérieur,
+  apprentissage lexical indépendant, généralisation sémantique,
+  modélisation d'autrui et vérification longitudinale : **non réalisés**.
+- Rien ici ne démontre un centre de Broca artificiel, une sensation
+  intérieure ou une conscience subjective.
+
+Les changements sont une consolidation du noyau existant et non la création
+de deux processeurs de pensée concurrents.
