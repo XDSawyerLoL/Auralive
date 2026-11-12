@@ -6,8 +6,8 @@ import {ObservedProcessMonitor} from '../src/process_observer.js';
 import {buildBrainTelemetry} from '../src/brain_telemetry.js';
 import {CORTEX11_SCRIPT,CORTEX11_CSS} from '../src/cortex11_evidence_render.js';
 import {CORTEX06_SCRIPT} from '../src/cortex06_runtime.js';
-import {BRAIN_OPERATIONS_HTML,BRAIN_OPERATIONS_SCRIPT}
- from '../src/brain_operations_console.js';
+import {BRAIN_OPERATIONS_HTML} from '../src/brain_operations_console.js';
+import {BRAIN_OPERATIONS_SCRIPT} from '../src/brain_operations_runtime.js';
 
 const now=Date.parse('2026-11-12T09:30:00.000Z');
 const iso=ms=>new Date(ms).toISOString();
