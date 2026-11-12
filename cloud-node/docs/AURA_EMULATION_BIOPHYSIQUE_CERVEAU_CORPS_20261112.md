@@ -480,8 +480,14 @@ Comparaison des tensions mesurées aux prédictions :
   MAE 0,780455866 mV.
 - RC passif monopartimental RMSE 1,061231 mV.
 - SHA-256 du NWB : `73b89bef175547c1e0a134efa65bd075db4eecb9bfd6be01d2eae0b24e5e4687`.
-- La qualité de la stimulation (amplitude du courant / potentiel d'action)
-  doit être rapportée avant de qualifier cet écart de représentatif. Les caractéristiques Allen pouvant provenir
+- Contrôle supplémentaire (job `43264994852`) : stimulation
+  hyperpolarisante -10 pA, courant non nul sur 32,5 % des échantillons,
+  variation de tension enregistrée 2,015624 mV, aucun franchissement
+  du seuil -20 mV. C'est un test **strictement sous-seuil** ; ne
+  surtout pas en déduire la fidélité des canaux actifs ou des spikes.
+- L'échantillon de balayage appartient à la même banque de mesures que
+  les caractéristiques Allen. `independent_holdout=false` et
+  `biological_fidelity_certified=false` sont conservés. Les caractéristiques Allen pouvant provenir
 de la même batterie d'enregistrements, ce n'est **pas une
 validation indépendante attestée**. Le rapport doit conserver
 cette limite même si l'erreur obtenue est faible.
