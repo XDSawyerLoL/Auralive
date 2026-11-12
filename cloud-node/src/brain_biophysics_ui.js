@@ -2,14 +2,14 @@
 // No pseudo-neural animation. All voltage paths are numeric traces from a
 // declared scientific equation or private experiment; real NWB is statistics only.
 export const BRAIN_BIOPHYSICS_HTML=String.raw`
-<section class="bio-research" id="bioEvidencePanel" aria-label="Laboratoire biophysique et preuves humaines">
+<section class="bio-research" id="bioEvidencePanel" role="region" tabindex="-1" hidden aria-label="Laboratoire biophysique et preuves humaines">
   <div class="bio-heading">
     <div class="bio-heading-title">
       <span class="bio-kicker">RECHERCHE BIOLOGIQUE · LECTURE SEULE</span>
       <h3>Du neurone humain au cerveau <span class="bio-version">/ Étape mesurée</span></h3>
       <p>Signaux électriques calculés, enregistrements humains et lacunes anatomiques — distincts des activités logicielles d'AURA.</p>
     </div>
-    <span class="bio-evidence-tag" id="bioEvidenceBadge">Preuves en cours de chargement</span>
+    <div class="bio-heading-actions"><span class="bio-evidence-tag" id="bioEvidenceBadge">Preuves en cours de chargement</span><button type="button" id="bioClose" class="bio-close" aria-label="Fermer le laboratoire biologique" title="Retour au cerveau">×</button></div>
   </div>
   <div class="bio-scope-note" role="note">
     <strong>Important :</strong> les points du connectome ci-dessus sont des <em>modules logiciels</em>.
@@ -118,10 +118,80 @@ export const BRAIN_BIOPHYSICS_CSS=String.raw`
  .bio-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
  .bio-system-grid{grid-template-columns:1fr}
  .bio-evidence-tag{white-space:normal}}
+/* Mesures scientifiques : une vue contextuelle, jamais un bloc qui réduit le connectome. */
+.top .bio-top-trigger{background:#192035;border-color:#5f5893;color:#d4d6ff;font-size:11px;
+ letter-spacing:.01em;padding:9px 11px;white-space:nowrap}
+.top .bio-top-trigger:hover,.top .bio-top-trigger[aria-expanded=true]{border-color:#9d91df;color:#f5ebff;background:#31254b}
+@media(max-width:620px){.top-actions .bio-top-trigger.top-btn{display:inline-flex!important;align-items:center;min-height:31px;padding:7px 9px;font-size:10px}.top .bio-top-trigger span{display:none}}
+#bioEvidencePanel[hidden],#bioBackdrop[hidden]{display:none!important}
+.graph-stage{isolation:isolate}
+#bioBackdrop.bio-backdrop{position:absolute;inset:4px 6px 48px;z-index:12;display:block;width:auto;height:auto;
+ padding:0;margin:0;border:0;border-radius:12px;cursor:pointer;background:rgba(1,4,12,.53);backdrop-filter:blur(2px)}
+#bioEvidencePanel.bio-research{position:absolute;z-index:13;top:7px;right:7px;bottom:auto;left:auto;
+ box-sizing:border-box;width:min(720px,calc(100% - 14px));height:min(690px,calc(100% - 15px));
+ max-height:calc(100% - 15px);overflow:auto;margin:0;padding:14px;
+ border-color:rgba(133,127,228,.46);border-radius:12px;
+ box-shadow:0 12px 65px #000d,0 0 0 1px rgba(90,93,178,.12);
+ background:linear-gradient(152deg,#110f22,#080f1b 62%,#0a1420);overscroll-behavior:contain}
+#bioEvidencePanel .bio-heading{gap:10px;align-items:center}
+.bio-heading-actions{display:flex;align-items:center;gap:7px;flex:none}
+.bio-close{width:30px;height:30px;display:inline-grid;place-items:center;
+ border:1px solid #596079;border-radius:8px;color:#eadff7;background:#272237;
+ font-size:23px;font-weight:400;line-height:1;cursor:pointer}
+.bio-close:hover,.bio-close:focus-visible{border-color:#b18bff;background:#382b52}
+#bioEvidencePanel .bio-kicker{color:#a5adfc}
+#bioEvidencePanel .bio-heading h3{color:#f2eaff}
+#bioEvidencePanel .bio-evidence-tag{white-space:normal;max-width:185px;text-align:right;
+ background:#1b2035;color:#afdbd3;border-color:#40556c}
+#bioEvidencePanel .bio-scope-note{border-left-color:#a292ee}
+#bioEvidencePanel .bio-modes button[aria-pressed=true]{border-color:#8c78be;background:#292344;color:#f8e9ff}
+#bioEvidencePanel .bio-pane{grid-template-columns:minmax(0,1.6fr) minmax(185px,1fr)}
+#bioEvidencePanel #bioVoltageCanvas{height:158px}
+#bioEvidencePanel .bio-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+#bioEvidencePanel .bio-metric{min-height:78px;padding:9px}
+#bioEvidencePanel .bio-metric strong{font-size:14px}
+#bioEvidencePanel .bio-metric span{font-size:9px}
+#bioEvidencePanel .bio-system-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+#bioEvidencePanel:focus{outline:none}
+#bioEvidencePanel:focus-visible{outline:2px solid #9c8efa;outline-offset:-2px}
+@media(max-width:850px){#bioEvidencePanel.bio-research{width:calc(100% - 12px);right:6px;top:5px;
+ height:calc(100% - 10px);max-height:calc(100% - 10px);padding:10px}
+ #bioEvidencePanel .bio-heading-actions{flex-wrap:wrap;justify-content:flex-end}}
+@media(max-width:600px){#bioEvidencePanel .bio-pane{grid-template-columns:1fr}
+ #bioEvidencePanel #bioVoltageCanvas{height:130px}
+ #bioEvidencePanel .bio-system-grid{grid-template-columns:1fr}
+ #bioEvidencePanel .bio-heading{align-items:start}
+ #bioEvidencePanel .bio-evidence-tag{font-size:9px;max-width:130px}
+ #bioEvidencePanel .bio-heading h3{font-size:14px}
+ #bioEvidencePanel .bio-heading p{font-size:10px}}
+
 `;
 
 export const BRAIN_BIOPHYSICS_SCRIPT=String.raw`
 const bioLab={mode:'human',evidence:null,hh:null,busy:false};
+
+const bioPanel=$('bioEvidencePanel'),bioBackdrop=$('bioBackdrop');
+const bioTrigger=$('bioLabTrigger'),bioClose=$('bioClose');
+function bioSetOpen(open,{focus=true}={}){
+ const enabled=Boolean(open);
+ if(!bioPanel||!bioBackdrop)return;
+ bioPanel.hidden=!enabled;
+ bioBackdrop.hidden=!enabled;
+ if(bioTrigger){bioTrigger.setAttribute('aria-expanded',String(enabled));
+  bioTrigger.classList.toggle('scene-active',enabled);}
+ if(enabled){
+  if(focus)bioPanel.focus({preventScroll:true});
+  requestAnimationFrame(()=>bioPaintTrace());
+ } else if(focus&&bioTrigger)bioTrigger.focus({preventScroll:true});
+}
+bioTrigger?.addEventListener('click',()=>bioSetOpen(bioPanel.hidden));
+bioClose?.addEventListener('click',()=>bioSetOpen(false));
+bioBackdrop?.addEventListener('click',()=>bioSetOpen(false));
+document.addEventListener('keydown',ev=>{
+ if(ev.key==='Escape'&&!bioPanel?.hidden)bioSetOpen(false);
+});
+document.querySelectorAll('[data-focus]').forEach(nav=>nav.addEventListener('click',()=>bioSetOpen(false,{focus:false})));
+
 const bioButtons={human:$('bioModeHuman'),hh:$('bioModeHH'),atlas:$('bioModeAtlas')};
 function bioStatus(text){const node=$('bioRunStatus');if(node)node.textContent=String(text||'');}
 function bioSetMode(mode){
