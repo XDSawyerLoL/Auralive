@@ -2,6 +2,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from run_verified_allen_model import verify_manifest
 from download_allen_human_active_model import (
     ALLOWED_MODEL_TEMPLATE_IDS,
     checked_human_models,
@@ -54,6 +55,26 @@ class ActiveHumanModelTests(unittest.TestCase):
             self.assertEqual(data['species'], 'Homo sapiens')
             self.assertEqual(data['source']['cell_species_filter'],
                              'CellTypesApi.HUMAN')
+
+
+    def test_checksum_validation_rejects_modified_model_and_path_traversal(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'soma.swc').write_text('synthetic morphology\\n', encoding='utf-8')
+            file = write_manifest(root, SID, 901, TEMPLATE)
+            verified = verify_manifest(root)
+            self.assertTrue(verified['sha256_verified'])
+            self.assertFalse(verified['human_biological_fidelity_validated'])
+            (root/'soma.swc').write_text('tampered content\\n', encoding='utf-8')
+            with self.assertRaises(ValueError):
+                verify_manifest(root)
+            import json
+            doc = json.loads(file.read_text(encoding='utf-8'))
+            doc['files'][0]['path'] = '../outside.swc'
+            file.write_text(json.dumps(doc), encoding='utf-8')
+            with self.assertRaises(ValueError):
+                verify_manifest(root)
+
 
 
 if __name__ == '__main__':
