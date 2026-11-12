@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 ALLEN_API = 'AllenSDK.BiophysicalApi.get_neuronal_models'
+ALLOWED_BIOPHYSICAL_TEMPLATES = frozenset((491455321, 329230710))
 
 
 def model_records(specimen_id, human_cells, models):
@@ -28,6 +29,9 @@ def model_records(specimen_id, human_cells, models):
             raise TypeError('invalid neuronal model record')
         model_id = item.get('id')
         sample_id = item.get('specimen_id')
+        template_id = item.get('neuronal_model_template_id')
+        if template_id not in ALLOWED_BIOPHYSICAL_TEMPLATES:
+            continue
         if not isinstance(model_id, int) or isinstance(model_id, bool) or model_id < 1000:
             raise ValueError('invalid Allen neuronal model ID')
         if sample_id != specimen_id:
@@ -49,7 +53,9 @@ def download_human_model(specimen_id, model_id, out_dir, cells, models, api):
     out_dir.mkdir(parents=True, exist_ok=True)
     # AllenSDK retrieves manifest, parameter fit, morphology, mechanisms.
     # Do not compile or run downloaded .mod code here.
-    api.cache_stimulus = False
+    # Official NEURON runner needs its original stimulus NWB file.
+    # This happens ONLY in an explicitly executed offline research command.
+    api.cache_stimulus = True
     api.cache_data(model_id, working_directory=str(out_dir.resolve()))
     files = []
     for item in out_dir.rglob('*'):
