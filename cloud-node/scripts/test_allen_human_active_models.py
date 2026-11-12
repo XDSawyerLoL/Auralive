@@ -35,6 +35,11 @@ class HumanBiophysicalModelTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_records(SPECIMEN,human(),[{'id':'bad','specimen_id':SPECIMEN}])
 
+    def test_non_biophysical_glif_templates_cannot_be_fetched_as_active_neurons(self):
+        invalid=[{'id': MODEL_ID, 'specimen_id': SPECIMEN,
+                  'neuronal_model_template_id': 395310498}]
+        self.assertEqual(model_records(SPECIMEN,human(),invalid),[])
+
     def test_only_explicit_matching_model_may_download(self):
         with tempfile.TemporaryDirectory() as tmp:
             out=Path(tmp) / 'model'
@@ -44,7 +49,7 @@ class HumanBiophysicalModelTests(unittest.TestCase):
             self.assertFalse(api.called)
             result=download_human_model(SPECIMEN,MODEL_ID,out,human(),record(),api)
             self.assertTrue(api.called)
-            self.assertFalse(api.cache_stimulus)
+            self.assertTrue(api.cache_stimulus)
             self.assertEqual(result['species'],'Homo sapiens')
             self.assertTrue(result['native_mechanisms_not_executed'])
             self.assertFalse(result['human_parameter_fit_independently_validated'])
