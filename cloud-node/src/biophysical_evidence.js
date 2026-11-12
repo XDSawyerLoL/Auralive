@@ -90,6 +90,16 @@ export function biologicalResearchSnapshot(){
       units:'mV',time_unit:'ms',origin:'calculated-not-measured',
       dt_ms:simulation.dt_ms,values:simulation.voltage_mV,
     },
+    sources:{
+      human_cell:{url:'https://celltypes.brain-map.org/',
+        label:'Allen Cell Types / Homo sapiens'},
+      amygdala:{url:'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE342709',
+        label:'Atlas spatial transcriptomique amygdale humaine · GSE342709'},
+      human_active:{url:'https://github.com/XDSawyerLoL/Auralive/actions/runs/43277555645',
+        label:'Allen NWB 32 · quatre spikes réellement enregistrés'},
+      physical_solver:{url:'https://www.neuronsimulator.org/en/latest/',
+        label:'NEURON simulation biophysique'},
+    },
     subsystems:[
       stage('passive','Neurone humain passif','measured-and-modeled',
         'SWC réel et mesures membranaires, comparaison sous-seuil NWB','Allen Cell Types / NEURON'),
