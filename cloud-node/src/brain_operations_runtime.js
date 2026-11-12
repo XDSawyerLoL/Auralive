@@ -987,7 +987,9 @@ $('chatSend').onclick=async()=>{
        chatLine('MOTEUR INDISPONIBLE','Aucun texte vérifiable généré ; consulter le diagnostic.');
      }else{
        const provider=String(out.language_provider||'').toLowerCase();
-       const providerLabel=provider.includes('groq')?'Groq Free'
+       const isNative=out.response_kind==='native-kernel'&&provider.includes('aura-native');
+       const providerLabel=isNative?'AURA native · sans LLM'
+         :provider.includes('groq')?'Groq Free'
          :provider.includes('openrouter')?'OpenRouter Free'
          :provider.includes('embedded')||provider.includes('local')?'Modèle local'
          :provider?'Fournisseur externe':'Moteur non identifié';
@@ -1002,7 +1004,7 @@ $('chatSend').onclick=async()=>{
          Number.isFinite(speechMs)&&speechMs>=0;
        const title=verified
          ?'AURA · noyau '+(reliableTiming?Math.round(kernelMs)+' ms':'durée inconnue')+
-           ' · langage '+providerLabel+
+           (isNative?' · noyau communicant ':' · langage ')+providerLabel+
            (reliableTiming?' '+Math.round(speechMs)+' ms':'')
          :'AURA · FORMULATION À VÉRIFIER';
        chatLine(title,answer);
