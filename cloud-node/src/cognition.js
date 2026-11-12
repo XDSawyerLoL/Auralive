@@ -3,6 +3,7 @@ import { DialogueStateTracker } from './dialogue_model.js';
 import { classifySelfDialogue } from './self_dialogue_intents.js';
 import { substantiveRequest } from './composite_intent.js';
 import { socialPerspective, conversationMemoryPolicy } from './conversation_grounding.js';
+import { pragmaticIntent } from './conversation_pragmatics.js';
 import { selectFounderProfile } from './founder_profile.js';
 
 function normalize(value) {
@@ -439,7 +440,7 @@ export class CognitionEngine {
     };
   }
 
-  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false, founderProfileNotes = [] }) {
+  planReply({ text, soul, intentions = [], lessons = [], reflections = [], work = [], agenda = {}, continuityReport = {}, recentMessages = [], privateView = false, founderProfileNotes = [], sessionStyle = 'neutral' }) {
     const raw = normalize(text);
     const q = lower(raw);
     const current = topIntention(intentions, soul?.current_intention);
@@ -479,6 +480,7 @@ export class CognitionEngine {
       &&['supported','counterexample','inconclusive'].includes(audit?.outcome)
       ?{probe:audit.probe,outcome:audit.outcome,at:audit.at}:null;
     const interpersonal = socialPerspective(raw);
+    const pragmatics = pragmaticIntent(raw,previousAssistantMessage(conversationContext)?.content||'');
 
     let act = 'respond';
     let goal = 'Répondre utilement au message en restant cohérente avec mon état réel.';
@@ -511,6 +513,14 @@ export class CognitionEngine {
       needsSemanticSupport=false;
       facts.push('Référent grammatical confirmé : « tu » désigne AURA, « me » désigne la personne qui écrit.');
       facts.push('Aucun événement proactif confirmé par ce seul message.');
+    } else if (pragmatics?.act) {
+      // Social inference is a native discourse decision, not a model's persona.
+      act=pragmatics.act;goal=pragmatics.goal;needsSemanticSupport=false;
+      facts.push(...pragmatics.facts);
+      const previous=previousAssistantMessage(conversationContext);
+      if(previous?.content && ['playful_repair','simplify_question',
+          'comment_on_tone','conversational_reciprocity'].includes(act))
+        facts.push('Dernier propos AURA : '+previous.content.slice(0,330));
     } else if (substantiveRequest(raw)) {
       // A greeting or a negated greeting must not hijack the actual instruction.
       // The semantic module may suggest an interpretation, not modify AURA's
@@ -832,6 +842,7 @@ export class CognitionEngine {
       goal,
       facts:relevantFacts,
       memory_policy:memoryPolicy,
+      speech_style:['warm','reserved'].includes(sessionStyle)?sessionStyle:'neutral',
       social_perspective:interpersonal,
       independent_activity:latestAudit,
       address_form:/\b(?:vous|votre|vos|êtes-vous|etes-vous)\b/i.test(raw)?'vous':'tu',
