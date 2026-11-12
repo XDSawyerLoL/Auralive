@@ -1525,6 +1525,7 @@ export class CognitiveKernel {
       try { if(typeof onTrace==='function') onTrace(stage,status,details); }
       catch { /* observing must never interrupt the kernel */ }
     };
+    const chatStartedAt=performance.now();
     const content = String(text || '').replace(/\s+/g, ' ').trim();
     if (!content) throw new Error('Message vide');
 
@@ -2239,11 +2240,13 @@ export class CognitiveKernel {
     const languagePrediction=predictModule(this.soulCache.prediction_bus,{
       module:'language',operationId:brainFlowId,at:now(),
     });
+    const languageStartedAt=performance.now();
     const answer=languageGate.allowed
       ?await this.expression.verbalize(languageGate.plan,{
         maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
         taskRole:'conversation',
       }):'';
+    const languageCompletedAt=performance.now();
     const languageResult=observePrediction(this.soulCache.prediction_bus,languagePrediction,{
       success:Boolean(answer),source:'machine-observed',at:now(),
     });
@@ -2318,6 +2321,15 @@ export class CognitiveKernel {
     observe('persistence','done');
     // Correlate the conversation's actual input/output states with its recorded
     // hops; no private content, no synthetic success and no model chain of thought.
+    const responseCompletedAt=performance.now();
+    const elapsed=(a,b)=>Number(Math.max(0,b-a).toFixed(2));
+    const timings={
+      preparation_ms:elapsed(chatStartedAt,languageStartedAt),
+      formulation_ms:elapsed(languageStartedAt,languageCompletedAt),
+      persistence_ms:elapsed(languageCompletedAt,responseCompletedAt),
+      total_ms:elapsed(chatStartedAt,responseCompletedAt),
+      provenance:'node-performance-monotonic-clock',
+    };
     await this.trace('brain-causal','verified-causal-receipt','',{
       flow_id:brainFlowId,
       at:now(),
@@ -2326,6 +2338,7 @@ export class CognitiveKernel {
       semantic_support_required:Boolean(plan.needs_semantic_support),
       language_outcome:answer?'response-produced':'response-unavailable',
       action_executed:false,
+      measured_chat_phases:timings,
       before:somaticAtIngress,
       after:causalSnapshot(this.organism.migrate(this.soulCache || {})),
     });
@@ -2351,6 +2364,7 @@ export class CognitiveKernel {
       nucleus_plan_origin: 'AURA.nucleus.CognitionEngine.planReply',
       immediate_context_turns:immediateDialogue.length,
       language_latency_ms:Math.max(0,Number(this.expression.language.lastLatencyMs)||0),
+      measured_chat_phases:timings,
       nucleus_verbalization_validated:
         Boolean(answer && this.expression.language.lastNucleusContract?.accepted),
       nucleus_verbalization_code:
