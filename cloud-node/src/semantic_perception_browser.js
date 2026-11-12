@@ -1,7 +1,7 @@
 export const SEMANTIC_PERCEPTION_BROWSER = String.raw`// Runs inside BRAIN_OPERATIONS_SCRIPT's browser closure after camera/mic setup.
 // Strictly opt-in. Browser-only model inference; model assets may be downloaded.
 const semantic={recognizer:null,visionEnabled:false,visionBusy:false,
-  classifier:null,modelPromise:null,visionTimer:null,modelId:'onnx-community/mobilenetv4_conv_small.e2400_r224_in1k'};
+  classifier:null,modelPromise:null,visionTimer:null,modelId:'onnx-community/mobilenet_v2_1.0_224'};
 const perceptionMessage=s=>setText('auraPerceptionStatus',s);
 async function emitPerception(kind,source,model,payload){
   const response=await fetch('/api/cognition/perception',{
@@ -112,7 +112,7 @@ async function classifyCurrentView(){
    const ranked=await classifier(canvas,{top_k:1});
    // Never transmit the frame or canvas. Top-1 model prediction only.
    const first=Array.isArray(ranked)?ranked[0]:null;
-   const label=String(first?.label||'').slice(0,90);
+   const label=String(first?.label||'').replace(/[^\\p{L}\\p{N},.()' /_-]/gu,'').trim().slice(0,90);
    const confidence=Number(first?.score);
    if(!label||!Number.isFinite(confidence))throw Error('résultat de classification absent');
    if(!semantic.visionEnabled||!senseState.cam)return;
