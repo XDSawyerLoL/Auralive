@@ -1034,6 +1034,36 @@ async function pollSocialInitiative(){
     if(!ack.ok)throw Error('ack unavailable');
     const receipt=await ack.json();
     if(receipt.acknowledged!==true)throw Error('ack rejected');
+    // User feedback is the sole training signal for question usefulness.
+    // A model-generated compliment or a lack of reply cannot count.
+    const ratingControls=element('div','aura-initiative-rating');
+    ratingControls.append(element('small','', 'Cette initiative t’a-t-elle été utile ?'));
+    for(const [rating,label] of [['helpful','Utile'],['unhelpful','Inutile']]){
+      const button=element('button','secondary',label);
+      button.type='button';
+      button.addEventListener('click',async()=>{
+        if(button.disabled)return;
+        for(const other of ratingControls.querySelectorAll('button'))other.disabled=true;
+        try{
+          const response=await fetch('/api/cognition/initiative/feedback',{
+            method:'POST',credentials:'same-origin',
+            headers:{'Content-Type':'application/json',Accept:'application/json'},
+            body:JSON.stringify({id,rating}),
+          });
+          if(!response.ok)throw Error('feedback unavailable');
+          const outcome=await response.json();
+          if(outcome.accepted!==true)throw Error('feedback rejected');
+          ratingControls.replaceChildren(element('small','',
+            'Évaluation enregistrée : '+label.toLowerCase()+'.'));
+        }catch{
+          for(const other of ratingControls.querySelectorAll('button'))other.disabled=false;
+          ratingControls.append(element('small','','Évaluation non enregistrée.'));
+        }
+      });
+      ratingControls.append(button);
+    }
+    history.append(ratingControls);
+    history.scrollTop=history.scrollHeight;
   }catch{
     // A read-only display or failed acknowledgement is not a cognitive
     // success. Keep the receipt in the server until a valid ack is saved.
