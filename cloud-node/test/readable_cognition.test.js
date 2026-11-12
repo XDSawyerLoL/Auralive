@@ -8,6 +8,14 @@ const state={
   dominant_thought:'Comparer deux hypothèses sans inventer de résultat',
   current_intention:'Vérifier un résultat de test scientifique',
   existence:{current_focus:'Terminer la validation du noyau'},
+  last_communication_decision:{
+    at:'2026-11-12T20:08:00Z',act:'explain_apparent_curiosity',
+    intended_goal:'Expliquer ma question sans revendiquer de sentiment',
+    context_source:'same-session-conversation-and-rule',
+    selected_action:'verify',response_tone:'cautious',response_committed:true,
+    verbalization_source:'native-social-kernel',
+    source:'recorded-kernel-decision-before-language',
+  },
 };
 
 test('exact persisted intention and written thought are readable, with source labels',()=>{
@@ -31,6 +39,10 @@ test('exact persisted intention and written thought are readable, with source la
  assert.equal(out.intentions.length,1);
  assert.equal(out.intentions[0].status,'working');
  assert.equal(out.arbitration.selected_action,'verify');
+ assert.equal(out.last_communication_decision.act,'explain_apparent_curiosity');
+ assert.equal(out.last_communication_decision.response_committed,true);
+ assert.equal(out.last_communication_decision.llm_cannot_override_intention,true);
+ assert.equal(out.last_communication_decision.verbalization_source,'native-social-kernel');
  assert.equal(out.arbitration.competition.find(x=>x.channel==='caution').value,.71);
  assert.equal(out.arbitration.hidden_llm_reasoning_exposed,false);
  assert.equal(out.declared_thought.live_stream,false);
