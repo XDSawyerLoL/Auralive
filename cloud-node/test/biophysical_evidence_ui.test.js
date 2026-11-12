@@ -31,7 +31,7 @@ test('visible voltage graph is calculated from human passive data, not claimed a
  assert.equal(data.protocol.current_pA,-10);
  assert.equal(data.predicted_trace.values.length,120);
  const y=data.predicted_trace.values;
- assert.equal(y[0],data.protocol.baseline_mV);
+ assert.ok(Math.abs(y[0]-data.protocol.baseline_mV)<1e-5,'recorded membrane model rounds display voltage');
  assert.ok(y[60]<y[20]-0.9,'real membrane equation responds causally to negative current');
  assert.ok(y[110]>y[65],'voltage rebounds after physical current removal');
  assert.equal(data.model.human_active_channels_fitted,false);
