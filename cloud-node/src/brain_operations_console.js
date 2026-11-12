@@ -111,8 +111,12 @@ export const BRAIN_OPERATIONS_HTML = String.raw`<!doctype html>
       </select>
       <input id="chatInput" placeholder="Pose une requête à AURA et observe en direct les modules traversés…" aria-label="Message à AURA">
       <button type="button" id="chatSend">Envoyer</button>
+      <button type="button" class="secondary" id="auraListen" aria-pressed="false" title="Activer ou arrêter le microphone">Ouïe : inactive</button>
+      <button type="button" class="secondary" id="auraSee" aria-pressed="false" title="Activer ou arrêter la caméra">Vue : inactive</button>
       <button id="chatExpand" type="button" class="secondary" aria-controls="conversation-panel">Voir dialogue</button>
     </div>
+    <small id="auraSenseStatus" role="status">Capteurs désactivés. Permission explicite requise. Analyse locale de volume sonore et de mouvement/lumière uniquement : aucune reconnaissance de paroles ou d’objets.</small>
+    <video id="auraCameraPreview" autoplay muted playsinline hidden aria-label="Aperçu caméra local"></video>
   </div>
       </section>
       <details class="module-drawer" id="module-drawer">
