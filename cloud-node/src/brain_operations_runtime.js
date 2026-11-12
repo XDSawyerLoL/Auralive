@@ -1066,6 +1066,11 @@ $('cogModeDialogue').onclick=()=>switchCognitiveMode('dialogue');
 $('cogModeAutonomy').onclick=()=>switchCognitiveMode('autonomy');
 $('cogReplay').onclick=replayCognitiveTrace;
 $('cogDiagnostics').onclick=()=>{$('diagnostics-details').open=true;$('diagnostics-details').scrollIntoView({behavior:reduced?'auto':'smooth'});};
+$('cogReadIntents').onclick=()=>{
+ const lab=$('neuro-lab-details');
+ lab.open=true;
+ lab.scrollIntoView({behavior:reduced?'auto':'smooth',block:'start'});
+};
 atlasDetails.addEventListener('toggle',()=>{
  if(atlasDetails.open){
    if(!atlasInitialized){atlasInitialized=true;try{initCognitiveGraph();}catch(error){setText('cogState','Atlas indisponible');return;}}
