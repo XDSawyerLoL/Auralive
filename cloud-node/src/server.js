@@ -2323,6 +2323,21 @@ app.post('/api/cognition/initiative/ack', async (request, reply) => {
   return {ok:acknowledged,acknowledged};
 });
 
+// Correlated private rating of a previously displayed autonomous initiative.
+// Never infer usefulness from silence, response tone or a model's opinion.
+app.post('/api/cognition/initiative/feedback', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  if (!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  reply.header('Cache-Control','private, no-store');
+  const id=String(request.body?.id||'');
+  const rating=String(request.body?.rating||'');
+  if(!/^[a-f\\d]{24}$/.test(id)||!['helpful','unhelpful'].includes(rating))
+    return reply.code(422).send({error:'Retour invalide'});
+  const accepted=await kernel.rateSocialInitiative(id,rating);
+  return {ok:accepted,accepted};
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
