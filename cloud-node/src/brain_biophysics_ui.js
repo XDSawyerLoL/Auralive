@@ -34,9 +34,9 @@ export const BRAIN_BIOPHYSICS_HTML=String.raw`
     </div>
     <div class="bio-metrics">
       <div class="bio-metric"><small>Cellule humaine · Allen</small><strong id="bioSpecimen">—</strong><span>Référence, pas cerveau complet</span></div>
-      <div class="bio-metric"><small>SWC / sections / segments</small><strong id="bioMorph">—</strong><span>Géométrie utilisée par NEURON</span></div>
-      <div class="bio-metric"><small>Erreur NEURON / RC</small><strong id="bioErrors">—</strong><span>RMSE sur le NWB sous-seuil</span></div>
-      <div class="bio-metric"><small>Décharges observées (NWB)</small><strong id="bioSpikes">—</strong><span>Balayage mesuré, non simulation</span></div>
+      <div class="bio-metric"><small>SWC / sections / segments</small><strong id="bioMorph">—</strong><span id="bioMorphContext">Géométrie utilisée par NEURON</span></div>
+      <div class="bio-metric"><small>Erreur NEURON / RC</small><strong id="bioErrors">—</strong><span id="bioErrorsContext">RMSE (mV) · NEURON / RC · NWB 25</span></div>
+      <div class="bio-metric"><small>Décharges observées (NWB)</small><strong id="bioSpikes">—</strong><span id="bioSpikesContext">Balayage humain mesuré, non simulation</span></div>
     </div>
   </div>
   <div class="bio-anatomy" id="bioAnatomyPane" hidden>
@@ -140,12 +140,16 @@ function bioRenderEvidence(){
  const e=data.evidence||{},measurement=e.measured_nwb||{};
  setText('bioEvidenceBadge','1 cellule humaine · preuve archivée');
  setText('bioSpecimen',String(e.specimen_id||'—'));
- setText('bioMorph',bioNumber(e.morphology_nodes,0)+' / '+
-   bioNumber(e.neuron_sections,0)+' / '+bioNumber(e.neuron_segments,0));
+ setText('bioMorph',bioNumber(e.morphology_nodes,0)+' points');
+ setText('bioMorphContext',bioNumber(e.neuron_sections,0)+' sections / '+bioNumber(e.neuron_segments,0)+' segments');
  setText('bioErrors',bioNumber(measurement.neuron_passive_rmse_mV,3)+' / '+
-   bioNumber(measurement.rc_passive_rmse_mV,3)+' mV');
- setText('bioSpikes',bioNumber(measurement.action_potential_threshold_crossings,0)+
-   ' (sous-seuil)');
+   bioNumber(measurement.rc_passive_rmse_mV,3));
+ const spiking=e.measured_spiking||{};
+ setText('bioSpikes',Number.isInteger(spiking.observed_spike_count)
+   ?bioNumber(spiking.observed_spike_count,0)+' mesurées':'—');
+ setText('bioSpikesContext',Number.isInteger(spiking.sweep_number)
+   ?'NWB '+spiking.sweep_number+' · +'+bioNumber(spiking.injected_current_max_pA,0)+' pA · aucun modèle actif validé'
+   :'Balayage actif humain non enregistré');
  setText('bioProvenance','Allen Cell Types · NWB n° '+
    String(measurement.sweep_number||'—')+' · simulation NEURON · 12/11/2026 · aucune donnée en direct');
  const link=$('bioReportLink');
@@ -235,7 +239,7 @@ function bioPaintTrace(){
    ctx.beginPath();ctx.moveTo(x,margin.t);ctx.lineTo(x,h-margin.b);ctx.stroke();
    ctx.fillStyle='#7f9eaa';ctx.fillText(bioNumber(maxX*i/4,0),x-6,h-10);
  }
- ctx.fillText('mV',7,12);ctx.fillText('ms',w-23,h-10);
+ ctx.fillText('mV',7,12);ctx.fillText('temps (ms)',w-86,12);
  if(!hh&&evidence?.protocol){
    ctx.fillStyle='rgba(125,229,204,.065)';
    const a=xp(evidence.protocol.pulse_start_ms),b=xp(evidence.protocol.pulse_end_ms);
