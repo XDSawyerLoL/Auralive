@@ -1,3 +1,4 @@
+import {inferImageSpaceMovement} from './event_semantics.js';
 // Temporal grouping of CLIENT MODEL OUTPUT. This is not independent
 // verification of a scene: repeated agreement can itself repeat model error.
 // Transcripts are not kept here: only their occurrence and coarse length.
@@ -48,11 +49,16 @@ export function updatePerceptualContinuity(previous=null,reading=null,{
     intersectionOverUnion(old.box,strongest.box)>=.25;
   const count=matching?Math.min(50,(Number(old.count)||1)+1):1;
   const confirmed=count>=Math.max(2,minimumVisualAgreement);
-  const event=confirmed&&count===Math.max(2,minimumVisualAgreement)
+  const movement=matching&&confirmed
+    ?inferImageSpaceMovement(
+      {label,box:old.box,at:old.at,trusted:false},
+      {label,box:strongest.box,at:new Date(at).toISOString(),trusted:false})
+    :null;
+  const event=movement||(confirmed&&count===Math.max(2,minimumVisualAgreement)
     ?{kind:'object-hypothesis-stable',at:new Date(at).toISOString(),
        label:'browser-object-hypothesis',agreement_count:count,
        model_label:label,verified_real_world:false,
-       claim:'repeated-client-detection-not-confirmed-object'}:null;
+       claim:'repeated-client-detection-not-confirmed-object'}:null);
   return {accepted:true,event,state:{...state,
     revision:(Number(state.revision)||0)+1,
     objects:{at:new Date(at).toISOString(),label,count,box:{...strongest.box}},
