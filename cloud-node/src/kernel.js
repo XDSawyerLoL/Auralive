@@ -1884,19 +1884,24 @@ export class CognitiveKernel {
     });
     const selectedNotes=admitted.notes;
     const selectedMessages=admitted.messages;
-    // A very small, current-session dialogue buffer is PERCEPTUAL context:
-    // it enters only after the workspace actually broadcasts perception.
-    // It is not project memory and carries no authority beyond this chat.
+    // A verified ingress and the last few turns of its exact SQL session
+    // form short-lived PERCEPTUAL context, not autobiographical memory.
+    // Reading these turns MUST NOT depend on whether an unrelated long-term
+    // memory won attention. Nothing crosses a session or leaves the browser
+    // without a user message and its matching database row.
     const immediateDialogue=immediateDialogueWindow(recentMessages,content,{
-      perceptualBroadcast:workspaceHas(workspace,'prefrontal','perception'),
+      perceptualBroadcast:true,
       maxTurns:3,
     });
     const dialogueMessages=mergeConversationViews(selectedMessages,immediateDialogue);
     if(immediateDialogue.length){
-      await brainHop('workspace','dialogue','immediate-context-admitted');
+      const broadcast=workspaceHas(workspace,'prefrontal','perception');
+      if(broadcast)await brainHop('workspace','dialogue','immediate-context-admitted');
+      else await brainHop('input','dialogue','verified-current-session-ingress');
       await this.trace('dialogue-context','same-session-turn-window','',{
         flow_id:brainFlowId,at:now(),turn_count:immediateDialogue.length,
-        admitted_after_perception:true,source:'session-scoped-message-query',
+        admitted_after_perception:broadcast,
+        current_ingress_verified:true,source:'session-scoped-message-query',
         raw_text_stored:false,
       });
     }
@@ -2321,8 +2326,19 @@ export class CognitiveKernel {
       module:'language',operationId:brainFlowId,at:now(),
     });
     const languageStartedAt=performance.now();
-    const answer=languageGate.allowed
-      ?await this.expression.verbalize(languageGate.plan,{
+    // If resource-bounded attention has not broadcast any language channel,
+    // the *native short social micro-circuit* can still respond to a real,
+    // persisted ingress. It reads no autobiographical memory, runs no tool,
+    // and never delegates the intention to Groq/OpenRouter.
+    const nativeSocialIngress=Boolean(
+      plan.social_turn?.source==='same-session-conversation-and-rule'
+      && ['social_wellbeing_ack','clarify_unrequested_continuation',
+          'unfinished_address','explain_apparent_curiosity'].includes(plan.act)
+      && (immediateDialogue.length>0||plan.act==='unfinished_address')
+    );
+    const answer=languageGate.allowed||nativeSocialIngress
+      ?await this.expression.verbalize(languageGate.allowed
+        ?languageGate.plan:plan,{
         maxTokens: Math.max(120, Math.min(Number(inference.token_budget || 180), 900)),
         taskRole:'conversation',
       }):'';
@@ -2435,7 +2451,9 @@ export class CognitiveKernel {
       answer,
       brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
-      response_kind: languageUnavailable ? 'model-unavailable' : 'model-generated',
+      response_kind: languageUnavailable ? 'model-unavailable'
+        :this.expression.lastMode==='native-social-kernel'
+          ?'native-kernel':'model-generated',
       retryable: languageUnavailable,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
