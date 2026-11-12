@@ -23,7 +23,7 @@ export function validateSemanticPerception(value,nowMs=Date.now()){
      if(!item||typeof item!=='object'||Array.isArray(item)||
         Object.keys(item).some(k=>!['label','confidence','box'].includes(k))||
         !cleanString(item.label,70)||
-        !/^[\\p{L}\\p{N},.()' /_-]{2,70}$/u.test(item.label)||
+        !/^[\p{L}\p{N},.()' /_-]{2,70}$/u.test(item.label)||
         typeof item.confidence!=='number'||!Number.isFinite(item.confidence)||
         item.confidence<0||item.confidence>1||
         !item.box||typeof item.box!=='object'||Array.isArray(item.box)||
