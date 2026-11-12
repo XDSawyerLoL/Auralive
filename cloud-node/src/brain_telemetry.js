@@ -33,12 +33,20 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     :{status:'unavailable',updated_at:null,age_seconds:null};
   const metrics=BRAIN_METRICS.map(([id,label])=>({
     id,label,value:live?boundedMetric(organism[id]):null,
+    precise_value:live&&organism[id]!=null&&Number.isFinite(Number(organism[id]))
+      ?Number((Math.max(0,Math.min(1,Number(organism[id])))*100).toFixed(2)):null,
     origin:'AuraOrganism.publicState',
     measured:false, // deterministic software-state index, not a biological reading
   }));
   // Physical telemetry is only from the current Node process, never synthetic.
-  const processSample=live&&organism.homeostasis?.sensor?.source==='node-process'
-    ?organism.homeostasis.sensor:null;
+  const observer=live?extra.process_monitor||null:null;
+  const observedSample=observer?.latest;
+  const observedAt=Date.parse(String(observedSample?.sampled_at||''));
+  const observedFresh=observedSample?.source==='node-process' &&
+    Number.isFinite(observedAt)&&observedAt<=nowMs+2000&&nowMs-observedAt<=120000;
+  const processSample=observedFresh?observedSample:
+    live&&organism.homeostasis?.sensor?.source==='node-process'
+      ?organism.homeostasis.sensor:null;
   const processFreshness=processSample?evaluateTelemetryFreshness(processSample.sampled_at,nowMs)
     :{status:'unavailable',updated_at:null,age_seconds:null};
   const measured=processFreshness.status==='recent';
@@ -172,6 +180,8 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
   const rawViability=extra.viability||{};
   const viability=live&&rawViability.at?{
     reserve:boundedMetric(rawViability.reserve),
+    reserve_precise:rawViability.reserve==null?null:
+      Number((Math.max(0,Math.min(1,Number(rawViability.reserve)||0))*100).toFixed(2)),
     capacity:Math.max(1,Math.min(3,Number(rawViability.capacity)||3)),
     mode:['normal','restricted','critical','protected-rest']
       .includes(rawViability.mode)?rawViability.mode:'unknown',
@@ -340,6 +350,17 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
       ?boundedMetric(organism.homeostasis?.failure_ema):null,
     independent_activity:live?independentActivity:null,
     autonomous_cycle:autonomousCycle,
+    process_history:observedFresh?{
+      source:'ProcessSomaticSensor',
+      interval_ms:Math.max(2000,Math.min(60000,Number(observer.interval_ms)||5000)),
+      samples:(Array.isArray(observer.history)?observer.history:[]).slice(-60).map(row=>({
+        at:safeText(row.at,40),
+        sequence:Math.max(0,Number(row.sequence)||0),
+        cpu:row.cpu==null?null:boundedMetric(row.cpu)/100,
+        heap:row.heap==null?null:boundedMetric(row.heap)/100,
+        pressure:row.pressure==null?null:boundedMetric(row.pressure)/100,
+      })),
+    }:null,
     curiosity_cycle:curiosityCycle,
     global_workspace:globalWorkspace,
     prediction,attention_schema:attentionSchema,viability,consolidation,
