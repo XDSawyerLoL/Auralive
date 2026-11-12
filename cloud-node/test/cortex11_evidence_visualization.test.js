@@ -4,6 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {ObservedProcessMonitor} from '../src/process_observer.js';
 import {buildBrainTelemetry} from '../src/brain_telemetry.js';
+import {buildBrainFlowGraph} from '../src/brain_flow.js';
 import {CORTEX11_SCRIPT,CORTEX11_CSS} from '../src/cortex11_evidence_render.js';
 import {CORTEX06_SCRIPT} from '../src/cortex06_runtime.js';
 import {BRAIN_OPERATIONS_HTML} from '../src/brain_operations_console.js';
@@ -83,11 +84,38 @@ test('CORTEX 11 only illuminates dated real receipts and has no decorative parti
 test('one actual autonomous tick yields a source-stamped module hop, not a timer animation',()=>{
  const code=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
  assert.match(code,/source_verified:sampled/);
- assert.match(code,/stage,status:'ok',at:timestamp/);
+ assert.match(code,/path,status:'ok',at:timestamp/);
+ assert.match(code,/workspace-competition-completed/);
  assert.match(code,/persisted-organism-and-workspace-cycle/);
  assert.match(code,/await this\.saveSoul\(\);\s+\/\/ Each receipt below/);
  const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
  assert.match(server,/processObserver\.start\(\)/);
  assert.match(server,/process_monitor:bootstrap.runtimeReady\?processObserver\.snapshot\(\):null/);
  assert.match(BRAIN_OPERATIONS_HTML,/id="c10AutonomyTitle"/);
+});
+test('one real completed kernel tick produces a typed multi-stage route without extra SQL rows',()=>{
+ const at=iso(now);
+ const row={
+   id:42,kind:'brain-hop',created_at:at,
+   context:JSON.stringify({
+     origin:'CognitiveKernel.tick',status:'ok',at,
+     flow_id:'b2df8cc2-b3de-4d72-9871-1d3d88315b1a',
+     path:[
+       {from:'kernel',to:'homeostasis',stage:'idleTick-completed'},
+       {from:'homeostasis',to:'interoception',stage:'process-sampled'},
+       {from:'thalamus',to:'workspace',stage:'workspace-competition-completed'},
+     ],
+   }),
+ };
+ const graph=buildBrainFlowGraph({telemetry:{runtime_ready:true},traceRows:[row]},now);
+ assert.equal(graph.observed_hop_count,3);
+ assert.equal(graph.flows[0].step_count,3);
+ assert.equal(graph.flows[0].steps[2].to,'workspace');
+ // Reject untrusted or hypothetical path expansion.
+ const forged={...row,context:JSON.stringify({
+   origin:'browser',status:'ok',at,
+   path:[{from:'kernel',to:'homeostasis',stage:'pretend'}],
+ })};
+ const unsafe=buildBrainFlowGraph({telemetry:{runtime_ready:true},traceRows:[forged]},now);
+ assert.equal(unsafe.observed_hop_count,0);
 });
