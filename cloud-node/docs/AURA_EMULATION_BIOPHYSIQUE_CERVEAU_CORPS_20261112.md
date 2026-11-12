@@ -221,6 +221,15 @@ authentifié un JSON de forme `{"record": <export AllenSDK>}` à
 Il n'existe pas de boutons factices ni de données synthétiques
 présentées comme issues d'Allen.
 
+
+**Limite de provenance :** le script AllenSDK établit le filtre humain au
+moment de l'export ; l'API Node vérifie le format, les unités et la déclaration
+de source, mais **ne peut pas authentifier à elle seule que le JSON reçu
+provient effectivement de l'Allen Institute**. Elle retourne donc
+`source_authenticity_verified_by_server=false`. Un benchmark scientifique
+publiable exigera archivage des fichiers NWB source, identifiants de
+balayages, contrôles d'intégrité et vérification indépendante.
+
 ### Ce que nous ne pouvons PAS encore conclure
 
 Un compartiment passif n'est pas un neurone complet. La calibration des
