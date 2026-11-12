@@ -4,6 +4,17 @@ import {inferImageSpaceMovement} from './event_semantics.js';
 // Transcripts are not kept here: only their occurrence and coarse length.
 const asMs=s=>{const n=Date.parse(String(s||''));return Number.isFinite(n)?n:null;};
 const round=x=>Math.round(x*1000)/1000;
+// Lexical evidence from speech is NOT an instruction or a verified action.
+// No words, names or transcript are retained in the result.
+export function speechMotionCue(text=''){
+ const s=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const mention=/\b(?:deplac\w*|boug\w*|gliss\w*|pouss\w*|tir\w*|transport\w*|prend\w*|pren\w*|pos\w*|mett\w*|met)\b/u.test(s);
+ const negated=/\b(?:ne|n'|pas|jamais|sans|interdit)\b/u.test(s);
+ const questioned=/\?|\b(?:pourquoi|comment|qui|quoi)\b/u.test(s);
+ return {motion_mentioned:mention,motion_negated:negated,motion_questioned:questioned,
+  meaning_verified:false};
+}
+
 const intersectionOverUnion=(a,b)=>{
  if(!a||!b)return 0;
  const left=Math.max(a.xmin,b.xmin),top=Math.max(a.ymin,b.ymin);
@@ -26,8 +37,10 @@ export function updatePerceptualContinuity(previous=null,reading=null,{
   const last=asMs(state.last_speech_at);
   if(last!==null&&at<=last)return {state,event:null,accepted:false};
   const wordCount=String(reading.payload?.text||'').trim().split(/\s+/u).filter(Boolean).length;
+  const cue=speechMotionCue(reading.payload?.text||'');
   const event={kind:'speech-detected',at:new Date(at).toISOString(),
     speech_length_band:wordCount<=3?'short':wordCount<=18?'medium':'long',
+    motion_language_cue:cue,
     label:'browser-speech-hypothesis',verified_real_world:false,
     claim:'client-model-output-not-user-command'};
   return {accepted:true,event,state:{...state,revision:(Number(state.revision)||0)+1,
