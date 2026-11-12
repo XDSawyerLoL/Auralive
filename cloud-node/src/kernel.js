@@ -143,6 +143,7 @@ export class CognitiveKernel {
     this.independentContinuity = new IndependentContinuity({
       db:{execute:(sql,params)=>getDb().execute(sql,params)},
       selfInquiry:this.selfInquiry,history:this.history,
+      innerDialogue:this.innerDialogue,livedExperience:this.livedExperience,
     });
     this.activeInference = new ActiveInferenceEngine();
     this.nativeLearning = new NativePolicyLearner();
@@ -198,6 +199,7 @@ export class CognitiveKernel {
       organism,
       emergent_identity: this.autogenesis.defaultState(),
       inner_dialogue: null,
+      endophasia: null,
       lived_experience: this.livedExperience.defaultState(),
       history_pending_episode_id: null,
       epistemic_self: this.selfInquiry.defaultState(),
@@ -912,6 +914,19 @@ export class CognitiveKernel {
           // Merge only the tested state; chat may have updated other fields.
           this.soulCache.epistemic_self=independent.soul.epistemic_self;
           this.soulCache.independent_activity=independent.soul.independent_activity;
+          if(independent.soul.endophasia){
+            this.soulCache.endophasia=independent.soul.endophasia;
+            await this.trace('endophasia','experience-derived-inquiry','',{
+              at:independent.receipt.at,
+              context:independent.receipt.context,
+              experience_revision:independent.receipt.experience_revision,
+              actual:independent.receipt.observed_action,
+              baseline:independent.receipt.baseline_action,
+              causal_change:independent.receipt.causal_change,
+              proof_scope:'local-strategy-ablation-not-external-success',
+              origin:'InnerDialogueEngine.derivePrivateInquiry',
+            });
+          }
           await this.trace('independent-self-test',
             independent.receipt.probe,independent.receipt.outcome,{
               at:independent.receipt.at,
