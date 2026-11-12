@@ -2113,11 +2113,11 @@ app.post('/api/chat', async (request, reply) => {
   // Never append a curiosity prompt to an empty/unavailable model reply.
   // This distinguishes a real AI answer from a server diagnostic.
   const unavailable = Boolean(response?.language_unavailable) || !baseAnswer;
-  const curiosityItem = unavailable ? null
-    : await curiosity.questionForInteraction(text).catch(() => null);
-  const curiosityQuestion = String(curiosityItem?.question || '').trim();
-  const answer = unavailable ? ''
-    : curiosityQuestion ? `${baseAnswer}\n\n${curiosityQuestion}` : baseAnswer;
+  // Do not append a separately generated question AFTER the kernel
+  // validated and persisted its actual answer. Such a post-processing
+  // addition was neither planned nor part of the stored dialogue.
+  const curiosityItem = null;
+  const answer = unavailable ? '' : baseAnswer;
   cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
