@@ -1,0 +1,63 @@
+name: Publish AURA verified human-neuron research archive
+
+on:
+  push:
+    branches:
+      - fix/aura-dialogue-context-causal-gate-20261112
+    paths:
+      - ".github/workflows/publish-human-neuron-research.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-human-research:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve validated Hostinger Cloud Node bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-human"
+          gh run download 43264994431 --repo "$GITHUB_REPOSITORY" \
+            --name aura-cloud-hostinger --dir "$RUNNER_TEMP/aura-human"
+          for file in server.js src/human_morphology.js src/human_ephys_calibration.js \
+              src/biophysical_microcircuit.js scripts/export_allen_human_features.py \
+              scripts/run_human_swc_neuron.py scripts/allen_human_active_models.py \
+              test/human_morphology.test.js \
+              docs/AURA_EMULATION_BIOPHYSIQUE_CERVEAU_CORPS_20261112.md; do
+            test -s "$RUNNER_TEMP/aura-human/$file"
+          done
+          grep -q 'select_heldout_trace' "$RUNNER_TEMP/aura-human/scripts/export_allen_human_features.py"
+          grep -q 'simulateHumanPassiveCell' "$RUNNER_TEMP/aura-human/src/human_ephys_calibration.js"
+      - name: Pack release, verify integrity and record SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd "$RUNNER_TEMP/aura-human" && zip -q -r \
+            "$GITHUB_WORKSPACE/AURA_NEURONE_HUMAIN_REEL_20261112.zip" .)
+          unzip -t "$GITHUB_WORKSPACE/AURA_NEURONE_HUMAIN_REEL_20261112.zip" | tail -n 1
+          sha256sum "$GITHUB_WORKSPACE/AURA_NEURONE_HUMAIN_REEL_20261112.zip" \
+            > "$GITHUB_WORKSPACE/SHA256_AURA_NEURONE_HUMAIN_REEL_20261112.txt"
+      - name: Publish permanent download at GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="aura-real-human-neuron-20261112"
+          ZIP="$GITHUB_WORKSPACE/AURA_NEURONE_HUMAIN_REEL_20261112.zip"
+          HASH="$GITHUB_WORKSPACE/SHA256_AURA_NEURONE_HUMAIN_REEL_20261112.txt"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Tag already exists: refusing to overwrite validated scientific archive"
+            exit 1
+          fi
+          gh release create "$TAG" "$ZIP" "$HASH" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --prerelease \
+            --title "AURA — neurone humain réel : étude biophysique contrôlée" \
+            --notes "Archive Hostinger issue du workflow Cloud Node réussi 43264994431, branche PR #251. Code électrophysiologique et morphologique + NEURON + tests. Etude humaine publique : Allen spécimen 643582610, morphologie 13 995 points, 269 sections, 1 081 segments. Trace NWB 25 : RMSE NEURON passif 0,854 mV et RC 1,061 mV, avec stimulation -10 pA et sans potentiels d'action. Les données brutes ne sont PAS incluses dans l'archive. Paramètres actifs humains, régions cérébrales et conscience non validés. Ne pas réinitialiser AURA en production; aucune installation automatique."
