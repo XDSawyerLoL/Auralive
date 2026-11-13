@@ -58,6 +58,17 @@ export function parseExplicitTemporal(source,parseStatement){
   if(typeof parseStatement!=='function'||String(source||'').length>400||
      /[?？;]/u.test(source))return [];
   const text=fold(source).replace(/[.!]\s*$/u,'');
+  // "Une fois que" may be future or habitual. Only the explicitly
+  // completed past on BOTH sides licenses event assertions here.
+  const completedPast=/^[\p{L}-]+\s+(?:a|ont)\s+[\p{L}-]+\s+/u;
+  const once=text.match(/^(.+?)\s+une fois que\s+(.+)$/u);
+  if(once){
+    if(!completedPast.test(once[1])||!completedPast.test(once[2]))return [];
+    const later=parseStatement(once[1]),prior=parseStatement(once[2]);
+    return prior?.kind==='event'&&later?.kind==='event'&&prior.polarity&&later.polarity
+      ?[{frame:prior,temporal:'before',resolved:false},
+        {frame:later,temporal:'after',resolved:false}]:[];
+  }
   let m=text.match(/^apres que (.+?),\s*(.+)$/u);
   if(m){
     const prior=parseStatement(m[1]),later=parseStatement(m[2]);
