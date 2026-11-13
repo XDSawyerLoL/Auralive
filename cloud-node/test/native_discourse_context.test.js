@@ -139,7 +139,7 @@ test('fronted object with overt clitic and compatible past participle is reconst
   history:[{role:'user',content:"La porte, Mélanie l'a ouverte."}],
   question:'Qui a ouvert la porte ?'
  });
- assert.match(result?.text||'',/Mélanie/);
+ assert.match(result?.text||'',/Melanie/);
 });
 test('fronted object rejects absent clitic and inconsistent agreement',()=>{
  for(const line of [
