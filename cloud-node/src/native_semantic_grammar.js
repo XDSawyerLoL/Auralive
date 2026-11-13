@@ -116,17 +116,6 @@ function splitAssertions(value){
 }
 function collect(history=[],stored=[]){
   const frames=[];
-  for(const entry of stored.slice(-10)){
-    const record=typeof entry==='string'?JSON.parse(entry):entry;
-    if(record?.schema!==LOCAL_SEMANTIC_VERSION||record?.type!=='user-correction')continue;
-    const f=record.frame;
-    if(!['event','property'].includes(f?.kind)||!['user-statement-unverified'].includes(f?.source))continue;
-    for(let i=frames.length-1;i>=0;i--){
-      if(f.kind===frames[i].kind&&(f.kind==='property'&&f.agent===frames[i].agent
-         ||f.kind==='event'&&eventKey(f)===eventKey(frames[i])))frames.splice(i,1);
-    }
-    frames.push({...f,_stored:true});
-  }
   for(const row of history.slice(-10)){
     if(row?.role!=='user')continue;
     for(const part of splitAssertions(row.content)){
@@ -137,14 +126,19 @@ function collect(history=[],stored=[]){
         if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
            ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
       }
-      // A newer utterance supersedes an older stored correction in this session.
-      if(!correction)for(let i=frames.length-1;i>=0;i--){
-        if(frames[i]._stored&&frame.kind===frames[i].kind&&
-          (frame.kind==='property'&&frame.agent===frames[i].agent||
-           frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
-      }
       frames.push(frame);
     }
+  }
+  for(const entry of stored.slice(-10)){
+    const record=typeof entry==='string'?JSON.parse(entry):entry;
+    if(record?.schema!==LOCAL_SEMANTIC_VERSION||record?.type!=='user-correction')continue;
+    const f=record.frame;
+    if(!['event','property'].includes(f?.kind)||!['user-statement-unverified'].includes(f?.source))continue;
+    for(let i=frames.length-1;i>=0;i--){
+      if(f.kind===frames[i].kind&&(f.kind==='property'&&f.agent===frames[i].agent
+         ||f.kind==='event'&&eventKey(f)===eventKey(frames[i])))frames.splice(i,1);
+    }
+    frames.push(f);
   }
   return frames;
 }
