@@ -58,6 +58,14 @@ jobs:
           name: aura-discourse-stress-100
           path: cloud-node/discourse-stress-100-report.json
           if-no-files-found: error
+      - name: Evaluate third frozen event semantic challenge (internal, not blind)
+        run: node scripts/evaluate_event_frames_challenge_100.mjs event-frames-challenge-report.json
+      - name: Upload event frame semantic challenge report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-event-frames-challenge-100
+          path: cloud-node/event-frames-challenge-report.json
+          if-no-files-found: error
       - name: Run falsifiable AGI capability battery
         run: npm run audit:agi -- --json=agi-audit-report.json
       - name: Upload AGI audit report
