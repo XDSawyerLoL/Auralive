@@ -2314,6 +2314,15 @@ export class CognitiveKernel {
       ],
     };
 
+    // Local semantic corrections are read from THIS SQL session only, AFTER
+    // perception and attention. They remain unverified user statements.
+    // No foreign session or unrelated autobiographical memory is loaded.
+    if(['local-only','prefer-local'].includes(process.env.AURA_NATIVE_FRENCH_MODE)
+      &&/[?？]\s*$/.test(content)){
+      plan.native_semantic_corrections=await this.language
+        .nativeGrammarCorrections(conversationSession).catch(()=>[]);
+    }
+
     // Allocation adaptative : le noyau choisit combien de calcul externe
     // mérite la situation. AURA continue d'exister si aucun modèle n'est disponible.
     const inference = this.inferenceAssessment();
