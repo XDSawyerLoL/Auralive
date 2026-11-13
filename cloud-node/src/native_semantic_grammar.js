@@ -33,6 +33,13 @@ function lexicon(){
 const verb = token => nativeUDConstructions.lemma(token)||lexicon().get(fold(token))?.lemma||null;
 const cleanObject = value => entity(value.replace(/^(?:pas|plus|jamais|en|y)\s+/u,''));
 const eventKey = frame => [frame.predicate,frame.patient].join(':');
+// Conservative lexical overlap: a skipped modifier in the object span
+// must never make another participant disappear from an actor question.
+// This only blocks a confident answer; it does not create positive facts.
+const possiblySamePatient=(observed,requested)=>{
+ const a=words(observed),b=words(requested);
+ return Boolean(a&&b&&(a===b||a.endsWith(' '+b)||b.endsWith(' '+a)));
+};
 
 export function parseFrenchStatement(text){
   // Unsupported complements cannot be reinterpreted as flat SVO facts.
@@ -175,7 +182,7 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
   }
   if(request.kind==='actor'){
     const candidates=frames.filter(f=>f.kind==='event'&&f.predicate===request.predicate&&
-      f.patient===request.patient&&f.polarity===true);
+      possiblySamePatient(f.patient,request.patient)&&f.polarity===true);
     const distinct=[...new Set(candidates.map(f=>f.agent))];
     if(distinct.length===1)text='D’après ce que tu as indiqué, c’est '+publicLabel(distinct[0])+'.';
   }else if(request.kind==='property'){
