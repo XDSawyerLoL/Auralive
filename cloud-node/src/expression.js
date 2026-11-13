@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.js';
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
 import {nativeFrenchCorpus} from './native_french_corpus.js';
+import {answerFrenchFromConversation} from './native_semantic_grammar.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -77,7 +78,14 @@ export class ExpressionLayer {
     }
     const nativeMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
     if(nativeMode==='local-only'||nativeMode==='prefer-local'){
-      const local=nativeFrenchCorpus.realizePlan(plan);
+      // Only same-session statements admitted by the perceptual language gate
+      // can justify a local answer. This is reported testimony, not world truth.
+      const semantic=answerFrenchFromConversation({
+        question:plan.user_text,
+        history:plan.immediate_dialogue_context||[],
+        storedCorrections:plan.native_semantic_corrections||[],
+      });
+      const local=semantic||nativeFrenchCorpus.realizePlan(plan);
       if(local?.text){
         const checked=validateNucleusSpeech(plan,local.text);
         this.language.lastNucleusContract={
@@ -85,9 +93,9 @@ export class ExpressionLayer {
         };
         if(checked.accepted){
           this.lastError='';
-          this.lastMode='native-corpus-language';
+          this.lastMode=semantic?'native-grammar-grounded':'native-corpus-language';
           this.language.lastBackend='aura-native-corpus';
-          this.language.lastModel='ud-fr-gsd-morphological-symbolic';
+          this.language.lastModel=semantic?'ud-fr-gsd-lexical-local-semantics':'ud-fr-gsd-morphological-symbolic';
           this.language.lastLatencyMs=0;
           this.language.lastError='';
           return local.text;
