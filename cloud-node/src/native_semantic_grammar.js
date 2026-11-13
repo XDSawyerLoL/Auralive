@@ -35,6 +35,8 @@ const cleanObject = value => entity(value.replace(/^(?:pas|plus|jamais|en|y)\s+/
 const eventKey = frame => [frame.predicate,frame.patient].join(':');
 
 export function parseFrenchStatement(text){
+  // Unsupported complements cannot be reinterpreted as flat SVO facts.
+  if(/\b(?:dit|pense|sait|croit|affirme|veut)\s+que\b|\bsi\b/iu.test(fold(text)))return null;
   const acquired=nativeUDConstructions.parseStatement(text);
   if(acquired)return acquired;
   const source=words(text).replace(/^non\s+(?:je corrige\s+)?/u,'')
