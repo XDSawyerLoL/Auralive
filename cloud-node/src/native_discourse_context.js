@@ -14,6 +14,12 @@ function patientGender(clause, patient) {
 }
 export function parseBoundedDiscourse(source,parseStatement){
   if(typeof parseStatement!=='function'||/[?？]/u.test(source)||String(source).length>500)return [];
+  const explicit=parseExplicitTemporal(source,parseStatement);
+  if(explicit.length)return explicit;
+  const relative=parseExplicitSubjectRelative(source,parseStatement);
+  if(relative.length)return relative;
+  // Never flatten unsupported subordinate clauses into asserted events.
+  if(/\b(?:que|qui|quand|lorsque|si|avant)\b/iu.test(fold(source)))return [];
   const clauses=String(source||'').split(/\s+(?:puis|ensuite)\s+|[.;]\s*/iu)
     .map(s=>s.trim()).filter(Boolean);
   if(!clauses.length||clauses.length>4)return [];
@@ -38,4 +44,40 @@ export function parseBoundedDiscourse(source,parseStatement){
     output.push({frame:frame||null,resolved:Boolean(frame)});
   }
   return output;
+}
+
+// Only assert events from completed indicative temporal constructions.
+// A bare "avant que", "si", "quand", or "lorsque" is not evidence of occurrence.
+export function parseExplicitTemporal(source,parseStatement){
+  if(typeof parseStatement!=='function'||String(source||'').length>400||
+     /[?？;]/u.test(source))return [];
+  const text=fold(source).replace(/[.!]\s*$/u,'');
+  let m=text.match(/^apres que (.+?),\s*(.+)$/u);
+  if(m){
+    const prior=parseStatement(m[1]),later=parseStatement(m[2]);
+    return prior&&later?[{frame:prior,temporal:'before',resolved:false},
+      {frame:later,temporal:'after',resolved:false}]:[];
+  }
+  m=text.match(/^(.+?)\s+apres que\s+(.+)$/u);
+  if(m){
+    const later=parseStatement(m[1]),prior=parseStatement(m[2]);
+    return prior&&later?[{frame:prior,temporal:'before',resolved:false},
+      {frame:later,temporal:'after',resolved:false}]:[];
+  }
+  return [];
+}
+// Relative attached to an overt proper-name antecedent, bounded to two clauses.
+// The restrictive form with an implicit antecedent is deliberately unsupported.
+export function parseExplicitSubjectRelative(source,parseStatement){
+  if(typeof parseStatement!=='function'||String(source||'').length>300||
+    /[?？;]/u.test(source))return [];
+  const text=fold(source).replace(/[.!]\s*$/u,'');
+  const m=text.match(/^([\p{L}-]+),\s*qui\s+([^,]+),\s*(.+)$/u);
+  if(!m)return [];
+  const subject=m[1],dependent=parseStatement(subject+' '+m[2]);
+  const main=parseStatement(subject+' '+m[3]);
+  if(!dependent||!main||dependent.agent!==subject||main.agent!==subject||
+      dependent.kind!=='event'||main.kind!=='event')return [];
+  return [{frame:dependent,relation:'relative-subject',resolved:false},
+    {frame:main,relation:'main-clause',resolved:false}];
 }
