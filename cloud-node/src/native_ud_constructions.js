@@ -74,7 +74,7 @@ export class NativeUDConstructions{
     ...(agentSide!=='none'?{'obl:agent':agentEvidence}:{})}};
  }
  parseStatement(text){
-  const q=fold(text);
+  const q=fold(text).replace(/[.!]\s*$/u,'');
   if(!this.ready||!q||q.length>LIMIT||/[?？\n.;:{}[\]<>]/u.test(q)||
      /(?:\bsi\b|\bque\b|\bquand\b|\bdont\b|\blequel\b)/u.test(q))return null;
   // Coordinated, causal, subordinate clauses require a separate scope model.
