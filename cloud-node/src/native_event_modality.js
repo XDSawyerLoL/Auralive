@@ -1,3 +1,4 @@
+import {makeNativeEventFrame} from './native_event_frame.js';
 // Modality and event-scope analysis is kept separate from factual question answering.
 // A quoted user sentence is NEVER evidence that an event happened in the real world.
 const fold=value=>String(value||'').toLocaleLowerCase('fr-FR')
@@ -51,4 +52,37 @@ export function analyzeFrenchEventRelations(source,parseStatement){
      relations:condition&&consequence?[{type:'implies-if',from:0,to:1}]:[]};
  }
  return {scope:base.scope,events:[],relations:[]};
+}
+
+
+// Separate observation graph: edges represent user-described relationships,
+// never externally verified causality. Unsupported clauses yield no fact.
+export function buildNativeEventGraph(source,parseStatement){
+ const analyzed=analyzeFrenchEventRelations(source,parseStatement);
+ const normalized=fold(source).replace(/[.!]\s*$/u,'');
+ const edges=analyzed.relations.map(edge=>({...edge,provenance:'user-statement-unverified'}));
+ let clauses=[];
+ let roles=[];
+ if(/\s+une fois que\s+/u.test(normalized)){
+   const parts=normalized.split(/\s+une fois que\s+/u);
+   if(parts.length===2){clauses=[parts[1],parts[0]];roles=['before','after'];}
+ }else if(/^si\s+/u.test(normalized)){
+   const match=normalized.match(/^si\s+(.+?),\s*(.+)$/u);
+   if(match){clauses=[match[1],match[2]];roles=['condition','consequence'];}
+ }
+ const events=analyzed.events.map((f,i)=>{
+   const raw=clauses[i]||normalized;
+   // Named relations preserve role, yet only asserted completed events
+   // should ever enter a factual answer's evidence set.
+   return makeNativeEventFrame(f,raw,{
+     scope:f.asserted?'user-asserted':f.scope||analyzed.scope,
+     role:roles[i]||f.relation_role||null,order:i
+   });
+ }).filter(Boolean);
+ const coherent=events.length===analyzed.events.length&&
+   (edges.length===0||events.length===2);
+ return {schema:'aura-native-event-graph-v1',scope:analyzed.scope,
+   events:coherent?events:[],relations:coherent?edges:[],
+   verified_world_facts:0,
+   limitations:'Bounded French clauses, local user-claimed semantics only'};
 }
