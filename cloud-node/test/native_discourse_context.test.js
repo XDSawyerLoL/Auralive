@@ -102,3 +102,19 @@ test('unsupported clefts abstain instead of interpreting modal, hypothetical or 
     question:'Qui a ouvert la fenêtre ?'}),null,line);
  }
 });
+
+
+test('multiple overt agents with same patient must not yield an invented unique actor',()=>{
+ const answer=answerFrenchFromConversation({
+  question:'Qui a ouvert la porte ?',
+  history:[{role:'user',content:'Romain ouvre la porte. Mélanie ouvre aussi la porte.'}]
+ });
+ assert.equal(answer,null);
+});
+test('independent object cannot be silently merged to force a false actor answer',()=>{
+ const answer=answerFrenchFromConversation({
+  question:'Qui a ouvert la fenêtre ?',
+  history:[{role:'user',content:'Romain ouvre la fenêtre. Mélanie ferme le portail.'}]
+ });
+ assert.match(answer?.text||'',/Romain/);
+});
