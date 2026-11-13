@@ -82,3 +82,23 @@ test('conditional, hypothetical, and ambiguous subordinate assertions are not fa
    }),null,content);
  }
 });
+
+
+test('observed UD cleft construction binds a new named actor without changing lexical rules',()=>{
+ const history=[{role:'user',content:"C'est Romain qui ouvre la fenêtre."}];
+ const result=answerFrenchFromConversation({history,question:'Qui a ouvert la fenêtre ?'});
+ assert.match(result?.text||'',/Romain/);
+ assert.equal(result?.evidence_scope,'same-session-user-statement-unverified');
+});
+test('unsupported clefts abstain instead of interpreting modal, hypothetical or negated facts',()=>{
+ for(const line of [
+   "C'est le chat qui ouvre la fenêtre.",
+   "Ce n'est pas Romain qui ouvre la fenêtre.",
+   "C'est Romain qui dit que Julie ouvre la fenêtre.",
+   "C'est Romain qui pense ouvrir la fenêtre.",
+   "Si c'est Romain qui ouvre la fenêtre, Julie ferme la porte.",
+ ]){
+  assert.equal(answerFrenchFromConversation({history:[{role:'user',content:line}],
+    question:'Qui a ouvert la fenêtre ?'}),null,line);
+ }
+});
