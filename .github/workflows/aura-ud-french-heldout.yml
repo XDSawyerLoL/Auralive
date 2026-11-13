@@ -1,0 +1,60 @@
+name: AURA UD French dependency held-out validation
+
+on:
+  pull_request:
+    paths:
+      - 'cloud-node/src/native_ud_constructions.js'
+      - 'cloud-node/src/native_semantic_grammar.js'
+      - 'cloud-node/data/fr_ud_dependency_constructions.json'
+      - 'cloud-node/scripts/train_native_ud_dependencies.mjs'
+      - 'cloud-node/scripts/evaluate_native_ud_dependencies.mjs'
+      - '.github/workflows/aura-ud-french-heldout.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dev-heldout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify source, model and evaluator syntax
+        run: |
+          node --check cloud-node/src/native_ud_constructions.js
+          node --check cloud-node/scripts/train_native_ud_dependencies.mjs
+          node --check cloud-node/scripts/evaluate_native_ud_dependencies.mjs
+          node --check cloud-node/scripts/verify_native_ud_reproduction.mjs
+      - name: Fetch pinned official UD French-GSD dev corpus
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            'https://raw.githubusercontent.com/UniversalDependencies/UD_French-GSD/7110d4660ba088b630eb5928a6a1d35523898e05/fr_gsd-ud-dev.conllu' \
+            -o "$RUNNER_TEMP/fr_gsd-ud-dev.conllu"
+      - name: Reproduce the published grammar from the pinned TRAIN annotations
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            'https://raw.githubusercontent.com/UniversalDependencies/UD_French-GSD/7110d4660ba088b630eb5928a6a1d35523898e05/fr_gsd-ud-train.conllu' \
+            -o "$RUNNER_TEMP/fr_gsd-ud-train.conllu"
+          node cloud-node/scripts/train_native_ud_dependencies.mjs \
+            "$RUNNER_TEMP/fr_gsd-ud-train.conllu" \
+            "$RUNNER_TEMP/aura-ud-retrained.json"
+          node cloud-node/scripts/verify_native_ud_reproduction.mjs \
+            "$RUNNER_TEMP/aura-ud-retrained.json" \
+            cloud-node/data/fr_ud_dependency_constructions.json
+      - name: Independently evaluate held-out dependency interpretation
+        run: |
+          node cloud-node/scripts/evaluate_native_ud_dependencies.mjs \
+            "$RUNNER_TEMP/fr_gsd-ud-dev.conllu" \
+            "$RUNNER_TEMP/aura-ud-dev-benchmark.json"
+          mkdir -p benchmark
+          cp "$RUNNER_TEMP/aura-ud-dev-benchmark.json" benchmark/aura-ud-dev-benchmark.json
+      - name: Publish benchmark statistics only (no source text)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-ud-french-dev-evaluation
+          path: benchmark/aura-ud-dev-benchmark.json
+          retention-days: 14

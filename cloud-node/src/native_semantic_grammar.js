@@ -1,4 +1,5 @@
 import { nativeFrenchCorpus } from './native_french_corpus.js';
+import {nativeUDConstructions} from './native_ud_constructions.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -28,11 +29,13 @@ function lexicon(){
   }
   return surfaceIndex;
 }
-const verb = token => lexicon().get(fold(token))?.lemma || null;
+const verb = token => nativeUDConstructions.lemma(token)||lexicon().get(fold(token))?.lemma||null;
 const cleanObject = value => entity(value.replace(/^(?:pas|plus|jamais|en|y)\s+/u,''));
 const eventKey = frame => [frame.predicate,frame.patient].join(':');
 
 export function parseFrenchStatement(text){
+  const acquired=nativeUDConstructions.parseStatement(text);
+  if(acquired)return acquired;
   const source=words(text).replace(/^non\s+(?:je corrige\s+)?/u,'')
     .replace(/^je corrige\s+/u,'').replace(/^c'est\s+/u,'');
   if(!source||source.length>300||/[<>={}]/u.test(source))return null;
@@ -109,7 +112,7 @@ export function parseFrenchCorrection(text){
   const rewrite=q.match(/^non\s+c'est\s+(.+?)\s+qui\s+(.+)$/u);
   const candidate=rewrite ? rewrite[1]+' '+rewrite[2] : q
     .replace(/^(?:non|je corrige|correction|en fait|c'est plutot)\s*(?::|,)?\s*/u,'');
-  const frame=parseFrenchStatement(candidate);
+  const frame=parseFrenchStatement(candidate.replace(/\s+pas\s+\p{L}+$/u,''));
   if(!frame)return null;
   return {schema:LOCAL_SEMANTIC_VERSION,type:'user-correction',frame,
     evidence_status:'user-statement-unverified'};
