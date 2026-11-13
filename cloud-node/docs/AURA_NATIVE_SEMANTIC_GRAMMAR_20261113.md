@@ -12,7 +12,7 @@ Couverture ciblée : sujet/action/objet, équivalence actif–passif pour certai
 - Les antécédents sont limités aux tours utilisateur de la fenêtre de dialogue de la même session, après le filtre perceptif du noyau. Les affirmations de l'assistant ne sont jamais recyclées comme preuves.
 - LanguageFaculty.rememberCorrection extrait des corrections explicites, les persiste dans la table existante aura_language_experiences avec étiquette user-statement-unverified ; aucune migration ni création d'un second « cerveau ».
 - La récupération SQL est filtrée par session_id et limitée au circuit local pour une question. Aucun souvenir d'une session étrangère n'est interrogé.
-- Une correction plus ancienne ne doit pas écraser sans raison une affirmation plus récente de cette session.
+- Les corrections explicites prévalent sur les faits contradictoires non corrigés de la même session. Limite connue : la chronologie d'une affirmation ultérieure non qualifiée n'est pas encore comparée à celle de la correction ; il faut prévoir un ordre d'événements fiable.
 - Le système ne convertit ni une phrase déclarée par un utilisateur en vérité vérifiée, ni une correction en droit d'exécuter un outil.
 - **Zéro appel Groq dans cette voie de verbalisation locale.** D'autres composants historiques d'AURA peuvent faire leurs propres appels réseau : le patch ne rend pas toute l'application hors ligne.
 
