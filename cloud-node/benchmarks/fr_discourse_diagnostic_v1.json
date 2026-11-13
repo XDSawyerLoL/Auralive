@@ -1,0 +1,521 @@
+{
+  "schema": "aura-french-discourse-diagnostic-v1",
+  "source": "authored-diagnostic-not-external-blind",
+  "policy": "Fixed evaluation-only examples, never used for training; source and annotations created by same project, no claim of independent human annotation",
+  "cases": [
+    {
+      "id": "dialogue-001",
+      "category": "pronoun_clear",
+      "history": [
+        {
+          "role": "user",
+          "content": "Luc ferme la porte puis il ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "luc"
+      }
+    },
+    {
+      "id": "dialogue-002",
+      "category": "pronoun_clear",
+      "history": [
+        {
+          "role": "user",
+          "content": "Marc déplace la chaise puis il ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "marc"
+      }
+    },
+    {
+      "id": "dialogue-003",
+      "category": "pronoun_clear",
+      "history": [
+        {
+          "role": "user",
+          "content": "Paul ouvre la fenêtre puis il ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "paul"
+      }
+    },
+    {
+      "id": "dialogue-004",
+      "category": "pronoun_clear",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nadia ferme le portail puis elle ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "nadia"
+      }
+    },
+    {
+      "id": "dialogue-005",
+      "category": "pronoun_clear",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sophie déplace le carton puis elle ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "sophie"
+      }
+    },
+    {
+      "id": "dialogue-006",
+      "category": "pronoun_clear",
+      "history": [
+        {
+          "role": "user",
+          "content": "Julie ferme le coffre puis elle ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "julie"
+      }
+    },
+    {
+      "id": "dialogue-007",
+      "category": "pronoun_ambiguous",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nadia ferme la porte puis elle ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-008",
+      "category": "pronoun_ambiguous",
+      "history": [
+        {
+          "role": "user",
+          "content": "Luc ferme le portail puis il ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-009",
+      "category": "pronoun_ambiguous",
+      "history": [
+        {
+          "role": "user",
+          "content": "Marc déplace le carton puis il ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-010",
+      "category": "pronoun_ambiguous",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sophie ouvre la fenêtre puis elle ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-011",
+      "category": "pronoun_ambiguous",
+      "history": [
+        {
+          "role": "user",
+          "content": "Elle ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-012",
+      "category": "pronoun_ambiguous",
+      "history": [
+        {
+          "role": "user",
+          "content": "Ils ferment la porte puis ils ouvrent la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-013",
+      "category": "relative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Luc, qui ferme la porte, ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "luc"
+      }
+    },
+    {
+      "id": "dialogue-014",
+      "category": "relative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nadia, qui déplace la chaise, ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "nadia"
+      }
+    },
+    {
+      "id": "dialogue-015",
+      "category": "relative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Marc, qui ouvre la fenêtre, ferme le portail."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "marc"
+      }
+    },
+    {
+      "id": "dialogue-016",
+      "category": "relative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Julie, qui ferme le coffre, ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "julie"
+      }
+    },
+    {
+      "id": "dialogue-017",
+      "category": "temporal",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Luc a fermé la porte, Nadia ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "nadia"
+      }
+    },
+    {
+      "id": "dialogue-018",
+      "category": "temporal",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nadia ouvre la fenêtre après que Luc a fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "luc"
+      }
+    },
+    {
+      "id": "dialogue-019",
+      "category": "temporal",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Julie a déplacé la chaise, Marc ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "marc"
+      }
+    },
+    {
+      "id": "dialogue-020",
+      "category": "temporal",
+      "history": [
+        {
+          "role": "user",
+          "content": "Paul ouvre la fenêtre après que Nadia a fermé le portail."
+        }
+      ],
+      "question": "Qui a fermé le portail ?",
+      "expected": {
+        "type": "actor",
+        "value": "nadia"
+      }
+    },
+    {
+      "id": "dialogue-021",
+      "category": "correction",
+      "history": [
+        {
+          "role": "user",
+          "content": "Luc ferme la porte."
+        },
+        {
+          "role": "user",
+          "content": "Non, Nadia ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "nadia"
+      }
+    },
+    {
+      "id": "dialogue-022",
+      "category": "correction",
+      "history": [
+        {
+          "role": "user",
+          "content": "Marc ouvre la fenêtre."
+        },
+        {
+          "role": "user",
+          "content": "Je corrige : Julie ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "julie"
+      }
+    },
+    {
+      "id": "dialogue-023",
+      "category": "correction",
+      "history": [
+        {
+          "role": "user",
+          "content": "Paul déplace la chaise."
+        },
+        {
+          "role": "user",
+          "content": "En fait, Sophie déplace la chaise."
+        }
+      ],
+      "question": "Qui a déplacé la chaise ?",
+      "expected": {
+        "type": "actor",
+        "value": "sophie"
+      }
+    },
+    {
+      "id": "dialogue-024",
+      "category": "correction",
+      "history": [
+        {
+          "role": "user",
+          "content": "Julie ferme le portail."
+        },
+        {
+          "role": "user",
+          "content": "Correction : Marc ferme le portail."
+        }
+      ],
+      "question": "Qui a fermé le portail ?",
+      "expected": {
+        "type": "actor",
+        "value": "marc"
+      }
+    },
+    {
+      "id": "dialogue-025",
+      "category": "unsafe",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Luc ferme la porte, Nadia ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-026",
+      "category": "unsafe",
+      "history": [
+        {
+          "role": "user",
+          "content": "Quand Marc ferme la porte, Julie ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-027",
+      "category": "unsafe",
+      "history": [
+        {
+          "role": "user",
+          "content": "Luc dit que Nadia ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-028",
+      "category": "unsafe",
+      "history": [
+        {
+          "role": "user",
+          "content": "Avant que Nadia ouvre la fenêtre, Luc ferme la porte."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-029",
+      "category": "unsafe",
+      "history": [
+        {
+          "role": "user",
+          "content": "La porte que Luc ferme est rouge."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-030",
+      "category": "unsafe",
+      "history": [
+        {
+          "role": "user",
+          "content": "Paul pense que Julie ferme le portail."
+        }
+      ],
+      "question": "Qui a fermé le portail ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "dialogue-031",
+      "category": "multi_event",
+      "history": [
+        {
+          "role": "user",
+          "content": "Luc ferme la porte puis Nadia ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "nadia"
+      }
+    },
+    {
+      "id": "dialogue-032",
+      "category": "multi_event",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sophie déplace la chaise ensuite Marc ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "marc"
+      }
+    },
+    {
+      "id": "dialogue-033",
+      "category": "multi_event",
+      "history": [
+        {
+          "role": "user",
+          "content": "Paul ouvre la fenêtre puis Julie ferme le portail."
+        }
+      ],
+      "question": "Qui a fermé le portail ?",
+      "expected": {
+        "type": "actor",
+        "value": "julie"
+      }
+    },
+    {
+      "id": "dialogue-034",
+      "category": "multi_event",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nadia ferme le coffre puis Luc ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "luc"
+      }
+    }
+  ]
+}
