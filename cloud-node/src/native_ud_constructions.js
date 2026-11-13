@@ -10,6 +10,7 @@ const stripArticles=raw=>raw.replace(/^(?:(?:le|la|les|un|une|des|du|de|l|d)\s+)
 const AUX=new Set(['a','as','ai','avons','avez','ont','avait','avaient',
   'est','es','suis','sommes','etes','sont','etait','etaient','ete']);
 const NEG=new Set(['ne','n','pas','plus','jamais']);
+const DET=new Set(['le','la','les','un','une','des','du','ce','cet','cette','ces','mon','ma','mes','ton','ta','tes','son','sa','ses']);
 const NEGATIVE=(tokens)=>tokens.includes('pas')||tokens.includes('jamais')||
   tokens.includes('ne')&&tokens.includes('plus');
 const MODEL_ID='aura-ud-dependency-constructions-v1';
@@ -85,11 +86,11 @@ export class NativeUDConstructions{
   // the model then supplies nsubj:pass / obl:agent semantics and ordering.
   const par=tokens.lastIndexOf('par');
   if(par>=0){
-   const candidateVerbs=tokens.map((word,i)=>({word,i,lemma:this.lemma(word)}))
-     .filter(x=>x.lemma&&!AUX.has(x.word)&&x.i<par);
-   if(candidateVerbs.length!==1)return null;
-   const v=candidateVerbs[0];
-   if(v.i<2||par!==v.i+1||par===tokens.length-1)return null;
+   // A participle immediately preceding "par" is the observable head.
+   // Earlier lexical homographs can be NOUNs (e.g. "porte" in "la porte").
+   const i=par-1,word=tokens[i],lemma=this.lemma(word);
+   if(i<2||!lemma||par===tokens.length-1)return null;
+   const v={i,word,lemma};
    const aux=tokens.slice(0,v.i).filter(x=>AUX.has(x));
    if(!aux.some(x=>['est','sont','etait','etaient','ete'].includes(x)))return null;
    const pattern=this.evidence({voice:'passive',subjectSide:'left',objectSide:'none',agentSide:'right'});
@@ -104,7 +105,8 @@ export class NativeUDConstructions{
   // For active transitive clauses, map the observed slots by the trained
   // nsubj (left) and obj (right) dependency configurations.
   const candidates=tokens.map((word,i)=>({word,i,lemma:this.lemma(word)}))
-    .filter(x=>x.lemma&&!AUX.has(x.word)&&x.i>0);
+    .filter(x=>x.lemma&&!AUX.has(x.word)&&x.i>0&&
+      !DET.has(tokens[x.i-1]));
   if(candidates.length!==1)return null;
   const v=candidates[0];
   const pattern=this.evidence({voice:'active',subjectSide:'left',objectSide:'right',agentSide:'none'});
