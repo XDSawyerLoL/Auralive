@@ -22,7 +22,7 @@ export function makeNativeEventFrame(frame,source,{scope='user-asserted',role=nu
  if(frame?.kind!=='event'||!frame.agent||!frame.predicate||!frame.patient||
    typeof frame.polarity!=='boolean')return null;
  const temporal=timeOf(source);
- const mode=['conditional','consequence','hypothetical','planned','habitual',
+ const mode=['conditional','condition','consequence','hypothetical','planned','habitual',
   'reported','temporal-underspecified'].includes(scope)?scope:'asserted';
  const asserted=mode==='asserted'&&temporal.tense!=='future';
  return {
