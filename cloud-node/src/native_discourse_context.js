@@ -94,7 +94,7 @@ export function parseObservedCleft(source,parseStatement){
  if(typeof parseStatement!=='function'||String(source||'').length>300||
     /[?？;,\n]/u.test(source)||!nativeUDConstructions.evidenceCleft())return null;
  const raw=String(source||'').trim();
- const match=raw.match(/^c['’]est\s+([\p{Lu}][\p{L}-]{1,34})\s+qui\s+(.+?)[.!]?\s*$/u);
+ const match=raw.match(/^[Cc]['’]est\s+([\p{Lu}][\p{L}-]{1,34})\s+qui\s+(.+?)[.!]?\s*$/u);
  if(!match)return null;
  const dependent=match[2].replace(/[.!]\s*$/u,'').trim();
  if(!dependent||/\b(?:si|quand|lorsque|avant|apres|parce|car|que|qui|dit|pense|veut)\b/iu.test(fold(dependent)))return null;
