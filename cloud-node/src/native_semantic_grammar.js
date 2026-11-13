@@ -1,6 +1,7 @@
 import { nativeFrenchCorpus } from './native_french_corpus.js';
 import {nativeUDConstructions} from './native_ud_constructions.js';
 import {parseBoundedDiscourse} from './native_discourse_context.js';
+import {classifyFrenchEventScope,analyzeFrenchEventRelations} from './native_event_modality.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -134,8 +135,13 @@ function collect(history=[],stored=[]){
   let previousUserStatement=null;
   for(const row of history.slice(-10)){
     if(row?.role!=='user'){previousUserStatement=null;continue;}
+    const scope=classifyFrenchEventScope(row.content);
+    // A syntactically extractable agent is not evidence that the event took place.
+    // Non-asserted clauses are kept in a separate analytical representation only.
+    if(!scope.asserted){previousUserStatement=null;continue;}
     const parts=splitAssertions(row.content);
     for(const part of parts){
+      if(!classifyFrenchEventScope(part).asserted)continue;
       const correction=parseFrenchCorrection(part);
       // Antecedents are confined to the immediately preceding user turn,
       // with a single explicit event and no intervening speaker or clause.
@@ -213,4 +219,10 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
   }
   return text ? {text,source:'aura-native-local-semantics',evidence_scope:'same-session-user-statement-unverified',
     grammar_version:LOCAL_SEMANTIC_VERSION,coverage:'bounded-grammatical-question-answering'} : null;
+}
+
+// Exposed for audit and prospective counterfactual reasoning; never inserts
+// hypothetical or habitual frames into the asserted conversational memory.
+export function inspectFrenchEventRelations(source){
+ return analyzeFrenchEventRelations(source,parseFrenchStatement);
 }
