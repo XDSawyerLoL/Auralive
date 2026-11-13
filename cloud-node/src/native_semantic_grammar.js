@@ -37,6 +37,11 @@ export function parseFrenchStatement(text){
     .replace(/^je corrige\s+/u,'').replace(/^c'est\s+/u,'');
   if(!source||source.length>300||/[<>={}]/u.test(source))return null;
   const clause=source.split(/\s+parce que\s+|\s+car\s+|\s+puis\s+|\s+ensuite\s+/u)[0].replace(/\s*,?\s+pas\s+\p{L}+$/u,'').trim();
+  // Abstain on unsupported multi-predicate coordination and hypotheticals.
+  // A lexical SVO match must never turn an entire compound sentence into one event.
+  if (/\b(?:si|lorsque|quand)\b/u.test(clause)) return null;
+  const segments=clause.split(/\s+(?:et|ou)\s+/u);
+  if(segments.length>1 && segments.slice(1).some(segment=>segment.split(/\s+/u).some(token=>verb(token))))return null;
   // Passive: grammatical subject is the patient, 'par' introduces the agent.
   const passive=clause.match(/^(.+?)\s+(?:a ete|ont ete|est|sont|etait)\s+(\p{L}+)\s+par\s+(.+)$/u);
   if(passive){
