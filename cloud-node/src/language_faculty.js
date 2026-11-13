@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { one, query } from './db.js';
 import { retrieveExperiences } from './memory_retrieval.js';
 import { consolidateLessons } from './memory_consolidation.js';
+import {parseFrenchCorrection} from './native_semantic_grammar.js';
 
 const VERSION = 'aura-language-faculty-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -70,15 +71,38 @@ export class LanguageFaculty {
   }
 
   async rememberCorrection({ sessionId, discourse, userText }) {
-    const target = clean(discourse?.correction_target, 300);
-    if (discourse?.move !== 'correction' || !target) return false;
-    await this.store.query(
+    const id=clean(sessionId,96);
+    if(!id)return false;
+    // A concrete grammatical correction has a scoped, explicit representation.
+    // It is testimony about this session, not verified world knowledge.
+    const nativeCorrection=parseFrenchCorrection(userText);
+    if(nativeCorrection)await this.store.query(
       'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
-      [clean(sessionId, 96), 'user-correction',
-        clean('Correction donnée par cet interlocuteur : ' + userText, 900),
-        'user-statement-unverified', now()],
+      [id,'native-semantic-correction',JSON.stringify(nativeCorrection),
+        'user-statement-unverified',now()],
     );
-    return true;
+    const target=clean(discourse?.correction_target,300);
+    if(discourse?.move==='correction'&&target)await this.store.query(
+      'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
+      [id,'user-correction',clean('Correction donnée par cet interlocuteur : '+userText,900),
+        'user-statement-unverified',now()],
+    );
+    return Boolean(nativeCorrection||discourse?.move==='correction'&&target);
+  }
+
+  async nativeGrammarCorrections(sessionId){
+    const id=clean(sessionId,96);
+    if(!id)return [];
+    const rows=await this.store.query(
+      "SELECT note FROM aura_language_experiences WHERE session_id=? AND kind='native-semantic-correction' ORDER BY id DESC LIMIT 10",
+      [id],
+    );
+    return rows.reverse().flatMap(row=>{
+      try{
+        const item=JSON.parse(String(row.note||''));
+        return item?.type==='user-correction'?[item]:[];
+      }catch{return [];}
+    });
   }
 
   async rememberOutcome({ automationId, eventType, ok, signature }) {
