@@ -118,3 +118,79 @@ test('independent object cannot be silently merged to force a false actor answer
  });
  assert.match(answer?.text||'',/Romain/);
 });
+
+
+test('coordinated clauses with a unique pronoun antecedent preserve actor and object',()=>{
+ const result=answerFrenchFromConversation({
+  history:[{role:'user',content:'Romain ferme la porte et il ouvre le tiroir.'}],
+  question:'Qui a ouvert le tiroir ?'
+ });
+ assert.match(result?.text||'',/Romain/);
+});
+test('coordinated clauses with competing same-gender patient abstain',()=>{
+ const result=answerFrenchFromConversation({
+  history:[{role:'user',content:'Romain ferme le portail et il ouvre le tiroir.'}],
+  question:'Qui a ouvert le tiroir ?'
+ });
+ assert.equal(result,null);
+});
+test('fronted object with overt clitic and compatible past participle is reconstructed',()=>{
+ const result=answerFrenchFromConversation({
+  history:[{role:'user',content:"La porte, Mélanie l'a ouverte."}],
+  question:'Qui a ouvert la porte ?'
+ });
+ assert.match(result?.text||'',/Mélanie/);
+});
+test('fronted object rejects absent clitic and inconsistent agreement',()=>{
+ for(const line of [
+  'La porte, Mélanie a ouverte.',
+  "La porte, Mélanie l'a ouvert.",
+  "Le portail, Mélanie l'a ouverte.",
+  "La porte, elle l'a ouverte."
+ ]){
+  assert.equal(answerFrenchFromConversation({
+   history:[{role:'user',content:line}],
+   question:'Qui a ouvert la porte ?'
+  }),null,line);
+ }
+});
+test('immediate prior user turn may ground a unique subject pronoun',()=>{
+ const result=answerFrenchFromConversation({
+  history:[{role:'user',content:'Romain ferme la porte.'},
+           {role:'user',content:'Il ouvre ensuite le tiroir.'}],
+  question:'Qui a ouvert le tiroir ?'
+ });
+ assert.match(result?.text||'',/Romain/);
+});
+test('anaphora cannot bridge a different speaker or ambiguous patient',()=>{
+ for(const history of [
+  [{role:'user',content:'Romain ferme le portail.'},
+   {role:'user',content:'Il ouvre ensuite le tiroir.'}],
+  [{role:'user',content:'Romain ferme la porte.'},
+   {role:'assistant',content:'Voici une réponse.'},
+   {role:'user',content:'Il ouvre ensuite le tiroir.'}],
+ ]){
+  assert.equal(answerFrenchFromConversation({
+   history,question:'Qui a ouvert le tiroir ?'
+  }),null);
+ }
+});
+test('completed once-after construction supports a verified relative temporal order only',()=>{
+ const result=answerFrenchFromConversation({
+  history:[{role:'user',content:'Mélanie a ouvert le tiroir une fois que Romain a fermé la porte.'}],
+  question:'Qui a fermé la porte ?'
+ });
+ assert.match(result?.text||'',/Romain/);
+});
+test('once-after present or hypothetical clauses never assert completed events',()=>{
+ for(const line of [
+  'Mélanie ouvre le tiroir une fois que Romain a fermé la porte.',
+  'Mélanie ouvrira le tiroir une fois que Romain aura fermé la porte.',
+  'Si Mélanie a ouvert le tiroir une fois que Romain a fermé la porte, Paul part.'
+ ]){
+  assert.equal(answerFrenchFromConversation({
+   history:[{role:'user',content:line}],
+   question:'Qui a fermé la porte ?'
+  }),null,line);
+ }
+});
