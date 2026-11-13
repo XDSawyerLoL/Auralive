@@ -69,3 +69,12 @@ test('hostile inputs and unsupported syntax do not count as comprehension',()=>{
  assert.equal(parseFrenchQuestion('Explique une théorie scientifique'),null);
  assert.equal(ask('Qui ferme la fenêtre ?', ['Nadia ferme la fenêtre','Sara ferme la fenêtre']),null);
 });
+
+
+test('abstains rather than merging coordinated or hypothetical actions',()=>{
+ assert.equal(parseFrenchStatement('Luc ferme la porte et Sara ouvre la fenêtre'),null);
+ assert.equal(parseFrenchStatement('Luc ferme la porte ou Sara ouvre la fenêtre'),null);
+ assert.equal(parseFrenchStatement('Si Luc ferme la porte Sara ouvre la fenêtre'),null);
+ assert.equal(ask('Qui ferme la porte ?', ['Luc ferme la porte et Sara ouvre la fenêtre']),null);
+ assert.equal(parseFrenchStatement('Luc ferme la porte')?.agent,'luc');
+});
