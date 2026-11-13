@@ -1,7 +1,8 @@
 import { nativeFrenchCorpus } from './native_french_corpus.js';
 import {nativeUDConstructions} from './native_ud_constructions.js';
 import {parseBoundedDiscourse} from './native_discourse_context.js';
-import {classifyFrenchEventScope,analyzeFrenchEventRelations} from './native_event_modality.js';
+import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGraph} from './native_event_modality.js';
+import {makeNativeEventFrame} from './native_event_frame.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -163,6 +164,12 @@ function collect(history=[],stored=[]){
       for(const item of parsed){
         const frame=item.frame;
         if(!frame)continue;
+        // All new candidate events must pass the shared semantic gate;
+        // a future-form candidate must never become a completed action.
+        if(frame.kind==='event'){
+          const unified=makeNativeEventFrame(frame,part);
+          if(!unified||unified.modality!=='asserted'||unified.tense==='future')continue;
+        }
         if(correction)for(let i=frames.length-1;i>=0;i--){
           if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
              ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
@@ -232,4 +239,10 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
 // hypothetical or habitual frames into the asserted conversational memory.
 export function inspectFrenchEventRelations(source){
  return analyzeFrenchEventRelations(source,parseFrenchStatement);
+}
+
+// One shared representation is returned for audit / causal ablation tools.
+// Its edges are descriptions of statements, never verified world history.
+export function inspectFrenchEventGraph(source){
+ return buildNativeEventGraph(source,parseFrenchStatement);
 }
