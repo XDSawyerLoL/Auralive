@@ -28,11 +28,23 @@ jobs:
           node --check cloud-node/src/native_ud_constructions.js
           node --check cloud-node/scripts/train_native_ud_dependencies.mjs
           node --check cloud-node/scripts/evaluate_native_ud_dependencies.mjs
+          node --check cloud-node/scripts/verify_native_ud_reproduction.mjs
       - name: Fetch pinned official UD French-GSD dev corpus
         run: |
           curl --fail --location --silent --show-error --retry 3 \
             'https://raw.githubusercontent.com/UniversalDependencies/UD_French-GSD/7110d4660ba088b630eb5928a6a1d35523898e05/fr_gsd-ud-dev.conllu' \
             -o "$RUNNER_TEMP/fr_gsd-ud-dev.conllu"
+      - name: Reproduce the published grammar from the pinned TRAIN annotations
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            'https://raw.githubusercontent.com/UniversalDependencies/UD_French-GSD/7110d4660ba088b630eb5928a6a1d35523898e05/fr_gsd-ud-train.conllu' \
+            -o "$RUNNER_TEMP/fr_gsd-ud-train.conllu"
+          node cloud-node/scripts/train_native_ud_dependencies.mjs \
+            "$RUNNER_TEMP/fr_gsd-ud-train.conllu" \
+            "$RUNNER_TEMP/aura-ud-retrained.json"
+          node cloud-node/scripts/verify_native_ud_reproduction.mjs \
+            "$RUNNER_TEMP/aura-ud-retrained.json" \
+            cloud-node/data/fr_ud_dependency_constructions.json
       - name: Independently evaluate held-out dependency interpretation
         run: |
           node cloud-node/scripts/evaluate_native_ud_dependencies.mjs \
