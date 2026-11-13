@@ -2,7 +2,7 @@ import { nativeFrenchCorpus } from './native_french_corpus.js';
 import {nativeUDConstructions} from './native_ud_constructions.js';
 import {parseBoundedDiscourse} from './native_discourse_context.js';
 import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGraph} from './native_event_modality.js';
-import {makeNativeEventFrame} from './native_event_frame.js';
+import {makeNativeEventFrame,isNativeEventAssertable} from './native_event_frame.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -140,10 +140,17 @@ function collect(history=[],stored=[]){
     // A syntactically extractable agent is not evidence that the event took place.
     // Non-asserted clauses are kept in a separate analytical representation only.
     if(!scope.asserted){
-      const relations=analyzeFrenchEventRelations(row.content,parseFrenchStatement);
-      if(relations.scope==='user-asserted'&&relations.events.length===2&&
-         relations.events.every(e=>e.asserted&&e.polarity))
-        frames.push(...relations.events);
+      const eventGraph=buildNativeEventGraph(row.content,parseFrenchStatement);
+      // Only committed events from the unified graph can become memory
+      // candidates. Relation edges remain descriptions, never facts.
+      if(eventGraph.events.length===2&&eventGraph.relations.length===1&&
+         eventGraph.events.every(isNativeEventAssertable)){
+        frames.push(...eventGraph.events.map(e=>({
+          kind:'event',agent:e.agent,predicate:e.predicate,patient:e.patient,
+          polarity:true,voice:e.voice,source:'user-statement-unverified',
+          semantic_event:e
+        })));
+      }
       previousUserStatement=null;
       continue;
     }
