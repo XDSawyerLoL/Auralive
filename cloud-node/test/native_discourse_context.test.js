@@ -44,3 +44,41 @@ test('no freeform subordinate guessing or malformed conversational evidence',()=
   assert.equal(parseBoundedDiscourse('Luc ferme la porte ? puis il ouvre la fenêtre',
     parseFrenchStatement).length,0);
 });
+
+test('explicit completed after-that clauses preserve both event roles',()=>{
+ const result=answerFrenchFromConversation({
+   question:'Qui a ouvert la fenêtre ?',
+   history:[{role:'user',content:'Après que Luc a fermé la porte, Nadia ouvre la fenêtre.'}],
+ });
+ assert.match(result?.text||'',/Nadia/);
+ const reversed=answerFrenchFromConversation({
+   question:'Qui a fermé la porte ?',
+   history:[{role:'user',content:'Nadia ouvre la fenêtre après que Luc a fermé la porte.'}],
+ });
+ assert.match(reversed?.text||'',/Luc/);
+});
+
+test('subject relative with overt antecedent yields two independently attributed events',()=>{
+ const history=[{role:'user',content:'Luc, qui ferme la porte, ouvre la fenêtre.'}];
+ assert.match(answerFrenchFromConversation({
+   question:'Qui a fermé la porte ?',history,
+ })?.text||'',/Luc/);
+ assert.match(answerFrenchFromConversation({
+   question:'Qui a ouvert la fenêtre ?',history,
+ })?.text||'',/Luc/);
+});
+
+test('conditional, hypothetical, and ambiguous subordinate assertions are not facts',()=>{
+ for(const content of [
+   'Si Luc ferme la porte, Nadia ouvre la fenêtre.',
+   'Quand Luc ferme la porte, Nadia ouvre la fenêtre.',
+   'Luc dit que Nadia ouvre la fenêtre.',
+   'Luc ferme la porte avant que Nadia ouvre la fenêtre.',
+   'La porte que Luc ferme est rouge.',
+ ]){
+   assert.equal(answerFrenchFromConversation({
+     question:'Qui a ouvert la fenêtre ?',
+     history:[{role:'user',content}],
+   }),null,content);
+ }
+});
