@@ -99,6 +99,8 @@ const sameFrame=(a,b)=>a?.kind===b?.kind&&a?.predicate===b?.predicate&&
 export function parseFrenchCorrection(text){
   const q=words(text);
   if(!/^(?:non[, :]|je corrige\b|correction\b|en fait\b|c'est plutot\b)/u.test(q))return null;
+  // Metalinguistic repair without a grammatical proposition is not a fact.
+  if(/^(?:non\s+)?je\s+(?:voulais|veux|souhaite)\s+dire\b/u.test(q))return null;
   const rewrite=q.match(/^non\s+c'est\s+(.+?)\s+qui\s+(.+)$/u);
   const candidate=rewrite ? rewrite[1]+' '+rewrite[2] : q
     .replace(/^(?:non|je corrige|correction|en fait|c'est plutot)\s*(?::|,)?\s*/u,'');
