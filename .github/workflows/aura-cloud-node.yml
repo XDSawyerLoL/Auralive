@@ -34,6 +34,14 @@ jobs:
         run: npm run check
       - name: Policy tests
         run: npm test
+      - name: Evaluate fixed discourse diagnostic (not external blind)
+        run: node scripts/evaluate_native_discourse.mjs discourse-diagnostic-report.json
+      - name: Upload discourse diagnostic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-discourse-diagnostic
+          path: cloud-node/discourse-diagnostic-report.json
+          if-no-files-found: error
       - name: Run falsifiable AGI capability battery
         run: npm run audit:agi -- --json=agi-audit-report.json
       - name: Upload AGI audit report
