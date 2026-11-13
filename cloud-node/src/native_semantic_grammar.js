@@ -131,14 +131,22 @@ function splitAssertions(value){
 }
 function collect(history=[],stored=[]){
   const frames=[];
+  let previousUserStatement=null;
   for(const row of history.slice(-10)){
-    if(row?.role!=='user')continue;
-    for(const part of splitAssertions(row.content)){
+    if(row?.role!=='user'){previousUserStatement=null;continue;}
+    const parts=splitAssertions(row.content);
+    for(const part of parts){
       const correction=parseFrenchCorrection(part);
+      // Antecedents are confined to the immediately preceding user turn,
+      // with a single explicit event and no intervening speaker or clause.
+      // We reuse the same ambiguity checks as within-turn coordination.
+      const isAnaphor=/^(?:il|elle)\s+[\p{L}]+/iu.test(part.trim());
+      const discourseInput=!correction&&isAnaphor&&previousUserStatement
+        ?previousUserStatement+' puis '+part : part;
       // Resolve coordinated clauses as one bounded discourse before assigning actors.
       // Preserve the original behavior for explicit corrections and unsupported syntax.
       const parsed=correction?[{frame:correction.frame}]:
-        parseBoundedDiscourse(part,parseFrenchStatement);
+        parseBoundedDiscourse(discourseInput,parseFrenchStatement);
       for(const item of parsed){
         const frame=item.frame;
         if(!frame)continue;
@@ -149,6 +157,12 @@ function collect(history=[],stored=[]){
         frames.push(frame);
       }
     }
+    // Explicit single-clause antecedent only: do not carry a whole narrative
+    // or a guessed reference through later turns.
+    const sole=parts.length===1 ? parseFrenchStatement(parts[0]) : null;
+    previousUserStatement=sole?.kind==='event'&&sole.polarity&&
+      /^[\p{Lu}][\p{L}-]+\s/u.test(String(row.content||'').trim()) ?
+      String(row.content).trim().replace(/[.!]\s*$/u,'') : null;
   }
   for(const entry of stored.slice(-10)){
     const record=typeof entry==='string'?JSON.parse(entry):entry;
