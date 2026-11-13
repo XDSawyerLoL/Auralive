@@ -1,5 +1,6 @@
 import { nativeFrenchCorpus } from './native_french_corpus.js';
 import {nativeUDConstructions} from './native_ud_constructions.js';
+import {parseBoundedDiscourse} from './native_discourse_context.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -117,7 +118,7 @@ function splitAssertions(value){
   // Explicit conjunctions only. Never silently transform a question into evidence.
   const s=String(value||'').trim();
   if(/[?？]/u.test(s))return [];
-  return s.split(/\s+(?:puis|ensuite|mais)\s+|[.;]\s*/iu).filter(Boolean);
+  return s.split(/\s+mais\s+|[.;]\s*/iu).filter(Boolean);
 }
 function collect(history=[],stored=[]){
   const frames=[];
@@ -125,13 +126,19 @@ function collect(history=[],stored=[]){
     if(row?.role!=='user')continue;
     for(const part of splitAssertions(row.content)){
       const correction=parseFrenchCorrection(part);
-      const frame=correction?.frame||parseFrenchStatement(part);
-      if(!frame)continue;
-      if(correction)for(let i=frames.length-1;i>=0;i--){
-        if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
-           ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
+      // Resolve coordinated clauses as one bounded discourse before assigning actors.
+      // Preserve the original behavior for explicit corrections and unsupported syntax.
+      const parsed=correction?[{frame:correction.frame}]:
+        parseBoundedDiscourse(part,parseFrenchStatement);
+      for(const item of parsed){
+        const frame=item.frame;
+        if(!frame)continue;
+        if(correction)for(let i=frames.length-1;i>=0;i--){
+          if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
+             ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
+        }
+        frames.push(frame);
       }
-      frames.push(frame);
     }
   }
   for(const entry of stored.slice(-10)){
