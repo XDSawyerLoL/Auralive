@@ -90,7 +90,7 @@ export function parseFrenchRelation(text){
   const after=parseFrenchStatement(relation[3]);
   if(!before||!after)return null;
   return {kind:relation[2]==='parce que'||relation[2]==='car'?'cause':'sequence',
-    first:before,second:after,explanation:relation[3].slice(0,140),
+    first:before,second:after,explanation:words(relation[3]).slice(0,140),
     source:'user-statement-unverified'};
 }
 const sameFrame=(a,b)=>a?.kind===b?.kind&&a?.predicate===b?.predicate&&
@@ -116,6 +116,17 @@ function splitAssertions(value){
 }
 function collect(history=[],stored=[]){
   const frames=[];
+  for(const entry of stored.slice(-10)){
+    const record=typeof entry==='string'?JSON.parse(entry):entry;
+    if(record?.schema!==LOCAL_SEMANTIC_VERSION||record?.type!=='user-correction')continue;
+    const f=record.frame;
+    if(!['event','property'].includes(f?.kind)||!['user-statement-unverified'].includes(f?.source))continue;
+    for(let i=frames.length-1;i>=0;i--){
+      if(f.kind===frames[i].kind&&(f.kind==='property'&&f.agent===frames[i].agent
+         ||f.kind==='event'&&eventKey(f)===eventKey(frames[i])))frames.splice(i,1);
+    }
+    frames.push({...f,_stored:true});
+  }
   for(const row of history.slice(-10)){
     if(row?.role!=='user')continue;
     for(const part of splitAssertions(row.content)){
@@ -126,19 +137,14 @@ function collect(history=[],stored=[]){
         if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
            ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
       }
+      // A newer utterance supersedes an older stored correction in this session.
+      if(!correction)for(let i=frames.length-1;i>=0;i--){
+        if(frames[i]._stored&&frame.kind===frames[i].kind&&
+          (frame.kind==='property'&&frame.agent===frames[i].agent||
+           frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
+      }
       frames.push(frame);
     }
-  }
-  for(const entry of stored.slice(-10)){
-    const record=typeof entry==='string'?JSON.parse(entry):entry;
-    if(record?.schema!==LOCAL_SEMANTIC_VERSION||record?.type!=='user-correction')continue;
-    const f=record.frame;
-    if(!['event','property'].includes(f?.kind)||!['user-statement-unverified'].includes(f?.source))continue;
-    for(let i=frames.length-1;i>=0;i--){
-      if(f.kind===frames[i].kind&&(f.kind==='property'&&f.agent===frames[i].agent
-         ||f.kind==='event'&&eventKey(f)===eventKey(frames[i])))frames.splice(i,1);
-    }
-    frames.push(f);
   }
   return frames;
 }
