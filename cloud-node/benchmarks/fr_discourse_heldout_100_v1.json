@@ -1,0 +1,1559 @@
+{
+  "schema": "aura-french-discourse-heldout-100-v1",
+  "source": "new-author-generated-frozen-post-parser-not-external-annotator",
+  "baseline_parser_commit": "a4674968ed1533075233a7a750ab6543ac4a173a",
+  "training_policy": "Evaluation-only. No parser change or threshold adjustment allowed between frozen dataset commit and initial measurement.",
+  "independence": "Unseen exact text relative to authored 34-case diagnostic; not independent blind human annotation, partly same syntactic families.",
+  "cases": [
+    {
+      "id": "heldout-001",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Émile qui ferme la lampe."
+        }
+      ],
+      "question": "Qui a fermé la lampe ?",
+      "expected": {
+        "type": "actor",
+        "value": "emile"
+      }
+    },
+    {
+      "id": "heldout-002",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Bastien qui ouvre le vase."
+        }
+      ],
+      "question": "Qui a ouvert le vase ?",
+      "expected": {
+        "type": "actor",
+        "value": "bastien"
+      }
+    },
+    {
+      "id": "heldout-003",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Hugo qui déplace la caisse."
+        }
+      ],
+      "question": "Qui a déplacé la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "hugo"
+      }
+    },
+    {
+      "id": "heldout-004",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Noé qui ferme le rideau."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "noe"
+      }
+    },
+    {
+      "id": "heldout-005",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Antoine qui ouvre la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "antoine"
+      }
+    },
+    {
+      "id": "heldout-006",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Victor qui déplace le tableau."
+        }
+      ],
+      "question": "Qui a déplacé le tableau ?",
+      "expected": {
+        "type": "actor",
+        "value": "victor"
+      }
+    },
+    {
+      "id": "heldout-007",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Clara qui ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "actor",
+        "value": "clara"
+      }
+    },
+    {
+      "id": "heldout-008",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Élodie qui ouvre le journal."
+        }
+      ],
+      "question": "Qui a ouvert le journal ?",
+      "expected": {
+        "type": "actor",
+        "value": "elodie"
+      }
+    },
+    {
+      "id": "heldout-009",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Alice qui déplace la bouteille."
+        }
+      ],
+      "question": "Qui a déplacé la bouteille ?",
+      "expected": {
+        "type": "actor",
+        "value": "alice"
+      }
+    },
+    {
+      "id": "heldout-010",
+      "category": "surface_variants",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est Camille qui ferme le panier."
+        }
+      ],
+      "question": "Qui a fermé le panier ?",
+      "expected": {
+        "type": "actor",
+        "value": "camille"
+      }
+    },
+    {
+      "id": "heldout-011",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Émile déplace la lampe ensuite il ouvre le livre."
+        }
+      ],
+      "question": "Qui a ouvert le livre ?",
+      "expected": {
+        "type": "actor",
+        "value": "emile"
+      }
+    },
+    {
+      "id": "heldout-012",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Élodie déplace le vase ensuite elle ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "elodie"
+      }
+    },
+    {
+      "id": "heldout-013",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hugo déplace la caisse ensuite il ouvre le livre."
+        }
+      ],
+      "question": "Qui a ouvert le livre ?",
+      "expected": {
+        "type": "actor",
+        "value": "hugo"
+      }
+    },
+    {
+      "id": "heldout-014",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Camille déplace le rideau ensuite elle ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "camille"
+      }
+    },
+    {
+      "id": "heldout-015",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Antoine déplace la carte ensuite il ouvre le livre."
+        }
+      ],
+      "question": "Qui a ouvert le livre ?",
+      "expected": {
+        "type": "actor",
+        "value": "antoine"
+      }
+    },
+    {
+      "id": "heldout-016",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Emma déplace le tableau ensuite elle ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "emma"
+      }
+    },
+    {
+      "id": "heldout-017",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Gabriel déplace la serrure ensuite il ouvre le livre."
+        }
+      ],
+      "question": "Qui a ouvert le livre ?",
+      "expected": {
+        "type": "actor",
+        "value": "gabriel"
+      }
+    },
+    {
+      "id": "heldout-018",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chloé déplace le journal ensuite elle ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "chloe"
+      }
+    },
+    {
+      "id": "heldout-019",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Arthur déplace la bouteille ensuite il ouvre le livre."
+        }
+      ],
+      "question": "Qui a ouvert le livre ?",
+      "expected": {
+        "type": "actor",
+        "value": "arthur"
+      }
+    },
+    {
+      "id": "heldout-020",
+      "category": "coreference_unseen",
+      "history": [
+        {
+          "role": "user",
+          "content": "Zoé déplace le panier ensuite elle ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "zoe"
+      }
+    },
+    {
+      "id": "heldout-021",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Émile ouvre le livre puis il ferme le coffre."
+        }
+      ],
+      "question": "Qui a fermé le coffre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-022",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Élodie ouvre la malle puis elle ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-023",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hugo ouvre le dossier puis il ferme le coffre."
+        }
+      ],
+      "question": "Qui a fermé le coffre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-024",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Camille ouvre la valise puis elle ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-025",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Antoine ouvre le sac puis il ferme le coffre."
+        }
+      ],
+      "question": "Qui a fermé le coffre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-026",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Emma ouvre la boîte puis elle ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-027",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Gabriel ouvre le coffret puis il ferme le coffre."
+        }
+      ],
+      "question": "Qui a fermé le coffre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-028",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chloé ouvre la grille puis elle ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-029",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Arthur ouvre le meuble puis il ferme le coffre."
+        }
+      ],
+      "question": "Qui a fermé le coffre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-030",
+      "category": "ambiguous_references",
+      "history": [
+        {
+          "role": "user",
+          "content": "Zoé ouvre la table puis elle ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-031",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Émile, qui déplace la lampe, ferme le livre."
+        }
+      ],
+      "question": "Qui a fermé le livre ?",
+      "expected": {
+        "type": "actor",
+        "value": "emile"
+      }
+    },
+    {
+      "id": "heldout-032",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bastien, qui déplace la malle, ferme le vase."
+        }
+      ],
+      "question": "Qui a fermé le vase ?",
+      "expected": {
+        "type": "actor",
+        "value": "bastien"
+      }
+    },
+    {
+      "id": "heldout-033",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hugo, qui déplace la caisse, ferme le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "actor",
+        "value": "hugo"
+      }
+    },
+    {
+      "id": "heldout-034",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Noé, qui déplace la valise, ferme le rideau."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "noe"
+      }
+    },
+    {
+      "id": "heldout-035",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Antoine, qui déplace la carte, ferme le sac."
+        }
+      ],
+      "question": "Qui a fermé le sac ?",
+      "expected": {
+        "type": "actor",
+        "value": "antoine"
+      }
+    },
+    {
+      "id": "heldout-036",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Victor, qui déplace la boîte, ferme le tableau."
+        }
+      ],
+      "question": "Qui a fermé le tableau ?",
+      "expected": {
+        "type": "actor",
+        "value": "victor"
+      }
+    },
+    {
+      "id": "heldout-037",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Clara, qui déplace la serrure, ferme le coffret."
+        }
+      ],
+      "question": "Qui a fermé le coffret ?",
+      "expected": {
+        "type": "actor",
+        "value": "clara"
+      }
+    },
+    {
+      "id": "heldout-038",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Élodie, qui déplace la grille, ferme le journal."
+        }
+      ],
+      "question": "Qui a fermé le journal ?",
+      "expected": {
+        "type": "actor",
+        "value": "elodie"
+      }
+    },
+    {
+      "id": "heldout-039",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alice, qui déplace la bouteille, ferme le meuble."
+        }
+      ],
+      "question": "Qui a fermé le meuble ?",
+      "expected": {
+        "type": "actor",
+        "value": "alice"
+      }
+    },
+    {
+      "id": "heldout-040",
+      "category": "relative_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Camille, qui déplace la table, ferme le panier."
+        }
+      ],
+      "question": "Qui a fermé le panier ?",
+      "expected": {
+        "type": "actor",
+        "value": "camille"
+      }
+    },
+    {
+      "id": "heldout-041",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Émile a fermé le livre, Clara ouvre la lampe."
+        }
+      ],
+      "question": "Qui a ouvert la lampe ?",
+      "expected": {
+        "type": "actor",
+        "value": "clara"
+      }
+    },
+    {
+      "id": "heldout-042",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Élodie ouvre la malle après que Bastien a fermé le vase."
+        }
+      ],
+      "question": "Qui a fermé le vase ?",
+      "expected": {
+        "type": "actor",
+        "value": "bastien"
+      }
+    },
+    {
+      "id": "heldout-043",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Hugo a fermé le dossier, Alice ouvre la caisse."
+        }
+      ],
+      "question": "Qui a ouvert la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "alice"
+      }
+    },
+    {
+      "id": "heldout-044",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Camille ouvre la valise après que Noé a fermé le rideau."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "noe"
+      }
+    },
+    {
+      "id": "heldout-045",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Antoine a fermé le sac, Inès ouvre la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "ines"
+      }
+    },
+    {
+      "id": "heldout-046",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Emma ouvre la boîte après que Victor a fermé le tableau."
+        }
+      ],
+      "question": "Qui a fermé le tableau ?",
+      "expected": {
+        "type": "actor",
+        "value": "victor"
+      }
+    },
+    {
+      "id": "heldout-047",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Gabriel a fermé le coffret, Léa ouvre la serrure."
+        }
+      ],
+      "question": "Qui a ouvert la serrure ?",
+      "expected": {
+        "type": "actor",
+        "value": "lea"
+      }
+    },
+    {
+      "id": "heldout-048",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chloé ouvre la grille après que Louis a fermé le journal."
+        }
+      ],
+      "question": "Qui a fermé le journal ?",
+      "expected": {
+        "type": "actor",
+        "value": "louis"
+      }
+    },
+    {
+      "id": "heldout-049",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Après que Arthur a fermé le meuble, Sarah ouvre la bouteille."
+        }
+      ],
+      "question": "Qui a ouvert la bouteille ?",
+      "expected": {
+        "type": "actor",
+        "value": "sarah"
+      }
+    },
+    {
+      "id": "heldout-050",
+      "category": "temporal_transfer",
+      "history": [
+        {
+          "role": "user",
+          "content": "Zoé ouvre la table après que Mathis a fermé le panier."
+        }
+      ],
+      "question": "Qui a fermé le panier ?",
+      "expected": {
+        "type": "actor",
+        "value": "mathis"
+      }
+    },
+    {
+      "id": "heldout-051",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Émile ferme la lampe."
+        },
+        {
+          "role": "user",
+          "content": "En fait, Clara ferme la lampe."
+        }
+      ],
+      "question": "Qui a fermé la lampe ?",
+      "expected": {
+        "type": "actor",
+        "value": "clara"
+      }
+    },
+    {
+      "id": "heldout-052",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bastien ouvre le vase."
+        },
+        {
+          "role": "user",
+          "content": "Je corrige : Élodie ouvre le vase."
+        }
+      ],
+      "question": "Qui a ouvert le vase ?",
+      "expected": {
+        "type": "actor",
+        "value": "elodie"
+      }
+    },
+    {
+      "id": "heldout-053",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hugo déplace la caisse."
+        },
+        {
+          "role": "user",
+          "content": "En fait, Alice déplace la caisse."
+        }
+      ],
+      "question": "Qui a déplacé la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "alice"
+      }
+    },
+    {
+      "id": "heldout-054",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Noé ferme le rideau."
+        },
+        {
+          "role": "user",
+          "content": "Je corrige : Camille ferme le rideau."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "camille"
+      }
+    },
+    {
+      "id": "heldout-055",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Antoine ouvre la carte."
+        },
+        {
+          "role": "user",
+          "content": "En fait, Inès ouvre la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "ines"
+      }
+    },
+    {
+      "id": "heldout-056",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Victor déplace le tableau."
+        },
+        {
+          "role": "user",
+          "content": "Je corrige : Emma déplace le tableau."
+        }
+      ],
+      "question": "Qui a déplacé le tableau ?",
+      "expected": {
+        "type": "actor",
+        "value": "emma"
+      }
+    },
+    {
+      "id": "heldout-057",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Gabriel ferme la serrure."
+        },
+        {
+          "role": "user",
+          "content": "En fait, Léa ferme la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "actor",
+        "value": "lea"
+      }
+    },
+    {
+      "id": "heldout-058",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Louis ouvre le journal."
+        },
+        {
+          "role": "user",
+          "content": "Je corrige : Chloé ouvre le journal."
+        }
+      ],
+      "question": "Qui a ouvert le journal ?",
+      "expected": {
+        "type": "actor",
+        "value": "chloe"
+      }
+    },
+    {
+      "id": "heldout-059",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Arthur déplace la bouteille."
+        },
+        {
+          "role": "user",
+          "content": "En fait, Sarah déplace la bouteille."
+        }
+      ],
+      "question": "Qui a déplacé la bouteille ?",
+      "expected": {
+        "type": "actor",
+        "value": "sarah"
+      }
+    },
+    {
+      "id": "heldout-060",
+      "category": "explicit_corrections",
+      "history": [
+        {
+          "role": "user",
+          "content": "Mathis ferme le panier."
+        },
+        {
+          "role": "user",
+          "content": "Je corrige : Zoé ferme le panier."
+        }
+      ],
+      "question": "Qui a fermé le panier ?",
+      "expected": {
+        "type": "actor",
+        "value": "zoe"
+      }
+    },
+    {
+      "id": "heldout-061",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Émile ferme le livre, Clara ouvre la lampe."
+        }
+      ],
+      "question": "Qui a ouvert la lampe ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-062",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lorsque Bastien ferme le vase, Élodie ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-063",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Hugo ferme le dossier, Alice ouvre la caisse."
+        }
+      ],
+      "question": "Qui a ouvert la caisse ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-064",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lorsque Noé ferme le rideau, Camille ouvre la valise."
+        }
+      ],
+      "question": "Qui a ouvert la valise ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-065",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Antoine ferme le sac, Inès ouvre la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-066",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lorsque Victor ferme le tableau, Emma ouvre la boîte."
+        }
+      ],
+      "question": "Qui a ouvert la boîte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-067",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Gabriel ferme le coffret, Léa ouvre la serrure."
+        }
+      ],
+      "question": "Qui a ouvert la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-068",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lorsque Louis ferme le journal, Chloé ouvre la grille."
+        }
+      ],
+      "question": "Qui a ouvert la grille ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-069",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Arthur ferme le meuble, Sarah ouvre la bouteille."
+        }
+      ],
+      "question": "Qui a ouvert la bouteille ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-070",
+      "category": "unasserted_conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lorsque Mathis ferme le panier, Zoé ouvre la table."
+        }
+      ],
+      "question": "Qui a ouvert la table ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-071",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Émile déplace le livre."
+        },
+        {
+          "role": "user",
+          "content": "Camille ouvre la lampe."
+        }
+      ],
+      "question": "Qui a ouvert la lampe ?",
+      "expected": {
+        "type": "actor",
+        "value": "camille"
+      }
+    },
+    {
+      "id": "heldout-072",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bastien déplace le vase."
+        },
+        {
+          "role": "user",
+          "content": "Inès ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "ines"
+      }
+    },
+    {
+      "id": "heldout-073",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hugo déplace le dossier."
+        },
+        {
+          "role": "user",
+          "content": "Emma ouvre la caisse."
+        }
+      ],
+      "question": "Qui a ouvert la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "emma"
+      }
+    },
+    {
+      "id": "heldout-074",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Noé déplace le rideau."
+        },
+        {
+          "role": "user",
+          "content": "Léa ouvre la valise."
+        }
+      ],
+      "question": "Qui a ouvert la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "lea"
+      }
+    },
+    {
+      "id": "heldout-075",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Antoine déplace le sac."
+        },
+        {
+          "role": "user",
+          "content": "Chloé ouvre la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "chloe"
+      }
+    },
+    {
+      "id": "heldout-076",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Victor déplace le tableau."
+        },
+        {
+          "role": "user",
+          "content": "Sarah ouvre la boîte."
+        }
+      ],
+      "question": "Qui a ouvert la boîte ?",
+      "expected": {
+        "type": "actor",
+        "value": "sarah"
+      }
+    },
+    {
+      "id": "heldout-077",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Clara déplace le coffret."
+        },
+        {
+          "role": "user",
+          "content": "Zoé ouvre la serrure."
+        }
+      ],
+      "question": "Qui a ouvert la serrure ?",
+      "expected": {
+        "type": "actor",
+        "value": "zoe"
+      }
+    },
+    {
+      "id": "heldout-078",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Élodie déplace le journal."
+        },
+        {
+          "role": "user",
+          "content": "Clara ouvre la grille."
+        }
+      ],
+      "question": "Qui a ouvert la grille ?",
+      "expected": {
+        "type": "actor",
+        "value": "clara"
+      }
+    },
+    {
+      "id": "heldout-079",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alice déplace le meuble."
+        },
+        {
+          "role": "user",
+          "content": "Élodie ouvre la bouteille."
+        }
+      ],
+      "question": "Qui a ouvert la bouteille ?",
+      "expected": {
+        "type": "actor",
+        "value": "elodie"
+      }
+    },
+    {
+      "id": "heldout-080",
+      "category": "cross_turn_switch",
+      "history": [
+        {
+          "role": "user",
+          "content": "Camille déplace le panier."
+        },
+        {
+          "role": "user",
+          "content": "Alice ouvre la table."
+        }
+      ],
+      "question": "Qui a ouvert la table ?",
+      "expected": {
+        "type": "actor",
+        "value": "alice"
+      }
+    },
+    {
+      "id": "heldout-081",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Émile n'a pas fermé la lampe."
+        }
+      ],
+      "question": "Qui a fermé la lampe ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-082",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bastien n'a pas ouvert le vase."
+        }
+      ],
+      "question": "Qui a ouvert le vase ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-083",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hugo n'a pas déplacé la caisse."
+        }
+      ],
+      "question": "Qui a déplacé la caisse ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-084",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Noé n'a pas fermé le rideau."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-085",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Antoine n'a pas ouvert la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-086",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Victor n'a pas déplacé le tableau."
+        }
+      ],
+      "question": "Qui a déplacé le tableau ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-087",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Gabriel n'a pas fermé la serrure."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-088",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Louis n'a pas ouvert le journal."
+        }
+      ],
+      "question": "Qui a ouvert le journal ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-089",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Arthur n'a pas déplacé la bouteille."
+        }
+      ],
+      "question": "Qui a déplacé la bouteille ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-090",
+      "category": "negation_scope",
+      "history": [
+        {
+          "role": "user",
+          "content": "Mathis n'a pas fermé le panier."
+        }
+      ],
+      "question": "Qui a fermé le panier ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "heldout-091",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "La lampe a été fermée par Émile."
+        }
+      ],
+      "question": "Qui a fermé la lampe ?",
+      "expected": {
+        "type": "actor",
+        "value": "emile"
+      }
+    },
+    {
+      "id": "heldout-092",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "Le vase a été ouvert par Élodie."
+        }
+      ],
+      "question": "Qui a ouvert le vase ?",
+      "expected": {
+        "type": "actor",
+        "value": "elodie"
+      }
+    },
+    {
+      "id": "heldout-093",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "La caisse a été déplacée par Hugo."
+        }
+      ],
+      "question": "Qui a déplacé la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "hugo"
+      }
+    },
+    {
+      "id": "heldout-094",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "Le rideau a été fermé par Camille."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "camille"
+      }
+    },
+    {
+      "id": "heldout-095",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "La carte a été ouverte par Antoine."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "antoine"
+      }
+    },
+    {
+      "id": "heldout-096",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "Le tableau a été déplacé par Emma."
+        }
+      ],
+      "question": "Qui a déplacé le tableau ?",
+      "expected": {
+        "type": "actor",
+        "value": "emma"
+      }
+    },
+    {
+      "id": "heldout-097",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "La serrure a été fermée par Gabriel."
+        }
+      ],
+      "question": "Qui a fermé la serrure ?",
+      "expected": {
+        "type": "actor",
+        "value": "gabriel"
+      }
+    },
+    {
+      "id": "heldout-098",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "Le journal a été ouvert par Chloé."
+        }
+      ],
+      "question": "Qui a ouvert le journal ?",
+      "expected": {
+        "type": "actor",
+        "value": "chloe"
+      }
+    },
+    {
+      "id": "heldout-099",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "La bouteille a été déplacée par Arthur."
+        }
+      ],
+      "question": "Qui a déplacé la bouteille ?",
+      "expected": {
+        "type": "actor",
+        "value": "arthur"
+      }
+    },
+    {
+      "id": "heldout-100",
+      "category": "passive_generalization",
+      "history": [
+        {
+          "role": "user",
+          "content": "Le panier a été fermé par Zoé."
+        }
+      ],
+      "question": "Qui a fermé le panier ?",
+      "expected": {
+        "type": "actor",
+        "value": "zoe"
+      }
+    }
+  ]
+}
