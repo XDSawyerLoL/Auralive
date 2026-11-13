@@ -1,3 +1,4 @@
+import {nativeUDConstructions} from './native_ud_constructions.js';
 // Limited French discourse coreference; no broad conversational or factual claims.
 const fold = v => String(v||'').toLocaleLowerCase('fr-FR').normalize('NFD')
   .replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").trim();
@@ -14,6 +15,8 @@ function patientGender(clause, patient) {
 }
 export function parseBoundedDiscourse(source,parseStatement){
   if(typeof parseStatement!=='function'||/[?？]/u.test(source)||String(source).length>500)return [];
+  const cleft=parseObservedCleft(source,parseStatement);
+  if(cleft)return [{frame:cleft,resolved:false}];
   const explicit=parseExplicitTemporal(source,parseStatement);
   if(explicit.length)return explicit;
   const relative=parseExplicitSubjectRelative(source,parseStatement);
@@ -80,4 +83,24 @@ export function parseExplicitSubjectRelative(source,parseStatement){
       dependent.kind!=='event'||main.kind!=='event')return [];
   return [{frame:dependent,relation:'relative-subject',resolved:false},
     {frame:main,relation:'main-clause',resolved:false}];
+}
+
+
+// Narrow French presentational cleft: a single capitalized overt name and
+// a finite affirmative relative. Acquired UD evidence gates the normalization;
+// subject/predicate/object extraction still uses the existing trained parser.
+// Never accept a generic noun phrase, modal, hypothetical, or subordinate.
+export function parseObservedCleft(source,parseStatement){
+ if(typeof parseStatement!=='function'||String(source||'').length>300||
+    /[?？;,\n]/u.test(source)||!nativeUDConstructions.evidenceCleft())return null;
+ const raw=String(source||'').trim();
+ const match=raw.match(/^c['’]est\s+([\p{Lu}][\p{L}-]{1,34})\s+qui\s+(.+?)[.!]?\s*$/u);
+ if(!match)return null;
+ const dependent=match[2].replace(/[.!]\s*$/u,'').trim();
+ if(!dependent||/\b(?:si|quand|lorsque|avant|apres|parce|car|que|qui|dit|pense|veut)\b/iu.test(fold(dependent)))return null;
+ const frame=parseStatement(match[1]+' '+dependent);
+ if(frame?.kind!=='event'||frame.voice!=='active'||
+    !frame.polarity||frame.agent!==fold(match[1])||!frame.patient)return null;
+ return {...frame,parser:'ud-cleft-construction',
+   cleft_evidence:nativeUDConstructions.evidenceCleft()};
 }
