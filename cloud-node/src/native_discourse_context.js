@@ -25,7 +25,9 @@ export function parseBoundedDiscourse(source,parseStatement){
   if(relative.length)return relative;
   // Never flatten unsupported subordinate clauses into asserted events.
   if(/\b(?:que|qui|quand|lorsque|si|avant)\b/iu.test(fold(source)))return [];
-  const clauses=String(source||'').split(/\s+(?:puis|ensuite)\s+|\s+et\s+(?=(?:il|elle)\s+)|[.;]\s*/iu)
+  const clauses=String(source||'')
+    .replace(/\b(il|elle)\s+(\p{L}+)\s+ensuite\s+/iu,'$1 $2 ')
+    .split(/\s+(?:puis|ensuite)\s+|\s+et\s+(?=(?:il|elle)\s+)|[.;]\s*/iu)
     .map(s=>s.trim()).filter(Boolean);
   if(!clauses.length||clauses.length>4)return [];
   const output=[];
