@@ -86,10 +86,10 @@ export class NativeUDConstructions{
   const par=tokens.lastIndexOf('par');
   if(par>=0){
    const candidateVerbs=tokens.map((word,i)=>({word,i,lemma:this.lemma(word)}))
-     .filter(x=>x.lemma&&x.i<par);
+     .filter(x=>x.lemma&&!AUX.has(x.word)&&x.i<par);
    if(candidateVerbs.length!==1)return null;
    const v=candidateVerbs[0];
-   if(v.i<2||par<=v.i+1||par===tokens.length-1)return null;
+   if(v.i<2||par!==v.i+1||par===tokens.length-1)return null;
    const aux=tokens.slice(0,v.i).filter(x=>AUX.has(x));
    if(!aux.some(x=>['est','sont','etait','etaient','ete'].includes(x)))return null;
    const pattern=this.evidence({voice:'passive',subjectSide:'left',objectSide:'none',agentSide:'right'});
