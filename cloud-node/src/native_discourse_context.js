@@ -17,13 +17,15 @@ export function parseBoundedDiscourse(source,parseStatement){
   if(typeof parseStatement!=='function'||/[?？]/u.test(source)||String(source).length>500)return [];
   const cleft=parseObservedCleft(source,parseStatement);
   if(cleft)return [{frame:cleft,resolved:false}];
+  const displaced=parseFrontedObject(source,parseStatement);
+  if(displaced)return [{frame:displaced,resolved:false}];
   const explicit=parseExplicitTemporal(source,parseStatement);
   if(explicit.length)return explicit;
   const relative=parseExplicitSubjectRelative(source,parseStatement);
   if(relative.length)return relative;
   // Never flatten unsupported subordinate clauses into asserted events.
   if(/\b(?:que|qui|quand|lorsque|si|avant)\b/iu.test(fold(source)))return [];
-  const clauses=String(source||'').split(/\s+(?:puis|ensuite)\s+|[.;]\s*/iu)
+  const clauses=String(source||'').split(/\s+(?:puis|ensuite)\s+|\s+et\s+(?=(?:il|elle)\s+)|[.;]\s*/iu)
     .map(s=>s.trim()).filter(Boolean);
   if(!clauses.length||clauses.length>4)return [];
   const output=[];
@@ -43,7 +45,8 @@ export function parseBoundedDiscourse(source,parseStatement){
       output.push({frame:null,resolved:false});
       continue;
     }
-    const frame=parseStatement(prev.agent+' '+match[2]);
+    const continuation=match[2].replace(/\s+ensuite\s+/u,' ');
+    const frame=parseStatement(prev.agent+' '+continuation);
     output.push({frame:frame||null,resolved:Boolean(frame)});
   }
   return output;
@@ -103,4 +106,26 @@ export function parseObservedCleft(source,parseStatement){
     !frame.polarity||frame.agent!==fold(match[1])||!frame.patient)return null;
  return {...frame,parser:'ud-cleft-construction',
    cleft_evidence:nativeUDConstructions.evidenceCleft()};
+}
+
+
+// Object dislocation: overt definite patient, overt named agent, clitic l'a,
+// a single observed participle, and matching grammatical agreement.
+// The resulting event is still an unverified user statement.
+export function parseFrontedObject(source,parseStatement){
+ if(typeof parseStatement!=='function'||String(source||'').length>300||
+    /[?？;\n]/u.test(source))return null;
+ const raw=String(source||'').trim().replace(/[.!]\s*$/u,'');
+ const m=raw.match(/^(Le|La)\s+([\p{L}-]{2,40}),\s+([\p{Lu}][\p{L}-]{1,40})\s+l['’]a\s+([\p{L}-]{3,35})$/u);
+ if(!m)return null;
+ const feminine=m[1]==='La';
+ const participle=fold(m[4]);
+ if(feminine&&!participle.endsWith('e'))return null;
+ const stem=feminine?participle.slice(0,-1):participle;
+ const lemma=nativeUDConstructions.lemma(stem);
+ if(!lemma||lemma==='avoir'||lemma==='etre')return null;
+ const frame=parseStatement(m[3]+' a '+stem+' '+m[1]+' '+m[2]);
+ if(frame?.kind!=='event'||!frame.polarity||frame.agent!==fold(m[3])||
+   frame.patient!==fold(m[2])||frame.predicate!==lemma)return null;
+ return {...frame,parser:'bounded-object-dislocation'};
 }
