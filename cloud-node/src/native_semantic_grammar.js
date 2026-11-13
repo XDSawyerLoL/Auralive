@@ -138,7 +138,14 @@ function collect(history=[],stored=[]){
     const scope=classifyFrenchEventScope(row.content);
     // A syntactically extractable agent is not evidence that the event took place.
     // Non-asserted clauses are kept in a separate analytical representation only.
-    if(!scope.asserted){previousUserStatement=null;continue;}
+    if(!scope.asserted){
+      const relations=analyzeFrenchEventRelations(row.content,parseFrenchStatement);
+      if(relations.scope==='user-asserted'&&relations.events.length===2&&
+         relations.events.every(e=>e.asserted&&e.polarity))
+        frames.push(...relations.events);
+      previousUserStatement=null;
+      continue;
+    }
     const parts=splitAssertions(row.content);
     for(const part of parts){
       if(!classifyFrenchEventScope(part).asserted)continue;
