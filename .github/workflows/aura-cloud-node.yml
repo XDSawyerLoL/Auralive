@@ -42,6 +42,14 @@ jobs:
           name: aura-discourse-diagnostic
           path: cloud-node/discourse-diagnostic-report.json
           if-no-files-found: error
+      - name: Evaluate frozen 100-case discourse heldout, no tuning
+        run: node scripts/evaluate_discourse_heldout_100.mjs discourse-heldout-100-report.json
+      - name: Upload 100-case discourse evaluation
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-discourse-heldout-100
+          path: cloud-node/discourse-heldout-100-report.json
+          if-no-files-found: error
       - name: Run falsifiable AGI capability battery
         run: npm run audit:agi -- --json=agi-audit-report.json
       - name: Upload AGI audit report
