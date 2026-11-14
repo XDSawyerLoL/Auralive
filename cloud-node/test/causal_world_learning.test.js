@@ -1,18 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,
- causalWorldChoice,causalWorldAblation}
+ causalWorldChoice,causalWorldAblation,proposeCausalPolicyTransfer,causalPolicyTransferAblation}
  from '../src/causal_world_learning.js';
 const context='docs_readability';
 const receipt=(id,source='machine-verified')=>({
  episode_id:id,source,calibrated:source==='machine-verified'
 });
 function experience(state,id,{success=true,source='machine-verified',
- contextTag=context,action='verify',at=id*10}={}){
+ contextTag=context,action='verify',at=id*10,affordances=[]}={}){
  const issued='2026-11-14T10:'+String(at).padStart(2,'0')+':00.000Z';
  const observed='2026-11-14T10:'+String(at).padStart(2,'0')+':01.000Z';
  const p=predictCausalWorld(state,{
-  episodeId:id,context:contextTag,action,issuedAt:issued});
+  episodeId:id,context:contextTag,action,issuedAt:issued,affordances});
  assert.equal(p.accepted,true);
  const result=observeVerifiedCausalWorld(
   JSON.parse(JSON.stringify(p.state)),{
@@ -103,4 +103,58 @@ test('pending prediction does not count as evidence after a process restart',()=
   ledgerReceipt:{episode_id:5,source:'founder-feedback',calibrated:false}
  });
  assert.equal(falseReceipt.accepted,false);
+});
+
+
+test('verified source actions transfer a safety competence into a novel domain and survive restart',()=>{
+ const features=['read_only','filesystem','path_access','precheck_available'];
+ let world=initialCausalWorld();
+ for(const row of [
+  [1,'config_health'],[2,'article_media']
+ ]){
+  const out=experience(world,row[0],{contextTag:row[1],affordances:features});
+  assert.equal(out.accepted,true);
+  world=out.state;
+ }
+ const options={targetContext:'backup_review',affordances:features};
+ const first=proposeCausalPolicyTransfer(world,options);
+ assert.equal(first.transferred,true);
+ assert.equal(first.action,'verify');
+ assert.equal(first.target_outcome_verified,false);
+ assert.deepEqual(first.source_domains,['article_media','config_health']);
+ assert.deepEqual(first.evidence_ids,[1,2]);
+ assert.match(first.safety,/private-authorized-probe/);
+ assert.deepEqual(proposeCausalPolicyTransfer(JSON.parse(JSON.stringify(world)),options),first);
+ const ablation=causalPolicyTransferAblation(world,options);
+ assert.equal(ablation.transfer_depends_on_verified_history,true);
+ assert.equal(ablation.without.transferred,false);
+ assert.equal(proposeCausalPolicyTransfer(world,{
+  targetContext:'external_camera',affordances:['vision','realtime']}).transferred,false);
+});
+test('a contrary verified outcome stops transfer instead of silently rewarding majority',()=>{
+ const features=['read_only','filesystem','path_access','precheck_available'];
+ let world=initialCausalWorld();
+ for(const row of [
+  [1,'config_health',true],[2,'article_media',true],
+  [3,'backup_review',false]
+ ]){
+  const out=experience(world,row[0],{
+   contextTag:row[1],success:row[2],affordances:features});
+  world=out.state;
+ }
+ const outcome=proposeCausalPolicyTransfer(world,{
+  targetContext:'new_backup_check',affordances:features});
+ assert.equal(outcome.transferred,false);
+ assert.equal(outcome.contrary_outcomes,1);
+});
+test('same domain or repeated run cannot masquerade as independent cross-domain proof',()=>{
+ const features=['read_only','filesystem'];
+ let world=initialCausalWorld();
+ for(const id of [1,2]){
+  const out=experience(world,id,{
+   contextTag:'same_context',affordances:features});
+  world=out.state;
+ }
+ assert.equal(proposeCausalPolicyTransfer(world,{
+  targetContext:'new_context',affordances:features}).transferred,false);
 });
