@@ -621,6 +621,45 @@ export class CognitiveKernel {
       [Math.max(1,Math.min(Number(limit)||20,100))]);
   }
 
+  async learningEvidence({context='docs_readability',limit=12}={}){
+    const max=Math.max(1,Math.min(30,Number(limit)||12));
+    const scope=/^[a-z0-9_-]{3,70}$/i.test(String(context))
+      ?String(context):'docs_readability';
+    const [candidates,verifiedLessons]=await Promise.all([
+      this.learningCandidates(max),this.lessons(max),
+    ]);
+    const world=this.soulCache?.world_learning||initialCausalWorld();
+    const ablation=causalWorldAblation(world,{
+      context:scope,baseline:'respond',allowed:['respond','verify'],
+    });
+    return {
+      schema:'aura-causal-learning-inspector-v1',
+      externally_verified_facts_not_inferred_from_text:true,
+      self_generated_candidates:candidates.length,
+      independently_verified_lessons:verifiedLessons.length,
+      pending_prospective_predictions:Array.isArray(world.pending)?world.pending.length:0,
+      machine_verified_outcomes:Array.isArray(world.episodes)?world.episodes.length:0,
+      causal_choice:ablation.actual,
+      choice_without_evidence:ablation.without_evidence,
+      ablation_changes_decision:ablation.decision_changed,
+      candidate_records:candidates.map(c=>({
+        key:c.lesson_key,kind:c.kind,source:c.origin,
+        status:c.status,repetitions:Number(c.repetitions||0),
+        repeats_are_not_verified_evidence:true,
+      })),
+      trusted_lessons:verifiedLessons.map(l=>({
+        key:l.lesson_key,content:l.content,verified_machine_runs:Number(l.evidence_count||0),
+        source:l.source,
+      })),
+      recent_outcomes:(world.episodes||[]).slice(-max).map(e=>({
+        episode_id:e.episode_id,context:e.context,action:e.action,
+        success:e.success,predicted_probability:e.predicted_probability,
+        independent_machine_receipt:true,
+      })),
+      limitations:'Échantillons d’actions vérifiées et apprentissage borné ; ni neurones biologiques ni preuve de conscience.',
+    };
+  }
+
   async learn({lessonKey,content,confidence=0.6,source='experience'}={}) {
     const key=String(lessonKey||'').slice(0,260);
     const body=String(content||'').trim().slice(0,4000);
