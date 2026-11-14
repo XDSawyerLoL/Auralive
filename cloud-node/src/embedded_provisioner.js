@@ -32,9 +32,19 @@ const MODEL_Q4 = Object.freeze({
   url:'https://huggingface.co/tauqir02/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
   minBytes:480_000_000,maxBytes:490_000_000
 });
+const MODEL_17B_Q4=Object.freeze({
+ filename:'Qwen3-1.7B-Q4_K_M.gguf',
+ sha256:'d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5',
+ url:'https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf',
+ minBytes:1_250_000_000,maxBytes:1_340_000_000,
+ minimumMemoryBytes:3_000_000_000,minimumDiskBytes:1_650_000_000
+});
 export function selectedEmbeddedModel(env=process.env) {
-  return env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION==='q4'
-    ?MODEL_Q4:MODEL;
+  const requested=String(env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION||'').trim();
+  if(requested==='1.7b-q4')return MODEL_17B_Q4;
+  if(requested==='q4'||(env.AURA_LOCAL_LANGUAGE_ONLY==='true'&&requested!=='q8'))
+    return MODEL_Q4;
+  return MODEL;
 }
 const MIN_MEMORY = 1_500 * 1024 * 1024;
 const MIN_FREE_DISK = 900 * 1024 * 1024;
@@ -102,7 +112,8 @@ async function chooseInstallDir({home=homedir(),cwd=process.cwd(),temp=tmpdir()}
       const saved=await stat(join(folder,selection.filename)).catch(()=>null);
       const cached=Boolean(saved && saved.size>(selection.minBytes||500*1024*1024) &&
         saved.size<(selection.maxBytes||750*1024*1024));
-      if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024 : MIN_FREE_DISK))continue;
+      const requiredDisk=selection.minimumDiskBytes||MIN_FREE_DISK;
+      if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024 : requiredDisk))continue;
       return folder;
     }catch{}
   }
@@ -230,8 +241,9 @@ export class EmbeddedProvisioner {
     return {enabled:this.enabled,stage:this.stage,error_code:this.lastError,
       failed_stage:this.failedStage,redirect_origin:this.failureOrigin,
       engine_variant:this.engineVariant,
-      engine_revision:REVISION,model:'Qwen3-0.6B '+
-        (selectedEmbeddedModel()===MODEL_Q4?'Q4_K_M':'Q8_0'),no_paid_api:true,
+      engine_revision:REVISION,model:selectedEmbeddedModel()===MODEL_17B_Q4
+        ?'Qwen3-1.7B Q4_K_M':'Qwen3-0.6B '+(selectedEmbeddedModel()===MODEL_Q4?'Q4_K_M':'Q8_0'),
+      no_paid_api:true,
       retry_after:this.retryAfter>Date.now()?new Date(this.retryAfter).toISOString():null};
   }
   async ensure(){
@@ -250,11 +262,12 @@ export class EmbeddedProvisioner {
     return this.inflight;
   }
   async #prepare(){
+    const selection=selectedEmbeddedModel();
     const memory=await availableMemory();
-    if(memory!==null && memory<MIN_MEMORY)throw new Error('embedded-insufficient-cgroup-memory');
+    if(memory!==null && memory<(selection.minimumMemoryBytes||MIN_MEMORY))
+      throw new Error('embedded-insufficient-cgroup-memory');
     const cache=await chooseInstallDir(this.settings);
     const dest=join(cache,'llama-'+REVISION);
-    const selection=selectedEmbeddedModel();
     const model=join(cache,selection.filename);
     const binInfo=BUNDLES[process.arch];
     this.stage='locating-existing-install';
