@@ -1734,6 +1734,48 @@ app.get('/api/kernel/learning-evidence', async (request, reply) => {
   });
 });
 
+// Owner-only conceptual memory. An HTTP client can only add a USER REPORT.
+// It cannot claim a verified machine outcome, trigger inference or execute a
+// transferred policy. Server-side CSRF protection applies to POST requests.
+app.get('/api/kernel/concepts', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  return kernel.conceptEvidence({
+    domain:String(request.query?.domain||'').slice(0,70),
+    limit:request.query?.limit,
+  });
+});
+app.post('/api/kernel/concepts/observe', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  const body=request.body||{};
+  const outcome=await kernel.annotateConcept({
+    domain:body.domain,
+    subject:{label:body.subject?.label,kind:body.subject?.kind},
+    relation:body.relation,
+    object:{label:body.object?.label,kind:body.object?.kind},
+    polarity:body.polarity||'positive',
+    timeScope:body.time_scope||'unspecified',
+  });
+  if(!outcome.accepted)return reply.code(422).send(outcome);
+  return outcome;
+});
+app.post('/api/kernel/concepts/retract', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  return kernel.retractConceptAnnotation(request.body?.source_id);
+});
+app.post('/api/kernel/concepts/transfer', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  const body=request.body||{};
+  return kernel.conceptualTransfer({
+    targetDomain:body.target_domain,
+    subject:{label:body.subject?.label,kind:body.subject?.kind},
+    object:{label:body.object?.label,kind:body.object?.kind},
+  });
+});
+
 // Offline-curated directory. Links are informational, not external actions.
 app.get('/api/toolbox/resources', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
