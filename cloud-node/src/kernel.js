@@ -36,6 +36,8 @@ import { initialAttentionSchema,predictAttention,steerAttention,observeAttention
 import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
 import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
 import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice,causalWorldAblation} from './causal_world_learning.js';
+import {initialConceptMemory,addConceptRelation,retractConceptSource,inspectConceptMemory,observeMachineVerifiedConcept,proposeCrossDomainRelation,conceptTransferAblation} from './conceptual_world_memory.js';
+import {inspectFrenchEventGraph} from './native_semantic_grammar.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -223,6 +225,7 @@ export class CognitiveKernel {
       autonomous_allowance:null,
       verified_probe_loop:initialVerifiedLoop(),
       world_learning:initialCausalWorld(),
+      concept_memory:initialConceptMemory(),
       viability:initialViability(),
       consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
@@ -349,6 +352,8 @@ export class CognitiveKernel {
       this.soulCache.verified_probe_loop=initialVerifiedLoop();
     if(!this.soulCache.world_learning||this.soulCache.world_learning.version!=='aura-causal-world-v1')
       this.soulCache.world_learning=initialCausalWorld();
+    if(this.soulCache.concept_memory?.schema!=='aura-concept-memory-v1')
+      this.soulCache.concept_memory=initialConceptMemory();
     // Rehydrated permits are never trusted after a process restart.
     this.soulCache.autonomous_allowance=null;
     this.pendingOwnerProbePermit=null;
@@ -658,6 +663,86 @@ export class CognitiveKernel {
       })),
       limitations:'Échantillons d’actions vérifiées et apprentissage borné ; ni neurones biologiques ni preuve de conscience.',
     };
+  }
+
+  // Private annotations may use new concepts, predicates and kinds without
+  // adding a grammar rule. They are reports about reality, not verified facts.
+  async annotateConcept({
+    domain,subject,relation,object,polarity='positive',
+    timeScope='unspecified',sourceId
+  }={}){
+    const source=String(sourceId||('owner:'+randomUUID()));
+    const result=addConceptRelation(this.soulCache?.concept_memory,{
+      domain,subject,relation,object,polarity,timeScope,
+      evidence:{source_id:source,kind:'user-report',observed_at:now()}
+    });
+    if(result.accepted){
+      this.soulCache.concept_memory=result.state;
+      await this.saveSoul();
+    }
+    return {accepted:result.accepted,reason:result.reason,
+      source_id:result.accepted?source:null,relation_id:result.relation_id||null,
+      status:result.status||null,conflicts:result.conflicts||[],
+      no_machine_verification:true};
+  }
+
+  async retractConceptAnnotation(sourceId){
+    const result=retractConceptSource(this.soulCache?.concept_memory,{
+      sourceId:String(sourceId||''),at:now()});
+    if(result.changed){
+      this.soulCache.concept_memory=result.state;
+      await this.saveSoul();
+    }
+    return {changed:result.changed,affected_evidence:result.affected_evidence||0};
+  }
+
+  // A shared event representation is stored as a report only for private,
+  // admitted conversations. The complete utterance is NOT duplicated into
+  // this graph and does not become a machine-verified fact.
+  async rememberFrenchEventLinks(text,{sourceId,domain='private_dialogue'}={}){
+    if(typeof text!=='string'||text.length>500)return {accepted:false};
+    const parsed=inspectFrenchEventGraph(text);
+    if(parsed?.events?.length!==2||parsed?.relations?.length<1)
+      return {accepted:false,reason:'no-supported-event-relation'};
+    let graph=this.soulCache?.concept_memory||initialConceptMemory(),created=0;
+    const sid=String(sourceId||('dialogue:'+randomUUID()));
+    for(const link of parsed.relations.slice(0,2)){
+      const a=parsed.events[link.from],b=parsed.events[link.to];
+      if(!a?.agent||!a?.predicate||!a?.patient||
+         !b?.agent||!b?.predicate||!b?.patient)continue;
+      const classify=predicate=>'event_'+String(predicate).normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'').toLowerCase()
+        .replace(/[^a-z0-9_]/g,'_').slice(0,45);
+      const out=addConceptRelation(graph,{
+        domain,
+        subject:{label:[a.agent,a.predicate,a.patient].join(' ').slice(0,160),
+          kind:classify(a.predicate)},
+        relation:link.type,
+        object:{label:[b.agent,b.predicate,b.patient].join(' ').slice(0,160),
+          kind:classify(b.predicate)},
+        timeScope:'dialogue_'+sid.replace(/[^a-z0-9_-]/gi,'_').slice(0,45),
+        evidence:{source_id:sid,kind:'user-report',observed_at:now()}
+      });
+      if(out.accepted){graph=out.state;created++;}
+    }
+    if(created){
+      this.soulCache.concept_memory=graph;
+      await this.saveSoul();
+    }
+    return {accepted:created>0,relations_recorded:created,
+      epistemic_status:'user-reported',verified_world_facts:0};
+  }
+
+  conceptEvidence({domain='',limit=25}={}){
+    return inspectConceptMemory(this.soulCache?.concept_memory,{domain,limit});
+  }
+
+  conceptualTransfer({targetDomain,subject,object}={}){
+    const params={targetDomain,subject,object};
+    return {proposal:proposeCrossDomainRelation(
+      this.soulCache?.concept_memory,params),
+      ablation:conceptTransferAblation(this.soulCache?.concept_memory,params),
+      automatic_execution:false,verified_target_facts:0};
   }
 
   async learn({lessonKey,content,confidence=0.6,source='experience'}={}) {
