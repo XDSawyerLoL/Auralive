@@ -3,7 +3,7 @@ import { config } from './config.js';
 import {MillisecondReflex} from './millisecond_reflex.js';
 import { one, query, getDb } from './db.js';
 import { HistoryLedger,historyChoice } from './history_provenance.js';
-import {candidateKind,evaluateProspectiveLessonEvidence,verifiedLessonDescription,TRUSTED_LESSONS_SQL,VERIFIED_LESSON_SOURCE} from './epistemic_lessons.js';
+import {candidateKind,evaluateProspectiveLessonEvidence,verifiedLessonDescription,TRUSTED_LESSONS_SQL,TRUSTED_LESSON_COUNT_SQL,VERIFIED_LESSON_SOURCE} from './epistemic_lessons.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
@@ -3292,9 +3292,12 @@ export class CognitiveKernel {
       improvements: 'aura_improvement_proposals',
       initiatives: 'aura_initiatives',
     })) {
-      const row = await one(`SELECT COUNT(*) AS total FROM ${table}`);
+      const row = await one(key==='lessons'?TRUSTED_LESSON_COUNT_SQL:
+        `SELECT COUNT(*) AS total FROM ${table}`);
       counts[key] = Number(row?.total || 0);
     }
+    const unverified=await one("SELECT COUNT(*) AS total FROM aura_learning_candidates WHERE status='candidate'");
+    counts.learning_candidates=Number(unverified?.total||0);
     return {
       version: CognitiveKernel.VERSION,
       runtime: 'node-hostinger',
