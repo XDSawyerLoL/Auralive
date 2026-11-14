@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
-  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot} from '../src/embedded_language.js';
+  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot,independentLocalLanguageBoot} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -582,4 +582,19 @@ test('a textual stub with no positive completion_tokens is never proof of infere
   });
   assert.equal(await runtime.start(),false);
   assert.equal(runtime.status().failure_code,'embedded-inference-probe-invalid');
+});
+
+test('independent language startup provisions missing GGUF without database',()=>{
+ const absent=independentLocalLanguageBoot({
+  warmup:true,installed:false,autoprovisionEnabled:true,canProvision:true});
+ assert.deepEqual(absent,{start:true,allowProvision:true});
+ assert.deepEqual(independentLocalLanguageBoot({
+  warmup:true,installed:false,autoprovisionEnabled:false,canProvision:true
+ }),{start:false,allowProvision:false});
+ assert.deepEqual(independentLocalLanguageBoot({
+  warmup:true,installed:true,autoprovisionEnabled:false,canProvision:false
+ }),{start:true,allowProvision:false});
+ assert.deepEqual(independentLocalLanguageBoot({
+  warmup:false,installed:true,autoprovisionEnabled:true,canProvision:true
+ }),{start:false,allowProvision:false});
 });
