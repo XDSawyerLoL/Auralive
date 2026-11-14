@@ -101,3 +101,21 @@ test('training rejects supplied claims without exact verb lemma or clear spans',
  }
  assert.equal(learner.status().ready,0);
 });
+
+
+test('same learner acquires a second unseen word-order topology from annotations',()=>{
+ const learner=new NativeConstructionLearner();
+ for(const x of [
+  {sentence:"La porte, c'est Romain qui l'a fermée.",agent:'Romain',patient:'porte',predicate:'fermer'},
+  {sentence:"Le tiroir, c'est Camille qui l'a ouvert.",agent:'Camille',patient:'tiroir',predicate:'ouvrir'},
+  {sentence:"La caisse, c'est Nadia qui l'a déplacée.",agent:'Nadia',patient:'caisse',predicate:'déplacer'}
+ ])assert.equal(learner.observe(x).accepted,true);
+ assert.equal(learner.status().ready,1);
+ const question="Qui a ouvert la fenêtre ?";
+ const history=[{role:'user',content:"La fenêtre, c'est Luc qui l'a ouverte."}];
+ const frame=learner.parse(history[0].content);
+ assert.equal(frame?.agent,'luc');
+ assert.equal(frame?.predicate,'ouvrir');
+ assert.equal(frame?.patient,'fenetre');
+ assert.match(answerFrenchFromConversation({question,history,constructionLearner:learner})?.text||'',/Luc/);
+});
