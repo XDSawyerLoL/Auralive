@@ -168,6 +168,8 @@ export const config = Object.freeze({
   aiTimeoutMs: int('AI_TIMEOUT_MS', 45000, 1000, 180000),
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
+  // Strict owner-selected local language policy: no Groq, Gemini, OpenRouter or other remote LLM.
+  localLanguageOnly: bool('AURA_LOCAL_LANGUAGE_ONLY', false),
   frenchLanguageRequired: bool('AURA_FRENCH_LANGUAGE_REQUIRED', true),
   embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', true),
 
@@ -188,7 +190,7 @@ export const config = Object.freeze({
   // GroqCloud Free: ONLY if the account holder explicitly confirms the
   // organization is on FREE, not Developer (which charges for tokens).
   // The key is server-private; the endpoint and models are hard allowlisted.
-  groqFreeEnabled: bool('AURA_GROQ_FREE_ENABLED', true),
+  groqFreeEnabled: bool('AURA_GROQ_FREE_ENABLED', false),
   groqFreePlanConfirmed: bool('AURA_GROQ_FREE_PLAN_CONFIRMED', false),
   groqApiKey: process.env.AURA_GROQ_API_KEY || process.env.GROQ_API_KEY || '',
   groqFreeModel: String(process.env.AURA_GROQ_FREE_MODEL || 'qwen/qwen3.8-27b').trim(),
