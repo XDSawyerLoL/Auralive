@@ -3429,6 +3429,10 @@ export class CognitiveKernel {
     }
     const unverified=await one("SELECT COUNT(*) AS total FROM aura_learning_candidates WHERE status='candidate'");
     counts.learning_candidates=Number(unverified?.total||0);
+    const cognitiveGraph=this.soulCache?.concept_memory||initialConceptMemory();
+    counts.concepts=Array.isArray(cognitiveGraph.nodes)?cognitiveGraph.nodes.length:0;
+    counts.concept_relations=Array.isArray(cognitiveGraph.links)?cognitiveGraph.links.length:0;
+    counts.concept_revisions=Number(cognitiveGraph.revision||0);
     return {
       version: CognitiveKernel.VERSION,
       runtime: 'node-hostinger',
