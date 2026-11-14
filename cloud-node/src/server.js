@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
+import {localDialogueReadiness} from './local_dialogue_readiness.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -2325,6 +2326,27 @@ app.post('/api/cognition/initiative/feedback', async (request, reply) => {
   return {ok:accepted,accepted};
 });
 
+async function localLanguageSnapshot(){
+  let bridgeOnline=false;
+  if(config.localLanguageOnly&&bridge.enabled){
+    try{bridgeOnline=await bridge.workerOnline();}catch{}
+  }
+  return localDialogueReadiness({
+    localOnly:config.localLanguageOnly,
+    runtime:embeddedLanguageRuntime.status(),
+    booting:Boolean(embeddedLanguageRuntime.booting),
+    bridgeOnline,
+    autoProvision:embeddedLanguageRuntime.canProvision(),
+  });
+}
+
+// Read-only status works even when MySQL is not ready. No paths, user text,
+// provider credentials, raw stderr or private kernel history are included.
+app.get('/api/language/ready', async (_request, reply)=>{
+  reply.header('Cache-Control','no-store');
+  return localLanguageSnapshot();
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
@@ -2364,6 +2386,7 @@ app.post('/api/chat', async (request, reply) => {
   // addition was neither planned nor part of the stored dialogue.
   const curiosityItem = null;
   const answer = unavailable ? '' : baseAnswer;
+  const languageRuntime=unavailable?await localLanguageSnapshot():null;
   cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
@@ -2374,7 +2397,8 @@ app.post('/api/chat', async (request, reply) => {
     response_kind: unavailable ? 'model-unavailable'
       : response?.response_kind==='native-kernel' ? 'native-kernel':'model-generated',
     language_unavailable: unavailable,
-    retryable: unavailable,
+    language_runtime:languageRuntime,
+    retryable: unavailable&&Boolean(languageRuntime?.retryable),
     service_status: unavailable ? {
       code: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'local-corpus-unsupported-intent':'french-inference-unavailable',
