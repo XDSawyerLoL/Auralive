@@ -533,8 +533,13 @@ export class FrenchLanguageFaculty {
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(groq.enabled || embedded.ready || federation.enabled || local);
-    const blockingReason = installing ? 'embedded-language-installing'
+    const ready = config.localLanguageOnly
+      ?Boolean(embedded.ready&&embedded.probe_verified||local)
+      :Boolean(groq.enabled || embedded.ready || federation.enabled || local);
+    const blockingReason = config.localLanguageOnly && !ready
+      ?(provisionFailed?'embedded-language-installation-blocked'
+        :embedded.failure_code||'embedded-language-not-responsive')
+      : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['groq-free','zero-cost-federation','runtime-local'].includes(this.lastMode)
@@ -713,7 +718,7 @@ export class FrenchLanguageFaculty {
     // GroqCloud Free is the preferred conversational model when the operator
     // explicitly confirms their organization has NO paid Developer billing.
     // Never interpret a configured key alone as proof of a free plan.
-    if(this.groq?.enabled){
+    if(!config.localLanguageOnly&&this.groq?.enabled){
       try{
         const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
         let result=await this.groq.generate(
@@ -787,7 +792,7 @@ export class FrenchLanguageFaculty {
     const embeddedAnswer = await tryEmbedded();
     if (embeddedAnswer) return embeddedAnswer;
 
-    if (this.federation?.enabled) {
+    if (!config.localLanguageOnly&&this.federation?.enabled) {
       try {
         // The full semantic JSON is appropriate for larger models, but the
         // free router may select a small or reasoning-heavy model. Use a
