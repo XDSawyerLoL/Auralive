@@ -73,6 +73,7 @@ export class NativeLocalSemanticEncoder{
   this.config=configuration;
   this.load=load;
   this.model=null;
+  this.loading=null;
   this.status='not-initialized';
   this.failure='none';
  }
@@ -84,6 +85,12 @@ export class NativeLocalSemanticEncoder{
    limitations:'similarity-only, no facts, no generative language'};
  }
  async initialize(){
+  if(this.model)return true;
+  if(this.loading)return this.loading;
+  this.loading=this.initializeOnce();
+  try{return await this.loading;}finally{this.loading=null;}
+ }
+ async initializeOnce(){
   if(this.model)return true;
   if(!this.config.ready){this.status='disabled';this.failure=this.config.reason;return false;}
   try{
