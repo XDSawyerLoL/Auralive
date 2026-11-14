@@ -1275,6 +1275,8 @@ export class CognitiveKernel {
         trigger: effectiveTrigger,
         continuity: continuity.due ? continuity.snapshot : null,
         cognition_version: CognitionEngine.VERSION,
+        epistemic_scope:'self-generated-hypothesis',
+        independently_verified:false,
         language_model_used_for_decision: false,
         horizon_used: Boolean(bundle.horizon),
         stimuli_count: bundle.stimuli.length,
@@ -1335,6 +1337,8 @@ export class CognitiveKernel {
         confidence,
         autonomy_hint: parsed.autonomy_hint || (restrictedAuthority ? 'notify_or_verify_only' : 'native_cognition_then_policy_gate'),
         cognition_version: CognitionEngine.VERSION,
+        epistemic_scope:'self-generated-hypothesis',
+        independently_verified:false,
         language_model_used_for_decision: false,
       };
       await this.trace('reflection', title, summary, reflection);
