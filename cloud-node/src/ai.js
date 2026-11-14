@@ -46,6 +46,7 @@ function isLocalAiEndpoint(value) {
 }
 
 function remoteFallbackBlocked() {
+  if (config.localLanguageOnly) return true;
   if (!config.zeroCostMode) return false;
   if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
   if (config.aiMode === 'gemini') {
@@ -88,8 +89,13 @@ export class AiClient {
   }
 
   get provider() {
-    if (this.groq.enabled) return 'groq-free';
+    if (config.localLanguageOnly) {
+      if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
+      if (this.bridge?.enabled) return 'aura-runtime-local';
+      return 'local-language-not-ready';
+    }
     if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
+    if (this.groq.enabled) return 'groq-free';
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
       return this.federation.enabled
         ? 'aura-runtime-local+zero-cost-federation'
@@ -102,8 +108,11 @@ export class AiClient {
   }
 
   get enabled() {
-    if (this.groq.enabled) return true;
+    if (config.localLanguageOnly)
+      return Boolean(embeddedLanguageRuntime.installed() ||
+        embeddedLanguageRuntime.canProvision() || this.bridge?.enabled);
     if (embeddedLanguageRuntime.installed()) return true;
+    if (this.groq.enabled) return true;
     if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (remoteFallbackBlocked()) return false;
@@ -125,6 +134,8 @@ export class AiClient {
       local_bridge_configured: Boolean(this.bridge?.enabled),
       local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
       zero_cost_mode: Boolean(config.zeroCostMode),
+      local_language_only: Boolean(config.localLanguageOnly),
+      remote_language_providers_blocked: Boolean(config.localLanguageOnly),
       remote_fallback_blocked: remoteFallbackBlocked(),
       gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
       gemini_free_tier_model_allowed: freeTierModelAllowed(geminiModel(), 'text'),
@@ -249,17 +260,6 @@ export class AiClient {
     let localError = null;
     try {
       let groqError = null;
-      if (this.groq.enabled) {
-        try {
-          const result = await this.groq.generate(prompt, system, maxTokens);
-          if (result?.answer) {
-            this.lastBackend = 'zero-cost:groq-free:' + result.model;
-            this.lastError = '';
-            this.lastLatencyMs = Date.now() - started;
-            return result.answer;
-          }
-        } catch (error) { groqError = error; }
-      }
       if (embeddedLanguageRuntime.installed()) {
         const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
         if (answer) {
@@ -288,6 +288,26 @@ export class AiClient {
         localError = new Error('AURA Runtime local hors ligne');
       }
 
+      // No remote-provider invocation, even when an operator left API keys in
+      // the old environment. A missing local model must remain visibly missing.
+      if (config.localLanguageOnly) {
+        this.lastBackend = 'local-language-only';
+        this.lastError = localError ? 'local unavailable: '+safeError(localError)
+          : 'local-language-not-responsive';
+        this.lastLatencyMs = Date.now()-started;
+        return '';
+      }
+      if (this.groq.enabled) {
+        try {
+          const result=await this.groq.generate(prompt,system,maxTokens);
+          if (result?.answer) {
+            this.lastBackend='zero-cost:groq-free:'+result.model;
+            this.lastError='';
+            this.lastLatencyMs=Date.now()-started;
+            return result.answer;
+          }
+        }catch(error){groqError=error;}
+      }
       let federationError = null;
       if (this.federation.enabled) {
         try {
