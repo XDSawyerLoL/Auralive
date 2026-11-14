@@ -3,6 +3,7 @@ import {nativeUDConstructions} from './native_ud_constructions.js';
 import {parseBoundedDiscourse} from './native_discourse_context.js';
 import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGraph} from './native_event_modality.js';
 import {makeNativeEventFrame,isNativeEventAssertable} from './native_event_frame.js';
+import {NativeConstructionLearner} from './native_construction_learning.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -131,7 +132,7 @@ function splitAssertions(value){
   if(/[?？]/u.test(s))return [];
   return s.split(/\s+mais\s+|[.;]\s*/iu).filter(Boolean);
 }
-function collect(history=[],stored=[]){
+function collect(history=[],stored=[],constructionLearner=null){
   const frames=[];
   let previousUserStatement=null;
   for(const row of history.slice(-10)){
@@ -168,7 +169,13 @@ function collect(history=[],stored=[]){
       // Preserve the original behavior for explicit corrections and unsupported syntax.
       const parsed=correction?[{frame:correction.frame}]:
         parseBoundedDiscourse(discourseInput,parseFrenchStatement);
-      for(const item of parsed){
+      // A trained construction is a candidate only with three diverse,
+      // explicitly annotated examples. It overrides a simplistic flat parse
+      // that may accidentally absorb a fronted adverb into the agent.
+      const learned=constructionLearner instanceof NativeConstructionLearner&&!correction
+        ?constructionLearner.parse(part):null;
+      const candidateFrames=learned?[{frame:learned}]:parsed;
+      for(const item of candidateFrames){
         const frame=item.frame;
         if(!frame)continue;
         // All new candidate events must pass the shared semantic gate;
@@ -205,11 +212,11 @@ function collect(history=[],stored=[]){
   return frames;
 }
 
-export function answerFrenchFromConversation({question='',history=[],storedCorrections=[]}={}){
+export function answerFrenchFromConversation({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
   const request=parseFrenchQuestion(question);
   if(!request)return null;
   let frames;
-  try{frames=collect(Array.isArray(history)?history:[],Array.isArray(storedCorrections)?storedCorrections:[]);}
+  try{frames=collect(Array.isArray(history)?history:[],Array.isArray(storedCorrections)?storedCorrections:[],constructionLearner);}
   catch{return null;}
   let text=null;
   if(request.kind==='cause'||request.kind==='after'){
