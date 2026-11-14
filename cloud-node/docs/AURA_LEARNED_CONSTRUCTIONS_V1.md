@@ -47,6 +47,12 @@ const response=answerFrenchFromConversation({
 });
 ```
 
+## Activation explicite sur Hostinger
+
+Un snapshot validé peut maintenant être lu automatiquement par le moteur local d'AURA **uniquement** si l'opérateur configure la variable d'environnement `AURA_NATIVE_CONSTRUCTIONS_FILE` avec le chemin absolu vers ce snapshot JSON. Le chargement est en lecture seule, limité à 2 Mo, et ne provoque aucune collecte automatique de conversations. Si le fichier est absent, refusé ou mal formé, le moteur conserve son comportement antérieur. La disponibilité est inspectable par `nativeRuntimeConstructionStatus()` sans révéler le chemin.
+
+L'activation nécessite de placer manuellement le fichier dans un emplacement persistant accessible au processus Node et de redémarrer ce dernier. Les snapshots ne sont pas fournis par défaut et la PR n'est pas déployée. Cela n'entraîne aucun frais d'API, mais reste soumis à la capacité disque du contrat Hostinger.
+
 ## Contrôles
 
 - L'exemple répété ne peut pas franchir le seuil d'apprentissage.
