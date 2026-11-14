@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import {NativeLocalSemanticEncoder} from './native_local_sentence_encoder.js';
 import {retrieveNativeSemanticEvidence} from './native_semantic_retrieval.js';
+import {retrieveLocalConversationMemory} from './native_semantic_memory.js';
 import { ZeroCostFederation } from './free_federation.js';
 import { GroqFreeProvider } from './groq_free.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
@@ -144,6 +145,14 @@ export class AiClient {
     return retrieveNativeSemanticEvidence({
       query:question,passages,encoder:this.localSemanticEncoder
     });
+  }
+
+  // Contextual semantic recall is not a generated answer and does not persist
+  // private messages or embeddings. The caller supplies the conversation.
+  async recallLocalConversation(question,history){
+    return retrieveLocalConversationMemory(
+      question,history,this.localSemanticEncoder
+    );
   }
 
   async #generateGemini(prompt, system, maxTokens) {
