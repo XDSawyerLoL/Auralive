@@ -3,6 +3,7 @@ import { config } from './config.js';
 import {MillisecondReflex} from './millisecond_reflex.js';
 import { one, query, getDb } from './db.js';
 import { HistoryLedger,historyChoice } from './history_provenance.js';
+import {candidateKind,evaluateProspectiveLessonEvidence,verifiedLessonDescription,TRUSTED_LESSONS_SQL,VERIFIED_LESSON_SOURCE} from './epistemic_lessons.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
@@ -604,27 +605,85 @@ export class CognitiveKernel {
   }
 
   async lessons(limit = 20) {
+    // Only prospectively machine-verified records, rechecked against current
+    // non-ablated immutable history, can influence the kernel as lessons.
+    return query(TRUSTED_LESSONS_SQL,[Math.max(1,Math.min(Number(limit)||20,100))]);
+  }
+
+  async learningCandidates(limit=20) {
     return query(
-      'SELECT lesson_key,content,confidence,evidence_count,source,updated_at FROM aura_lessons ORDER BY confidence DESC,evidence_count DESC,updated_at DESC LIMIT ?',
-      [Math.max(1, Math.min(Number(limit) || 20, 100))],
-    );
+      'SELECT lesson_key,content,kind,origin,status,repetitions,created_at,updated_at '+
+      'FROM aura_learning_candidates ORDER BY updated_at DESC LIMIT ?',
+      [Math.max(1,Math.min(Number(limit)||20,100))]);
   }
 
-  async learn({ lessonKey, content, confidence = 0.6, source = 'experience' }) {
-    const existing = await one('SELECT evidence_count FROM aura_lessons WHERE lesson_key=?', [String(lessonKey).slice(0, 260)]);
-    const timestamp = now();
-    const evidenceCount = Number(existing?.evidence_count || 0) + 1;
+  async learn({lessonKey,content,confidence=0.6,source='experience'}={}) {
+    const key=String(lessonKey||'').slice(0,260);
+    const body=String(content||'').trim().slice(0,4000);
+    if(!key||!body)throw Error('Lesson candidate requires key and content');
+    const origin=String(source||'unknown').slice(0,100);
+    const timestamp=now(),kind=candidateKind(origin);
+    // This table carries a hypothesis or a report, never a verified lesson.
+    // Repetition increments repetitions only, NOT evidence_count or confidence.
     await query(
-      `INSERT INTO aura_lessons(id,lesson_key,content,confidence,evidence_count,source,created_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE content=VALUES(content),confidence=GREATEST(confidence,VALUES(confidence)),evidence_count=evidence_count+1,source=VALUES(source),updated_at=VALUES(updated_at)`,
-      [randomUUID(), String(lessonKey).slice(0, 260), String(content).slice(0, 4000), clamp(confidence), evidenceCount, String(source).slice(0, 100), timestamp, timestamp],
-    );
-    this.adjustSoul({ introspection: 0.01, continuity: 0.004 });
-    await this.saveSoul();
-    return { lesson_key: lessonKey, content, confidence: clamp(confidence), evidence_count: evidenceCount };
+      'INSERT INTO aura_learning_candidates '+
+      '(lesson_key,content,kind,origin,status,context_tag,action,repetitions,created_at,updated_at) '+
+      "VALUES(?,?,?,?,'candidate','', '',1,?,?) "+
+      "ON DUPLICATE KEY UPDATE content=IF(status='candidate',VALUES(content),content),"+
+      'repetitions=repetitions+1,updated_at=VALUES(updated_at)',
+      [key,body,kind,origin,timestamp,timestamp]);
+    return {lesson_key:key,content:body,epistemic_status:'candidate',
+      origin,proposed_confidence:clamp(confidence),evidence_count:0,
+      usable_as_verified_fact:false};
   }
 
+  async promoteVerifiedLesson({lessonKey,contextTag,action}={}) {
+    const key=String(lessonKey||'').slice(0,260);
+    const context=String(contextTag||'').slice(0,120);
+    const verb=String(action||'').slice(0,32);
+    if(!/^[a-z0-9:_-]{1,260}$/i.test(key)||
+      !/^[a-z0-9_-]{1,120}$/i.test(context)||
+      !['respond','verify','clarify','attentive','task_first'].includes(verb))
+      return {status:'rejected',reason:'unsupported-context-action'};
+    const candidate=await one(
+      'SELECT lesson_key,created_at,status FROM aura_learning_candidates WHERE lesson_key=?',[key]);
+    if(!candidate||candidate.status==='refuted')
+      return {status:'rejected',reason:'no-unrefuted-prior-hypothesis'};
+    // All matching, bounded, prospective machine receipts are read directly
+    // from immutable HistoryLedger tables; the candidate cannot supply proof.
+    const rows=await query(
+      'SELECT e.id AS episode_id,e.mission_id,e.kind,e.ts,e.prediction,e.context_tag,e.action,e.ablated,'+
+      'o.observed_at,o.source,o.success,o.hash AS outcome_hash '+
+      'FROM aura_history_episodes e JOIN aura_history_outcomes o ON o.episode_id=e.id '+
+      'WHERE e.kind=? AND e.context_tag=? AND e.action=? AND e.ts>? '+
+      'ORDER BY e.id DESC LIMIT 100',
+      ['action',context,verb,candidate.created_at]);
+    const result=evaluateProspectiveLessonEvidence(rows,{
+      context_tag:context,action:verb,candidate_created_at:candidate.created_at,
+    });
+    if(!result.verified){
+      return {status:'candidate',reason:result.reason,
+        independent_runs:result.independent_runs,evidence_count:0};
+    }
+    const safe=verifiedLessonDescription({context_tag:context,action:verb},result);
+    const stamp=now();
+    await query(
+      'INSERT INTO aura_lessons '+
+      '(id,lesson_key,content,confidence,evidence_count,source,created_at,updated_at) '+
+      'VALUES(?,?,?,?,?,?,?,?) '+
+      'ON DUPLICATE KEY UPDATE content=VALUES(content),confidence=VALUES(confidence),'+
+      'evidence_count=VALUES(evidence_count),source=VALUES(source),updated_at=VALUES(updated_at)',
+      [randomUUID(),key,safe,result.observed_success_estimate,
+        result.independent_runs,VERIFIED_LESSON_SOURCE,stamp,stamp]);
+    await query(
+      "UPDATE aura_learning_candidates SET status='verified',context_tag=?,action=?,updated_at=? "+
+      'WHERE lesson_key=? AND status<>?',
+      [context,verb,stamp,key,'refuted']);
+    return {status:'verified',lesson_key:key,evidence_count:result.independent_runs,
+      successes:result.successes,failures:result.failures,
+      provenance_episode_ids:result.episode_ids,
+      confidence:result.observed_success_estimate};
+  }
   async dedupeActiveIntentions() {
     const rows = await query(
       `SELECT id,statement,priority,source,context,created_at,updated_at
