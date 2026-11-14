@@ -5,6 +5,7 @@ import {initialConceptMemory,addConceptRelation,retractConceptSource,
  inspectConceptMemory,proposeCrossDomainRelation,conceptTransferAblation,
  observeMachineVerifiedConcept} from '../src/conceptual_world_memory.js';
 import {publicSoul} from '../src/policy.js';
+import {CognitiveKernel} from '../src/kernel.js';
 
 const when='2026-11-14T15:00:00.000Z';
 const relation=(state,{sourceId='record-1',domain='logistique',
@@ -194,4 +195,45 @@ test('bounded state refuses more concepts rather than silently forgetting old ev
   state=r.state;
  }
  assert.fail('must enforce bounded memory before 370 unique relations');
+});
+
+
+test('private dialogue actually retains native event chronology across restart',async()=>{
+ const fake={soulCache:{concept_memory:initialConceptMemory()},
+  async saveSoul(){this.persisted=JSON.parse(JSON.stringify(this.soulCache.concept_memory));}};
+ const result=await CognitiveKernel.prototype.rememberFrenchEventLinks.call(fake,
+  'Maya a ouvert le coffre une fois que Hugo a fermé la porte.',
+  {sourceId:'chat-turn-90',domain:'private_dialogue'});
+ assert.equal(result.accepted,true);
+ assert.equal(result.verified_world_facts,0);
+ assert.equal(fake.persisted.links.length,1);
+ const inspected=inspectConceptMemory(fake.persisted,{domain:'private_dialogue'});
+ assert.equal(inspected.visible[0].relation,'before');
+ assert.equal(inspected.visible[0].status,'user-reported');
+ assert.equal(inspected.visible[0].subject.kind,'event_fermer');
+ assert.equal(inspected.visible[0].object.kind,'event_ouvrir');
+});
+test('conditional utterances are stored as conditional reports, not realized world history',async()=>{
+ const fake={soulCache:{concept_memory:initialConceptMemory()},
+  async saveSoul(){return undefined;}};
+ const result=await CognitiveKernel.prototype.rememberFrenchEventLinks.call(fake,
+  'Si Maya ferme la porte, Hugo ouvre le coffre.',
+  {sourceId:'chat-turn-91',domain:'private_dialogue'});
+ assert.equal(result.accepted,true);
+ const inspected=inspectConceptMemory(fake.soulCache.concept_memory);
+ assert.equal(inspected.visible[0].relation,'implies-if');
+ assert.equal(inspected.visible[0].status,'user-reported');
+ assert.equal(inspected.verified_world_facts,0);
+});
+test('ordinary past-tense private speech becomes an explicitly unverified event',async()=>{
+ const fake={soulCache:{concept_memory:initialConceptMemory()},
+  async saveSoul(){return undefined;}};
+ const result=await CognitiveKernel.prototype.rememberFrenchEventLinks.call(fake,
+  'Romain a fermé la porte.',{sourceId:'chat-turn-92'});
+ assert.equal(result.accepted,true);
+ const record=inspectConceptMemory(fake.soulCache.concept_memory).visible[0];
+ assert.equal(record.relation,'reported_event');
+ assert.equal(record.subject.label,'romain');
+ assert.equal(record.status,'user-reported');
+ assert.equal(record.active_sources[0].kind,'user-report');
 });
