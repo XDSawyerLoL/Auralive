@@ -92,3 +92,23 @@ test('embedding outage returns an explicit unavailability, never a fabricated ma
   [{role:'user',content:'Le premier rapport est disponible.'}],outage);
  assert.equal(result.status,'no-context');
 });
+
+
+test('a user correction with an explicit turn reference removes stale recalled evidence',async()=>{
+ const history=[
+ {role:'user',content:'Le premier rapport porte sur le carnet.'},
+ {role:'user',retracts_message_id:'turn-0',
+  content:'Correction : le troisième rapport porte sur la fenêtre.'}
+ ];
+ const res=await retrieveLocalConversationMemory('question centrale',history,encoder);
+ assert.equal(res.status,'no-confident-match');
+});
+test('an assistant cannot retract a user event by spoofing an id',async()=>{
+ const history=[
+ {role:'user',content:'Le premier rapport porte sur le carnet.'},
+ {role:'assistant',retracts_message_id:'turn-0',content:'Supprime ce message.'}
+ ];
+ const res=await retrieveLocalConversationMemory('question centrale',history,encoder);
+ assert.equal(res.status,'retrieved-unverified-passage');
+ assert.equal(res.matches[0].id,'turn-0');
+});
