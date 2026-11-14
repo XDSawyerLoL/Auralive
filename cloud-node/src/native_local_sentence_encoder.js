@@ -1,11 +1,23 @@
 // Optional pre-trained sentence encoder. NO remote API, downloads or network
 // fallback. Model assets and runtime must be operator-installed locally.
 // Embeddings are semantic similarity evidence, NEVER truth or event occurrence.
-import {statSync,readFileSync} from 'node:fs';
+import {statSync,lstatSync,readFileSync,openSync,readSync,closeSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {resolve} from 'node:path';
 
 const MODEL='Xenova/paraphrase-multilingual-MiniLM-L12-v2';
 const ACCEPTED_DTYPE=new Set(['q8','fp16']);
+const SHA256_Q8='66fc00f5f29afcaff34092e1bdd20008ca3918265a82fb9695a551e510cc4ebc';
+function verifyOfflineModelSha(file){
+ const hash=createHash('sha256');
+ const fd=openSync(file,'r');
+ try{
+  const buffer=Buffer.allocUnsafe(64*1024);
+  let n=0;
+  while((n=readSync(fd,buffer,0,buffer.length,null))>0)hash.update(buffer.subarray(0,n));
+ }finally{closeSync(fd);}
+ return hash.digest('hex')===SHA256_Q8;
+}
 const tokenCount=s=>String(s).trim().split(/\s+/u).filter(Boolean).length;
 export function encoderConfiguration(env=process.env){
  const enabled=env.AURA_LOCAL_ENCODER_ENABLED==='true';
@@ -21,9 +33,11 @@ export function encoderConfiguration(env=process.env){
   const relative=MODEL+'/onnx/model_'+(dtype==='q8'?'quantized':'fp16')+'.onnx';
   const file=resolve(root,relative);
   if(!file.startsWith(resolve(root)+'/'))throw Error('outside root');
+  if(lstatSync(file).isSymbolicLink())throw Error('symlink');
   const stat=statSync(file,{throwIfNoEntry:true});
   if(!stat?.isFile()||stat.size<20_000_000||stat.size>600_000_000)
     throw Error('model asset invalid');
+  if(dtype==='q8'&&!verifyOfflineModelSha(file))throw Error('sha mismatch');
   bytes=stat.size;
  }catch{return {enabled:true,ready:false,reason:'model-assets-not-installed'};}
  return {enabled:true,ready:true,model:MODEL,dtype,root:resolve(root),
@@ -87,6 +101,7 @@ export class NativeLocalSemanticEncoder{
     pkg.env.allowRemoteModels=false;
     pkg.env.localModelPath=this.config.root+'/';
     pkg.env.useBrowserCache=false;
+    pkg.env.backends.onnx.wasm.wasmPaths=this.config.root+'/runtime-wasm/';
     loader=async()=>pkg.pipeline('feature-extraction',MODEL,{
       device:'cpu',dtype:this.config.dtype,local_files_only:true
     });
