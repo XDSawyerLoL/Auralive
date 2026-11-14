@@ -240,6 +240,8 @@ export function buildBrainTelemetry(publicState={},extra={},nowMs=Date.now()){
     {label:'Intentions',value:live?number(counts.intentions):null},
     {label:'Leçons vérifiées',value:live?number(counts.lessons):null},
     {label:'Hypothèses non vérifiées',value:live?number(counts.learning_candidates):null},
+    {label:'Concepts appris',value:live?number(counts.concepts):null},
+    {label:'Relations conceptuelles',value:live?number(counts.concept_relations):null},
     {label:'Routines',value:live?number(counts.routines):null},
   ];
   const command=publicState.command||{};
