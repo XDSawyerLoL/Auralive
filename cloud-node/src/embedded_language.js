@@ -448,9 +448,10 @@ export class EmbeddedLanguageRuntime {
     // Managed Node sites may not set NODE_ENV. An explicit 'false' still wins.
     // Suppress all automatic provisioning in CI/test environments.
     return Boolean(this.provisioner?.enabled
-      && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
       && process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
-      && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false');
+      && (process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
+        || (process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+          && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false')));
   }
   installed(){
     const found=this.inspect();
