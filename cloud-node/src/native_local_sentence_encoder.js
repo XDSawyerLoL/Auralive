@@ -1,7 +1,7 @@
 // Optional pre-trained sentence encoder. NO remote API, downloads or network
 // fallback. Model assets and runtime must be operator-installed locally.
 // Embeddings are semantic similarity evidence, NEVER truth or event occurrence.
-import {statSync} from 'node:fs';
+import {statSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 
 const MODEL='Xenova/paraphrase-multilingual-MiniLM-L12-v2';
@@ -29,6 +29,31 @@ export function encoderConfiguration(env=process.env){
  return {enabled:true,ready:true,model:MODEL,dtype,root:resolve(root),
   model_bytes:bytes,remote_network:false};
 }
+// Managed Node hosts can enforce a cgroup limit smaller than physical RAM.
+export function localEncoderMemoryHeadroom({
+ read=readFileSync,minMiB=768,allowUnverified=false
+}={}){
+ const places=[
+  ['/sys/fs/cgroup/memory.max','/sys/fs/cgroup/memory.current'],
+  ['/sys/fs/cgroup/memory/memory.limit_in_bytes',
+   '/sys/fs/cgroup/memory/memory.usage_in_bytes']
+ ];
+ for(const [limitFile,usageFile] of places){
+  try{
+   const max=String(read(limitFile,'utf8')).trim();
+   if(max==='max')continue;
+   const limit=Number(max),used=Number(String(read(usageFile,'utf8')).trim());
+   if(!Number.isSafeInteger(limit)||!Number.isSafeInteger(used)||
+      limit<=0||used<0||used>limit)continue;
+   const free=Math.floor((limit-used)/1048576);
+   return {sufficient:free>=minMiB,headroom_mib:free,
+     reason:free>=minMiB?'cgroup-headroom-ok':'insufficient-cgroup-headroom'};
+  }catch{}
+ }
+ return {sufficient:allowUnverified,
+   headroom_mib:null,reason:allowUnverified?'operator-verified':'memory-headroom-unknown'};
+}
+
 export class NativeLocalSemanticEncoder{
  constructor({configuration=encoderConfiguration(),load=null}={}){
   this.config=configuration;
@@ -48,6 +73,12 @@ export class NativeLocalSemanticEncoder{
   if(this.model)return true;
   if(!this.config.ready){this.status='disabled';this.failure=this.config.reason;return false;}
   try{
+   const memory=localEncoderMemoryHeadroom({
+     allowUnverified:process.env.AURA_LOCAL_ENCODER_MEMORY_VERIFIED==='true'
+   });
+   if(!this.load&&!memory.sufficient){
+     this.status='unavailable';this.failure=memory.reason;return false;
+   }
    let loader=this.load;
    if(!loader){
     // Installed separately from the main Hostinger runtime; leave its dependency
