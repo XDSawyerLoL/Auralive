@@ -1597,9 +1597,11 @@ export class CognitiveKernel {
     const forcePreflight=Boolean(strategy.verifies_first||worldChoice.action==='verify');
     const proposedAction=forcePreflight?'verify':'respond';
     const lessonKey='verified-probe:'+context+':'+proposedAction;
+    // A disposable candidate store must never break an authorized,
+    // independently verified local probe when MySQL is temporarily down.
     await this.learn({lessonKey,
       content:'Hypothèse de stratégie locale à tester : '+context+' / '+proposedAction,
-      source:'verified-probe'});
+      source:'verified-probe'}).catch(()=>null);
     const predicted=this.soulCache.verified_probe_loop.episodes||[];
     const successes=predicted.filter(x=>x.context===context&&x.outcome==='succeeded').length;
     const observations=predicted.filter(x=>x.context===context).length;
