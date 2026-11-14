@@ -8,6 +8,11 @@ const safeContext=v=>typeof v==='string'&&/^[a-z0-9_-]{3,70}$/i.test(v);
 const date=v=>typeof v==='string'&&v.endsWith('Z')&&Number.isFinite(Date.parse(v))
  ?Date.parse(v):null;
 const validId=v=>Number.isSafeInteger(Number(v))&&Number(v)>0;
+const normalizedAffordances=value=>{
+ if(!Array.isArray(value)||value.length>12)return [];
+ return [...new Set(value.map(x=>String(x||'').toLowerCase().trim())
+   .filter(x=>/^[a-z][a-z0-9_-]{2,35}$/.test(x)))].sort();
+};
 const compact=s=>({
  ...initialCausalWorld(),...s,
  pending:Array.isArray(s?.pending)?s.pending.slice(-24):[],
@@ -22,7 +27,7 @@ function likelihood(rows,context,action){
  const n=records.length,successes=records.filter(e=>e.success===1).length;
  return {n,successes,estimated_probability:Number(((successes+1)/(n+2)).toFixed(4))};
 }
-export function predictCausalWorld(state,{episodeId,context,action,issuedAt}={}){
+export function predictCausalWorld(state,{episodeId,context,action,issuedAt,affordances=[]}={}){
  const old=compact(state);
  if(!validId(episodeId)||!safeContext(context)||!actions.has(action)||
     date(issuedAt)===null||old.pending.some(e=>e.episode_id===Number(episodeId))||
@@ -31,7 +36,8 @@ export function predictCausalWorld(state,{episodeId,context,action,issuedAt}={})
  const distribution=likelihood(old.episodes,context,action);
  const prediction={episode_id:Number(episodeId),context,action,issued_at:issuedAt,
   expected_success:distribution.estimated_probability,
-  observations_before_prediction:distribution.n};
+  observations_before_prediction:distribution.n,
+  affordances:normalizedAffordances(affordances)};
  return {accepted:true,prediction,state:{...old,revision:old.revision+1,
   pending:[...old.pending,prediction].slice(-24)}};
 }
@@ -53,7 +59,8 @@ export function observeVerifiedCausalWorld(state,{
   context:pending.context,action:pending.action,
   predicted_probability:pending.expected_success,
   success:success?1:0,issued_at:pending.issued_at,
-  observed_at:observedAt,proof_hash:proofHash};
+  observed_at:observedAt,proof_hash:proofHash,
+  affordances:pending.affordances||[]};
  const next={...old,version:CAUSAL_WORLD_VERSION,revision:old.revision+1,
   pending:old.pending.filter(p=>p.episode_id!==id),
   episodes:[...old.episodes,evidence].slice(-128),
@@ -93,4 +100,52 @@ export function causalWorldAblation(state,options={}){
  return {actual,without_evidence:removed,
   decision_changed:actual.action!==removed.action,
   evidence_count:actual.evidence_ids.length};
+}
+
+
+// Transfer a safe precheck preference across DIFFERENT observed contexts only
+// when independent machine-verifiable successes share concrete affordances.
+// It cannot transfer permissions, execute tools or claim success in target.
+export function proposeCausalPolicyTransfer(state,{
+ targetContext,affordances=[],excludeEpisodeIds=[],
+}={}){
+ const s=compact(state);
+ const features=normalizedAffordances(affordances);
+ if(!safeContext(targetContext)||features.length<2)
+  return {transferred:false,reason:'insufficient-target-affordances'};
+ const excluded=new Set(excludeEpisodeIds.map(Number));
+ const candidates=s.episodes.filter(e=>
+  !excluded.has(Number(e.episode_id))&&e.context!==targetContext&&
+  e.action==='verify'&&[0,1].includes(e.success)&&
+  Array.isArray(e.affordances)&&e.affordances.length>=2)
+  .map(e=>{
+   const known=normalizedAffordances(e.affordances);
+   const common=known.filter(x=>features.includes(x));
+   const union=new Set([...known,...features]);
+   return {...e,similarity:union.size?common.length/union.size:0,
+    shared_features:common};
+  }).filter(e=>e.similarity>=0.6&&e.shared_features.length>=2);
+ const sourceContexts=new Set(candidates.map(x=>x.context));
+ const independentRuns=new Set(candidates.map(x=>x.run_id));
+ const wins=candidates.filter(e=>e.success===1).length;
+ const failures=candidates.length-wins;
+ if(sourceContexts.size<2||independentRuns.size<2||wins<2||failures>0)
+  return {transferred:false,reason:'insufficient-independent-machine-domain-proofs',
+   positive_outcomes:wins,contrary_outcomes:failures,
+   source_domains:[...sourceContexts]};
+ return {transferred:true,status:'safe-precheck-proposal',
+  target_context:targetContext,action:'verify',
+  source_domains:[...sourceContexts].sort(),
+  evidence_ids:candidates.map(e=>e.episode_id),
+  evidence_count:candidates.length,
+  shared_affordances:[...new Set(candidates.flatMap(e=>e.shared_features))].sort(),
+  safety:'only-add-precheck-after-private-authorized-probe',
+  target_outcome_verified:false};
+}
+export function causalPolicyTransferAblation(state,options={}){
+ const actual=proposeCausalPolicyTransfer(state,options);
+ const without=proposeCausalPolicyTransfer(state,{
+  ...options,excludeEpisodeIds:actual.evidence_ids||[]});
+ return {actual,without,
+  transfer_depends_on_verified_history:Boolean(actual.transferred&&!without.transferred)};
 }
