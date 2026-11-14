@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import {tmpdir} from 'node:os';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner,selectedEmbeddedModel } from './embedded_provisioner.js';
 import {sanitizeNativeFrenchGeneration} from './native_local_generation_quality.js';
@@ -358,6 +359,7 @@ export function locateEmbeddedRuntime({
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
   model = process.env.AURA_EMBEDDED_LANGUAGE_MODEL || '',
   quantization = process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION || '',
+  temp = tmpdir(),
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
@@ -380,6 +382,10 @@ export function locateEmbeddedRuntime({
     ...(override ? [safePath(override)] : []),
     path.join(root,'.aura-language-runtime'),
     path.join(root,'aura-language-runtime'),
+    // The provisioner can fall back to os.tmpdir() on restricted Hostinger
+    // accounts. On restart the in-memory provisionedPaths disappear; discover
+    // this cache before attempting another download of the model.
+    path.join(temp,'aura-language-runtime'),
     ...(home ? [
       path.join(home,'.cache','aura-language-runtime'),
       path.join(home,'.aura-language-runtime'),
