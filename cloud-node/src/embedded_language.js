@@ -349,6 +349,9 @@ export function locateEmbeddedRuntime({
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
+  const modelRequested=selectedEmbeddedModel().filename;
+  const requireSelectedModel=process.env.AURA_LOCAL_LANGUAGE_ONLY==='true'
+    || Boolean(process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION);
   // Provisioner stores its GGUF in ~/.cache/aura-language-runtime by default.
   // On a Node restart its in-memory "paths" are lost. Discover the persistent
   // cache rather than downloading the same 639 MB model again.
@@ -374,7 +377,8 @@ export function locateEmbeddedRuntime({
         queue.push({dir:full,depth:depth+1});
       }else if(entry.isFile() || entry.isSymbolicLink()){
         if(!executable && entry.name==='llama-server') executable=full;
-        if(!gguf && /\.gguf$/i.test(entry.name)) gguf=full;
+        if(!gguf && /\.gguf$/i.test(entry.name) &&
+           (!requireSelectedModel||entry.name===modelRequested)) gguf=full;
       }
     }
   }
