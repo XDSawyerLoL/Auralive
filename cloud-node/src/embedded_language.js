@@ -43,6 +43,9 @@ export function classifyEmbeddedFailure(error) {
   if (/embedded-insufficient-cgroup-headroom/.test(reason))
     return {code:'embedded-insufficient-cgroup-headroom',
       hint:'La mémoire disponible est trop basse pour le modèle linguistique GGUF choisi. Ne pas lancer le moteur; sélectionner un modèle plus léger ou augmenter les ressources de l’hébergement.'};
+  if (/aborterror|inference-timeout|inference-timed-out|request timed out|operation was aborted/.test(reason))
+    return {code:'embedded-inference-timeout',
+      hint:'Le modèle local dépasse le temps d’inférence CPU sur cet hébergement. Réduire la taille du modèle ou la longueur de la réponse.'};
   if (/sigkill|exit.signal.sigkill|enomem|out of memory|killed|bad.alloc|cannot allocate memory|failed to allocate|oom.kill|exit.code.137/i.test(reason))
     return { code: 'embedded-insufficient-memory',
       hint: 'Le processus a probablement dépassé la mémoire disponible. AURA tente un contexte et des lots plus petits.' };
@@ -735,12 +738,12 @@ export class EmbeddedLanguageRuntime {
     try{
       const response=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({model:'local',stream:false,temperature:0.6,
-          max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),
+        body:JSON.stringify({model:'local',stream:false,temperature:0.55,
+          max_tokens:Math.max(48,Math.min(this.bootProfile==='low-memory'?110:240,Number(maxTokens)||150)),
           chat_template_kwargs:{enable_thinking:false},messages:[
-            {role:'system',content:String(system).slice(0,9000)},
-            {role:'user',content:String(prompt).slice(0,14000)}]}),
-        signal:AbortSignal.timeout(30_000)});
+            {role:'system',content:String(system).slice(0,3500)},
+            {role:'user',content:String(prompt).slice(0,3800)}]}),
+        signal:AbortSignal.timeout(50_000)});
       if(!response.ok)throw Error('embedded HTTP '+response.status);
       const json=await response.json();
       const answer=sanitizeNativeFrenchGeneration(
