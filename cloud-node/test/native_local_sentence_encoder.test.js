@@ -98,3 +98,24 @@ test('preflight rejects insufficient managed memory and unknown cgroup limits',(
  assert.equal(confirmed.sufficient,true);
  assert.equal(confirmed.reason,'operator-verified');
 });
+
+
+test('concurrent semantic requests initialize the local model exactly once',async()=>{
+ let loads=0;
+ const e=new NativeLocalSemanticEncoder({
+  configuration:{ready:true,enabled:true,model:'offline-fixture'},
+  load:async()=>{
+   loads++;
+   await Promise.resolve();
+   return async()=>({data:Float32Array.from(vector(0))});
+  }
+ });
+ const [a,b,c]=await Promise.all([
+  e.embed('La première phrase'),e.embed('La deuxième phrase'),
+  e.embed('La troisième phrase')
+ ]);
+ assert.equal(loads,1);
+ assert.equal(a.length,384);
+ assert.deepEqual(a,b);
+ assert.deepEqual(a,c);
+});
