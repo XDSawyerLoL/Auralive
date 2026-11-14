@@ -42,6 +42,17 @@ export AURA_LOCAL_ENCODER_ROOT=/chemin/prive/models
 export AURA_LOCAL_ENCODER_DTYPE=q8
 ```
 
+La vérification de mémoire exige au moins **768 MiB de marge dans le cgroup** avant le chargement. Si l'hébergement ne publie pas son quota mémoire, le modèle reste désactivé, sauf confirmation explicite de l'opérateur par `AURA_LOCAL_ENCODER_MEMORY_VERIFIED=true` après une mesure réelle de capacité ; cette variable ne résout pas une insuffisance de mémoire.
+
+Un outil de validation avec les **vrais poids** est inclus :
+
+```sh
+cd cloud-node
+node scripts/probe_local_sentence_encoder.mjs
+```
+
+Il mesure quatre encodages de phrases, une similarité de paraphrases, une comparaison non liée, un contraste de négation, une latence et la RSS du processus. Ce test doit être lancé sur un hôte sur lequel les fichiers ONNX et la dépendance sont déjà installés. Il renvoie un échec si le modèle est indisponible. **Aucune validation réelle sur les poids Hostinger n'est déclarée tant que ce test n'a pas réussi sur Hostinger.**
+
 Redémarrer le service Node. Le modèle est chargé uniquement lors d'une recherche sémantique. **Aucun téléchargement automatique ne peut avoir lieu en production** : `env.allowRemoteModels=false` et `local_files_only=true`. En l'absence du modèle, du module Node facultatif ou de ressources suffisantes, le diagnostic indique `disabled`, `model-assets-not-installed` ou `offline-runtime-or-model-load-failed`.
 
 Un administrateur peut préparer les fichiers depuis Hugging Face avant de les transférer sur Hostinger. Le processus ne doit pas écrire ni redistribuer les fichiers sous une URL publique. Ne pas enregistrer des conversations personnelles dans un jeu d'entraînement sans consentement.
