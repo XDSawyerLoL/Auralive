@@ -91,3 +91,13 @@ test('Hostinger restart rediscovers a GGUF from provisioner temp-cache fallback'
   assert.equal(recovered.gguf,path.join(cache,'Qwen3-0.6B-Q4_K_M.gguf'));
  }finally{fs.rmSync(sandbox,{recursive:true,force:true});}
 });
+
+test('failed GGUF inference reports its cause instead of an idle retry label',()=>{
+ const status=localDialogueReadiness({localOnly:true,autoProvision:true,
+  runtime:{status:'startup-failed',failure_code:'embedded-inference-probe-timeout',
+   installed:true,ready:false,probe_verified:false,provisioning:{stage:'installed-verified'}}});
+ assert.equal(status.ready,false);
+ assert.equal(status.phase,'startup-failed');
+ assert.equal(status.reason,'embedded-inference-probe-timeout');
+ assert.equal(status.retryable,true);
+});
