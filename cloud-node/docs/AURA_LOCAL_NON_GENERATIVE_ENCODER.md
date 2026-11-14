@@ -81,3 +81,26 @@ Le résultat n'est **pas une réponse** : seulement un texte préexistant avec s
 - La prochaine validation doit être un test réel CPU sur les poids installés, avec scores de paraphrases et contre-exemples de négation/causalité, suivi du même essai sur les ressources Hostinger ; puis un véritable examen externe aveugle.
 
 Aucune API générative supplémentaire, aucune facturation par requête, aucun VPS ajouté. Les contraintes de l'hébergement peuvent rendre cette option techniquement indisponible.
+
+
+## Intégration dans la conversation privée (nouvelle itération)
+
+- `src/native_semantic_memory.js` indexe jusqu'à **40 messages explicites** conservés uniquement en mémoire du processus. Les vecteurs ne sont pas écrits dans la base de données.
+- Une recherche renvoie **un extrait original, son identifiant de message et son statut non vérifié**, ou s'abstient lorsque deux passages restent trop proches.
+- Les conditions, projets, habitudes et déclarations rapportées ne sont jamais admis comme faits sur simple similarité.
+- La suppression ou la correction d'un message exige son identifiant explicite (`retracts_message_id`) ; aucune ressemblance vectorielle ne peut supprimer une autre affirmation.
+- `AiClient.recallLocalConversation(question, history)` permet d'effectuer cette recherche.
+- Le `contextForAi` du noyau consulte ce rappel **uniquement en contexte privé avec une question ciblée et l'encodeur activé** ; le rappel est inséré comme citation utilisateur non vérifiée. Il ne crée pas une autorité décisionnelle.
+- Pas de disponibilité avec le modèle absent : le noyau conserve le comportement existant si le nouvel encodeur est désactivé.
+
+## Sécurité des poids et du runtime
+
+- Le fichier quantifié `onnx/model_quantized.onnx` est contrôlé par **SHA-256** :
+  `66fc00f5f29afcaff34092e1bdd20008ca3918265a82fb9695a551e510cc4ebc`
+  (empreinte publiée sur la page officielle du modèle, version consultée le 14 novembre 2026).
+- Un lien symbolique utilisé comme fichier de poids est refusé.
+- Les paramètres Transformers.js interdisent les téléchargements distants de modèles et fixent le chemin de secours WebAssembly vers `<racine>/runtime-wasm/` local ; toute dépendance native nécessaire doit elle aussi être installée sur le serveur.
+- Les requêtes simultanées partagent **un seul chargement du modèle**, pour éviter plusieurs allocations ONNX concurrentes.
+- Aucun résultat de performance sémantique fondé sur les vrais poids ne peut être annoncé avant exécution réussie du script `scripts/probe_local_sentence_encoder.mjs` sur l'hébergement.
+
+**Limite maintenue :** une citation extraite par similarité n'est pas une réponse générative ni une vérification factuelle. Les nouveaux tests vérifient les garde-fous avec des vecteurs contrôlés, et non une compréhension libre évaluée sur le modèle installé.
