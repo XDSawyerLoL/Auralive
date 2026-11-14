@@ -260,7 +260,11 @@ export class AiClient {
     let localError = null;
     try {
       let groqError = null;
-      if (embeddedLanguageRuntime.installed()) {
+      // The auto-provisioner is part of the local backend. Previously the
+      // runtime was never called until it had already installed a model,
+      // so first-run chats could not trigger setup when no GGUF existed.
+      if (embeddedLanguageRuntime.installed()
+          || (config.localLanguageOnly && embeddedLanguageRuntime.canProvision())) {
         const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
         if (answer) {
           this.lastBackend = 'hostinger-embedded-llama';
