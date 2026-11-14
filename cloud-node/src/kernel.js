@@ -35,6 +35,7 @@ import { OfflineConsolidation,verifyConsolidation } from './offline_consolidatio
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
 import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
+import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice} from './causal_world_learning.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -221,6 +222,7 @@ export class CognitiveKernel {
       attention_schema:initialAttentionSchema(),
       autonomous_allowance:null,
       verified_probe_loop:initialVerifiedLoop(),
+      world_learning:initialCausalWorld(),
       viability:initialViability(),
       consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
@@ -345,6 +347,8 @@ export class CognitiveKernel {
       this.soulCache.attention_schema=initialAttentionSchema();
     if(!this.soulCache.verified_probe_loop||typeof this.soulCache.verified_probe_loop!=='object')
       this.soulCache.verified_probe_loop=initialVerifiedLoop();
+    if(!this.soulCache.world_learning||this.soulCache.world_learning.version!=='aura-causal-world-v1')
+      this.soulCache.world_learning=initialCausalWorld();
     // Rehydrated permits are never trusted after a process restart.
     this.soulCache.autonomous_allowance=null;
     this.pendingOwnerProbePermit=null;
@@ -1586,33 +1590,62 @@ export class CognitiveKernel {
     const base=root||new URL('../',import.meta.url).pathname;
     const runId=randomUUID(),strategy=verifiedLoopDecision(
       this.soulCache.verified_probe_loop,context);
+    // World predictions are based only on verified prospective outcomes,
+    // and can only add a read-only verification step (never suppress it).
+    const worldChoice=causalWorldChoice(this.soulCache.world_learning,{
+      context,baseline:'respond',allowed:['respond','verify']});
+    const forcePreflight=Boolean(strategy.verifies_first||worldChoice.action==='verify');
+    const proposedAction=forcePreflight?'verify':'respond';
+    const lessonKey='verified-probe:'+context+':'+proposedAction;
+    await this.learn({lessonKey,
+      content:'Hypothèse de stratégie locale à tester : '+context+' / '+proposedAction,
+      source:'verified-probe'});
     const predicted=this.soulCache.verified_probe_loop.episodes||[];
     const successes=predicted.filter(x=>x.context===context&&x.outcome==='succeeded').length;
     const observations=predicted.filter(x=>x.context===context).length;
     // Commit the expectation BEFORE the actual filesystem syscall.
     const historyEpisode=await this.history.beginEpisode({
       mission_id:runId,kind:'action',context_tag:context,
-      action:strategy.verifies_first?'verify':'respond',
+      action:proposedAction,
       prediction:'local-probe-readable',confidence:(successes+1)/(observations+2),
     });
+    const worldPrediction=predictCausalWorld(this.soulCache.world_learning,{
+      episodeId:historyEpisode.id,context,action:proposedAction,issuedAt:now(),
+    });
+    if(!worldPrediction.accepted)
+      throw Error('prospective-world-prediction-rejected');
+    // Persist the prediction before the actual filesystem syscall, so a
+    // process restart cannot fabricate an after-the-fact prediction.
+    this.soulCache.world_learning=worldPrediction.state;
+    await this.saveSoul();
     const result=await runVerifiedProbe(this.soulCache.verified_probe_loop,{
-      root:base,context,relativePath,runId,
+      root:base,context,relativePath,runId,forcePreflight,
     });
     if(!replayVerifiedLoop(result.state,context).verified)
       throw Error('verified-probe-ledger-integrity-failed');
     const verifiedResult={outcome:'verified-fs-probe:'+result.receipt.hash,
       success:result.receipt.exit_code===0?1:0,source:'fs-syscall'};
     this.pendingMachineReceipts.set(Number(historyEpisode.id),verifiedResult);
+    let machineLedgerReceipt=null;
     try{
-      await this.history.recordOutcome(historyEpisode.id,{
+      machineLedgerReceipt=await this.history.recordOutcome(historyEpisode.id,{
         outcome:verifiedResult.outcome,success:verifiedResult.success,
         source:'machine-verified',
       });
     }finally{
       this.pendingMachineReceipts.delete(Number(historyEpisode.id));
     }
+    const learnedWorld=observeVerifiedCausalWorld(this.soulCache.world_learning,{
+      episodeId:historyEpisode.id,runId,
+      success:verifiedResult.success===1,observedAt:now(),
+      proofHash:result.receipt.hash,ledgerReceipt:machineLedgerReceipt,
+    });
+    if(learnedWorld.accepted)this.soulCache.world_learning=learnedWorld.state;
     this.soulCache.verified_probe_loop=result.state;
     await this.saveSoul();
+    const verifiedLesson=await this.promoteVerifiedLesson({
+      lessonKey,contextTag:context,action:proposedAction,
+    }).catch(()=>({status:'candidate',reason:'verification-storage-unavailable'}));
     await this.trace('verified-tool-loop','filesystem-observation','',{
       at:now(),context:String(context).slice(0,80),
       strategy:result.decision.strategy,preflighted:result.action_was_preflighted,
@@ -1622,7 +1655,9 @@ export class CognitiveKernel {
     });
     return {verified:result.verified,decision:result.decision,
       receipt:result.receipt,history_episode_id:historyEpisode.id,
-      preflighted:result.action_was_preflighted};
+      preflighted:result.action_was_preflighted,
+      prospective_world_updated:learnedWorld.accepted,
+      world_policy_before:worldChoice,verified_lesson:verifiedLesson};
   }
 
   async runAgent(name, task, { missionId = '' } = {}) {
