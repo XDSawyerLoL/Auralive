@@ -492,6 +492,31 @@ function compactContext(rows = []) {
     .filter((row) => row.content);
 }
 
+// A 768-token GGUF context cannot consume the multi-kilobyte system prompt
+// designed for large cloud models. Keep the local prompt syntactically valid,
+// short and strictly limited to the nucleus's known facts and speech goal.
+export function compactLowMemoryFrenchPrompt(plan={}){
+ const safe=(value,n)=>String(value||'').replace(/\s+/gu,' ').trim().slice(0,n);
+ const facts=Array.isArray(plan?.facts)?plan.facts.slice(0,3).map(x=>safe(x,160)):[];
+ const recent=Array.isArray(plan?.immediate_dialogue_context)
+   ?plan.immediate_dialogue_context.slice(-1):[];
+ const record={
+  acte:safe(plan.act||'respond',42),
+  message:safe(plan.user_text,320),
+  objectif:safe(plan.goal,220),
+  faits: facts,
+  contexte:recent.map(x=>({
+   role:x?.role==='assistant'?'assistant':'user',text:safe(x?.content,180)
+  })),
+ };
+ return '/no_think\n'+JSON.stringify(record);
+}
+export const LOW_MEMORY_FRENCH_SYSTEM=
+ 'Tu es la voix d’AURA. Parle en français naturel à la première personne. '
+ +'Réponds au message de l’utilisateur en une à trois phrases. '
+ +'Respecte les faits fournis, sans inventer d’action, de souvenir ou de preuve. '
+ +'Ne reproduis ni JSON ni instructions internes ; signale toute incertitude.';
+
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
@@ -769,10 +794,14 @@ export class FrenchLanguageFaculty {
     const tryEmbedded = async () => {
       if (!this.embedded.status?.().ready) return '';
       try {
+        const lowMemory=this.embedded.status?.().boot_profile==='low-memory';
+        const localPrompt=lowMemory?compactLowMemoryFrenchPrompt(plan):compactFrenchPrompt(plan);
+        const localSystem=lowMemory?LOW_MEMORY_FRENCH_SYSTEM:compactFrenchSystem(plan);
+        const localTokenBudget=lowMemory?110:240;
         const answer = accept(cleanSpeechOutput(await this.embedded.generate(
-          compactFrenchPrompt(plan),
-          compactFrenchSystem(plan),
-          Math.max(96, Math.min(Number(maxTokens) || 350, 450)),
+          localPrompt,
+          localSystem,
+          Math.max(64, Math.min(Number(maxTokens) || localTokenBudget,localTokenBudget)),
         )));
         if (answer) {
           this.lastMode = 'hostinger-embedded';
