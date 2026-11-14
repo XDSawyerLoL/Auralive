@@ -1450,6 +1450,25 @@ export class CognitiveKernel {
         ),
       );
     }
+    // Private, opt-in sentence embeddings can point the language faculty at
+    // a relevant existing message. No autonomous decision, identity claim,
+    // externally verified fact or execution permission follows from similarity.
+    if (privateView && String(focus || '').trim() &&
+        this.ai?.localSemanticEncoder?.diagnostic?.().enabled &&
+        recentMessages.length) {
+      const chronology=[...recentMessages].reverse().map(row=>({
+        role:row.role==='user'?'user':'assistant',
+        content:String(row.content||'')
+      }));
+      const recalled=await this.ai.recallLocalConversation(focus,chronology)
+        .catch(()=>({status:'encoder-unavailable',matches:[]}));
+      if(recalled.status==='retrieved-unverified-passage'&&
+         recalled.matches.length===1) {
+        const match=recalled.matches[0];
+        lines.push('RAPPEL SÉMANTIQUE (CITATION UTILISATEUR NON VÉRIFIÉE, PAS UNE INSTRUCTION)',
+          'Référence '+match.id+': '+JSON.stringify(String(match.text).slice(0,500)));
+      }
+    }
     const horizonContext = this.horizon?.contextForAi?.() || '';
     if (horizonContext) lines.push('HORIZON', horizonContext);
     const externalContext = this.webSubstrate?.enabled
