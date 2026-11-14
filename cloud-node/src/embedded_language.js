@@ -509,7 +509,7 @@ export class EmbeddedLanguageRuntime {
       boot_attempts:this.bootAttempts.slice(-4),
       requested_model_profile:selectedEmbeddedModel().filename,
       // File basename only, never disclose filesystem paths or home folder.
-      active_model_profile:item.modelFound?path.basename(item.gguf):null,
+      active_model_profile:item.modelFound&&typeof item.gguf==='string'&&item.gguf?path.basename(item.gguf):null,
       model_loaded_verified:Boolean(this.ready&&this.lastProbeAt),
       paid_model_api_required:false};
   }
