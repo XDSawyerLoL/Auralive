@@ -4,7 +4,7 @@
 import {statSync} from 'node:fs';
 import {resolve} from 'node:path';
 
-const MODEL='onnx-community/paraphrase-multilingual-MiniLM-L12-v2-ONNX';
+const MODEL='Xenova/paraphrase-multilingual-MiniLM-L12-v2';
 const ACCEPTED_DTYPE=new Set(['q8','fp16']);
 const tokenCount=s=>String(s).trim().split(/\s+/u).filter(Boolean).length;
 export function encoderConfiguration(env=process.env){
