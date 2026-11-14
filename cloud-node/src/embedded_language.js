@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
-import { embeddedProvisioner } from './embedded_provisioner.js';
+import { embeddedProvisioner,selectedEmbeddedModel } from './embedded_provisioner.js';
 import {sanitizeNativeFrenchGeneration} from './native_local_generation_quality.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
@@ -34,7 +34,7 @@ export function classifyEmbeddedFailure(error) {
       hint:'Le serveur Hostinger refuse la création de threads (SIGABRT/EAGAIN). AURA limite strictement les threads HTTP, calcul et batch ; vérifier la limite pids du compte.'};
   if (/embedded-insufficient-cgroup-headroom/.test(reason))
     return {code:'embedded-insufficient-cgroup-headroom',
-      hint:'La mémoire disponible est trop basse pour lancer Qwen3 Q8 en sécurité sur cet hébergement. Ne pas tenter de démarrage qui ferait tomber le site; choisir un GGUF plus léger ou un moteur local extérieur à Hostinger.'};
+      hint:'La mémoire disponible est trop basse pour le modèle linguistique GGUF choisi. Ne pas lancer le moteur; sélectionner un modèle plus léger ou augmenter les ressources de l’hébergement.'};
   if (/sigkill|exit.signal.sigkill|enomem|out of memory|killed|bad.alloc|cannot allocate memory|failed to allocate|oom.kill|exit.code.137/i.test(reason))
     return { code: 'embedded-insufficient-memory',
       hint: 'Le processus a probablement dépassé la mémoire disponible. AURA tente un contexte et des lots plus petits.' };
@@ -290,8 +290,11 @@ export function embeddedStartupBudget(memory=cgroupMemorySnapshot(),{read=fs.rea
   const current=Number(memory?.current_mb);
   const known=Number.isFinite(limit)&&limit>0&&Number.isFinite(current)&&current>=0;
   const headroom=known?Math.max(0,limit-current+Math.min(current,inactiveMb)):null;
-  // 639 MB Q8 GGUF plus llama.cpp runtime and KV cache. Do not spawn under 740 MB.
-  const required=740;
+  // Size-aware RAM preflight: the 1.7B profile needs more memory than Qwen3 0.6B.
+  const selection=selectedEmbeddedModel();
+  // Models over 1 GB require materially more room for weights, KV cache and
+  // Node's own process. A cheap shared plan must fail closed.
+  const required=selection.minimumMemoryBytes?1900:740;
   return {
     known,headroom_mb:headroom,
     recommended_low_memory:!known||headroom<1500||limit<2048,
