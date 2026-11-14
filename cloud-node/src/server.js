@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
 import {localDialogueReadiness} from './local_dialogue_readiness.js';
+import {localLanguageRecoveryDecision,localLanguageRetryAfter} from './local_language_supervisor.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -2991,6 +2992,7 @@ app.setErrorHandler((error, _request, reply) => {
 });
 
 let retryTimer = null;
+let localLanguageRetryTimer = null;
 let backupTimer = null;
 let metricsTimer = null;
 
@@ -3023,25 +3025,43 @@ export function startRuntimeLoop() {
   // AURA observes a fictitious trading strategy automatically every 6h;
   // zero-cost public data only, no account or live orders.
   startAutomaticPaperScan();
-  // Language bootstrap is independent from MySQL. The explicit Hostinger
-  // auto-provision opt-in can install missing verified GGUF and llama.cpp
-  // assets even when the database is down. Never run this in CI/tests.
-  {
+  // Language bootstrap is independent of MySQL. A missed first launch or a
+  // transient failure must not leave a chat pending indefinitely. Reattempt
+  // after the model / native runtime cooldown, without concurrent downloads.
+  const resumeLocalLanguage=()=>{
+    const installed=embeddedLanguageRuntime.installed();
+    const canProvision=embeddedLanguageRuntime.canProvision();
+    const warmup=shouldWarmInstalledLanguage();
     const policy=independentLocalLanguageBoot({
-      warmup:shouldWarmInstalledLanguage(),
-      installed:embeddedLanguageRuntime.installed(),
+      warmup,installed,
       autoprovisionEnabled:config.localLanguageOnly
         && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
         && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false',
-      canProvision:embeddedLanguageRuntime.canProvision(),
+      canProvision,
     });
-    if(policy.start){
+    const status=embeddedLanguageRuntime.status();
+    const decision=localLanguageRecoveryDecision({
+      warmup,localOnly:config.localLanguageOnly,
+      ready:Boolean(status.ready&&status.probe_verified),
+      booting:Boolean(embeddedLanguageRuntime.booting),
+      installed,canProvision:policy.allowProvision,
+      cooldownUntil:embeddedLanguageRuntime.cooldownUntil,
+      provisionRetryAfter:localLanguageRetryAfter(status.provisioning),
+      failureCode:status.failure_code||status.provisioning?.error_code,
+    });
+    if(policy.start&&decision.start){
       void embeddedLanguageRuntime.start({allowProvision:policy.allowProvision})
         .catch(error=>{
           app.log.warn({code:String(error?.code||'embedded-start-failed')},
             'AURA: independent local French warmup failed');
         });
     }
+  };
+  resumeLocalLanguage();
+  if(!localLanguageRetryTimer && shouldWarmInstalledLanguage()
+      && config.localLanguageOnly){
+    localLanguageRetryTimer=setInterval(resumeLocalLanguage,30000);
+    localLanguageRetryTimer.unref?.();
   }
   startRuntime().catch((error) => {
     bootstrap.startupError = safeError(error);
@@ -3058,6 +3078,7 @@ export function startRuntimeLoop() {
 }
 
 export async function stopAura() {
+  if(localLanguageRetryTimer){clearInterval(localLanguageRetryTimer);localLanguageRetryTimer=null;}
   if(paperAutoTimer){clearInterval(paperAutoTimer);paperAutoTimer=null;}
   if(paperAutoInitialTimer){clearTimeout(paperAutoInitialTimer);paperAutoInitialTimer=null;}
   if (retryTimer) {
