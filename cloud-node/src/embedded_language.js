@@ -445,9 +445,12 @@ export class EmbeddedLanguageRuntime {
     return this.cachedDiscovery;
   }
   canProvision(){
+    // Managed Node sites may not set NODE_ENV. An explicit 'false' still wins.
+    // Suppress all automatic provisioning in CI/test environments.
     return Boolean(this.provisioner?.enabled
-      && (process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
-        || (process.env.NODE_ENV==='production' && process.env.CI!=='true')));
+      && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+      && process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
+      && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false');
   }
   installed(){
     const found=this.inspect();
@@ -507,6 +510,8 @@ export class EmbeddedLanguageRuntime {
       pids_after_failure:this.pidsAfterFailure,
       memory_preflight:embeddedStartupBudget(),
       boot_attempts:this.bootAttempts.slice(-4),
+      // A bounded epoch-millisecond value for the next permitted attempt.
+      cooldown_until:this.cooldownUntil> Date.now()?this.cooldownUntil:null,
       requested_model_profile:selectedEmbeddedModel().filename,
       // File basename only, never disclose filesystem paths or home folder.
       active_model_profile:item.modelFound&&typeof item.gguf==='string'&&item.gguf?path.basename(item.gguf):null,
