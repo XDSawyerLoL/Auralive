@@ -37,7 +37,8 @@ import { nextAutonomousAllowance,centralActionAdmission } from './central_action
 import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
 import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice,causalWorldAblation,proposeCausalPolicyTransfer,causalPolicyTransferAblation} from './causal_world_learning.js';
 import {initialConceptMemory,addConceptRelation,retractConceptSource,inspectConceptMemory,observeMachineVerifiedConcept,proposeCrossDomainRelation,conceptTransferAblation} from './conceptual_world_memory.js';
-import {inspectFrenchEventGraph} from './native_semantic_grammar.js';
+import {inspectFrenchEventGraph,parseFrenchStatement} from './native_semantic_grammar.js';
+import {classifyFrenchEventScope} from './native_event_modality.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -706,28 +707,50 @@ export class CognitiveKernel {
   async rememberFrenchEventLinks(text,{sourceId,domain='private_dialogue'}={}){
     if(typeof text!=='string'||text.length>500)return {accepted:false};
     const parsed=inspectFrenchEventGraph(text);
-    if(parsed?.events?.length!==2||parsed?.relations?.length<1)
-      return {accepted:false,reason:'no-supported-event-relation'};
     let graph=this.soulCache?.concept_memory||initialConceptMemory(),created=0;
     const sid=String(sourceId||('dialogue:'+randomUUID()));
-    for(const link of parsed.relations.slice(0,2)){
-      const a=parsed.events[link.from],b=parsed.events[link.to];
-      if(!a?.agent||!a?.predicate||!a?.patient||
-         !b?.agent||!b?.predicate||!b?.patient)continue;
-      const classify=predicate=>'event_'+String(predicate).normalize('NFD')
-        .replace(/[\u0300-\u036f]/g,'').toLowerCase()
-        .replace(/[^a-z0-9_]/g,'_').slice(0,45);
-      const out=addConceptRelation(graph,{
-        domain,
-        subject:{label:[a.agent,a.predicate,a.patient].join(' ').slice(0,160),
-          kind:classify(a.predicate)},
-        relation:link.type,
-        object:{label:[b.agent,b.predicate,b.patient].join(' ').slice(0,160),
-          kind:classify(b.predicate)},
-        timeScope:'dialogue_'+sid.replace(/[^a-z0-9_-]/gi,'_').slice(0,45),
-        evidence:{source_id:sid,kind:'user-report',observed_at:now()}
-      });
-      if(out.accepted){graph=out.state;created++;}
+    const stamp=now();
+    const classify=predicate=>'event_'+String(predicate||'').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'').toLowerCase()
+      .replace(/[^a-z0-9_]/g,'_').slice(0,45);
+    const timeScope='dialogue_'+sid.replace(/[^a-z0-9_-]/gi,'_').slice(0,45);
+    const evidence={source_id:sid,kind:'user-report',observed_at:stamp};
+    if(parsed?.events?.length===2&&parsed?.relations?.length>=1){
+      for(const link of parsed.relations.slice(0,2)){
+        const a=parsed.events[link.from],b=parsed.events[link.to];
+        if(!a?.agent||!a?.predicate||!a?.patient||
+           !b?.agent||!b?.predicate||!b?.patient)continue;
+        const out=addConceptRelation(graph,{
+          domain,
+          subject:{label:[a.agent,a.predicate,a.patient].join(' ').slice(0,160),
+            kind:classify(a.predicate)},
+          relation:link.type,
+          object:{label:[b.agent,b.predicate,b.patient].join(' ').slice(0,160),
+            kind:classify(b.predicate)},
+          timeScope,evidence,
+        });
+        if(out.accepted){graph=out.state;created++;}
+      }
+    }else{
+      const statement=parseFrenchStatement(text);
+      const scope=classifyFrenchEventScope(text);
+      if(statement?.kind==='event'&&statement.agent&&statement.predicate&&
+         statement.patient&&typeof statement.polarity==='boolean' &&
+         ['user-asserted','planned','hypothetical','reported','habitual'].includes(scope.scope)){
+        const out=addConceptRelation(graph,{
+          domain,
+          subject:{label:String(statement.agent).slice(0,160),kind:'actor'},
+          relation:scope.scope==='planned'?'planned_event':
+             scope.scope==='hypothetical'?'hypothetical_event':
+             scope.scope==='habitual'?'habitual_event':
+             scope.scope==='reported'?'reported_speech_event':'reported_event',
+          object:{label:[statement.predicate,statement.patient].join(' ').slice(0,160),
+            kind:classify(statement.predicate)},
+          polarity:statement.polarity?'positive':'negative',
+          timeScope,evidence,
+        });
+        if(out.accepted){graph=out.state;created++;}
+      }
     }
     if(created){
       this.soulCache.concept_memory=graph;
