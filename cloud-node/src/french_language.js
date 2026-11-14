@@ -1,3 +1,4 @@
+import {config} from './config.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
 import { isUnrequestedTechnicalDigression } from './conversation_grounding.js';
 
