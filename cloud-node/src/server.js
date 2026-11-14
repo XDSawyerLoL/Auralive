@@ -1723,6 +1723,17 @@ app.get('/api/kernel/lessons', async (request, reply) =>
     ? kernel.lessons(request.query?.limit)
     : undefined);
 
+// The cognitive inspector is private: unverified hypotheses, decisions and
+// receipts are not public site content and never enable an action by reading.
+app.get('/api/kernel/learning-evidence', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  return kernel.learningEvidence({
+    context:String(request.query?.context||'docs_readability').slice(0,70),
+    limit:request.query?.limit,
+  });
+});
+
 // Offline-curated directory. Links are informational, not external actions.
 app.get('/api/toolbox/resources', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
