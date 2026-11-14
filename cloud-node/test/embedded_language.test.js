@@ -31,7 +31,7 @@ test('nested Hostinger runtime folder detects the binary and GGUF',()=>{
     const dir=path.join(root,'.aura-language-runtime','llama-b11425','llama-b11425');
     fs.mkdirSync(dir,{recursive:true});
     fs.writeFileSync(path.join(dir,'llama-server'),'dummy',{mode:0o755});
-    fs.writeFileSync(path.join(dir,'model.gguf'),'dummy');
+    fs.writeFileSync(path.join(dir,'Qwen3-0.6B-Q8_0.gguf'),'dummy');
     const result=locateEmbeddedRuntime({root,home:''});
     assert.equal(result.installed,true);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
@@ -93,7 +93,7 @@ test('restores executable bit only on a managed AURA runtime binary',()=>{
     fs.mkdirSync(dir,{recursive:true});
     const exe=path.join(dir,'llama-server');
     fs.writeFileSync(exe,'test',{mode:0o644});
-    fs.writeFileSync(path.join(dir,'model.gguf'),'model');
+    fs.writeFileSync(path.join(dir,'Qwen3-0.6B-Q8_0.gguf'),'model');
     const runtime=new EmbeddedLanguageRuntime({discover:()=>locateEmbeddedRuntime({root,home:''})});
     assert.equal(runtime.installed(),true);
     assert.equal(runtime.repairExecutable(),true);
