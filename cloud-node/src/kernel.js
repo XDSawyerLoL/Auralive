@@ -35,7 +35,7 @@ import { OfflineConsolidation,verifyConsolidation } from './offline_consolidatio
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
 import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
-import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice,causalWorldAblation} from './causal_world_learning.js';
+import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice,causalWorldAblation,proposeCausalPolicyTransfer,causalPolicyTransferAblation} from './causal_world_learning.js';
 import {initialConceptMemory,addConceptRelation,retractConceptSource,inspectConceptMemory,observeMachineVerifiedConcept,proposeCrossDomainRelation,conceptTransferAblation} from './conceptual_world_memory.js';
 import {inspectFrenchEventGraph} from './native_semantic_grammar.js';
 import { groundAgenda } from './activity_truth.js';
@@ -647,6 +647,10 @@ export class CognitiveKernel {
       causal_choice:ablation.actual,
       choice_without_evidence:ablation.without_evidence,
       ablation_changes_decision:ablation.decision_changed,
+      cross_domain_precheck_transfer:causalPolicyTransferAblation(world,{
+        targetContext:scope,
+        affordances:['filesystem','read_only','path_access','precheck_available'],
+      }),
       candidate_records:candidates.map(c=>({
         key:c.lesson_key,kind:c.kind,source:c.origin,
         status:c.status,repetitions:Number(c.repetitions||0),
@@ -1737,7 +1741,13 @@ export class CognitiveKernel {
     // and can only add a read-only verification step (never suppress it).
     const worldChoice=causalWorldChoice(this.soulCache.world_learning,{
       context,baseline:'respond',allowed:['respond','verify']});
-    const forcePreflight=Boolean(strategy.verifies_first||worldChoice.action==='verify');
+    // The affordances below describe this REAL read-only file tool, not
+    // model-generated concepts. They are persisted before the syscall.
+    const affordances=['filesystem','read_only','path_access','precheck_available'];
+    const transfer=proposeCausalPolicyTransfer(this.soulCache.world_learning,{
+      targetContext:context,affordances});
+    const forcePreflight=Boolean(strategy.verifies_first||worldChoice.action==='verify'
+      ||transfer.transferred);
     const proposedAction=forcePreflight?'verify':'respond';
     const lessonKey='verified-probe:'+context+':'+proposedAction;
     // A disposable candidate store must never break an authorized,
@@ -1756,6 +1766,7 @@ export class CognitiveKernel {
     });
     const worldPrediction=predictCausalWorld(this.soulCache.world_learning,{
       episodeId:historyEpisode.id,context,action:proposedAction,issuedAt:now(),
+      affordances,
     });
     if(!worldPrediction.accepted)
       throw Error('prospective-world-prediction-rejected');
@@ -1826,7 +1837,9 @@ export class CognitiveKernel {
       receipt:result.receipt,history_episode_id:historyEpisode.id,
       preflighted:result.action_was_preflighted,
       prospective_world_updated:learnedWorld.accepted,
-      world_policy_before:worldChoice,verified_lesson:verifiedLesson};
+      world_policy_before:worldChoice,
+      cross_domain_transfer:transfer,
+      verified_lesson:verifiedLesson};
   }
 
   async runAgent(name, task, { missionId = '' } = {}) {
