@@ -487,6 +487,8 @@ export class EmbeddedLanguageRuntime {
       pids_after_failure:this.pidsAfterFailure,
       memory_preflight:embeddedStartupBudget(),
       boot_attempts:this.bootAttempts.slice(-4),
+      requested_model_profile:selectedEmbeddedModel().filename,
+      model_loaded_verified:Boolean(this.ready&&this.lastProbeAt),
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
