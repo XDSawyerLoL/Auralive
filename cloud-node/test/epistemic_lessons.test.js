@@ -78,3 +78,17 @@ test('trusted lesson retrieval queries recheck proof status and ablation',()=>{
  assert.match(db,/CREATE TABLE IF NOT EXISTS aura_learning_candidates/);
  assert.match(db,/INSERT IGNORE INTO aura_learning_candidates/);
 });
+
+
+test('the evidence inspector is private and shows separate candidate vs verified sources',()=>{
+ const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ const route=server.match(/app\.get\('\/api\/kernel\/learning-evidence'[\s\S]*?\n\}\);/);
+ assert.ok(route,'private epistemic inspector route required');
+ assert.match(route[0],/requirePrivate\(request, reply\)/);
+ assert.match(route[0],/requireRuntime\(reply\)/);
+ assert.match(route[0],/private, no-store/);
+ const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
+ assert.match(kernel,/async learningEvidence\(/);
+ assert.match(kernel,/repeats_are_not_verified_evidence:true/);
+ assert.match(kernel,/causalWorldAblation\(/);
+});
