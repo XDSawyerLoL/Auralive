@@ -452,19 +452,6 @@ async function startRuntime() {
     // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
     // The founder can explicitly invoke the authenticated evaluation endpoint.
     app.log.info('AURA Cloud: noyau persistant démarré.');
-    // Always non-blocking: the first verified GGUF install can take minutes.
-    // Production-only to avoid downloading model weights during CI/test runs.
-    if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
-      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false'
-      && !embeddedLanguageRuntime.installed()) {
-      // The independent startup loop handles already installed files, even if
-      // the database is unavailable; this path only provisions missing files.
-      void embeddedLanguageRuntime.start().catch((error) => {
-        app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
-          'AURA: local French engine warmup failed');
-      });
-    }
-
     try {
       await horizon.start();
     } catch (error) {
@@ -3012,14 +2999,20 @@ export function startRuntimeLoop() {
   // AURA observes a fictitious trading strategy automatically every 6h;
   // zero-cost public data only, no account or live orders.
   startAutomaticPaperScan();
-  // Installed local inference is independent of MySQL initialization.
-  // Do not download weights here: no unmanaged bandwidth or cost at startup.
-  if(shouldWarmInstalledLanguage()
-    && embeddedLanguageRuntime.installed()){
-    void embeddedLanguageRuntime.start({allowProvision:false}).catch(error=>{
-      app.log.warn({code:String(error?.code||'embedded-start-failed')},
-        'AURA: independent local French warmup failed');
-    });
+  // Language bootstrap is independent from MySQL. The explicit Hostinger
+  // auto-provision opt-in can install missing verified GGUF and llama.cpp
+  // assets even when the database is down. Never run this in CI/tests.
+  if(shouldWarmInstalledLanguage()){
+    const installed=embeddedLanguageRuntime.installed();
+    const mayInstall=process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
+      && embeddedLanguageRuntime.canProvision();
+    if(installed||mayInstall){
+      void embeddedLanguageRuntime.start({allowProvision:mayInstall})
+        .catch(error=>{
+          app.log.warn({code:String(error?.code||'embedded-start-failed')},
+            'AURA: independent local French warmup failed');
+        });
+    }
   }
   startRuntime().catch((error) => {
     bootstrap.startupError = safeError(error);
