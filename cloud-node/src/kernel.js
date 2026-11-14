@@ -1623,7 +1623,7 @@ export class CognitiveKernel {
     if (privateView && knowledgeNotes.length) lines.push(knowledgeContext(knowledgeNotes));
     if(privateView && String(focus||'').length>=4){
       const keywords=String(focus).toLocaleLowerCase('fr-FR')
-        .split(/[^\\p{L}\\p{N}]+/u).filter(w=>w.length>=5).slice(0,8);
+        .split(/[^\p{L}\p{N}]+/u).filter(w=>w.length>=5).slice(0,8);
       const concepts=this.conceptEvidence({limit:35}).visible
         .filter(row=>row.status!=='retracted'&&keywords.some(
           w=>(row.subject?.label||'').toLocaleLowerCase('fr-FR').includes(w)||
