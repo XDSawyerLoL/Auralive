@@ -14,7 +14,7 @@ const clean=(text,max)=>typeof text==='string'&&text.trim().length>=2&&
  text.length<=max&&!/[\u0000-\u001f<>]/u.test(text);
 const safeType=t=>/^[a-z][a-z0-9_-]{1,55}$/.test(String(t||''));
 const sourceKinds=new Set(['user-report','model-hypothesis','machine-verified']);
-const subjectiveKinds=new Set(['user-report','model-hypothesis']);
+const INTERNAL_MACHINE_CAPABILITY=Symbol('ledger-confirmed-concept');
 const functional=new Set(['located_in','has_state','current_owner','current_location']);
 const trimState=s=>{
  if(!s||s.schema!==CONCEPT_MEMORY_SCHEMA||!Array.isArray(s.nodes)||
@@ -65,7 +65,7 @@ export function addConceptRelation(state,{
   !safeType(scope)||!['positive','negative'].includes(polarity)||
   !safeReference(evidence?.source_id)||!sourceKinds.has(evidence?.kind)||
   !time(evidence?.observed_at)||!clean(timeScope,140)||
-  (evidence?.kind==='machine-verified'&&!evidence?.validated_receipt))
+  (evidence?.kind==='machine-verified'&&evidence?.internal_capability!==INTERNAL_MACHINE_CAPABILITY))
   return {accepted:false,reason:'invalid-or-unverified-relation',state:s};
  // This input gate is also used for owner annotations: self-reported facts are
  // not allowed to request machine-verified status.
@@ -110,18 +110,44 @@ export function addConceptRelation(state,{
  return {accepted:true,relation_id:id,status:evidenceStatus(link),
   conflicts:conceptualConflicts(next,link),state:next};
 }
+// The only machine-verified ingestion path cross-checks a receipt already
+// accepted by the causal model. Never expose this function as an HTTP route.
+export function observeMachineVerifiedConcept(state,{
+ world,episodeId,runId,proofHash,context,success,observedAt
+}={}){
+ const verified=world?.episodes?.find(e=>
+  e.episode_id===episodeId&&e.run_id===runId&&
+  e.proof_hash===proofHash&&e.context===context&&
+  e.success===(success?1:0)&&e.observed_at===observedAt);
+ if(!verified||!Number.isSafeInteger(episodeId))
+  return {accepted:false,reason:'no-verified-world-episode',state:trimState(state)};
+ return addConceptRelation(state,{
+  domain:context,
+  subject:{label:'contexte '+context,kind:'task_context'},
+  relation:'observed_result',
+  object:{label:success?'réussite vérifiée':'échec vérifié',kind:'outcome'},
+  timeScope:'execution',
+  evidence:{
+   source_id:'machine:'+String(episodeId),
+   kind:'machine-verified',episode_id:episodeId,proof_hash:proofHash,
+   observed_at:observedAt,internal_capability:INTERNAL_MACHINE_CAPABILITY
+  }
+ });
+}
+
 export function retractConceptSource(state,{sourceId,at}={}){
  const s=trimState(state);
  if(!safeReference(sourceId)||!time(at))return {changed:false,state:s};
  let changed=0;
  const links=s.links.map(l=>{
+  let touched=false;
   const evidence=l.evidence.map(e=>{
    // Machine-confirmed receipts can only be invalidated by HistoryLedger
    // ablation, never a user-report retraction endpoint.
    if(e.source_id!==sourceId||!e.active||e.kind==='machine-verified')return e;
-   changed++;return {...e,active:false,retracted_at:at};
+   touched=true;changed++;return {...e,active:false,retracted_at:at};
   });
-  return changed?{...l,evidence,revision:s.revision+1}:l;
+  return touched?{...l,evidence,revision:s.revision+1}:l;
  });
  if(!changed)return {changed:false,state:s};
  return {changed:true,affected_evidence:changed,
