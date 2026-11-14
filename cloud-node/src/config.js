@@ -169,7 +169,8 @@ export const config = Object.freeze({
   aiTemperature: Number(process.env.AI_TEMPERATURE || 0.65),
   localAiPreferred: bool('AURA_LOCAL_AI_PREFERRED', true),
   // Strict owner-selected local language policy: no Groq, Gemini, OpenRouter or other remote LLM.
-  localLanguageOnly: bool('AURA_LOCAL_LANGUAGE_ONLY', false),
+  localLanguageOnly: bool('AURA_LOCAL_LANGUAGE_ONLY',
+    process.env.NODE_ENV==='production' && process.env.CI!=='true'),
   frenchLanguageRequired: bool('AURA_FRENCH_LANGUAGE_REQUIRED', true),
   embeddedLanguageEnabled: bool('AURA_EMBEDDED_LANGUAGE_ENABLED', true),
 
