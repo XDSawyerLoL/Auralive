@@ -35,7 +35,7 @@ import { OfflineConsolidation,verifyConsolidation } from './offline_consolidatio
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
 import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
-import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice} from './causal_world_learning.js';
+import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice,causalWorldAblation} from './causal_world_learning.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -1652,6 +1652,19 @@ export class CognitiveKernel {
     const verifiedLesson=await this.promoteVerifiedLesson({
       lessonKey,contextTag:context,action:proposedAction,
     }).catch(()=>({status:'candidate',reason:'verification-storage-unavailable'}));
+    if(learnedWorld.accepted){
+      const ablation=causalWorldAblation(this.soulCache.world_learning,{context});
+      await this.trace('causal-world','verified-prediction-outcome','',{
+        episode_id:historyEpisode.id,context,
+        action:proposedAction,success:verifiedResult.success===1,
+        predicted_probability:worldPrediction.prediction.expected_success,
+        model_revision:this.soulCache.world_learning.revision,
+        evidence_count:this.soulCache.world_learning.episodes.length,
+        decision_differs_without_evidence:ablation.decision_changed,
+        source:'independent-fs-syscall-and-history-receipt',
+        raw_user_text_stored:false,
+      });
+    }
     await this.trace('verified-tool-loop','filesystem-observation','',{
       at:now(),context:String(context).slice(0,80),
       strategy:result.decision.strategy,preflighted:result.action_was_preflighted,
