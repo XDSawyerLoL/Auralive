@@ -1082,10 +1082,78 @@ $('chatMode').addEventListener('change',()=>{
  $('chatSend').textContent=mission?'Lancer':'Envoyer';
 });
 
+// The initial installation may run longer than one chat HTTP request.
+// Do not POST (and potentially persist) the same utterance repeatedly while
+// llama.cpp is downloading or verifying. Hold one unsent message and submit
+// it once only after actual verified local inference is reported.
+let waitingLocalLanguage=null;
+function readableLocalLanguageState(status){
+ const phase=String(status?.phase||'');
+ const messages={
+  'downloading-model':'Téléchargement du modèle de langue local en cours.',
+  'downloading-runtime':'Téléchargement du moteur llama.cpp en cours.',
+  'installing-runtime':'Installation du moteur de langue local en cours.',
+  'verifying-model':'Le modèle est chargé ; sa capacité à répondre est en cours de vérification.',
+  'starting-model':'Initialisation du modèle local en cours.',
+  'pending-start':'Le moteur local n’a pas encore confirmé son démarrage.',
+  'blocked':'Le démarrage du moteur local a échoué.',
+  'unavailable':'Aucun moteur local opérationnel n’est disponible.',
+ };
+ const reason=String(status?.reason||'').slice(0,80);
+ const detail=phase==='blocked'&&reason
+   ?' Diagnostic : '+reason+'.':'';
+ return (messages[phase]||'Le modèle local ne répond pas encore.')+detail;
+}
+async function getLocalLanguageState(){
+ try{
+  const res=await fetch('/api/language/ready',{
+   credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'},
+   signal:AbortSignal.timeout(5000)
+  });
+  return res.ok?await res.json():null;
+ }catch{return null;}
+}
+async function deferUnsentChatUntilLanguageReady(message){
+ const status=await getLocalLanguageState();
+ if(!status||status.local_only!==true||status.ready===true)return false;
+ const input=$('chatInput');
+ input.value=message;
+ if(waitingLocalLanguage?.message===message)return true;
+ if(waitingLocalLanguage?.timer)clearInterval(waitingLocalLanguage.timer);
+ const pending={message,timer:null,attempts:0,checking:false};
+ waitingLocalLanguage=pending;
+ chatLine('AURA · MOTEUR LOCAL',readableLocalLanguageState(status)+
+  (status.retryable?' Le dialogue partira automatiquement dès que le moteur répondra.':
+   ' Ton message reste dans le champ de saisie.'));
+ if(!status.retryable)return true;
+ pending.timer=setInterval(async()=>{
+  if(waitingLocalLanguage!==pending||pending.checking)return;
+  if(input.value.trim()!==pending.message){
+   clearInterval(pending.timer);waitingLocalLanguage=null;return;
+  }
+  if(document.hidden)return;
+  pending.checking=true;
+  try{
+   pending.attempts++;
+   const current=await getLocalLanguageState();
+   if(current?.ready===true){
+    clearInterval(pending.timer);waitingLocalLanguage=null;
+    if(!state.busy&&input.value.trim()===message)$('chatSend').click();
+   }else if(current?.retryable===false||pending.attempts>=120){
+    clearInterval(pending.timer);waitingLocalLanguage=null;
+    chatLine('AURA · MOTEUR LOCAL',readableLocalLanguageState(current)+
+      ' Message conservé. Vérifie le diagnostic du modèle avant un nouvel envoi.');
+   }
+  }finally{pending.checking=false;}
+ },5000);
+ return true;
+}
+
 $('chatSend').onclick=async()=>{
  const field=$('chatInput'),msg=field.value.trim();
  if(!msg||state.busy)return;
  const mission=$('chatMode').value==='mission';
+ if(!mission&&await deferUnsentChatUntilLanguageReady(msg))return;
  state.busy=true;
  state.flow=null;state.replayStarted=0;state.replayPlaying=false;state.replayOffset=0;
  $('chatSend').disabled=true;field.value='';
@@ -1120,8 +1188,12 @@ $('chatSend').onclick=async()=>{
        ||out?.service_status?.code==='french-inference-unavailable');
      field.value=msg;
      if(speechUnavailable){
+       const languageDetails=out?.language_runtime;
        chatLine('AURA · LANGAGE INDISPONIBLE',
-         'Le noyau a reçu ta question, mais la formulation n’a pas été confirmée. Réessaie lorsque le modèle répond ; ton message reste dans le champ de saisie.');
+         languageDetails?.local_only
+           ?readableLocalLanguageState(languageDetails)+
+             ' Aucun texte n’a été inventé et ton message reste disponible.'
+           :'Le noyau a reçu ta question, mais la formulation n’a pas été confirmée. Réessaie lorsque le modèle répond ; ton message reste dans le champ de saisie.');
      }else{
        const failure=typeof out?.error==='string'?out.error:'Le service n’a pas confirmé cette demande.';
        chatLine('SERVICE · ERREUR',failure.slice(0,750));
