@@ -1,3 +1,4 @@
+import {TRUSTED_LESSONS_SQL} from './epistemic_lessons.js';
 import { config } from './config.js';
 import { one, query } from './db.js';
 import { retrieveExperiences } from './memory_retrieval.js';
@@ -138,7 +139,7 @@ export class LanguageFaculty {
     );
     const globalLessons = queryText
       ? await this.store.query(
-        'SELECT lesson_key,content,confidence,evidence_count,source,updated_at FROM aura_lessons ORDER BY updated_at DESC LIMIT 120',
+        TRUSTED_LESSONS_SQL,[120],
       ).catch(() => [])
       : [];
     // Only the authenticated founder session can retrieve cross-session lessons.
