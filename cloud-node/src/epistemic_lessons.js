@@ -73,3 +73,8 @@ export function evidenceAblation(rows,options){
 
 // Both the dialogue and kernel must exclude stale, ablated or self-proclaimed lessons.
 export const TRUSTED_LESSONS_SQL="SELECT l.lesson_key,l.content,l.confidence,l.evidence_count,l.source,l.updated_at\n FROM aura_lessons l JOIN aura_learning_candidates c ON c.lesson_key=l.lesson_key\n WHERE l.source='machine-verified-history' AND c.status='verified'\n AND (SELECT COUNT(DISTINCT e.mission_id)\n FROM aura_history_episodes e JOIN aura_history_outcomes o ON o.episode_id=e.id\n WHERE e.context_tag=c.context_tag AND e.action=c.action\n AND e.kind='action' AND e.ablated=0 AND e.ts>c.created_at AND o.observed_at>e.ts\n AND e.mission_id IS NOT NULL AND e.mission_id<>''\n AND e.prediction IS NOT NULL AND e.prediction<>''\n AND o.source='machine-verified' AND o.success IN(0,1))>=2\n ORDER BY l.confidence DESC,l.updated_at DESC LIMIT ?";
+
+export const TRUSTED_LESSON_COUNT_SQL=TRUSTED_LESSONS_SQL
+ .replace('SELECT l.lesson_key,l.content,l.confidence,l.evidence_count,l.source,l.updated_at',
+  'SELECT COUNT(*) AS total')
+ .replace(/ORDER BY l.confidence DESC,l.updated_at DESC LIMIT \?$/,'');
