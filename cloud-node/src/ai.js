@@ -1,4 +1,6 @@
 import { config } from './config.js';
+import {NativeLocalSemanticEncoder} from './native_local_sentence_encoder.js';
+import {retrieveNativeSemanticEvidence} from './native_semantic_retrieval.js';
 import { ZeroCostFederation } from './free_federation.js';
 import { GroqFreeProvider } from './groq_free.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
@@ -81,6 +83,7 @@ export class AiClient {
     this.lastBackend = '';
     this.federation = new ZeroCostFederation();
     this.groq = new GroqFreeProvider();
+    this.localSemanticEncoder = new NativeLocalSemanticEncoder();
   }
 
   get provider() {
@@ -128,10 +131,19 @@ export class AiClient {
       free_federation: this.federation.snapshot(),
       groq_free: this.groq.snapshot(),
       embedded_language: embeddedLanguageRuntime.status(),
+      non_generative_semantic_encoder: this.localSemanticEncoder.diagnostic(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
     };
+  }
+
+  // Explicit opt-in retrieval: the encoder cannot produce an answer or assert
+  // facts. Only user-quoted, admissible evidence may be ranked.
+  async retrieveLocalSemanticEvidence(question,passages){
+    return retrieveNativeSemanticEvidence({
+      query:question,passages,encoder:this.localSemanticEncoder
+    });
   }
 
   async #generateGemini(prompt, system, maxTokens) {
