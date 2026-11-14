@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {NativeLocalSemanticEncoder,encoderConfiguration,dotSimilarity}
+import {NativeLocalSemanticEncoder,encoderConfiguration,dotSimilarity,localEncoderMemoryHeadroom}
  from '../src/native_local_sentence_encoder.js';
 import {retrieveNativeSemanticEvidence} from '../src/native_semantic_retrieval.js';
 
@@ -77,4 +77,24 @@ test('encoder never substitutes similarity for event verification',()=>{
  assert.equal(dotSimilarity(vector(0),vector(1)),0);
  assert.equal(dotSimilarity([1,0],[1]),null);
  assert.equal(dotSimilarity([0,0],[0,0]),null);
+});
+
+
+test('preflight rejects insufficient managed memory and unknown cgroup limits',()=>{
+ const mock=(path)=>{
+  if(path.endsWith('memory.max'))return String(700*1048576);
+  if(path.endsWith('memory.current'))return String(400*1048576);
+  throw Error('missing');
+ };
+ const low=localEncoderMemoryHeadroom({read:mock,minMiB:768});
+ assert.equal(low.sufficient,false);
+ assert.equal(low.headroom_mib,300);
+ assert.equal(low.reason,'insufficient-cgroup-headroom');
+ const missing=localEncoderMemoryHeadroom({read:()=>{throw Error('unavailable');}});
+ assert.equal(missing.sufficient,false);
+ assert.equal(missing.reason,'memory-headroom-unknown');
+ const confirmed=localEncoderMemoryHeadroom({
+  read:()=>{throw Error('unavailable');},allowUnverified:true});
+ assert.equal(confirmed.sufficient,true);
+ assert.equal(confirmed.reason,'operator-verified');
 });
