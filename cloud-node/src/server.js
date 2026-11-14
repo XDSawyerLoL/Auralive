@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
+import {generateStandaloneLocalReply} from './local_chat_recovery.js';
 import {localDialogueReadiness} from './local_dialogue_readiness.js';
 import {localLanguageRecoveryDecision,localLanguageRetryAfter} from './local_language_supervisor.js';
 import { ExecutionBridge } from './bridge.js';
@@ -2402,7 +2403,6 @@ app.get('/api/language/ready', async (_request, reply)=>{
 });
 
 app.post('/api/chat', async (request, reply) => {
-  if (!requireRuntime(reply)) return;
   if (
     !isPrivate(request)
     && !requireRateLimit(
@@ -2415,6 +2415,19 @@ app.post('/api/chat', async (request, reply) => {
   ) return;
   const text = String(request.body?.text || '').trim();
   if (!text) return reply.code(422).send({ error: 'Message vide' });
+  // The embedded GGUF model is supervised independently of MySQL. If that
+  // verified model is already responsive, allow a clearly labelled ephemeral
+  // conversation rather than making database startup block speech. This
+  // performs no tool operations and persists no autobiographical facts.
+  if (!bootstrap.runtimeReady) {
+    if(!config.localLanguageOnly){ requireRuntime(reply);return; }
+    const standalone=await generateStandaloneLocalReply({
+      localOnly:config.localLanguageOnly,runtime:embeddedLanguageRuntime,text,
+    });
+    if(!standalone?.ok)reply.code(503);
+    reply.header('Cache-Control','no-store');
+    return {...standalone,language_runtime:standalone?.ok?null:await localLanguageSnapshot()};
+  }
   const privateView = isPrivate(request);
   const chatSessionId = ensureChatSession(request, reply);
   const traceId = cognitiveTrace.start(chatSessionId);
