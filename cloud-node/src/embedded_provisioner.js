@@ -24,6 +24,18 @@ const MODEL = Object.freeze({
   sha256: '9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031',
   url: 'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf',
 });
+// Optional Q4 on-host profile. Bytes and SHA-256 are pinned to an audited
+// publisher's GGUF conversion; no arbitrary remote model URL is permitted.
+const MODEL_Q4 = Object.freeze({
+  filename:'Qwen3-0.6B-Q4_K_M.gguf',
+  sha256:'373db06783953f0981572d008f183eb2167b93304f5adbf7c4ce6ed6a91ee437',
+  url:'https://huggingface.co/tauqir02/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+  minBytes:480_000_000,maxBytes:490_000_000
+});
+export function selectedEmbeddedModel(env=process.env) {
+  return env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION==='q4'
+    ?MODEL_Q4:MODEL;
+}
 const MIN_MEMORY = 1_500 * 1024 * 1024;
 const MIN_FREE_DISK = 900 * 1024 * 1024;
 const BUNDLED_STATIC_REVISION = 'b11425';
@@ -86,8 +98,10 @@ async function chooseInstallDir({home=homedir(),cwd=process.cwd(),temp=tmpdir()}
       await access(folder,2);
       const disk=await statfs(folder).catch(()=>null);
       // Cached models need little extra disk; preserve them after deployment.
-      const saved=await stat(join(folder,MODEL.filename)).catch(()=>null);
-      const cached=Boolean(saved && saved.size>500*1024*1024 && saved.size<750*1024*1024);
+      const selection=selectedEmbeddedModel();
+      const saved=await stat(join(folder,selection.filename)).catch(()=>null);
+      const cached=Boolean(saved && saved.size>(selection.minBytes||500*1024*1024) &&
+        saved.size<(selection.maxBytes||750*1024*1024));
       if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024 : MIN_FREE_DISK))continue;
       return folder;
     }catch{}
@@ -216,7 +230,8 @@ export class EmbeddedProvisioner {
     return {enabled:this.enabled,stage:this.stage,error_code:this.lastError,
       failed_stage:this.failedStage,redirect_origin:this.failureOrigin,
       engine_variant:this.engineVariant,
-      engine_revision:REVISION,model:'Qwen3-0.6B Q8_0',no_paid_api:true,
+      engine_revision:REVISION,model:'Qwen3-0.6B '+
+        (selectedEmbeddedModel()===MODEL_Q4?'Q4_K_M':'Q8_0'),no_paid_api:true,
       retry_after:this.retryAfter>Date.now()?new Date(this.retryAfter).toISOString():null};
   }
   async ensure(){
@@ -239,7 +254,8 @@ export class EmbeddedProvisioner {
     if(memory!==null && memory<MIN_MEMORY)throw new Error('embedded-insufficient-cgroup-memory');
     const cache=await chooseInstallDir(this.settings);
     const dest=join(cache,'llama-'+REVISION);
-    const model=join(cache,MODEL.filename);
+    const selection=selectedEmbeddedModel();
+    const model=join(cache,selection.filename);
     const binInfo=BUNDLES[process.arch];
     this.stage='locating-existing-install';
     const staticBinary=await installBundledStaticServer(cache);
@@ -271,18 +287,19 @@ export class EmbeddedProvisioner {
     await chmod(binary,0o700);
     let modelGood=false;
     const existing=await stat(model).catch(()=>null);
-    if(existing?.size>500*1024*1024 && existing.size<750*1024*1024){
+    if(existing?.size>(selection.minBytes||500*1024*1024) &&
+       existing.size<(selection.maxBytes||750*1024*1024)){
       const sha=createHash('sha256');
       const {createReadStream}=await import('node:fs');
       for await(const part of createReadStream(model))sha.update(part);
-      modelGood=sha.digest('hex')===MODEL.sha256;
+      modelGood=sha.digest('hex')===selection.sha256;
     }
     if(!modelGood){
       this.stage='downloading-open-model';
       const partial=model+'.partial-'+process.pid;
       try{
-        await streamChecked(MODEL.url,partial,MODEL.sha256,
-          750*1024*1024,'model',this.request);
+        await streamChecked(selection.url,partial,selection.sha256,
+          selection.maxBytes||750*1024*1024,'model',this.request);
         await rename(partial,model);
       }finally{await rm(partial,{force:true}).catch(()=>{});}
     }
