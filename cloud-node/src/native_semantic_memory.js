@@ -8,7 +8,6 @@ const MAX_CHARS=800;
 const validId=id=>typeof id==='string'&&/^[a-zA-Z0-9_-]{1,80}$/.test(id);
 const validVector=v=>Array.isArray(v)&&v.length===384&&v.every(Number.isFinite)&&
  Math.hypot(...v)>0.0001;
-const refText=(text)=>text.length>160?text.slice(0,160)+'…':text;
 export class NativeSemanticEpisodeIndex{
  constructor(encoder,{minSimilarity=0.76,margin=0.07}={}){
   this.encoder=encoder;
@@ -70,6 +69,9 @@ export async function retrieveLocalConversationMemory(question,history,encoder,o
  for(let i=0;i<recent.length;i++){
   const row=recent[i];
   if(row?.role!=='user'||typeof row.content!=='string')continue;
+  // A correction references the prior message by an explicit stable turn id;
+  // never guess which memory was contradicted based on vector similarity.
+  if(validId(row.retracts_message_id))index.remove(row.retracts_message_id);
   await index.add({id:'turn-'+String(history.length-recent.length+i),
    text:row.content,role:'user',evidence_scope:'user-statement-unverified'});
  }
