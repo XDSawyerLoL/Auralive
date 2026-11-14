@@ -3,6 +3,7 @@ import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner } from './embedded_provisioner.js';
+import {sanitizeNativeFrenchGeneration} from './native_local_generation_quality.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -714,8 +715,10 @@ export class EmbeddedLanguageRuntime {
         signal:AbortSignal.timeout(30_000)});
       if(!response.ok)throw Error('embedded HTTP '+response.status);
       const json=await response.json();
-      const answer=String(json?.choices?.[0]?.message?.content||'').trim();
-      if(!answer)throw Error('embedded-empty-response');
+      const answer=sanitizeNativeFrenchGeneration(
+        json?.choices?.[0]?.message?.content
+      );
+      if(!answer)throw Error('embedded-invalid-visible-response');
       this.lastSuccessAt=new Date().toISOString();this.lastLatencyMs=Date.now()-started;
       this.lastFailure='';return answer;
     }catch(error){
