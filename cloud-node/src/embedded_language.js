@@ -358,8 +358,14 @@ export function locateEmbeddedRuntime({
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
   const modelRequested=selectedEmbeddedModel().filename;
-  const requireSelectedModel=process.env.AURA_LOCAL_LANGUAGE_ONLY==='true'
-    || Boolean(process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION);
+  // Local-only is a provider policy, not a request to discard a working GGUF.
+  // A pin is strict ONLY when the operator selects a quantization explicitly.
+  const requireSelectedModel=Boolean(process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION);
+  const knownLocalModels=new Set([
+    'Qwen3-0.6B-Q8_0.gguf',
+    'Qwen3-0.6B-Q4_K_M.gguf',
+    'Qwen3-1.7B-Q4_K_M.gguf',
+  ]);
   // Provisioner stores its GGUF in ~/.cache/aura-language-runtime by default.
   // On a Node restart its in-memory "paths" are lost. Discover the persistent
   // cache rather than downloading the same 639 MB model again.
@@ -385,7 +391,7 @@ export function locateEmbeddedRuntime({
         queue.push({dir:full,depth:depth+1});
       }else if(entry.isFile() || entry.isSymbolicLink()){
         if(!executable && entry.name==='llama-server') executable=full;
-        if(!gguf && /\.gguf$/i.test(entry.name) &&
+        if(!gguf && knownLocalModels.has(entry.name) &&
            (!requireSelectedModel||entry.name===modelRequested)) gguf=full;
       }
     }
@@ -496,6 +502,8 @@ export class EmbeddedLanguageRuntime {
       memory_preflight:embeddedStartupBudget(),
       boot_attempts:this.bootAttempts.slice(-4),
       requested_model_profile:selectedEmbeddedModel().filename,
+      // File basename only, never disclose filesystem paths or home folder.
+      active_model_profile:item.modelFound?path.basename(item.gguf):null,
       model_loaded_verified:Boolean(this.ready&&this.lastProbeAt),
       paid_model_api_required:false};
   }
