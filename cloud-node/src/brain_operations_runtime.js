@@ -870,7 +870,7 @@ setInterval(()=>{if(state.busy&&!document.hidden)void poll();},950);
 // Optional and explicitly activated browser sensors. All images and audio
 // remain on the visitor's device: only coarse, numeric features leave it.
 const senseState={mic:null,cam:null,context:null,analyser:null,video:null,
-  timer:null,lastFrame:null,lastSent:{},busy:false};
+  timer:null,lastFrame:null,lastSent:{},busy:false,bridgeRetryAt:0,bridgeError:''};
 const senseStatus=msg=>setText('auraSenseStatus',msg);
 function stopSense(kind){
   // A revoked browser sensor also revokes its semantic processor.
@@ -901,7 +901,8 @@ function stopSense(kind){
 async function postSense(kind,features){
   if(senseState.busy||document.hidden||!((kind==='audio-level'&&senseState.mic)||
     (kind==='visual-luminance-motion'&&senseState.cam)))return;
-  const now=Date.now();if(now-(senseState.lastSent[kind]||0)<4500)return;
+  const now=Date.now();
+  if(now<senseState.bridgeRetryAt||now-(senseState.lastSent[kind]||0)<4500)return;
   senseState.busy=true;
   try{
     const response=await fetch('/api/cognition/senses',{
@@ -910,13 +911,36 @@ async function postSense(kind,features){
       body:JSON.stringify({kind,features,source:'browser-opt-in-local-measurement',
         measured_at:new Date(now).toISOString()}),
     });
-    if(response.status===401||response.status===403){
-      stopSense('mic');stopSense('cam');
-      senseStatus('Capteurs arrêtés : accès privé au noyau requis.');
-    }else if(response.ok)senseState.lastSent[kind]=now;
-  }catch{senseStatus('Mesures locales actives, mais la liaison au noyau est indisponible.');}
-  finally{senseState.busy=false;}
+    if(response.ok){
+      senseState.lastSent[kind]=now;
+      if(senseState.bridgeError){
+        senseState.bridgeError='';senseState.bridgeRetryAt=0;
+        senseStatus('Capteurs actifs sur cet appareil ; dernières mesures reçues par le noyau AURA.');
+      }
+    }else if(response.status===401||response.status===403){
+      // Server authorization is independent of browser permission. The private
+      // kernel can refuse a measurement without revoking local camera/mic.
+      senseState.bridgeRetryAt=now+30000;
+      if(senseState.bridgeError!=='auth'){
+        senseState.bridgeError='auth';
+        senseStatus('Ouïe/Vue actives localement, mais AURA ne reçoit rien : accès privé au noyau requis. Reconnexion vérifiée automatiquement.');
+      }
+    }else{
+      senseState.bridgeRetryAt=now+15000;
+      if(senseState.bridgeError!=='unavailable'){
+        senseState.bridgeError='unavailable';
+        senseStatus('Capteurs actifs localement ; noyau momentanément indisponible (HTTP '+response.status+'). Aucune mesure reçue.');
+      }
+    }
+  }catch{
+    senseState.bridgeRetryAt=now+15000;
+    if(senseState.bridgeError!=='network'){
+      senseState.bridgeError='network';
+      senseStatus('Capteurs actifs localement ; réseau indisponible, aucune mesure reçue par AURA.');
+    }
+  }finally{senseState.busy=false;}
 }
+
 function sampleSenses(){
  if(document.hidden)return;
  if(senseState.analyser&&senseState.mic){
@@ -960,11 +984,14 @@ $('auraListen').onclick=async()=>{
  }
  try{
    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+   // Track the granted stream immediately so later setup failures can close it.
+   senseState.mic=stream;
    const context=new (window.AudioContext||window.webkitAudioContext)();
+   senseState.context=context;
    const source=context.createMediaStreamSource(stream);
    const analyser=context.createAnalyser();analyser.fftSize=1024;
    source.connect(analyser);
-   senseState.mic=stream;senseState.context=context;senseState.analyser=analyser;
+   senseState.analyser=analyser;
    stream.getAudioTracks().forEach(t=>t.addEventListener('ended',()=>stopSense('mic'),{once:true}));
    $('auraListen').textContent='Ouïe : active';
    $('auraListen').setAttribute('aria-pressed','true');
@@ -979,9 +1006,9 @@ $('auraSee').onclick=async()=>{
  try{
    const stream=await navigator.mediaDevices.getUserMedia({
      audio:false,video:{width:{ideal:320},height:{ideal:240},frameRate:{ideal:5,max:10}}});
+   senseState.cam=stream; // Also close it if video.play() rejects.
    const video=$('auraCameraPreview');
    video.srcObject=stream;video.hidden=false;$('auraVisionPreview').hidden=false;await video.play();
-   senseState.cam=stream;
    stream.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>stopSense('cam'),{once:true}));
    $('auraSee').textContent='Vue : active';
    $('auraSee').setAttribute('aria-pressed','true');
@@ -991,8 +1018,37 @@ $('auraSee').onclick=async()=>{
 window.addEventListener('pagehide',()=>{stopSense('mic');stopSense('cam');});
 
 const history=$('chatHistory');
+const localChatKey='aura.brain.session-chat.v1';
+const sessionChat=[];
+// Session-scoped only: never make a private conversation a permanent browser
+// profile, and never substitute restored display text for model memory.
+function restoreChat(){
+  try{
+    const stored=JSON.parse(sessionStorage.getItem(localChatKey)||'[]');
+    if(!Array.isArray(stored))return;
+    for(const row of stored.slice(-26)){
+      if(!row||typeof row.role!=='string'||typeof row.text!=='string')continue;
+      chatLine(row.role.slice(0,110),row.text.slice(0,4000),
+        row.kind==='user'?'user':row.kind==='aura-initiative'?'aura-initiative':'');
+    }
+  }catch{ /* Private browsing and storage restrictions must not block chat. */ }
+}
 $('chatExpand').onclick=()=>{$('conversation-panel').scrollIntoView({behavior:reduced?'auto':'smooth',block:'nearest'});};
-function chatLine(role,text,kind=''){const item=element('div','chat-message '+kind);item.append(element('small','',role),element('span','',text));history.append(item);while(history.children.length>26)history.firstElementChild.remove();history.classList.add('open');history.scrollTop=history.scrollHeight;}
+function chatLine(role,text,kind=''){
+  const item=element('div','chat-message '+kind);
+  item.append(element('small','',role),element('span','',text));history.append(item);
+  sessionChat.push({role:String(role).slice(0,110),text:String(text).slice(0,4000),kind});
+  while(sessionChat.length>26)sessionChat.shift();
+  while(history.children.length>26)history.firstElementChild.remove();
+  try{sessionStorage.setItem(localChatKey,JSON.stringify(sessionChat));}catch{}
+  history.classList.add('open');history.scrollTop=history.scrollHeight;
+}
+restoreChat();
+$('chatClear').onclick=()=>{
+  history.replaceChildren();sessionChat.length=0;
+  try{sessionStorage.removeItem(localChatKey);}catch{}
+  history.classList.remove('open');
+};
 // Explicit in-page opt-in, off by default and never persisted as a
 // subscription. Polling reads existing kernel output; it never calls
 // an LLM, schedules a fake question or activates a cognition cycle.
@@ -1232,11 +1288,13 @@ $('chatSend').onclick=async()=>{
        const reliableTiming=phases.provenance==='node-performance-monotonic-clock'&&
          Number.isFinite(kernelMs)&&kernelMs>=0&&
          Number.isFinite(speechMs)&&speechMs>=0;
-       const title=verified
-         ?'AURA · noyau '+(reliableTiming?Math.round(kernelMs)+' ms':'durée inconnue')+
-           (isNative?' · noyau communicant ':' · langage ')+providerLabel+
-           (reliableTiming?' '+Math.round(speechMs)+' ms':'')
-         :'AURA · FORMULATION À VÉRIFIER';
+       const title=out.response_kind==='local-ephemeral'
+         ?'AURA · MODÈLE LOCAL (SANS MÉMOIRE PERSISTANTE)'
+         :verified
+           ?'AURA · noyau '+(reliableTiming?Math.round(kernelMs)+' ms':'durée inconnue')+
+             (isNative?' · noyau communicant ':' · langage ')+providerLabel+
+             (reliableTiming?' '+Math.round(speechMs)+' ms':'')
+           :'AURA · FORMULATION À VÉRIFIER';
        chatLine(title,answer);
      }
    }
