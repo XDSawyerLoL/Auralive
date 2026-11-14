@@ -354,13 +354,16 @@ export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
   model = process.env.AURA_EMBEDDED_LANGUAGE_MODEL || '',
+  quantization = process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION || '',
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
-  const modelRequested=selectedEmbeddedModel().filename;
+  const modelRequested=selectedEmbeddedModel({
+    AURA_EMBEDDED_LANGUAGE_QUANTIZATION:quantization,
+  }).filename;
   // Local-only is a provider policy, not a request to discard a working GGUF.
   // A pin is strict ONLY when the operator selects a quantization explicitly.
-  const requireSelectedModel=Boolean(process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION);
+  const requireSelectedModel=Boolean(quantization);
   const knownLocalModels=new Set([
     'Qwen3-0.6B-Q8_0.gguf',
     'Qwen3-0.6B-Q4_K_M.gguf',
