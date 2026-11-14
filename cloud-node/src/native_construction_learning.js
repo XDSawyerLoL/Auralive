@@ -8,7 +8,9 @@ const norm=s=>String(s||'').toLocaleLowerCase('fr-FR').normalize('NFD')
   .replace(/[\u0300-\u036f]/g,'').replace(/[’‘]/g,"'").trim();
 const tokens=s=>norm(s).replace(/[^a-z0-9'-]+/gu,' ').replace(/'/g,' ')
   .split(/\s+/).filter(Boolean);
-const slots=new Set(['@agent','@verb','@patient']);
+const slots=new Set(['@agent','@verb','@patient','@det']);
+const determiners=new Set(['le','la','les','un','une','des']);
+const negations=/\b(?:ne|n'|pas|jamais|plus|aucun|ni)\b/u;
 const uid=s=>createHash('sha256').update(s).digest('hex');
 function locate(tokens,values){
  const positions=[];
@@ -19,7 +21,8 @@ function locate(tokens,values){
 export function abstractAnnotatedEvent(example){
  if(typeof example?.sentence!=='string'||example.sentence.length>280||
    !example.sentence.trim()||/[?？;\n]/u.test(example.sentence)||
-   classifyFrenchEventScope(example.sentence).scope!=='user-asserted')return null;
+   classifyFrenchEventScope(example.sentence).scope!=='user-asserted'||
+   negations.test(norm(example.sentence)))return null;
  const words=tokens(example.sentence),actor=tokens(example.agent),
    patient=tokens(example.patient),predicate=norm(example.predicate);
  if(words.length<5||words.length>32||actor.length<1||actor.length>3||
@@ -35,6 +38,7 @@ export function abstractAnnotatedEvent(example){
  const vi=verbs[0].i,grammar=[];
  for(let i=0;i<words.length;){
   if(i===ai){grammar.push('@agent');i+=actor.length;continue;}
+  if(i===pi-1&&determiners.has(words[i])){grammar.push('@det');i++;continue;}
   if(i===pi){grammar.push('@patient');i+=patient.length;continue;}
   if(i===vi){grammar.push('@verb');i++;continue;}
   if(av.has(i)||pv.has(i))return null;
@@ -59,7 +63,7 @@ function matchGrammar(grammar,words){
   }
   // Brute-force matching is bounded by 32 input words and 3 slots.
   // Each segment is anchored by the next literal and constrained length.
-  const max=cur==='@verb'?1:cur==='@agent'?3:5;
+  const max=cur==='@verb'||cur==='@det'?1:cur==='@agent'?3:5;
   for(let k=1;k<=max&&j+k<=words.length;k++)
     advance(i+1,j+k,{...slotsFound,[cur]:words.slice(j,j+k).join(' ')});
  }
@@ -93,14 +97,16 @@ export class NativeConstructionLearner{
  }
  parse(sentence){
   if(typeof sentence!=='string'||sentence.length>280||
-    classifyFrenchEventScope(sentence).scope!=='user-asserted'||/[?？;\n]/u.test(sentence))return null;
+    classifyFrenchEventScope(sentence).scope!=='user-asserted'||
+    negations.test(norm(sentence))||/[?？;\n]/u.test(sentence))return null;
   const words=tokens(sentence);
   if(words.length<5||words.length>32)return null;
   const candidates=[];
   for(const [signature,group] of this.groups){
    if(!this.licensed(group))continue;
    const values=matchGrammar(group.grammar,words);
-   if(!values||values['@agent'].split(' ').length>3)continue;
+   if(!values||values['@agent'].split(' ').length>3||
+      (values['@det']&&!determiners.has(values['@det'])))continue;
    const lemma=nativeUDConstructions.lemma(values['@verb']);
    if(!lemma)continue;
    const agent=values['@agent'],patient=values['@patient'];
