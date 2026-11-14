@@ -1095,14 +1095,18 @@ function readableLocalLanguageState(status){
   'installing-runtime':'Installation du moteur de langue local en cours.',
   'verifying-model':'Le modèle est chargé ; sa capacité à répondre est en cours de vérification.',
   'starting-model':'Initialisation du modèle local en cours.',
-  'pending-start':'Le moteur local n’a pas encore confirmé son démarrage.',
+  'pending-start':'Le moteur local attend sa prochaine tentative de démarrage.',
+  'retry-scheduled':'Le moteur local attend sa prochaine tentative automatique.',
   'blocked':'Le démarrage du moteur local a échoué.',
   'unavailable':'Aucun moteur local opérationnel n’est disponible.',
  };
  const reason=String(status?.reason||'').slice(0,80);
- const detail=phase==='blocked'&&reason
+ const seconds=Math.max(0,Math.min(86400,Number(status?.retry_after_seconds)||0));
+ const delay=phase==='retry-scheduled'&&seconds
+   ?' Nouvelle tentative dans environ '+Math.ceil(seconds/30)*30+' secondes.':'';
+ const detail=(phase==='blocked'||phase==='retry-scheduled')&&reason
    ?' Diagnostic : '+reason+'.':'';
- return (messages[phase]||'Le modèle local ne répond pas encore.')+detail;
+ return (messages[phase]||'Le modèle local ne répond pas encore.')+delay+detail;
 }
 async function getLocalLanguageState(){
  try{
@@ -1139,7 +1143,7 @@ async function deferUnsentChatUntilLanguageReady(message){
    if(current?.ready===true){
     clearInterval(pending.timer);waitingLocalLanguage=null;
     if(!state.busy&&input.value.trim()===message)$('chatSend').click();
-   }else if(current?.retryable===false||pending.attempts>=120){
+   }else if(current?.retryable===false||pending.attempts>=360){
     clearInterval(pending.timer);waitingLocalLanguage=null;
     chatLine('AURA · MOTEUR LOCAL',readableLocalLanguageState(current)+
       ' Message conservé. Vérifie le diagnostic du modèle avant un nouvel envoi.');
