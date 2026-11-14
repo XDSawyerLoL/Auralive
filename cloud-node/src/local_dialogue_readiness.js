@@ -59,6 +59,11 @@ export function localDialogueReadiness({
    retry_after_seconds:0,retryable:false};
  }
  if(autoProvision||runtime.installed){
+  // A failed launch is not the same thing as an idle but healthy installation.
+  // Surface the classified failure code while the supervisor schedules retry.
+  if(status==='startup-failed' && failure)
+    return {...base,phase:'startup-failed',reason:failure,
+      retryable:true,retry_after_seconds:5};
   return {...base,phase:'pending-start',
    reason:runtime.installed?'model-present-not-ready':'model-installation-not-started',
    retryable:true,retry_after_seconds:5};
