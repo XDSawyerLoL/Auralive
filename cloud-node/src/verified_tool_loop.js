@@ -67,10 +67,15 @@ export async function probeReadable({root,relativePath}={}){
 }
 export async function runVerifiedProbe(state={},{
   root,context='read-only-file-probe',relativePath,
-  runId=randomUUID(),at=new Date().toISOString(),
+  runId=randomUUID(),at=new Date().toISOString(),forcePreflight=false,
 }={}){
  const before={...initialVerifiedLoop(),...(state||{})};
- const decision=verifiedLoopDecision(before,context);
+ const baseline=verifiedLoopDecision(before,context);
+ // A learned model may ADD a preflight, never remove one or bypass the
+ // owner's existing tool permission. Tool safety is strictly monotonic.
+ const decision=forcePreflight&&!baseline.verifies_first
+  ?{...baseline,verifies_first:true,strategy:'verify-before-attempt',
+    evidence_source:'prospective-world-model'}:baseline;
  // Preflight changes the causal action order; a missing file is never
  // executed blindly after enough independent observed failures.
  const preflight=decision.verifies_first?await probeReadable({root,relativePath}):null;
