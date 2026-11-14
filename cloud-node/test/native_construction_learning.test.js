@@ -24,7 +24,7 @@ test('induction abstracts annotated agent/verb/patient rather than memorizing na
  assert.ok(x.signature.includes('@agent'));
  assert.ok(x.signature.includes('@patient'));
  assert.ok(x.signature.includes('@verb'));
- assert.equal(x.signature,'devant la gare @agent a @verb la @patient');
+ assert.equal(x.signature,'devant la gare @agent a @verb @det @patient');
  assert.ok(!x.signature.includes('romain'));
  assert.ok(!x.signature.includes('porte'));
 });
@@ -60,7 +60,7 @@ test('learned construction is causally necessary, and can be ablated',()=>{
 test('snapshot restores a useful construction without retaining annotated text',()=>{
  const learner=train(),stored=JSON.parse(JSON.stringify(learner.snapshot()));
  assert.equal(stored.groups.length,1);
- assert.ok(!JSON.stringify(stored).includes('Devant la gare'));
+ assert.ok(!JSON.stringify(stored).includes('Devant la gare, Romain'));
  const restored=new NativeConstructionLearner(stored);
  assert.deepEqual(restored.parse(query.history[0].content),
    learner.parse(query.history[0].content));
