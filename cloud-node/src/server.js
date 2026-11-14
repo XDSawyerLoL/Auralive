@@ -3030,9 +3030,9 @@ export function startRuntimeLoop() {
     const policy=independentLocalLanguageBoot({
       warmup:shouldWarmInstalledLanguage(),
       installed:embeddedLanguageRuntime.installed(),
-      autoprovisionEnabled:process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
-        || (process.env.NODE_ENV==='production'
-          && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false'),
+      autoprovisionEnabled:config.localLanguageOnly
+        && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+        && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false',
       canProvision:embeddedLanguageRuntime.canProvision(),
     });
     if(policy.start){
