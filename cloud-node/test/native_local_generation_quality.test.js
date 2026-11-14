@@ -33,4 +33,10 @@ test('Q4 requires explicit setting and never accepts an arbitrary URL',()=>{
  assert.match(q4.url,/^https:\/\/huggingface\.co\/tauqir02\//);
  assert.ok(q4.maxBytes<500_000_000);
  assert.equal(selectedEmbeddedModel({AURA_EMBEDDED_LANGUAGE_QUANTIZATION:'https://evil.example/model.gguf'}),defaultModel);
+ const larger=selectedEmbeddedModel({AURA_EMBEDDED_LANGUAGE_QUANTIZATION:'1.7b-q4'});
+ assert.equal(larger.filename,'Qwen3-1.7B-Q4_K_M.gguf');
+ assert.equal(larger.sha256,'d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5');
+ assert.ok(larger.minimumMemoryBytes>=3_000_000_000);
+ assert.ok(larger.minimumDiskBytes>=1_600_000_000);
+ assert.equal(selectedEmbeddedModel({AURA_LOCAL_LANGUAGE_ONLY:'true'}),q4);
 });
