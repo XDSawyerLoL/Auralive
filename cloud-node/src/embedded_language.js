@@ -18,6 +18,14 @@ export function shouldWarmInstalledLanguage(env=process.env) {
     && env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false';
 }
 
+// Startup selection is independent of the database and must be falsifiable.
+export function independentLocalLanguageBoot({
+  warmup=true,installed=false,autoprovisionEnabled=false,canProvision=false
+}={}){
+  if(!warmup)return {start:false,allowProvision:false};
+  const allowed=autoprovisionEnabled&&canProvision;
+  return {start:Boolean(installed||allowed),allowProvision:Boolean(allowed)};
+}
 export function classifyEmbeddedFailure(error) {
   const reason = errorText(error).toLowerCase();
   if (/eacces|eperm|permission denied|noexec|operation not permitted/.test(reason))
