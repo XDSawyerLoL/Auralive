@@ -121,7 +121,7 @@ test('chosen decision and actual retrieval provenance commit in same transaction
 test('Cloud schema v18 is separated from SQLite and has immutable receipts',()=>{
  const schema=readFileSync(new URL('../src/db.js',import.meta.url),'utf8');
  const kernel=readFileSync(new URL('../src/kernel.js',import.meta.url),'utf8');
- assert.match(schema,/LATEST_SCHEMA_VERSION = 18/);
+ assert.match(schema,/LATEST_SCHEMA_VERSION = 19/);
  assert.match(schema,/aura_history_outcomes/);
  assert.match(schema,/CREATE TRIGGER/);
  assert.match(schema,/machine-verified/);

@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
 import { spawn } from 'node:child_process';
-import { embeddedProvisioner } from './embedded_provisioner.js';
+import { embeddedProvisioner,selectedEmbeddedModel } from './embedded_provisioner.js';
+import {sanitizeNativeFrenchGeneration} from './native_local_generation_quality.js';
 
 // Canonical optional on-host GGUF runtime. No shell, remote model API, downloads or tokens.
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -17,6 +18,14 @@ export function shouldWarmInstalledLanguage(env=process.env) {
     && env.AURA_EMBEDDED_LANGUAGE_WARMUP!=='false';
 }
 
+// Startup selection is independent of the database and must be falsifiable.
+export function independentLocalLanguageBoot({
+  warmup=true,installed=false,autoprovisionEnabled=false,canProvision=false
+}={}){
+  if(!warmup)return {start:false,allowProvision:false};
+  const allowed=autoprovisionEnabled&&canProvision;
+  return {start:Boolean(installed||allowed),allowProvision:Boolean(allowed)};
+}
 export function classifyEmbeddedFailure(error) {
   const reason = errorText(error).toLowerCase();
   if (/eacces|eperm|permission denied|noexec|operation not permitted/.test(reason))
@@ -33,7 +42,10 @@ export function classifyEmbeddedFailure(error) {
       hint:'Le serveur Hostinger refuse la création de threads (SIGABRT/EAGAIN). AURA limite strictement les threads HTTP, calcul et batch ; vérifier la limite pids du compte.'};
   if (/embedded-insufficient-cgroup-headroom/.test(reason))
     return {code:'embedded-insufficient-cgroup-headroom',
-      hint:'La mémoire disponible est trop basse pour lancer Qwen3 Q8 en sécurité sur cet hébergement. Ne pas tenter de démarrage qui ferait tomber le site; choisir un GGUF plus léger ou un moteur local extérieur à Hostinger.'};
+      hint:'La mémoire disponible est trop basse pour le modèle linguistique GGUF choisi. Ne pas lancer le moteur; sélectionner un modèle plus léger ou augmenter les ressources de l’hébergement.'};
+  if (/aborterror|inference-timeout|inference-timed-out|request timed out|operation was aborted/.test(reason))
+    return {code:'embedded-inference-timeout',
+      hint:'Le modèle local dépasse le temps d’inférence CPU sur cet hébergement. Réduire la taille du modèle ou la longueur de la réponse.'};
   if (/sigkill|exit.signal.sigkill|enomem|out of memory|killed|bad.alloc|cannot allocate memory|failed to allocate|oom.kill|exit.code.137/i.test(reason))
     return { code: 'embedded-insufficient-memory',
       hint: 'Le processus a probablement dépassé la mémoire disponible. AURA tente un contexte et des lots plus petits.' };
@@ -289,8 +301,11 @@ export function embeddedStartupBudget(memory=cgroupMemorySnapshot(),{read=fs.rea
   const current=Number(memory?.current_mb);
   const known=Number.isFinite(limit)&&limit>0&&Number.isFinite(current)&&current>=0;
   const headroom=known?Math.max(0,limit-current+Math.min(current,inactiveMb)):null;
-  // 639 MB Q8 GGUF plus llama.cpp runtime and KV cache. Do not spawn under 740 MB.
-  const required=740;
+  // Size-aware RAM preflight: the 1.7B profile needs more memory than Qwen3 0.6B.
+  const selection=selectedEmbeddedModel();
+  // Models over 1 GB require materially more room for weights, KV cache and
+  // Node's own process. A cheap shared plan must fail closed.
+  const required=selection.minimumMemoryBytes?1900:740;
   return {
     known,headroom_mb:headroom,
     recommended_low_memory:!known||headroom<1500||limit<2048,
@@ -342,9 +357,21 @@ export function locateEmbeddedRuntime({
   root = process.cwd(), home = process.env.HOME || '',
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
   model = process.env.AURA_EMBEDDED_LANGUAGE_MODEL || '',
+  quantization = process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION || '',
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
+  const modelRequested=selectedEmbeddedModel({
+    AURA_EMBEDDED_LANGUAGE_QUANTIZATION:quantization,
+  }).filename;
+  // Local-only is a provider policy, not a request to discard a working GGUF.
+  // A pin is strict ONLY when the operator selects a quantization explicitly.
+  const requireSelectedModel=Boolean(quantization);
+  const knownLocalModels=new Set([
+    'Qwen3-0.6B-Q8_0.gguf',
+    'Qwen3-0.6B-Q4_K_M.gguf',
+    'Qwen3-1.7B-Q4_K_M.gguf',
+  ]);
   // Provisioner stores its GGUF in ~/.cache/aura-language-runtime by default.
   // On a Node restart its in-memory "paths" are lost. Discover the persistent
   // cache rather than downloading the same 639 MB model again.
@@ -370,7 +397,8 @@ export function locateEmbeddedRuntime({
         queue.push({dir:full,depth:depth+1});
       }else if(entry.isFile() || entry.isSymbolicLink()){
         if(!executable && entry.name==='llama-server') executable=full;
-        if(!gguf && /\.gguf$/i.test(entry.name)) gguf=full;
+        if(!gguf && knownLocalModels.has(entry.name) &&
+           (!requireSelectedModel||entry.name===modelRequested)) gguf=full;
       }
     }
   }
@@ -417,9 +445,13 @@ export class EmbeddedLanguageRuntime {
     return this.cachedDiscovery;
   }
   canProvision(){
+    // Managed Node sites may not set NODE_ENV. An explicit 'false' still wins.
+    // Suppress all automatic provisioning in CI/test environments.
     return Boolean(this.provisioner?.enabled
+      && process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'
       && (process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
-        || (process.env.NODE_ENV==='production' && process.env.CI!=='true')));
+        || (process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+          && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false')));
   }
   installed(){
     const found=this.inspect();
@@ -479,6 +511,12 @@ export class EmbeddedLanguageRuntime {
       pids_after_failure:this.pidsAfterFailure,
       memory_preflight:embeddedStartupBudget(),
       boot_attempts:this.bootAttempts.slice(-4),
+      // A bounded epoch-millisecond value for the next permitted attempt.
+      cooldown_until:this.cooldownUntil> Date.now()?this.cooldownUntil:null,
+      requested_model_profile:selectedEmbeddedModel().filename,
+      // File basename only, never disclose filesystem paths or home folder.
+      active_model_profile:item.modelFound&&typeof item.gguf==='string'&&item.gguf?path.basename(item.gguf):null,
+      model_loaded_verified:Boolean(this.ready&&this.lastProbeAt),
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -706,16 +744,18 @@ export class EmbeddedLanguageRuntime {
     try{
       const response=await this.request('http://127.0.0.1:'+this.port+'/v1/chat/completions',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({model:'local',stream:false,temperature:0.6,
-          max_tokens:Math.max(64,Math.min(1024,Number(maxTokens)||600)),
+        body:JSON.stringify({model:'local',stream:false,temperature:0.55,
+          max_tokens:Math.max(48,Math.min(this.bootProfile==='low-memory'?110:240,Number(maxTokens)||150)),
           chat_template_kwargs:{enable_thinking:false},messages:[
-            {role:'system',content:String(system).slice(0,9000)},
-            {role:'user',content:String(prompt).slice(0,14000)}]}),
-        signal:AbortSignal.timeout(30_000)});
+            {role:'system',content:String(system).slice(0,3500)},
+            {role:'user',content:String(prompt).slice(0,3800)}]}),
+        signal:AbortSignal.timeout(50_000)});
       if(!response.ok)throw Error('embedded HTTP '+response.status);
       const json=await response.json();
-      const answer=String(json?.choices?.[0]?.message?.content||'').trim();
-      if(!answer)throw Error('embedded-empty-response');
+      const answer=sanitizeNativeFrenchGeneration(
+        json?.choices?.[0]?.message?.content
+      );
+      if(!answer)throw Error('embedded-invalid-visible-response');
       this.lastSuccessAt=new Date().toISOString();this.lastLatencyMs=Date.now()-started;
       this.lastFailure='';return answer;
     }catch(error){

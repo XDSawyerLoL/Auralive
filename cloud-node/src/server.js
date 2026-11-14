@@ -2,7 +2,9 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
-import { embeddedLanguageRuntime, shouldWarmInstalledLanguage } from './embedded_language.js';
+import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
+import {localDialogueReadiness} from './local_dialogue_readiness.js';
+import {localLanguageRecoveryDecision,localLanguageRetryAfter} from './local_language_supervisor.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -452,19 +454,6 @@ async function startRuntime() {
     // Benchmarks use nine paid-in-quota calls: never trigger them at boot.
     // The founder can explicitly invoke the authenticated evaluation endpoint.
     app.log.info('AURA Cloud: noyau persistant démarré.');
-    // Always non-blocking: the first verified GGUF install can take minutes.
-    // Production-only to avoid downloading model weights during CI/test runs.
-    if (process.env.CI !== 'true' && process.env.NODE_ENV === 'production'
-      && process.env.AURA_EMBEDDED_LANGUAGE_WARMUP !== 'false'
-      && !embeddedLanguageRuntime.installed()) {
-      // The independent startup loop handles already installed files, even if
-      // the database is unavailable; this path only provisions missing files.
-      void embeddedLanguageRuntime.start().catch((error) => {
-        app.log.warn({ code: String(error?.code || 'embedded-start-failed') },
-          'AURA: local French engine warmup failed');
-      });
-    }
-
     try {
       await horizon.start();
     } catch (error) {
@@ -1734,6 +1723,59 @@ app.get('/api/kernel/lessons', async (request, reply) =>
     ? kernel.lessons(request.query?.limit)
     : undefined);
 
+// The cognitive inspector is private: unverified hypotheses, decisions and
+// receipts are not public site content and never enable an action by reading.
+app.get('/api/kernel/learning-evidence', async (request, reply) => {
+  if (!requirePrivate(request, reply) || !requireRuntime(reply)) return;
+  reply.header('Cache-Control','private, no-store');
+  return kernel.learningEvidence({
+    context:String(request.query?.context||'docs_readability').slice(0,70),
+    limit:request.query?.limit,
+  });
+});
+
+// Owner-only conceptual memory. An HTTP client can only add a USER REPORT.
+// It cannot claim a verified machine outcome, trigger inference or execute a
+// transferred policy. Server-side CSRF protection applies to POST requests.
+app.get('/api/kernel/concepts', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  return kernel.conceptEvidence({
+    domain:String(request.query?.domain||'').slice(0,70),
+    limit:request.query?.limit,
+  });
+});
+app.post('/api/kernel/concepts/observe', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  const body=request.body||{};
+  const outcome=await kernel.annotateConcept({
+    domain:body.domain,
+    subject:{label:body.subject?.label,kind:body.subject?.kind},
+    relation:body.relation,
+    object:{label:body.object?.label,kind:body.object?.kind},
+    polarity:body.polarity||'positive',
+    timeScope:body.time_scope||'unspecified',
+  });
+  if(!outcome.accepted)return reply.code(422).send(outcome);
+  return outcome;
+});
+app.post('/api/kernel/concepts/retract', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  return kernel.retractConceptAnnotation(request.body?.source_id);
+});
+app.post('/api/kernel/concepts/transfer', async (request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  reply.header('Cache-Control','private, no-store');
+  const body=request.body||{};
+  return kernel.conceptualTransfer({
+    targetDomain:body.target_domain,
+    subject:{label:body.subject?.label,kind:body.subject?.kind},
+    object:{label:body.object?.label,kind:body.object?.kind},
+  });
+});
+
 // Offline-curated directory. Links are informational, not external actions.
 app.get('/api/toolbox/resources', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
@@ -2338,6 +2380,27 @@ app.post('/api/cognition/initiative/feedback', async (request, reply) => {
   return {ok:accepted,accepted};
 });
 
+async function localLanguageSnapshot(){
+  let bridgeOnline=false;
+  if(config.localLanguageOnly&&bridge.enabled){
+    try{bridgeOnline=await bridge.workerOnline();}catch{}
+  }
+  return localDialogueReadiness({
+    localOnly:config.localLanguageOnly,
+    runtime:embeddedLanguageRuntime.status(),
+    booting:Boolean(embeddedLanguageRuntime.booting),
+    bridgeOnline,
+    autoProvision:embeddedLanguageRuntime.canProvision(),
+  });
+}
+
+// Read-only status works even when MySQL is not ready. No paths, user text,
+// provider credentials, raw stderr or private kernel history are included.
+app.get('/api/language/ready', async (_request, reply)=>{
+  reply.header('Cache-Control','no-store');
+  return localLanguageSnapshot();
+});
+
 app.post('/api/chat', async (request, reply) => {
   if (!requireRuntime(reply)) return;
   if (
@@ -2377,6 +2440,7 @@ app.post('/api/chat', async (request, reply) => {
   // addition was neither planned nor part of the stored dialogue.
   const curiosityItem = null;
   const answer = unavailable ? '' : baseAnswer;
+  const languageRuntime=unavailable?await localLanguageSnapshot():null;
   cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
@@ -2387,7 +2451,8 @@ app.post('/api/chat', async (request, reply) => {
     response_kind: unavailable ? 'model-unavailable'
       : response?.response_kind==='native-kernel' ? 'native-kernel':'model-generated',
     language_unavailable: unavailable,
-    retryable: unavailable,
+    language_runtime:languageRuntime,
+    retryable: unavailable&&Boolean(languageRuntime?.retryable),
     service_status: unavailable ? {
       code: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'local-corpus-unsupported-intent':'french-inference-unavailable',
@@ -2980,6 +3045,7 @@ app.setErrorHandler((error, _request, reply) => {
 });
 
 let retryTimer = null;
+let localLanguageRetryTimer = null;
 let backupTimer = null;
 let metricsTimer = null;
 
@@ -3012,14 +3078,43 @@ export function startRuntimeLoop() {
   // AURA observes a fictitious trading strategy automatically every 6h;
   // zero-cost public data only, no account or live orders.
   startAutomaticPaperScan();
-  // Installed local inference is independent of MySQL initialization.
-  // Do not download weights here: no unmanaged bandwidth or cost at startup.
-  if(shouldWarmInstalledLanguage()
-    && embeddedLanguageRuntime.installed()){
-    void embeddedLanguageRuntime.start({allowProvision:false}).catch(error=>{
-      app.log.warn({code:String(error?.code||'embedded-start-failed')},
-        'AURA: independent local French warmup failed');
+  // Language bootstrap is independent of MySQL. A missed first launch or a
+  // transient failure must not leave a chat pending indefinitely. Reattempt
+  // after the model / native runtime cooldown, without concurrent downloads.
+  const resumeLocalLanguage=()=>{
+    const installed=embeddedLanguageRuntime.installed();
+    const canProvision=embeddedLanguageRuntime.canProvision();
+    const warmup=shouldWarmInstalledLanguage();
+    const policy=independentLocalLanguageBoot({
+      warmup,installed,
+      autoprovisionEnabled:config.localLanguageOnly
+        && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+        && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false',
+      canProvision,
     });
+    const status=embeddedLanguageRuntime.status();
+    const decision=localLanguageRecoveryDecision({
+      warmup,localOnly:config.localLanguageOnly,
+      ready:Boolean(status.ready&&status.probe_verified),
+      booting:Boolean(embeddedLanguageRuntime.booting),
+      installed,canProvision:policy.allowProvision,
+      cooldownUntil:embeddedLanguageRuntime.cooldownUntil,
+      provisionRetryAfter:localLanguageRetryAfter(status.provisioning),
+      failureCode:status.failure_code||status.provisioning?.error_code,
+    });
+    if(policy.start&&decision.start){
+      void embeddedLanguageRuntime.start({allowProvision:policy.allowProvision})
+        .catch(error=>{
+          app.log.warn({code:String(error?.code||'embedded-start-failed')},
+            'AURA: independent local French warmup failed');
+        });
+    }
+  };
+  resumeLocalLanguage();
+  if(!localLanguageRetryTimer && shouldWarmInstalledLanguage()
+      && config.localLanguageOnly){
+    localLanguageRetryTimer=setInterval(resumeLocalLanguage,30000);
+    localLanguageRetryTimer.unref?.();
   }
   startRuntime().catch((error) => {
     bootstrap.startupError = safeError(error);
@@ -3036,6 +3131,7 @@ export function startRuntimeLoop() {
 }
 
 export async function stopAura() {
+  if(localLanguageRetryTimer){clearInterval(localLanguageRetryTimer);localLanguageRetryTimer=null;}
   if(paperAutoTimer){clearInterval(paperAutoTimer);paperAutoTimer=null;}
   if(paperAutoInitialTimer){clearTimeout(paperAutoInitialTimer);paperAutoInitialTimer=null;}
   if (retryTimer) {

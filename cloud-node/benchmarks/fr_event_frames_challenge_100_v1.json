@@ -1,0 +1,1528 @@
+{
+  "schema": "aura-event-frames-challenge-v1",
+  "source": "internally-authored-frozen-before-first-run-not-independent-human-blind",
+  "baseline_parser_commit": "9f7716c9ba675a6d60daee8cedfbb5e6ed22247d",
+  "claims": "100 new exact-text scenarios covering event actuality, not a blind third-party benchmark",
+  "cases": [
+    {
+      "id": "frame-001",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Célestin a fermé le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "actor",
+        "value": "celestin"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-002",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Isidore a fermé la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "actor",
+        "value": "isidore"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-003",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maëlle a fermé le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "actor",
+        "value": "maelle"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-004",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bérénice a fermé la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "berenice"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-005",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valentin a fermé le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "actor",
+        "value": "valentin"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-006",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Joséphine a fermé la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "actor",
+        "value": "josephine"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-007",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alban a fermé le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "actor",
+        "value": "alban"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-008",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Daphné a fermé la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "daphne"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-009",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sébastien a fermé le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "actor",
+        "value": "sebastien"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-010",
+      "category": "completed_past",
+      "history": [
+        {
+          "role": "user",
+          "content": "Éva a fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "eva"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-011",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Célestin n'a pas fermé le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-012",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Isidore n'a pas fermé la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-013",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maëlle n'a pas fermé le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-014",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bérénice n'a pas fermé la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-015",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valentin n'a pas fermé le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-016",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Joséphine n'a pas fermé la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-017",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alban n'a pas fermé le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-018",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Daphné n'a pas fermé la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-019",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sébastien n'a pas fermé le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-020",
+      "category": "explicit_negative",
+      "history": [
+        {
+          "role": "user",
+          "content": "Éva n'a pas fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-021",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Célestin ferme le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-022",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Isidore ferme la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-023",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Maëlle ferme le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-024",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Bérénice ferme la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-025",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Valentin ferme le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-026",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Joséphine ferme la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-027",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Alban ferme le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-028",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Daphné ferme la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-029",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Sébastien ferme le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-030",
+      "category": "future_plan",
+      "history": [
+        {
+          "role": "user",
+          "content": "Demain, Éva ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "planned"
+    },
+    {
+      "id": "frame-031",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Célestin pourrait fermer le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-032",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Isidore pourrait fermer la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-033",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maëlle pourrait fermer le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-034",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bérénice pourrait fermer la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-035",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valentin pourrait fermer le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-036",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Joséphine pourrait fermer la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-037",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alban pourrait fermer le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-038",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Daphné pourrait fermer la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-039",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sébastien pourrait fermer le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-040",
+      "category": "hypothetical",
+      "history": [
+        {
+          "role": "user",
+          "content": "Éva pourrait fermer la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "hypothetical"
+    },
+    {
+      "id": "frame-041",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Célestin ferme le registre, Louise ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-042",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Isidore ferme la lanterne, Félix ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-043",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Maëlle ferme le cahier, Héloïse ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-044",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Bérénice ferme la fenêtre, Benoît ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-045",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Valentin ferme le dossier, Ninon ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-046",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Joséphine ferme la trappe, Étienne ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-047",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Alban ferme le tiroir, Ariane ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-048",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Daphné ferme la valise, Loïc ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-049",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Sébastien ferme le carton, Adèle ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-050",
+      "category": "conditional",
+      "history": [
+        {
+          "role": "user",
+          "content": "Si Éva ferme la porte, Oscar ouvre le coffre."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "conditional"
+    },
+    {
+      "id": "frame-051",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Célestin ferme le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-052",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Isidore ferme la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-053",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Maëlle ferme le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-054",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Bérénice ferme la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-055",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Valentin ferme le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-056",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Joséphine ferme la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-057",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Alban ferme le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-058",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Daphné ferme la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-059",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Sébastien ferme le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-060",
+      "category": "habitual",
+      "history": [
+        {
+          "role": "user",
+          "content": "Chaque matin, Éva ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "habitual"
+    },
+    {
+      "id": "frame-061",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Louise affirme que Célestin ferme le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-062",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Félix affirme que Isidore ferme la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-063",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Héloïse affirme que Maëlle ferme le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-064",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Benoît affirme que Bérénice ferme la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-065",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Ninon affirme que Valentin ferme le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-066",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Étienne affirme que Joséphine ferme la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-067",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Ariane affirme que Alban ferme le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-068",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Loïc affirme que Daphné ferme la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-069",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Adèle affirme que Sébastien ferme le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-070",
+      "category": "reported_claim",
+      "history": [
+        {
+          "role": "user",
+          "content": "Oscar affirme que Éva ferme la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "reported"
+    },
+    {
+      "id": "frame-071",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Célestin a ouvert le coffre une fois que Louise a fermé le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "actor",
+        "value": "louise"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-072",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Isidore a ouvert le coffre une fois que Félix a fermé la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "actor",
+        "value": "felix"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-073",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maëlle a ouvert le coffre une fois que Héloïse a fermé le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "actor",
+        "value": "heloise"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-074",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bérénice a ouvert le coffre une fois que Benoît a fermé la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "benoit"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-075",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valentin a ouvert le coffre une fois que Ninon a fermé le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "actor",
+        "value": "ninon"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-076",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Joséphine a ouvert le coffre une fois que Étienne a fermé la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "actor",
+        "value": "etienne"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-077",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alban a ouvert le coffre une fois que Ariane a fermé le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "actor",
+        "value": "ariane"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-078",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Daphné a ouvert le coffre une fois que Loïc a fermé la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "loic"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-079",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sébastien a ouvert le coffre une fois que Adèle a fermé le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "actor",
+        "value": "adele"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-080",
+      "category": "completed_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Éva a ouvert le coffre une fois que Oscar a fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "oscar"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-081",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Célestin ouvre le coffre une fois que Louise a fermé le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-082",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Isidore ouvre le coffre une fois que Félix a fermé la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-083",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maëlle ouvre le coffre une fois que Héloïse a fermé le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-084",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bérénice ouvre le coffre une fois que Benoît a fermé la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-085",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valentin ouvre le coffre une fois que Ninon a fermé le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-086",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Joséphine ouvre le coffre une fois que Étienne a fermé la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-087",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alban ouvre le coffre une fois que Ariane a fermé le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-088",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Daphné ouvre le coffre une fois que Loïc a fermé la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-089",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sébastien ouvre le coffre une fois que Adèle a fermé le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-090",
+      "category": "underspecified_sequence",
+      "history": [
+        {
+          "role": "user",
+          "content": "Éva ouvre le coffre une fois que Oscar a fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "temporal-underspecified"
+    },
+    {
+      "id": "frame-091",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Célestin ferme le registre. Louise ferme aussi le registre."
+        }
+      ],
+      "question": "Qui a fermé le registre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-092",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Isidore ferme la lanterne. Félix ferme aussi la lanterne."
+        }
+      ],
+      "question": "Qui a fermé la lanterne ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-093",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maëlle ferme le cahier. Héloïse ferme aussi le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-094",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Bérénice ferme la fenêtre. Benoît ferme aussi la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-095",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valentin ferme le dossier. Ninon ferme aussi le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-096",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Joséphine ferme la trappe. Étienne ferme aussi la trappe."
+        }
+      ],
+      "question": "Qui a fermé la trappe ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-097",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Alban ferme le tiroir. Ariane ferme aussi le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-098",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Daphné ferme la valise. Loïc ferme aussi la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-099",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Sébastien ferme le carton. Adèle ferme aussi le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    },
+    {
+      "id": "frame-100",
+      "category": "multiple_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Éva ferme la porte. Oscar ferme aussi la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "abstain"
+      },
+      "expected_scope": "user-asserted"
+    }
+  ]
+}

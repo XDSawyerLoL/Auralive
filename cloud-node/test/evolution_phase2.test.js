@@ -15,7 +15,9 @@ test('AURA Cloud Phase 3 delegates evolution to AURA Runtime when the worker is 
   assert.match(evolutionSource, /this\.bridge\.evolve\(objective, \{/);
   assert.match(evolutionSource, /phase3-hybrid-autonomous-evolution/);
   assert.match(evolutionSource, /phase3-cloud-persistent-adaptation/);
-  assert.match(evolutionSource, /persistent-runtime-learning/);
+  assert.match(evolutionSource, /persistent-hypothesis-candidate/);
+  assert.match(evolutionSource, /runtime_change_applied:false/);
+  assert.match(evolutionSource, /independently_verified:false/);
   assert.match(evolutionSource, /aura_improvement_proposals/);
   assert.match(serverSource, /new EvolutionLab\(ai, kernel, bridge\)/);
   assert.match(serverSource, /evolution\.dispatchCycle\(/);

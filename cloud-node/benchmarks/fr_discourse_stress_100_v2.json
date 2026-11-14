@@ -1,0 +1,1558 @@
+{
+  "schema": "aura-french-discourse-stress-100-v2",
+  "source": "fresh-authored-structural-stress-not-external-blind",
+  "policy": "Frozen before first CI evaluation; never train or tune against this same sample; use a later independent set to assess improvements",
+  "baseline_parser_commit": "ef155e34f036eee09351f714236f0eddb61f708a",
+  "cases": [
+    {
+      "id": "stress-001",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Romain qui a fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "romain"
+      }
+    },
+    {
+      "id": "stress-002",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Théo qui a fermé la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "theo"
+      }
+    },
+    {
+      "id": "stress-003",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Yanis qui a fermé la caisse."
+        }
+      ],
+      "question": "Qui a fermé la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "yanis"
+      }
+    },
+    {
+      "id": "stress-004",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Martin qui a fermé la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "martin"
+      }
+    },
+    {
+      "id": "stress-005",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Samuel qui a fermé la carte."
+        }
+      ],
+      "question": "Qui a fermé la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "samuel"
+      }
+    },
+    {
+      "id": "stress-006",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Nathan qui a fermé la boîte."
+        }
+      ],
+      "question": "Qui a fermé la boîte ?",
+      "expected": {
+        "type": "actor",
+        "value": "nathan"
+      }
+    },
+    {
+      "id": "stress-007",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Baptiste qui a fermé la malle."
+        }
+      ],
+      "question": "Qui a fermé la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "baptiste"
+      }
+    },
+    {
+      "id": "stress-008",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Adrien qui a fermé la grille."
+        }
+      ],
+      "question": "Qui a fermé la grille ?",
+      "expected": {
+        "type": "actor",
+        "value": "adrien"
+      }
+    },
+    {
+      "id": "stress-009",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Olivier qui a fermé la lettre."
+        }
+      ],
+      "question": "Qui a fermé la lettre ?",
+      "expected": {
+        "type": "actor",
+        "value": "olivier"
+      }
+    },
+    {
+      "id": "stress-010",
+      "category": "cleft_emphasis",
+      "history": [
+        {
+          "role": "user",
+          "content": "C'est bien Maxime qui a fermé la barrière."
+        }
+      ],
+      "question": "Qui a fermé la barrière ?",
+      "expected": {
+        "type": "actor",
+        "value": "maxime"
+      }
+    },
+    {
+      "id": "stress-011",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La porte, Mélanie l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "melanie"
+      }
+    },
+    {
+      "id": "stress-012",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La fenêtre, Océane l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "oceane"
+      }
+    },
+    {
+      "id": "stress-013",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La caisse, Amandine l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "amandine"
+      }
+    },
+    {
+      "id": "stress-014",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La valise, Lucie l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "lucie"
+      }
+    },
+    {
+      "id": "stress-015",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La carte, Pauline l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "pauline"
+      }
+    },
+    {
+      "id": "stress-016",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La boîte, Charlotte l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la boîte ?",
+      "expected": {
+        "type": "actor",
+        "value": "charlotte"
+      }
+    },
+    {
+      "id": "stress-017",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La malle, Margot l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "margot"
+      }
+    },
+    {
+      "id": "stress-018",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La grille, Anaïs l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la grille ?",
+      "expected": {
+        "type": "actor",
+        "value": "anais"
+      }
+    },
+    {
+      "id": "stress-019",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La lettre, Hélène l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la lettre ?",
+      "expected": {
+        "type": "actor",
+        "value": "helene"
+      }
+    },
+    {
+      "id": "stress-020",
+      "category": "dislocated_object",
+      "history": [
+        {
+          "role": "user",
+          "content": "La barrière, Valérie l'a ouverte."
+        }
+      ],
+      "question": "Qui a ouvert la barrière ?",
+      "expected": {
+        "type": "actor",
+        "value": "valerie"
+      }
+    },
+    {
+      "id": "stress-021",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Romain affirme que Mélanie ouvre la porte."
+        }
+      ],
+      "question": "Qui a ouvert la porte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-022",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Théo affirme que Océane ouvre la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-023",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Yanis affirme que Amandine ouvre la caisse."
+        }
+      ],
+      "question": "Qui a ouvert la caisse ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-024",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Martin affirme que Lucie ouvre la valise."
+        }
+      ],
+      "question": "Qui a ouvert la valise ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-025",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Samuel affirme que Pauline ouvre la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-026",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nathan affirme que Charlotte ouvre la boîte."
+        }
+      ],
+      "question": "Qui a ouvert la boîte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-027",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Baptiste affirme que Margot ouvre la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-028",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Adrien affirme que Anaïs ouvre la grille."
+        }
+      ],
+      "question": "Qui a ouvert la grille ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-029",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Olivier affirme que Hélène ouvre la lettre."
+        }
+      ],
+      "question": "Qui a ouvert la lettre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-030",
+      "category": "reported_speech",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maxime affirme que Valérie ouvre la barrière."
+        }
+      ],
+      "question": "Qui a ouvert la barrière ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-031",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Mélanie n'a jamais fermé le tiroir."
+        }
+      ],
+      "question": "Qui a fermé le tiroir ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-032",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Océane n'a jamais fermé le portail."
+        }
+      ],
+      "question": "Qui a fermé le portail ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-033",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Amandine n'a jamais fermé le colis."
+        }
+      ],
+      "question": "Qui a fermé le colis ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-034",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lucie n'a jamais fermé le dossier."
+        }
+      ],
+      "question": "Qui a fermé le dossier ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-035",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Pauline n'a jamais fermé le carton."
+        }
+      ],
+      "question": "Qui a fermé le carton ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-036",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Charlotte n'a jamais fermé le coffre."
+        }
+      ],
+      "question": "Qui a fermé le coffre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-037",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Margot n'a jamais fermé le rideau."
+        }
+      ],
+      "question": "Qui a fermé le rideau ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-038",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Anaïs n'a jamais fermé le placard."
+        }
+      ],
+      "question": "Qui a fermé le placard ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-039",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hélène n'a jamais fermé le cahier."
+        }
+      ],
+      "question": "Qui a fermé le cahier ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-040",
+      "category": "negation_contrast",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valérie n'a jamais fermé le panneau."
+        }
+      ],
+      "question": "Qui a fermé le panneau ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-041",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Romain ferme la porte et il ouvre le tiroir."
+        }
+      ],
+      "question": "Qui a ouvert le tiroir ?",
+      "expected": {
+        "type": "actor",
+        "value": "romain"
+      }
+    },
+    {
+      "id": "stress-042",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Théo ferme la fenêtre et il ouvre le portail."
+        }
+      ],
+      "question": "Qui a ouvert le portail ?",
+      "expected": {
+        "type": "actor",
+        "value": "theo"
+      }
+    },
+    {
+      "id": "stress-043",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Yanis ferme la caisse et il ouvre le colis."
+        }
+      ],
+      "question": "Qui a ouvert le colis ?",
+      "expected": {
+        "type": "actor",
+        "value": "yanis"
+      }
+    },
+    {
+      "id": "stress-044",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Martin ferme la valise et il ouvre le dossier."
+        }
+      ],
+      "question": "Qui a ouvert le dossier ?",
+      "expected": {
+        "type": "actor",
+        "value": "martin"
+      }
+    },
+    {
+      "id": "stress-045",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Samuel ferme la carte et il ouvre le carton."
+        }
+      ],
+      "question": "Qui a ouvert le carton ?",
+      "expected": {
+        "type": "actor",
+        "value": "samuel"
+      }
+    },
+    {
+      "id": "stress-046",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nathan ferme la boîte et il ouvre le coffre."
+        }
+      ],
+      "question": "Qui a ouvert le coffre ?",
+      "expected": {
+        "type": "actor",
+        "value": "nathan"
+      }
+    },
+    {
+      "id": "stress-047",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Baptiste ferme la malle et il ouvre le rideau."
+        }
+      ],
+      "question": "Qui a ouvert le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "baptiste"
+      }
+    },
+    {
+      "id": "stress-048",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Adrien ferme la grille et il ouvre le placard."
+        }
+      ],
+      "question": "Qui a ouvert le placard ?",
+      "expected": {
+        "type": "actor",
+        "value": "adrien"
+      }
+    },
+    {
+      "id": "stress-049",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Olivier ferme la lettre et il ouvre le cahier."
+        }
+      ],
+      "question": "Qui a ouvert le cahier ?",
+      "expected": {
+        "type": "actor",
+        "value": "olivier"
+      }
+    },
+    {
+      "id": "stress-050",
+      "category": "coordination",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maxime ferme la barrière et il ouvre le panneau."
+        }
+      ],
+      "question": "Qui a ouvert le panneau ?",
+      "expected": {
+        "type": "actor",
+        "value": "maxime"
+      }
+    },
+    {
+      "id": "stress-051",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Romain ouvre la porte. Mélanie ouvre aussi la porte."
+        }
+      ],
+      "question": "Qui a ouvert la porte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-052",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Théo ouvre la fenêtre. Océane ouvre aussi la fenêtre."
+        }
+      ],
+      "question": "Qui a ouvert la fenêtre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-053",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Yanis ouvre la caisse. Amandine ouvre aussi la caisse."
+        }
+      ],
+      "question": "Qui a ouvert la caisse ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-054",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Martin ouvre la valise. Lucie ouvre aussi la valise."
+        }
+      ],
+      "question": "Qui a ouvert la valise ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-055",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Samuel ouvre la carte. Pauline ouvre aussi la carte."
+        }
+      ],
+      "question": "Qui a ouvert la carte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-056",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nathan ouvre la boîte. Charlotte ouvre aussi la boîte."
+        }
+      ],
+      "question": "Qui a ouvert la boîte ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-057",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Baptiste ouvre la malle. Margot ouvre aussi la malle."
+        }
+      ],
+      "question": "Qui a ouvert la malle ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-058",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Adrien ouvre la grille. Anaïs ouvre aussi la grille."
+        }
+      ],
+      "question": "Qui a ouvert la grille ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-059",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Olivier ouvre la lettre. Hélène ouvre aussi la lettre."
+        }
+      ],
+      "question": "Qui a ouvert la lettre ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-060",
+      "category": "ambiguous_actors",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maxime ouvre la barrière. Valérie ouvre aussi la barrière."
+        }
+      ],
+      "question": "Qui a ouvert la barrière ?",
+      "expected": {
+        "type": "abstain"
+      }
+    },
+    {
+      "id": "stress-061",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Romain ouvre le tiroir."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Mélanie qui ouvre le tiroir."
+        }
+      ],
+      "question": "Qui a ouvert le tiroir ?",
+      "expected": {
+        "type": "actor",
+        "value": "melanie"
+      }
+    },
+    {
+      "id": "stress-062",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Théo ouvre le portail."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Océane qui ouvre le portail."
+        }
+      ],
+      "question": "Qui a ouvert le portail ?",
+      "expected": {
+        "type": "actor",
+        "value": "oceane"
+      }
+    },
+    {
+      "id": "stress-063",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Yanis ouvre le colis."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Amandine qui ouvre le colis."
+        }
+      ],
+      "question": "Qui a ouvert le colis ?",
+      "expected": {
+        "type": "actor",
+        "value": "amandine"
+      }
+    },
+    {
+      "id": "stress-064",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Martin ouvre le dossier."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Lucie qui ouvre le dossier."
+        }
+      ],
+      "question": "Qui a ouvert le dossier ?",
+      "expected": {
+        "type": "actor",
+        "value": "lucie"
+      }
+    },
+    {
+      "id": "stress-065",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Samuel ouvre le carton."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Pauline qui ouvre le carton."
+        }
+      ],
+      "question": "Qui a ouvert le carton ?",
+      "expected": {
+        "type": "actor",
+        "value": "pauline"
+      }
+    },
+    {
+      "id": "stress-066",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nathan ouvre le coffre."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Charlotte qui ouvre le coffre."
+        }
+      ],
+      "question": "Qui a ouvert le coffre ?",
+      "expected": {
+        "type": "actor",
+        "value": "charlotte"
+      }
+    },
+    {
+      "id": "stress-067",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Baptiste ouvre le rideau."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Margot qui ouvre le rideau."
+        }
+      ],
+      "question": "Qui a ouvert le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "margot"
+      }
+    },
+    {
+      "id": "stress-068",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Adrien ouvre le placard."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Anaïs qui ouvre le placard."
+        }
+      ],
+      "question": "Qui a ouvert le placard ?",
+      "expected": {
+        "type": "actor",
+        "value": "anais"
+      }
+    },
+    {
+      "id": "stress-069",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Olivier ouvre le cahier."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Hélène qui ouvre le cahier."
+        }
+      ],
+      "question": "Qui a ouvert le cahier ?",
+      "expected": {
+        "type": "actor",
+        "value": "helene"
+      }
+    },
+    {
+      "id": "stress-070",
+      "category": "correction_rephrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maxime ouvre le panneau."
+        },
+        {
+          "role": "user",
+          "content": "Non, c'est Valérie qui ouvre le panneau."
+        }
+      ],
+      "question": "Qui a ouvert le panneau ?",
+      "expected": {
+        "type": "actor",
+        "value": "valerie"
+      }
+    },
+    {
+      "id": "stress-071",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Mélanie ouvre le tiroir une fois que Romain a fermé la porte."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "romain"
+      }
+    },
+    {
+      "id": "stress-072",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Océane ouvre le portail une fois que Théo a fermé la fenêtre."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "theo"
+      }
+    },
+    {
+      "id": "stress-073",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Amandine ouvre le colis une fois que Yanis a fermé la caisse."
+        }
+      ],
+      "question": "Qui a fermé la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "yanis"
+      }
+    },
+    {
+      "id": "stress-074",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Lucie ouvre le dossier une fois que Martin a fermé la valise."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "martin"
+      }
+    },
+    {
+      "id": "stress-075",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Pauline ouvre le carton une fois que Samuel a fermé la carte."
+        }
+      ],
+      "question": "Qui a fermé la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "samuel"
+      }
+    },
+    {
+      "id": "stress-076",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Charlotte ouvre le coffre une fois que Nathan a fermé la boîte."
+        }
+      ],
+      "question": "Qui a fermé la boîte ?",
+      "expected": {
+        "type": "actor",
+        "value": "nathan"
+      }
+    },
+    {
+      "id": "stress-077",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Margot ouvre le rideau une fois que Baptiste a fermé la malle."
+        }
+      ],
+      "question": "Qui a fermé la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "baptiste"
+      }
+    },
+    {
+      "id": "stress-078",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Anaïs ouvre le placard une fois que Adrien a fermé la grille."
+        }
+      ],
+      "question": "Qui a fermé la grille ?",
+      "expected": {
+        "type": "actor",
+        "value": "adrien"
+      }
+    },
+    {
+      "id": "stress-079",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Hélène ouvre le cahier une fois que Olivier a fermé la lettre."
+        }
+      ],
+      "question": "Qui a fermé la lettre ?",
+      "expected": {
+        "type": "actor",
+        "value": "olivier"
+      }
+    },
+    {
+      "id": "stress-080",
+      "category": "chronology_paraphrase",
+      "history": [
+        {
+          "role": "user",
+          "content": "Valérie ouvre le panneau une fois que Maxime a fermé la barrière."
+        }
+      ],
+      "question": "Qui a fermé la barrière ?",
+      "expected": {
+        "type": "actor",
+        "value": "maxime"
+      }
+    },
+    {
+      "id": "stress-081",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La porte a été fermée par Mélanie."
+        }
+      ],
+      "question": "Qui a fermé la porte ?",
+      "expected": {
+        "type": "actor",
+        "value": "melanie"
+      }
+    },
+    {
+      "id": "stress-082",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La fenêtre a été fermée par Océane."
+        }
+      ],
+      "question": "Qui a fermé la fenêtre ?",
+      "expected": {
+        "type": "actor",
+        "value": "oceane"
+      }
+    },
+    {
+      "id": "stress-083",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La caisse a été fermée par Amandine."
+        }
+      ],
+      "question": "Qui a fermé la caisse ?",
+      "expected": {
+        "type": "actor",
+        "value": "amandine"
+      }
+    },
+    {
+      "id": "stress-084",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La valise a été fermée par Lucie."
+        }
+      ],
+      "question": "Qui a fermé la valise ?",
+      "expected": {
+        "type": "actor",
+        "value": "lucie"
+      }
+    },
+    {
+      "id": "stress-085",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La carte a été fermée par Pauline."
+        }
+      ],
+      "question": "Qui a fermé la carte ?",
+      "expected": {
+        "type": "actor",
+        "value": "pauline"
+      }
+    },
+    {
+      "id": "stress-086",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La boîte a été fermée par Charlotte."
+        }
+      ],
+      "question": "Qui a fermé la boîte ?",
+      "expected": {
+        "type": "actor",
+        "value": "charlotte"
+      }
+    },
+    {
+      "id": "stress-087",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La malle a été fermée par Margot."
+        }
+      ],
+      "question": "Qui a fermé la malle ?",
+      "expected": {
+        "type": "actor",
+        "value": "margot"
+      }
+    },
+    {
+      "id": "stress-088",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La grille a été fermée par Anaïs."
+        }
+      ],
+      "question": "Qui a fermé la grille ?",
+      "expected": {
+        "type": "actor",
+        "value": "anais"
+      }
+    },
+    {
+      "id": "stress-089",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La lettre a été fermée par Hélène."
+        }
+      ],
+      "question": "Qui a fermé la lettre ?",
+      "expected": {
+        "type": "actor",
+        "value": "helene"
+      }
+    },
+    {
+      "id": "stress-090",
+      "category": "passive_morphology",
+      "history": [
+        {
+          "role": "user",
+          "content": "La barrière a été fermée par Valérie."
+        }
+      ],
+      "question": "Qui a fermé la barrière ?",
+      "expected": {
+        "type": "actor",
+        "value": "valerie"
+      }
+    },
+    {
+      "id": "stress-091",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Romain ferme la porte."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le tiroir."
+        }
+      ],
+      "question": "Qui a ouvert le tiroir ?",
+      "expected": {
+        "type": "actor",
+        "value": "romain"
+      }
+    },
+    {
+      "id": "stress-092",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Théo ferme la fenêtre."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le portail."
+        }
+      ],
+      "question": "Qui a ouvert le portail ?",
+      "expected": {
+        "type": "actor",
+        "value": "theo"
+      }
+    },
+    {
+      "id": "stress-093",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Yanis ferme la caisse."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le colis."
+        }
+      ],
+      "question": "Qui a ouvert le colis ?",
+      "expected": {
+        "type": "actor",
+        "value": "yanis"
+      }
+    },
+    {
+      "id": "stress-094",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Martin ferme la valise."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le dossier."
+        }
+      ],
+      "question": "Qui a ouvert le dossier ?",
+      "expected": {
+        "type": "actor",
+        "value": "martin"
+      }
+    },
+    {
+      "id": "stress-095",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Samuel ferme la carte."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le carton."
+        }
+      ],
+      "question": "Qui a ouvert le carton ?",
+      "expected": {
+        "type": "actor",
+        "value": "samuel"
+      }
+    },
+    {
+      "id": "stress-096",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Nathan ferme la boîte."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le coffre."
+        }
+      ],
+      "question": "Qui a ouvert le coffre ?",
+      "expected": {
+        "type": "actor",
+        "value": "nathan"
+      }
+    },
+    {
+      "id": "stress-097",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Baptiste ferme la malle."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le rideau."
+        }
+      ],
+      "question": "Qui a ouvert le rideau ?",
+      "expected": {
+        "type": "actor",
+        "value": "baptiste"
+      }
+    },
+    {
+      "id": "stress-098",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Adrien ferme la grille."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le placard."
+        }
+      ],
+      "question": "Qui a ouvert le placard ?",
+      "expected": {
+        "type": "actor",
+        "value": "adrien"
+      }
+    },
+    {
+      "id": "stress-099",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Olivier ferme la lettre."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le cahier."
+        }
+      ],
+      "question": "Qui a ouvert le cahier ?",
+      "expected": {
+        "type": "actor",
+        "value": "olivier"
+      }
+    },
+    {
+      "id": "stress-100",
+      "category": "cross_turn_pronouns",
+      "history": [
+        {
+          "role": "user",
+          "content": "Maxime ferme la barrière."
+        },
+        {
+          "role": "user",
+          "content": "Il ouvre ensuite le panneau."
+        }
+      ],
+      "question": "Qui a ouvert le panneau ?",
+      "expected": {
+        "type": "actor",
+        "value": "maxime"
+      }
+    }
+  ]
+}

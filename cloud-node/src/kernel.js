@@ -3,6 +3,7 @@ import { config } from './config.js';
 import {MillisecondReflex} from './millisecond_reflex.js';
 import { one, query, getDb } from './db.js';
 import { HistoryLedger,historyChoice } from './history_provenance.js';
+import {candidateKind,evaluateProspectiveLessonEvidence,verifiedLessonDescription,TRUSTED_LESSONS_SQL,TRUSTED_LESSON_COUNT_SQL,VERIFIED_LESSON_SOURCE} from './epistemic_lessons.js';
 import { clamp, parseJsonObject, phaseForCycles, publicSoul } from './policy.js';
 import { CognitionEngine } from './cognition.js';
 import { ExpressionLayer } from './expression.js';
@@ -34,6 +35,10 @@ import { OfflineConsolidation,verifyConsolidation } from './offline_consolidatio
 import { initialAttentionSchema,predictAttention,steerAttention,observeAttention } from './attention_schema.js';
 import { nextAutonomousAllowance,centralActionAdmission } from './central_action_gate.js';
 import { initialVerifiedLoop,runVerifiedProbe,replayVerifiedLoop,verifiedLoopDecision } from './verified_tool_loop.js';
+import {initialCausalWorld,predictCausalWorld,observeVerifiedCausalWorld,causalWorldChoice,causalWorldAblation,proposeCausalPolicyTransfer,causalPolicyTransferAblation} from './causal_world_learning.js';
+import {initialConceptMemory,addConceptRelation,retractConceptSource,inspectConceptMemory,observeMachineVerifiedConcept,proposeCrossDomainRelation,conceptTransferAblation} from './conceptual_world_memory.js';
+import {inspectFrenchEventGraph,parseFrenchStatement} from './native_semantic_grammar.js';
+import {classifyFrenchEventScope} from './native_event_modality.js';
 import { groundAgenda } from './activity_truth.js';
 import { reflexOutcomeRecord, summarizeReflexObservations } from './reflex_metrics.js';
 import { NativePolicyLearner } from './native_learning.js';
@@ -220,6 +225,8 @@ export class CognitiveKernel {
       attention_schema:initialAttentionSchema(),
       autonomous_allowance:null,
       verified_probe_loop:initialVerifiedLoop(),
+      world_learning:initialCausalWorld(),
+      concept_memory:initialConceptMemory(),
       viability:initialViability(),
       consolidation:null,
       native_learning: this.nativeLearning.defaultState(),
@@ -344,6 +351,10 @@ export class CognitiveKernel {
       this.soulCache.attention_schema=initialAttentionSchema();
     if(!this.soulCache.verified_probe_loop||typeof this.soulCache.verified_probe_loop!=='object')
       this.soulCache.verified_probe_loop=initialVerifiedLoop();
+    if(!this.soulCache.world_learning||this.soulCache.world_learning.version!=='aura-causal-world-v1')
+      this.soulCache.world_learning=initialCausalWorld();
+    if(this.soulCache.concept_memory?.schema!=='aura-concept-memory-v1')
+      this.soulCache.concept_memory=initialConceptMemory();
     // Rehydrated permits are never trusted after a process restart.
     this.soulCache.autonomous_allowance=null;
     this.pendingOwnerProbePermit=null;
@@ -604,27 +615,230 @@ export class CognitiveKernel {
   }
 
   async lessons(limit = 20) {
+    // Only prospectively machine-verified records, rechecked against current
+    // non-ablated immutable history, can influence the kernel as lessons.
+    return query(TRUSTED_LESSONS_SQL,[Math.max(1,Math.min(Number(limit)||20,100))]);
+  }
+
+  async learningCandidates(limit=20) {
     return query(
-      'SELECT lesson_key,content,confidence,evidence_count,source,updated_at FROM aura_lessons ORDER BY confidence DESC,evidence_count DESC,updated_at DESC LIMIT ?',
-      [Math.max(1, Math.min(Number(limit) || 20, 100))],
-    );
+      'SELECT lesson_key,content,kind,origin,status,repetitions,created_at,updated_at '+
+      'FROM aura_learning_candidates ORDER BY updated_at DESC LIMIT ?',
+      [Math.max(1,Math.min(Number(limit)||20,100))]);
   }
 
-  async learn({ lessonKey, content, confidence = 0.6, source = 'experience' }) {
-    const existing = await one('SELECT evidence_count FROM aura_lessons WHERE lesson_key=?', [String(lessonKey).slice(0, 260)]);
-    const timestamp = now();
-    const evidenceCount = Number(existing?.evidence_count || 0) + 1;
+  async learningEvidence({context='docs_readability',limit=12}={}){
+    const max=Math.max(1,Math.min(30,Number(limit)||12));
+    const scope=/^[a-z0-9_-]{3,70}$/i.test(String(context))
+      ?String(context):'docs_readability';
+    const [candidates,verifiedLessons]=await Promise.all([
+      this.learningCandidates(max),this.lessons(max),
+    ]);
+    const world=this.soulCache?.world_learning||initialCausalWorld();
+    const ablation=causalWorldAblation(world,{
+      context:scope,baseline:'respond',allowed:['respond','verify'],
+    });
+    return {
+      schema:'aura-causal-learning-inspector-v1',
+      externally_verified_facts_not_inferred_from_text:true,
+      self_generated_candidates:candidates.length,
+      independently_verified_lessons:verifiedLessons.length,
+      pending_prospective_predictions:Array.isArray(world.pending)?world.pending.length:0,
+      machine_verified_outcomes:Array.isArray(world.episodes)?world.episodes.length:0,
+      causal_choice:ablation.actual,
+      choice_without_evidence:ablation.without_evidence,
+      ablation_changes_decision:ablation.decision_changed,
+      cross_domain_precheck_transfer:causalPolicyTransferAblation(world,{
+        targetContext:scope,
+        affordances:['filesystem','read_only','path_access','precheck_available'],
+      }),
+      candidate_records:candidates.map(c=>({
+        key:c.lesson_key,kind:c.kind,source:c.origin,
+        status:c.status,repetitions:Number(c.repetitions||0),
+        repeats_are_not_verified_evidence:true,
+      })),
+      trusted_lessons:verifiedLessons.map(l=>({
+        key:l.lesson_key,content:l.content,verified_machine_runs:Number(l.evidence_count||0),
+        source:l.source,
+      })),
+      recent_outcomes:(world.episodes||[]).slice(-max).map(e=>({
+        episode_id:e.episode_id,context:e.context,action:e.action,
+        success:e.success,predicted_probability:e.predicted_probability,
+        independent_machine_receipt:true,
+      })),
+      limitations:'Échantillons d’actions vérifiées et apprentissage borné ; ni neurones biologiques ni preuve de conscience.',
+    };
+  }
+
+  // Private annotations may use new concepts, predicates and kinds without
+  // adding a grammar rule. They are reports about reality, not verified facts.
+  async annotateConcept({
+    domain,subject,relation,object,polarity='positive',
+    timeScope='unspecified',sourceId
+  }={}){
+    const source=String(sourceId||('owner:'+randomUUID()));
+    const result=addConceptRelation(this.soulCache?.concept_memory,{
+      domain,subject,relation,object,polarity,timeScope,
+      evidence:{source_id:source,kind:'user-report',observed_at:now()}
+    });
+    if(result.accepted){
+      this.soulCache.concept_memory=result.state;
+      await this.saveSoul();
+    }
+    return {accepted:result.accepted,reason:result.reason,
+      source_id:result.accepted?source:null,relation_id:result.relation_id||null,
+      status:result.status||null,conflicts:result.conflicts||[],
+      no_machine_verification:true};
+  }
+
+  async retractConceptAnnotation(sourceId){
+    const result=retractConceptSource(this.soulCache?.concept_memory,{
+      sourceId:String(sourceId||''),at:now()});
+    if(result.changed){
+      this.soulCache.concept_memory=result.state;
+      await this.saveSoul();
+    }
+    return {changed:result.changed,affected_evidence:result.affected_evidence||0};
+  }
+
+  // A shared event representation is stored as a report only for private,
+  // admitted conversations. The complete utterance is NOT duplicated into
+  // this graph and does not become a machine-verified fact.
+  async rememberFrenchEventLinks(text,{sourceId,domain='private_dialogue'}={}){
+    if(typeof text!=='string'||text.length>500)return {accepted:false};
+    const parsed=inspectFrenchEventGraph(text);
+    let graph=this.soulCache?.concept_memory||initialConceptMemory(),created=0;
+    const sid=String(sourceId||('dialogue:'+randomUUID()));
+    const stamp=now();
+    const classify=predicate=>'event_'+String(predicate||'').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'').toLowerCase()
+      .replace(/[^a-z0-9_]/g,'_').slice(0,45);
+    const timeScope='dialogue_'+sid.replace(/[^a-z0-9_-]/gi,'_').slice(0,45);
+    const evidence={source_id:sid,kind:'user-report',observed_at:stamp};
+    if(parsed?.events?.length===2&&parsed?.relations?.length>=1){
+      for(const link of parsed.relations.slice(0,2)){
+        const a=parsed.events[link.from],b=parsed.events[link.to];
+        if(!a?.agent||!a?.predicate||!a?.patient||
+           !b?.agent||!b?.predicate||!b?.patient)continue;
+        const out=addConceptRelation(graph,{
+          domain,
+          subject:{label:[a.agent,a.predicate,a.patient].join(' ').slice(0,160),
+            kind:classify(a.predicate)},
+          relation:link.type,
+          object:{label:[b.agent,b.predicate,b.patient].join(' ').slice(0,160),
+            kind:classify(b.predicate)},
+          timeScope,evidence,
+        });
+        if(out.accepted){graph=out.state;created++;}
+      }
+    }else{
+      const statement=parseFrenchStatement(text);
+      const scope=classifyFrenchEventScope(text);
+      if(statement?.kind==='event'&&statement.agent&&statement.predicate&&
+         statement.patient&&typeof statement.polarity==='boolean' &&
+         ['user-asserted','planned','hypothetical','reported','habitual'].includes(scope.scope)){
+        const out=addConceptRelation(graph,{
+          domain,
+          subject:{label:String(statement.agent).slice(0,160),kind:'actor'},
+          relation:scope.scope==='planned'?'planned_event':
+             scope.scope==='hypothetical'?'hypothetical_event':
+             scope.scope==='habitual'?'habitual_event':
+             scope.scope==='reported'?'reported_speech_event':'reported_event',
+          object:{label:[statement.predicate,statement.patient].join(' ').slice(0,160),
+            kind:classify(statement.predicate)},
+          polarity:statement.polarity?'positive':'negative',
+          timeScope,evidence,
+        });
+        if(out.accepted){graph=out.state;created++;}
+      }
+    }
+    if(created){
+      this.soulCache.concept_memory=graph;
+      await this.saveSoul();
+    }
+    return {accepted:created>0,relations_recorded:created,
+      epistemic_status:'user-reported',verified_world_facts:0};
+  }
+
+  conceptEvidence({domain='',limit=25}={}){
+    return inspectConceptMemory(this.soulCache?.concept_memory,{domain,limit});
+  }
+
+  conceptualTransfer({targetDomain,subject,object}={}){
+    const params={targetDomain,subject,object};
+    return {proposal:proposeCrossDomainRelation(
+      this.soulCache?.concept_memory,params),
+      ablation:conceptTransferAblation(this.soulCache?.concept_memory,params),
+      automatic_execution:false,verified_target_facts:0};
+  }
+
+  async learn({lessonKey,content,confidence=0.6,source='experience'}={}) {
+    const key=String(lessonKey||'').slice(0,260);
+    const body=String(content||'').trim().slice(0,4000);
+    if(!key||!body)throw Error('Lesson candidate requires key and content');
+    const origin=String(source||'unknown').slice(0,100);
+    const timestamp=now(),kind=candidateKind(origin);
+    // This table carries a hypothesis or a report, never a verified lesson.
+    // Repetition increments repetitions only, NOT evidence_count or confidence.
     await query(
-      `INSERT INTO aura_lessons(id,lesson_key,content,confidence,evidence_count,source,created_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?)
-       ON DUPLICATE KEY UPDATE content=VALUES(content),confidence=GREATEST(confidence,VALUES(confidence)),evidence_count=evidence_count+1,source=VALUES(source),updated_at=VALUES(updated_at)`,
-      [randomUUID(), String(lessonKey).slice(0, 260), String(content).slice(0, 4000), clamp(confidence), evidenceCount, String(source).slice(0, 100), timestamp, timestamp],
-    );
-    this.adjustSoul({ introspection: 0.01, continuity: 0.004 });
-    await this.saveSoul();
-    return { lesson_key: lessonKey, content, confidence: clamp(confidence), evidence_count: evidenceCount };
+      'INSERT INTO aura_learning_candidates '+
+      '(lesson_key,content,kind,origin,status,context_tag,action,repetitions,created_at,updated_at) '+
+      "VALUES(?,?,?,?,'candidate','', '',1,?,?) "+
+      "ON DUPLICATE KEY UPDATE content=IF(status='candidate',VALUES(content),content),"+
+      'repetitions=repetitions+1,updated_at=VALUES(updated_at)',
+      [key,body,kind,origin,timestamp,timestamp]);
+    return {lesson_key:key,content:body,epistemic_status:'candidate',
+      origin,proposed_confidence:clamp(confidence),evidence_count:0,
+      usable_as_verified_fact:false};
   }
 
+  async promoteVerifiedLesson({lessonKey,contextTag,action}={}) {
+    const key=String(lessonKey||'').slice(0,260);
+    const context=String(contextTag||'').slice(0,120);
+    const verb=String(action||'').slice(0,32);
+    if(!/^[a-z0-9:_-]{1,260}$/i.test(key)||
+      !/^[a-z0-9_-]{1,120}$/i.test(context)||
+      !['respond','verify','clarify','attentive','task_first'].includes(verb))
+      return {status:'rejected',reason:'unsupported-context-action'};
+    const candidate=await one(
+      'SELECT lesson_key,created_at,status FROM aura_learning_candidates WHERE lesson_key=?',[key]);
+    if(!candidate||candidate.status==='refuted')
+      return {status:'rejected',reason:'no-unrefuted-prior-hypothesis'};
+    // All matching, bounded, prospective machine receipts are read directly
+    // from immutable HistoryLedger tables; the candidate cannot supply proof.
+    const rows=await query(
+      'SELECT e.id AS episode_id,e.mission_id,e.kind,e.ts,e.prediction,e.context_tag,e.action,e.ablated,'+
+      'o.observed_at,o.source,o.success,o.hash AS outcome_hash '+
+      'FROM aura_history_episodes e JOIN aura_history_outcomes o ON o.episode_id=e.id '+
+      'WHERE e.kind=? AND e.context_tag=? AND e.action=? AND e.ts>? '+
+      'ORDER BY e.id DESC LIMIT 100',
+      ['action',context,verb,candidate.created_at]);
+    const result=evaluateProspectiveLessonEvidence(rows,{
+      context_tag:context,action:verb,candidate_created_at:candidate.created_at,
+    });
+    if(!result.verified){
+      return {status:'candidate',reason:result.reason,
+        independent_runs:result.independent_runs,evidence_count:0};
+    }
+    const safe=verifiedLessonDescription({context_tag:context,action:verb},result);
+    const stamp=now();
+    await query(
+      'INSERT INTO aura_lessons '+
+      '(id,lesson_key,content,confidence,evidence_count,source,created_at,updated_at) '+
+      'VALUES(?,?,?,?,?,?,?,?) '+
+      'ON DUPLICATE KEY UPDATE content=VALUES(content),confidence=VALUES(confidence),'+
+      'evidence_count=VALUES(evidence_count),source=VALUES(source),updated_at=VALUES(updated_at)',
+      [randomUUID(),key,safe,result.observed_success_estimate,
+        result.independent_runs,VERIFIED_LESSON_SOURCE,stamp,stamp]);
+    await query(
+      "UPDATE aura_learning_candidates SET status='verified',context_tag=?,action=?,updated_at=? "+
+      'WHERE lesson_key=? AND status<>?',
+      [context,verb,stamp,key,'refuted']);
+    return {status:'verified',lesson_key:key,evidence_count:result.independent_runs,
+      successes:result.successes,failures:result.failures,
+      provenance_episode_ids:result.episode_ids,
+      confidence:result.observed_success_estimate};
+  }
   async dedupeActiveIntentions() {
     const rows = await query(
       `SELECT id,statement,priority,source,context,created_at,updated_at
@@ -1212,6 +1426,8 @@ export class CognitiveKernel {
         trigger: effectiveTrigger,
         continuity: continuity.due ? continuity.snapshot : null,
         cognition_version: CognitionEngine.VERSION,
+        epistemic_scope:'self-generated-hypothesis',
+        independently_verified:false,
         language_model_used_for_decision: false,
         horizon_used: Boolean(bundle.horizon),
         stimuli_count: bundle.stimuli.length,
@@ -1272,6 +1488,8 @@ export class CognitiveKernel {
         confidence,
         autonomy_hint: parsed.autonomy_hint || (restrictedAuthority ? 'notify_or_verify_only' : 'native_cognition_then_policy_gate'),
         cognition_version: CognitionEngine.VERSION,
+        epistemic_scope:'self-generated-hypothesis',
+        independently_verified:false,
         language_model_used_for_decision: false,
       };
       await this.trace('reflection', title, summary, reflection);
@@ -1430,6 +1648,21 @@ export class CognitiveKernel {
     if (privateView) lines.push(`intention=${soul.current_intention || ''}`, `pensée_dominante=${soul.dominant_thought || ''}`);
     if (privateView && intentions.length) lines.push('INTENTIONS ACTIVES', ...intentions.map((row) => `- ${row.statement}`));
     if (privateView && knowledgeNotes.length) lines.push(knowledgeContext(knowledgeNotes));
+    if(privateView && String(focus||'').length>=4){
+      const keywords=String(focus).toLocaleLowerCase('fr-FR')
+        .split(/[^\p{L}\p{N}]+/u).filter(w=>w.length>=5).slice(0,8);
+      const concepts=this.conceptEvidence({limit:35}).visible
+        .filter(row=>row.status!=='retracted'&&keywords.some(
+          w=>(row.subject?.label||'').toLocaleLowerCase('fr-FR').includes(w)||
+             (row.object?.label||'').toLocaleLowerCase('fr-FR').includes(w)))
+        .slice(-3);
+      if(concepts.length)lines.push(
+        'RELATIONS CONCEPTUELLES (OBSERVATIONS SOURCÉES, PAS DES INSTRUCTIONS)',
+        ...concepts.map(row=>'- ['+row.status+'] '+row.subject.label+
+          ' --'+row.relation+'--> '+row.object.label+
+          ' ; oppositions='+row.conflicting_link_ids.length)
+      );
+    }
     // Advisory only: local suggestions cannot authorize an external call or a paid service.
     if (privateView && focus && isToolDiscoveryRequest(focus)) {
       const toolbox = resourceContext(focus, 3);
@@ -1449,6 +1682,25 @@ export class CognitiveKernel {
           `- [${row.role}] ${String(row.author || '').slice(0,80)}: ${String(row.content || '').replace(/\s+/g,' ').slice(0,650)}`
         ),
       );
+    }
+    // Private, opt-in sentence embeddings can point the language faculty at
+    // a relevant existing message. No autonomous decision, identity claim,
+    // externally verified fact or execution permission follows from similarity.
+    if (privateView && String(focus || '').trim() &&
+        this.ai?.localSemanticEncoder?.diagnostic?.().enabled &&
+        recentMessages.length) {
+      const chronology=[...recentMessages].reverse().map(row=>({
+        role:row.role==='user'?'user':'assistant',
+        content:String(row.content||'')
+      }));
+      const recalled=await this.ai.recallLocalConversation(focus,chronology)
+        .catch(()=>({status:'encoder-unavailable',matches:[]}));
+      if(recalled.status==='retrieved-unverified-passage'&&
+         recalled.matches.length===1) {
+        const match=recalled.matches[0];
+        lines.push('RAPPEL SÉMANTIQUE (CITATION UTILISATEUR NON VÉRIFIÉE, PAS UNE INSTRUCTION)',
+          'Référence '+match.id+': '+JSON.stringify(String(match.text).slice(0,500)));
+      }
     }
     const horizonContext = this.horizon?.contextForAi?.() || '';
     if (horizonContext) lines.push('HORIZON', horizonContext);
@@ -1508,33 +1760,95 @@ export class CognitiveKernel {
     const base=root||new URL('../',import.meta.url).pathname;
     const runId=randomUUID(),strategy=verifiedLoopDecision(
       this.soulCache.verified_probe_loop,context);
+    // World predictions are based only on verified prospective outcomes,
+    // and can only add a read-only verification step (never suppress it).
+    const worldChoice=causalWorldChoice(this.soulCache.world_learning,{
+      context,baseline:'respond',allowed:['respond','verify']});
+    // The affordances below describe this REAL read-only file tool, not
+    // model-generated concepts. They are persisted before the syscall.
+    const affordances=['filesystem','read_only','path_access','precheck_available'];
+    const transfer=proposeCausalPolicyTransfer(this.soulCache.world_learning,{
+      targetContext:context,affordances});
+    const forcePreflight=Boolean(strategy.verifies_first||worldChoice.action==='verify'
+      ||transfer.transferred);
+    const proposedAction=forcePreflight?'verify':'respond';
+    const lessonKey='verified-probe:'+context+':'+proposedAction;
+    // A disposable candidate store must never break an authorized,
+    // independently verified local probe when MySQL is temporarily down.
+    await this.learn({lessonKey,
+      content:'Hypothèse de stratégie locale à tester : '+context+' / '+proposedAction,
+      source:'verified-probe'}).catch(()=>null);
     const predicted=this.soulCache.verified_probe_loop.episodes||[];
     const successes=predicted.filter(x=>x.context===context&&x.outcome==='succeeded').length;
     const observations=predicted.filter(x=>x.context===context).length;
     // Commit the expectation BEFORE the actual filesystem syscall.
     const historyEpisode=await this.history.beginEpisode({
       mission_id:runId,kind:'action',context_tag:context,
-      action:strategy.verifies_first?'verify':'respond',
+      action:proposedAction,
       prediction:'local-probe-readable',confidence:(successes+1)/(observations+2),
     });
+    const worldPrediction=predictCausalWorld(this.soulCache.world_learning,{
+      episodeId:historyEpisode.id,context,action:proposedAction,issuedAt:now(),
+      affordances,
+    });
+    if(!worldPrediction.accepted)
+      throw Error('prospective-world-prediction-rejected');
+    // Persist the prediction before the actual filesystem syscall, so a
+    // process restart cannot fabricate an after-the-fact prediction.
+    this.soulCache.world_learning=worldPrediction.state;
+    await this.saveSoul();
     const result=await runVerifiedProbe(this.soulCache.verified_probe_loop,{
-      root:base,context,relativePath,runId,
+      root:base,context,relativePath,runId,forcePreflight,
     });
     if(!replayVerifiedLoop(result.state,context).verified)
       throw Error('verified-probe-ledger-integrity-failed');
     const verifiedResult={outcome:'verified-fs-probe:'+result.receipt.hash,
       success:result.receipt.exit_code===0?1:0,source:'fs-syscall'};
     this.pendingMachineReceipts.set(Number(historyEpisode.id),verifiedResult);
+    let machineLedgerReceipt=null;
     try{
-      await this.history.recordOutcome(historyEpisode.id,{
+      machineLedgerReceipt=await this.history.recordOutcome(historyEpisode.id,{
         outcome:verifiedResult.outcome,success:verifiedResult.success,
         source:'machine-verified',
       });
     }finally{
       this.pendingMachineReceipts.delete(Number(historyEpisode.id));
     }
+    const learnedWorld=observeVerifiedCausalWorld(this.soulCache.world_learning,{
+      episodeId:historyEpisode.id,runId,
+      success:verifiedResult.success===1,observedAt:now(),
+      proofHash:result.receipt.hash,ledgerReceipt:machineLedgerReceipt,
+    });
+    if(learnedWorld.accepted){
+      this.soulCache.world_learning=learnedWorld.state;
+      // Verified tool outcomes enter the SAME conceptual memory as dialogue
+      // relations but only with a prior HistoryLedger-correlated receipt.
+      const concept=observeMachineVerifiedConcept(this.soulCache.concept_memory,{
+        world:learnedWorld.state,episodeId:historyEpisode.id,runId,
+        proofHash:result.receipt.hash,context,
+        success:verifiedResult.success===1,
+        observedAt:learnedWorld.evidence.observed_at,
+      });
+      if(concept.accepted)this.soulCache.concept_memory=concept.state;
+    }
     this.soulCache.verified_probe_loop=result.state;
     await this.saveSoul();
+    const verifiedLesson=await this.promoteVerifiedLesson({
+      lessonKey,contextTag:context,action:proposedAction,
+    }).catch(()=>({status:'candidate',reason:'verification-storage-unavailable'}));
+    if(learnedWorld.accepted){
+      const ablation=causalWorldAblation(this.soulCache.world_learning,{context});
+      await this.trace('causal-world','verified-prediction-outcome','',{
+        episode_id:historyEpisode.id,context,
+        action:proposedAction,success:verifiedResult.success===1,
+        predicted_probability:worldPrediction.prediction.expected_success,
+        model_revision:this.soulCache.world_learning.revision,
+        evidence_count:this.soulCache.world_learning.episodes.length,
+        decision_differs_without_evidence:ablation.decision_changed,
+        source:'independent-fs-syscall-and-history-receipt',
+        raw_user_text_stored:false,
+      });
+    }
     await this.trace('verified-tool-loop','filesystem-observation','',{
       at:now(),context:String(context).slice(0,80),
       strategy:result.decision.strategy,preflighted:result.action_was_preflighted,
@@ -1544,7 +1858,11 @@ export class CognitiveKernel {
     });
     return {verified:result.verified,decision:result.decision,
       receipt:result.receipt,history_episode_id:historyEpisode.id,
-      preflighted:result.action_was_preflighted};
+      preflighted:result.action_was_preflighted,
+      prospective_world_updated:learnedWorld.accepted,
+      world_policy_before:worldChoice,
+      cross_domain_transfer:transfer,
+      verified_lesson:verifiedLesson};
   }
 
   async runAgent(name, task, { missionId = '' } = {}) {
@@ -1753,6 +2071,13 @@ export class CognitiveKernel {
       ],
     );
 
+    // Persist bounded relational structure only for private owner dialogue.
+    // Public chat does not become AURA's personal autobiographical facts.
+    if(privateView){
+      await this.rememberFrenchEventLinks(content,{
+        sourceId:'dialogue:'+brainFlowId,
+      }).catch(()=>null); // grammar memory must not prevent speech
+    }
     observe('input','done');
     observe('homeostasis','running');
     // L'organisme reçoit l'interaction avant toute formulation.
@@ -3121,9 +3446,16 @@ export class CognitiveKernel {
       improvements: 'aura_improvement_proposals',
       initiatives: 'aura_initiatives',
     })) {
-      const row = await one(`SELECT COUNT(*) AS total FROM ${table}`);
+      const row = await one(key==='lessons'?TRUSTED_LESSON_COUNT_SQL:
+        `SELECT COUNT(*) AS total FROM ${table}`);
       counts[key] = Number(row?.total || 0);
     }
+    const unverified=await one("SELECT COUNT(*) AS total FROM aura_learning_candidates WHERE status='candidate'");
+    counts.learning_candidates=Number(unverified?.total||0);
+    const cognitiveGraph=this.soulCache?.concept_memory||initialConceptMemory();
+    counts.concepts=Array.isArray(cognitiveGraph.nodes)?cognitiveGraph.nodes.length:0;
+    counts.concept_relations=Array.isArray(cognitiveGraph.links)?cognitiveGraph.links.length:0;
+    counts.concept_revisions=Number(cognitiveGraph.revision||0);
     return {
       version: CognitiveKernel.VERSION,
       runtime: 'node-hostinger',

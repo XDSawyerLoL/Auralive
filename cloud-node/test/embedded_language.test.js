@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import {classifyEmbeddedFailure,llamaLoaderEnv,locateEmbeddedRuntime,
   EmbeddedLanguageRuntime,repairLlamaLibraryAliases,nativeLibraryHealth,systemElfLoader,nativeLaunchSpec,
-  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot} from '../src/embedded_language.js';
+  nativeBootArgs,embeddedLogSignals,cgroupMemorySnapshot,cgroupPidSnapshot,independentLocalLanguageBoot} from '../src/embedded_language.js';
 
 test('llama dynamic linker failure and Hostinger EACCES are distinct',()=>{
   assert.equal(classifyEmbeddedFailure('libllama-common.so.0: cannot open shared object file').code,
@@ -31,7 +31,7 @@ test('nested Hostinger runtime folder detects the binary and GGUF',()=>{
     const dir=path.join(root,'.aura-language-runtime','llama-b11425','llama-b11425');
     fs.mkdirSync(dir,{recursive:true});
     fs.writeFileSync(path.join(dir,'llama-server'),'dummy',{mode:0o755});
-    fs.writeFileSync(path.join(dir,'model.gguf'),'dummy');
+    fs.writeFileSync(path.join(dir,'Qwen3-0.6B-Q8_0.gguf'),'dummy');
     const result=locateEmbeddedRuntime({root,home:''});
     assert.equal(result.installed,true);
   }finally{fs.rmSync(root,{recursive:true,force:true});}
@@ -93,7 +93,7 @@ test('restores executable bit only on a managed AURA runtime binary',()=>{
     fs.mkdirSync(dir,{recursive:true});
     const exe=path.join(dir,'llama-server');
     fs.writeFileSync(exe,'test',{mode:0o644});
-    fs.writeFileSync(path.join(dir,'model.gguf'),'model');
+    fs.writeFileSync(path.join(dir,'Qwen3-0.6B-Q8_0.gguf'),'model');
     const runtime=new EmbeddedLanguageRuntime({discover:()=>locateEmbeddedRuntime({root,home:''})});
     assert.equal(runtime.installed(),true);
     assert.equal(runtime.repairExecutable(),true);
@@ -582,4 +582,19 @@ test('a textual stub with no positive completion_tokens is never proof of infere
   });
   assert.equal(await runtime.start(),false);
   assert.equal(runtime.status().failure_code,'embedded-inference-probe-invalid');
+});
+
+test('independent language startup provisions missing GGUF without database',()=>{
+ const absent=independentLocalLanguageBoot({
+  warmup:true,installed:false,autoprovisionEnabled:true,canProvision:true});
+ assert.deepEqual(absent,{start:true,allowProvision:true});
+ assert.deepEqual(independentLocalLanguageBoot({
+  warmup:true,installed:false,autoprovisionEnabled:false,canProvision:true
+ }),{start:false,allowProvision:false});
+ assert.deepEqual(independentLocalLanguageBoot({
+  warmup:true,installed:true,autoprovisionEnabled:false,canProvision:false
+ }),{start:true,allowProvision:false});
+ assert.deepEqual(independentLocalLanguageBoot({
+  warmup:false,installed:true,autoprovisionEnabled:true,canProvision:true
+ }),{start:false,allowProvision:false});
 });

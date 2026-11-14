@@ -49,6 +49,18 @@ export class NativeUDConstructions{
     limitations:'Partial dependency-pattern learner, not a general French parser'};
  }
  lemma(form){return this.ready?this.forms.get(fold(form))?.lemma||null:null}
+ // The compact UD TRAIN model contains a small but non-zero cleft dependency
+ // observation (advcl:cleft). This only licenses a tightly scoped transformation,
+ // not a claim that AURA learned unrestricted French cleft syntax.
+ evidenceCleft(){
+  if(!this.ready)return null;
+  const observations=this.edges.get('VERB|advcl:cleft|VERB|right')||0;
+  const properSubject=this.edges.get('VERB|nsubj|PROPN|left')||0;
+  const object=this.edges.get('VERB|obj|NOUN|right')||0;
+  if(observations<3||properSubject<100||object<100)return null;
+  return {relation:'advcl:cleft',observations,dependency_support:{
+    nsubj_propn_left:properSubject,obj_noun_right:object}};
+ }
  // A construction is admitted only if multiple edges and slot geometry
  // were observed repeatedly in the training treebank. We never use a
  // relative corpus frequency as proof of a fact about a person or object.

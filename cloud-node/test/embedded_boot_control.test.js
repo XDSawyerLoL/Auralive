@@ -66,7 +66,9 @@ test('manual start is a private, download-free, nonblocking API',()=>{
 test('production warmup of installed models is independent of MySQL runtime readiness',()=>{
   const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
   const start=server.indexOf('export function startRuntimeLoop()');
-  const trigger=server.indexOf("embeddedLanguageRuntime.start({allowProvision:false})",start);
+  const trigger=server.indexOf("embeddedLanguageRuntime.start({allowProvision:policy.allowProvision})",start);
+  assert.match(server.slice(start,trigger),/independentLocalLanguageBoot/);
+  assert.match(server.slice(start,trigger),/autoprovisionEnabled/);
   const database=server.indexOf('startRuntime().catch(',start);
   assert.ok(start>=0 && trigger>start && trigger<database);
 });
@@ -104,7 +106,7 @@ test('explicit persistent model cache folder is discovered without a new downloa
     const cache=path.join(tmp,'managed-cache');
     fs.mkdirSync(cache,{recursive:true});
     fs.writeFileSync(path.join(cache,'llama-server'),'test binary',{mode:0o755});
-    fs.writeFileSync(path.join(cache,'model.gguf'),'test gguf');
+    fs.writeFileSync(path.join(cache,'Qwen3-0.6B-Q8_0.gguf'),'test gguf');
     process.env.AURA_EMBEDDED_CACHE_DIR=cache;
     const result=locateEmbeddedRuntime({root:path.join(tmp,'site'),home:''});
     assert.equal(result.installed,true);

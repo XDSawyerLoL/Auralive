@@ -1,0 +1,148 @@
+// Optional pre-trained sentence encoder. NO remote API, downloads or network
+// fallback. Model assets and runtime must be operator-installed locally.
+// Embeddings are semantic similarity evidence, NEVER truth or event occurrence.
+import {statSync,lstatSync,readFileSync,openSync,readSync,closeSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {resolve} from 'node:path';
+
+const MODEL='Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+const ACCEPTED_DTYPE=new Set(['q8','fp16']);
+const SHA256_Q8='66fc00f5f29afcaff34092e1bdd20008ca3918265a82fb9695a551e510cc4ebc';
+function verifyOfflineModelSha(file){
+ const hash=createHash('sha256');
+ const fd=openSync(file,'r');
+ try{
+  const buffer=Buffer.allocUnsafe(64*1024);
+  let n=0;
+  while((n=readSync(fd,buffer,0,buffer.length,null))>0)hash.update(buffer.subarray(0,n));
+ }finally{closeSync(fd);}
+ return hash.digest('hex')===SHA256_Q8;
+}
+const tokenCount=s=>String(s).trim().split(/\s+/u).filter(Boolean).length;
+export function encoderConfiguration(env=process.env){
+ const enabled=env.AURA_LOCAL_ENCODER_ENABLED==='true';
+ const root=String(env.AURA_LOCAL_ENCODER_ROOT||'').trim();
+ const dtype=String(env.AURA_LOCAL_ENCODER_DTYPE||'q8');
+ if(!enabled)return {enabled:false,ready:false,reason:'disabled'};
+ if(!root||!root.startsWith('/')||root.includes('\0')||!ACCEPTED_DTYPE.has(dtype))
+   return {enabled:true,ready:false,reason:'invalid-offline-configuration'};
+ let bytes=0;
+ try{
+  // Check a real locally installed ONNX asset, not merely a model directory.
+  // Reject symlinked models; deployment-specific administrator may review them.
+  const relative=MODEL+'/onnx/model_'+(dtype==='q8'?'quantized':'fp16')+'.onnx';
+  const file=resolve(root,relative);
+  if(!file.startsWith(resolve(root)+'/'))throw Error('outside root');
+  if(lstatSync(file).isSymbolicLink())throw Error('symlink');
+  const stat=statSync(file,{throwIfNoEntry:true});
+  if(!stat?.isFile()||stat.size<20_000_000||stat.size>600_000_000)
+    throw Error('model asset invalid');
+  if(dtype==='q8'&&!verifyOfflineModelSha(file))throw Error('sha mismatch');
+  bytes=stat.size;
+ }catch{return {enabled:true,ready:false,reason:'model-assets-not-installed'};}
+ return {enabled:true,ready:true,model:MODEL,dtype,root:resolve(root),
+  model_bytes:bytes,remote_network:false};
+}
+// Managed Node hosts can enforce a cgroup limit smaller than physical RAM.
+export function localEncoderMemoryHeadroom({
+ read=readFileSync,minMiB=768,allowUnverified=false
+}={}){
+ const places=[
+  ['/sys/fs/cgroup/memory.max','/sys/fs/cgroup/memory.current'],
+  ['/sys/fs/cgroup/memory/memory.limit_in_bytes',
+   '/sys/fs/cgroup/memory/memory.usage_in_bytes']
+ ];
+ for(const [limitFile,usageFile] of places){
+  try{
+   const max=String(read(limitFile,'utf8')).trim();
+   if(max==='max')continue;
+   const limit=Number(max),used=Number(String(read(usageFile,'utf8')).trim());
+   if(!Number.isSafeInteger(limit)||!Number.isSafeInteger(used)||
+      limit<=0||used<0||used>limit)continue;
+   const free=Math.floor((limit-used)/1048576);
+   return {sufficient:free>=minMiB,headroom_mib:free,
+     reason:free>=minMiB?'cgroup-headroom-ok':'insufficient-cgroup-headroom'};
+  }catch{}
+ }
+ return {sufficient:allowUnverified,
+   headroom_mib:null,reason:allowUnverified?'operator-verified':'memory-headroom-unknown'};
+}
+
+export class NativeLocalSemanticEncoder{
+ constructor({configuration=encoderConfiguration(),load=null}={}){
+  this.config=configuration;
+  this.load=load;
+  this.model=null;
+  this.loading=null;
+  this.status='not-initialized';
+  this.failure='none';
+ }
+ diagnostic(){
+  return {enabled:!!this.config.enabled,ready:this.status==='ready',
+   model:this.config.model||MODEL,configured:!!this.config.ready,
+   state:this.status,failure:this.failure,
+   model_bytes:this.config.model_bytes||0,network_access:false,
+   limitations:'similarity-only, no facts, no generative language'};
+ }
+ async initialize(){
+  if(this.model)return true;
+  if(this.loading)return this.loading;
+  this.loading=this.initializeOnce();
+  try{return await this.loading;}finally{this.loading=null;}
+ }
+ async initializeOnce(){
+  if(this.model)return true;
+  if(!this.config.ready){this.status='disabled';this.failure=this.config.reason;return false;}
+  try{
+   const memory=localEncoderMemoryHeadroom({
+     allowUnverified:process.env.AURA_LOCAL_ENCODER_MEMORY_VERIFIED==='true'
+   });
+   if(!this.load&&!memory.sufficient){
+     this.status='unavailable';this.failure=memory.reason;return false;
+   }
+   let loader=this.load;
+   if(!loader){
+    // Installed separately from the main Hostinger runtime; leave its dependency
+    // tree unchanged until the operator explicitly provisions CPU/memory.
+    const pkg=await import('@huggingface/transformers');
+    pkg.env.allowRemoteModels=false;
+    pkg.env.localModelPath=this.config.root+'/';
+    pkg.env.useBrowserCache=false;
+    pkg.env.backends.onnx.wasm.wasmPaths=this.config.root+'/runtime-wasm/';
+    loader=async()=>pkg.pipeline('feature-extraction',MODEL,{
+      device:'cpu',dtype:this.config.dtype,local_files_only:true
+    });
+   }
+   const loaded=await loader();
+   if(typeof loaded!=='function')throw Error('inference not callable');
+   this.model=loaded;
+   this.status='ready';this.failure='none';
+   return true;
+  }catch{
+   this.model=null;this.status='unavailable';
+   this.failure='offline-runtime-or-model-load-failed';
+   return false;
+  }
+ }
+ async embed(text){
+  if(typeof text!=='string'||text.length<3||text.length>800||
+     tokenCount(text)>96||!await this.initialize())return null;
+  try{
+   const result=await this.model(text,{pooling:'mean',normalize:true});
+   const values=result?.data||result;
+   if(!values||typeof values.length!=='number'||values.length!==384)return null;
+   const array=Array.from(values,Number);
+   if(array.some(x=>!Number.isFinite(x)))return null;
+   const norm=Math.hypot(...array);
+   if(!Number.isFinite(norm)||norm<0.0001)return null;
+   return array.map(x=>x/norm);
+  }catch{this.failure='offline-inference-failed';return null;}
+ }
+}
+export function dotSimilarity(a,b){
+ if(!Array.isArray(a)||!Array.isArray(b)||!a.length||a.length!==b.length||
+   a.some(x=>!Number.isFinite(x))||b.some(x=>!Number.isFinite(x)))return null;
+ const na=Math.hypot(...a),nb=Math.hypot(...b);
+ if(na<1e-6||nb<1e-6)return null;
+ return a.reduce((sum,x,i)=>sum+x*b[i],0)/(na*nb);
+}

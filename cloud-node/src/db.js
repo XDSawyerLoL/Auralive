@@ -4,7 +4,7 @@ import { config } from './config.js';
 
 let pool;
 
-export const LATEST_SCHEMA_VERSION = 18;
+export const LATEST_SCHEMA_VERSION = 19;
 
 export function getDb() {
   if (pool) return pool;
@@ -807,6 +807,40 @@ async function applyMigrations(db) {
       ['immutable-autobiography-causal-provenance', new Date().toISOString()],
     );
     current = 18;
+  }
+
+  if (current < 19) {
+    // Epistemic segregation: legacy self-generated lessons remain archived,
+    // never implicitly counted as independent or machine-verified evidence.
+    await db.query(`CREATE TABLE IF NOT EXISTS aura_learning_candidates (
+      lesson_key VARCHAR(260) PRIMARY KEY,
+      content TEXT NOT NULL,
+      kind VARCHAR(16) NOT NULL DEFAULT 'hypothesis',
+      origin VARCHAR(100) NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'candidate',
+      context_tag VARCHAR(120) NOT NULL DEFAULT '',
+      action VARCHAR(32) NOT NULL DEFAULT '',
+      repetitions INT NOT NULL DEFAULT 1,
+      created_at VARCHAR(40) NOT NULL,
+      updated_at VARCHAR(40) NOT NULL,
+      INDEX idx_aura_learning_kind(kind,status,updated_at),
+      CONSTRAINT chk_aura_learning_kind CHECK (kind IN ('hypothesis','reported')),
+      CONSTRAINT chk_aura_learning_status CHECK (status IN ('candidate','verified','refuted'))
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(
+      `INSERT IGNORE INTO aura_learning_candidates
+      (lesson_key,content,kind,origin,status,repetitions,created_at,updated_at)
+      SELECT lesson_key,content,
+        CASE WHEN source LIKE '%reflection%' OR source LIKE '%evolution%'
+          OR source LIKE '%critic%' THEN 'hypothesis' ELSE 'reported' END,
+        source,'candidate',GREATEST(1,evidence_count),created_at,updated_at
+      FROM aura_lessons`
+    );
+    await db.query(
+      'INSERT IGNORE INTO aura_schema_migrations(version,name,applied_at) VALUES(19,?,?)',
+      ['epistemic-candidates-and-prospective-proof-gate',new Date().toISOString()]
+    );
+    current = 19;
   }
 
 }

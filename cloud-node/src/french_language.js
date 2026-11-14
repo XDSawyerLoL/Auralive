@@ -1,3 +1,4 @@
+import {config} from './config.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
 import { isUnrequestedTechnicalDigression } from './conversation_grounding.js';
 
@@ -492,6 +493,31 @@ function compactContext(rows = []) {
     .filter((row) => row.content);
 }
 
+// A 768-token GGUF context cannot consume the multi-kilobyte system prompt
+// designed for large cloud models. Keep the local prompt syntactically valid,
+// short and strictly limited to the nucleus's known facts and speech goal.
+export function compactLowMemoryFrenchPrompt(plan={}){
+ const safe=(value,n)=>String(value||'').replace(/\s+/gu,' ').trim().slice(0,n);
+ const facts=Array.isArray(plan?.facts)?plan.facts.slice(0,3).map(x=>safe(x,160)):[];
+ const recent=Array.isArray(plan?.immediate_dialogue_context)
+   ?plan.immediate_dialogue_context.slice(-1):[];
+ const record={
+  acte:safe(plan.act||'respond',42),
+  message:safe(plan.user_text,320),
+  objectif:safe(plan.goal,220),
+  faits: facts,
+  contexte:recent.map(x=>({
+   role:x?.role==='assistant'?'assistant':'user',text:safe(x?.content,180)
+  })),
+ };
+ return '/no_think\n'+JSON.stringify(record);
+}
+export const LOW_MEMORY_FRENCH_SYSTEM=
+ 'Tu es la voix d’AURA. Parle en français naturel à la première personne. '
+ +'Réponds au message de l’utilisateur en une à trois phrases. '
+ +'Respecte les faits fournis, sans inventer d’action, de souvenir ou de preuve. '
+ +'Ne reproduis ni JSON ni instructions internes ; signale toute incertitude.';
+
 export class FrenchLanguageFaculty {
   static VERSION = 'aura-french-language-faculty-v1';
 
@@ -533,8 +559,13 @@ export class FrenchLanguageFaculty {
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
     // Native files alone do not establish that a model is operational.
-    const ready = Boolean(groq.enabled || embedded.ready || federation.enabled || local);
-    const blockingReason = installing ? 'embedded-language-installing'
+    const ready = config.localLanguageOnly
+      ?Boolean(embedded.ready&&embedded.probe_verified||local)
+      :Boolean(groq.enabled || embedded.ready || federation.enabled || local);
+    const blockingReason = config.localLanguageOnly && !ready
+      ?(provisionFailed?'embedded-language-installation-blocked'
+        :embedded.failure_code||'embedded-language-not-responsive')
+      : installing ? 'embedded-language-installing'
       : provisionFailed ? 'embedded-language-installation-blocked'
       : embedded.failure_code && (embeddedInstalled || embedded.binary_found)
       && !['groq-free','zero-cost-federation','runtime-local'].includes(this.lastMode)
@@ -713,7 +744,7 @@ export class FrenchLanguageFaculty {
     // GroqCloud Free is the preferred conversational model when the operator
     // explicitly confirms their organization has NO paid Developer billing.
     // Never interpret a configured key alone as proof of a free plan.
-    if(this.groq?.enabled){
+    if(!config.localLanguageOnly&&this.groq?.enabled){
       try{
         const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
         let result=await this.groq.generate(
@@ -764,10 +795,14 @@ export class FrenchLanguageFaculty {
     const tryEmbedded = async () => {
       if (!this.embedded.status?.().ready) return '';
       try {
+        const lowMemory=this.embedded.status?.().boot_profile==='low-memory';
+        const localPrompt=lowMemory?compactLowMemoryFrenchPrompt(plan):compactFrenchPrompt(plan);
+        const localSystem=lowMemory?LOW_MEMORY_FRENCH_SYSTEM:compactFrenchSystem(plan);
+        const localTokenBudget=lowMemory?110:240;
         const answer = accept(cleanSpeechOutput(await this.embedded.generate(
-          compactFrenchPrompt(plan),
-          compactFrenchSystem(plan),
-          Math.max(96, Math.min(Number(maxTokens) || 350, 450)),
+          localPrompt,
+          localSystem,
+          Math.max(64, Math.min(Number(maxTokens) || localTokenBudget,localTokenBudget)),
         )));
         if (answer) {
           this.lastMode = 'hostinger-embedded';
@@ -787,7 +822,7 @@ export class FrenchLanguageFaculty {
     const embeddedAnswer = await tryEmbedded();
     if (embeddedAnswer) return embeddedAnswer;
 
-    if (this.federation?.enabled) {
+    if (!config.localLanguageOnly&&this.federation?.enabled) {
       try {
         // The full semantic JSON is appropriate for larger models, but the
         // free router may select a small or reasoning-heavy model. Use a

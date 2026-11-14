@@ -1,4 +1,7 @@
 import { config } from './config.js';
+import {NativeLocalSemanticEncoder} from './native_local_sentence_encoder.js';
+import {retrieveNativeSemanticEvidence} from './native_semantic_retrieval.js';
+import {retrieveLocalConversationMemory} from './native_semantic_memory.js';
 import { ZeroCostFederation } from './free_federation.js';
 import { GroqFreeProvider } from './groq_free.js';
 import { embeddedLanguageRuntime } from './embedded_language.js';
@@ -43,6 +46,7 @@ function isLocalAiEndpoint(value) {
 }
 
 function remoteFallbackBlocked() {
+  if (config.localLanguageOnly) return true;
   if (!config.zeroCostMode) return false;
   if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
   if (config.aiMode === 'gemini') {
@@ -81,11 +85,17 @@ export class AiClient {
     this.lastBackend = '';
     this.federation = new ZeroCostFederation();
     this.groq = new GroqFreeProvider();
+    this.localSemanticEncoder = new NativeLocalSemanticEncoder();
   }
 
   get provider() {
-    if (this.groq.enabled) return 'groq-free';
+    if (config.localLanguageOnly) {
+      if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
+      if (this.bridge?.enabled) return 'aura-runtime-local';
+      return 'local-language-not-ready';
+    }
     if (embeddedLanguageRuntime.installed()) return 'hostinger-embedded-llama';
+    if (this.groq.enabled) return 'groq-free';
     if (this.bridge?.enabled && this.bridge?.preferLocalAi) {
       return this.federation.enabled
         ? 'aura-runtime-local+zero-cost-federation'
@@ -98,8 +108,11 @@ export class AiClient {
   }
 
   get enabled() {
-    if (this.groq.enabled) return true;
+    if (config.localLanguageOnly)
+      return Boolean(embeddedLanguageRuntime.installed() ||
+        embeddedLanguageRuntime.canProvision() || this.bridge?.enabled);
     if (embeddedLanguageRuntime.installed()) return true;
+    if (this.groq.enabled) return true;
     if (this.bridge?.enabled || this.federation.enabled) return true;
     if (config.aiMode === 'off' || config.aiMode === 'bridge') return false;
     if (remoteFallbackBlocked()) return false;
@@ -121,6 +134,8 @@ export class AiClient {
       local_bridge_configured: Boolean(this.bridge?.enabled),
       local_ai_preferred: Boolean(this.bridge?.preferLocalAi),
       zero_cost_mode: Boolean(config.zeroCostMode),
+      local_language_only: Boolean(config.localLanguageOnly),
+      remote_language_providers_blocked: Boolean(config.localLanguageOnly),
       remote_fallback_blocked: remoteFallbackBlocked(),
       gemini_free_tier_confirmed: Boolean(config.geminiFreeTierConfirmed),
       gemini_free_tier_model_allowed: freeTierModelAllowed(geminiModel(), 'text'),
@@ -128,10 +143,27 @@ export class AiClient {
       free_federation: this.federation.snapshot(),
       groq_free: this.groq.snapshot(),
       embedded_language: embeddedLanguageRuntime.status(),
+      non_generative_semantic_encoder: this.localSemanticEncoder.diagnostic(),
       last_backend: this.lastBackend,
       last_error: this.lastError,
       last_latency_ms: this.lastLatencyMs,
     };
+  }
+
+  // Explicit opt-in retrieval: the encoder cannot produce an answer or assert
+  // facts. Only user-quoted, admissible evidence may be ranked.
+  async retrieveLocalSemanticEvidence(question,passages){
+    return retrieveNativeSemanticEvidence({
+      query:question,passages,encoder:this.localSemanticEncoder
+    });
+  }
+
+  // Contextual semantic recall is not a generated answer and does not persist
+  // private messages or embeddings. The caller supplies the conversation.
+  async recallLocalConversation(question,history){
+    return retrieveLocalConversationMemory(
+      question,history,this.localSemanticEncoder
+    );
   }
 
   async #generateGemini(prompt, system, maxTokens) {
@@ -228,18 +260,11 @@ export class AiClient {
     let localError = null;
     try {
       let groqError = null;
-      if (this.groq.enabled) {
-        try {
-          const result = await this.groq.generate(prompt, system, maxTokens);
-          if (result?.answer) {
-            this.lastBackend = 'zero-cost:groq-free:' + result.model;
-            this.lastError = '';
-            this.lastLatencyMs = Date.now() - started;
-            return result.answer;
-          }
-        } catch (error) { groqError = error; }
-      }
-      if (embeddedLanguageRuntime.installed()) {
+      // The auto-provisioner is part of the local backend. Previously the
+      // runtime was never called until it had already installed a model,
+      // so first-run chats could not trigger setup when no GGUF existed.
+      if (embeddedLanguageRuntime.installed()
+          || (config.localLanguageOnly && embeddedLanguageRuntime.canProvision())) {
         const answer = await embeddedLanguageRuntime.generate(prompt, system, maxTokens);
         if (answer) {
           this.lastBackend = 'hostinger-embedded-llama';
@@ -267,6 +292,26 @@ export class AiClient {
         localError = new Error('AURA Runtime local hors ligne');
       }
 
+      // No remote-provider invocation, even when an operator left API keys in
+      // the old environment. A missing local model must remain visibly missing.
+      if (config.localLanguageOnly) {
+        this.lastBackend = 'local-language-only';
+        this.lastError = localError ? 'local unavailable: '+safeError(localError)
+          : 'local-language-not-responsive';
+        this.lastLatencyMs = Date.now()-started;
+        return '';
+      }
+      if (this.groq.enabled) {
+        try {
+          const result=await this.groq.generate(prompt,system,maxTokens);
+          if (result?.answer) {
+            this.lastBackend='zero-cost:groq-free:'+result.model;
+            this.lastError='';
+            this.lastLatencyMs=Date.now()-started;
+            return result.answer;
+          }
+        }catch(error){groqError=error;}
+      }
       let federationError = null;
       if (this.federation.enabled) {
         try {

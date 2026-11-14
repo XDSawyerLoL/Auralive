@@ -24,6 +24,34 @@ const MODEL = Object.freeze({
   sha256: '9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031',
   url: 'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf',
 });
+// Optional Q4 on-host profile. Bytes and SHA-256 are pinned to an audited
+// publisher's GGUF conversion; no arbitrary remote model URL is permitted.
+const MODEL_Q4 = Object.freeze({
+  filename:'Qwen3-0.6B-Q4_K_M.gguf',
+  sha256:'373db06783953f0981572d008f183eb2167b93304f5adbf7c4ce6ed6a91ee437',
+  url:'https://huggingface.co/tauqir02/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+  minBytes:480_000_000,maxBytes:490_000_000
+});
+const MODEL_17B_Q4=Object.freeze({
+ filename:'Qwen3-1.7B-Q4_K_M.gguf',
+ sha256:'d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5',
+ url:'https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf',
+ minBytes:1_250_000_000,maxBytes:1_340_000_000,
+ minimumMemoryBytes:3_000_000_000,minimumDiskBytes:1_650_000_000
+});
+export function selectedEmbeddedModel(env=process.env) {
+  const requested=String(env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION||'').trim();
+  if(requested==='1.7b-q4')return MODEL_17B_Q4;
+  // A managed Hostinger process frequently omits NODE_ENV, and the strict
+  // local language default is active in that situation. Prefer a smaller GGUF
+  // for a *new* installation, without discarding an existing working Q8.
+  const localByDefault=env.AURA_LOCAL_LANGUAGE_ONLY==='true' ||
+    (env.AURA_LOCAL_LANGUAGE_ONLY!=='false'
+      && env.CI!=='true'&&env.NODE_ENV!=='test');
+  if(requested==='q4'||(localByDefault&&requested!=='q8'))
+    return MODEL_Q4;
+  return MODEL;
+}
 const MIN_MEMORY = 1_500 * 1024 * 1024;
 const MIN_FREE_DISK = 900 * 1024 * 1024;
 const BUNDLED_STATIC_REVISION = 'b11425';
@@ -86,9 +114,12 @@ async function chooseInstallDir({home=homedir(),cwd=process.cwd(),temp=tmpdir()}
       await access(folder,2);
       const disk=await statfs(folder).catch(()=>null);
       // Cached models need little extra disk; preserve them after deployment.
-      const saved=await stat(join(folder,MODEL.filename)).catch(()=>null);
-      const cached=Boolean(saved && saved.size>500*1024*1024 && saved.size<750*1024*1024);
-      if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024 : MIN_FREE_DISK))continue;
+      const selection=selectedEmbeddedModel();
+      const saved=await stat(join(folder,selection.filename)).catch(()=>null);
+      const cached=Boolean(saved && saved.size>(selection.minBytes||500*1024*1024) &&
+        saved.size<(selection.maxBytes||750*1024*1024));
+      const requiredDisk=selection.minimumDiskBytes||MIN_FREE_DISK;
+      if(disk && disk.bavail*disk.bsize < (cached ? 80*1024*1024 : requiredDisk))continue;
       return folder;
     }catch{}
   }
@@ -216,7 +247,9 @@ export class EmbeddedProvisioner {
     return {enabled:this.enabled,stage:this.stage,error_code:this.lastError,
       failed_stage:this.failedStage,redirect_origin:this.failureOrigin,
       engine_variant:this.engineVariant,
-      engine_revision:REVISION,model:'Qwen3-0.6B Q8_0',no_paid_api:true,
+      engine_revision:REVISION,model:selectedEmbeddedModel()===MODEL_17B_Q4
+        ?'Qwen3-1.7B Q4_K_M':'Qwen3-0.6B '+(selectedEmbeddedModel()===MODEL_Q4?'Q4_K_M':'Q8_0'),
+      no_paid_api:true,
       retry_after:this.retryAfter>Date.now()?new Date(this.retryAfter).toISOString():null};
   }
   async ensure(){
@@ -235,11 +268,13 @@ export class EmbeddedProvisioner {
     return this.inflight;
   }
   async #prepare(){
+    const selection=selectedEmbeddedModel();
     const memory=await availableMemory();
-    if(memory!==null && memory<MIN_MEMORY)throw new Error('embedded-insufficient-cgroup-memory');
+    if(memory!==null && memory<(selection.minimumMemoryBytes||MIN_MEMORY))
+      throw new Error('embedded-insufficient-cgroup-memory');
     const cache=await chooseInstallDir(this.settings);
     const dest=join(cache,'llama-'+REVISION);
-    const model=join(cache,MODEL.filename);
+    const model=join(cache,selection.filename);
     const binInfo=BUNDLES[process.arch];
     this.stage='locating-existing-install';
     const staticBinary=await installBundledStaticServer(cache);
@@ -271,18 +306,19 @@ export class EmbeddedProvisioner {
     await chmod(binary,0o700);
     let modelGood=false;
     const existing=await stat(model).catch(()=>null);
-    if(existing?.size>500*1024*1024 && existing.size<750*1024*1024){
+    if(existing?.size>(selection.minBytes||500*1024*1024) &&
+       existing.size<(selection.maxBytes||750*1024*1024)){
       const sha=createHash('sha256');
       const {createReadStream}=await import('node:fs');
       for await(const part of createReadStream(model))sha.update(part);
-      modelGood=sha.digest('hex')===MODEL.sha256;
+      modelGood=sha.digest('hex')===selection.sha256;
     }
     if(!modelGood){
       this.stage='downloading-open-model';
       const partial=model+'.partial-'+process.pid;
       try{
-        await streamChecked(MODEL.url,partial,MODEL.sha256,
-          750*1024*1024,'model',this.request);
+        await streamChecked(selection.url,partial,selection.sha256,
+          selection.maxBytes||750*1024*1024,'model',this.request);
         await rename(partial,model);
       }finally{await rm(partial,{force:true}).catch(()=>{});}
     }

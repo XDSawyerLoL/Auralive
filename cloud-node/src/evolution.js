@@ -202,8 +202,11 @@ export class EvolutionLab {
     );
 
     return {
-      applied: true,
-      mode: 'persistent-runtime-learning',
+      applied: true, // persisted a proposal, NOT a validated runtime learning
+      mode: 'persistent-hypothesis-candidate',
+      runtime_change_applied:false,
+      independently_verified:false,
+      epistemic_status:learned.epistemic_status,
       lesson_key: learned.lesson_key,
       proposal_id: proposalId,
       risk,
@@ -247,7 +250,7 @@ export class EvolutionLab {
       }
 
       const adaptation = await this.applyRuntimeAdaptation(id, objective, diagnosis);
-      const status = adaptation.applied ? 'adapted-runtime' : 'research-only';
+      const status = adaptation.applied ? 'candidate-persisted' : 'research-only';
       const promotion = {
         runtime_adaptation: adaptation,
         code_evolution: this.bridge?.enabled ? 'delegated-when-worker-online' : 'waiting-for-local-worker',

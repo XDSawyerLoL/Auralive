@@ -1,5 +1,10 @@
 import { nativeFrenchCorpus } from './native_french_corpus.js';
 import {nativeUDConstructions} from './native_ud_constructions.js';
+import {parseBoundedDiscourse} from './native_discourse_context.js';
+import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGraph} from './native_event_modality.js';
+import {makeNativeEventFrame,isNativeEventAssertable} from './native_event_frame.js';
+import {NativeConstructionLearner} from './native_construction_learning.js';
+import {getNativeRuntimeConstructionLearner} from './native_construction_runtime.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -32,8 +37,17 @@ function lexicon(){
 const verb = token => nativeUDConstructions.lemma(token)||lexicon().get(fold(token))?.lemma||null;
 const cleanObject = value => entity(value.replace(/^(?:pas|plus|jamais|en|y)\s+/u,''));
 const eventKey = frame => [frame.predicate,frame.patient].join(':');
+// Conservative lexical overlap: a skipped modifier in the object span
+// must never make another participant disappear from an actor question.
+// This only blocks a confident answer; it does not create positive facts.
+const possiblySamePatient=(observed,requested)=>{
+ const a=words(observed),b=words(requested);
+ return Boolean(a&&b&&(a===b||a.endsWith(' '+b)||b.endsWith(' '+a)));
+};
 
 export function parseFrenchStatement(text){
+  // Unsupported complements cannot be reinterpreted as flat SVO facts.
+  if(/\b(?:que|qui|quand|lorsque|si|avant)\b/iu.test(fold(text)))return null;
   const acquired=nativeUDConstructions.parseStatement(text);
   if(acquired)return acquired;
   const source=words(text).replace(/^non\s+(?:je corrige\s+)?/u,'')
@@ -117,22 +131,73 @@ function splitAssertions(value){
   // Explicit conjunctions only. Never silently transform a question into evidence.
   const s=String(value||'').trim();
   if(/[?？]/u.test(s))return [];
-  return s.split(/\s+(?:puis|ensuite|mais)\s+|[.;]\s*/iu).filter(Boolean);
+  return s.split(/\s+mais\s+|[.;]\s*/iu).filter(Boolean);
 }
-function collect(history=[],stored=[]){
+function collect(history=[],stored=[],constructionLearner=null){
   const frames=[];
+  let previousUserStatement=null;
   for(const row of history.slice(-10)){
-    if(row?.role!=='user')continue;
-    for(const part of splitAssertions(row.content)){
-      const correction=parseFrenchCorrection(part);
-      const frame=correction?.frame||parseFrenchStatement(part);
-      if(!frame)continue;
-      if(correction)for(let i=frames.length-1;i>=0;i--){
-        if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
-           ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
+    if(row?.role!=='user'){previousUserStatement=null;continue;}
+    const scope=classifyFrenchEventScope(row.content);
+    // A syntactically extractable agent is not evidence that the event took place.
+    // Non-asserted clauses are kept in a separate analytical representation only.
+    if(!scope.asserted){
+      const eventGraph=buildNativeEventGraph(row.content,parseFrenchStatement);
+      // Only committed events from the unified graph can become memory
+      // candidates. Relation edges remain descriptions, never facts.
+      if(eventGraph.events.length===2&&eventGraph.relations.length===1&&
+         eventGraph.events.every(isNativeEventAssertable)){
+        frames.push(...eventGraph.events.map(e=>({
+          kind:'event',agent:e.agent,predicate:e.predicate,patient:e.patient,
+          polarity:true,voice:e.voice,source:'user-statement-unverified',
+          semantic_event:e
+        })));
       }
-      frames.push(frame);
+      previousUserStatement=null;
+      continue;
     }
+    const parts=splitAssertions(row.content);
+    for(const part of parts){
+      if(!classifyFrenchEventScope(part).asserted)continue;
+      const correction=parseFrenchCorrection(part);
+      // Antecedents are confined to the immediately preceding user turn,
+      // with a single explicit event and no intervening speaker or clause.
+      // We reuse the same ambiguity checks as within-turn coordination.
+      const isAnaphor=/^(?:il|elle)\s+[\p{L}]+/iu.test(part.trim());
+      const discourseInput=!correction&&isAnaphor&&previousUserStatement
+        ?previousUserStatement+' puis '+part : part;
+      // Resolve coordinated clauses as one bounded discourse before assigning actors.
+      // Preserve the original behavior for explicit corrections and unsupported syntax.
+      const parsed=correction?[{frame:correction.frame}]:
+        parseBoundedDiscourse(discourseInput,parseFrenchStatement);
+      // A trained construction is a candidate only with three diverse,
+      // explicitly annotated examples. It overrides a simplistic flat parse
+      // that may accidentally absorb a fronted adverb into the agent.
+      const learned=constructionLearner instanceof NativeConstructionLearner&&!correction
+        ?constructionLearner.parse(part):null;
+      const candidateFrames=learned?[{frame:learned}]:parsed;
+      for(const item of candidateFrames){
+        const frame=item.frame;
+        if(!frame)continue;
+        // All new candidate events must pass the shared semantic gate;
+        // a future-form candidate must never become a completed action.
+        if(frame.kind==='event'){
+          const unified=makeNativeEventFrame(frame,part);
+          if(!unified||unified.modality!=='asserted'||unified.tense==='future')continue;
+        }
+        if(correction)for(let i=frames.length-1;i>=0;i--){
+          if(frame.kind===frames[i].kind&&(frame.kind==='property'&&frame.agent===frames[i].agent
+             ||frame.kind==='event'&&eventKey(frame)===eventKey(frames[i])))frames.splice(i,1);
+        }
+        frames.push(frame);
+      }
+    }
+    // Explicit single-clause antecedent only: do not carry a whole narrative
+    // or a guessed reference through later turns.
+    const sole=parts.length===1 ? parseFrenchStatement(parts[0]) : null;
+    previousUserStatement=sole?.kind==='event'&&sole.polarity&&
+      /^[\p{Lu}][\p{L}-]+\s/u.test(String(row.content||'').trim()) ?
+      String(row.content).trim().replace(/[.!]\s*$/u,'') : null;
   }
   for(const entry of stored.slice(-10)){
     const record=typeof entry==='string'?JSON.parse(entry):entry;
@@ -148,11 +213,12 @@ function collect(history=[],stored=[]){
   return frames;
 }
 
-export function answerFrenchFromConversation({question='',history=[],storedCorrections=[]}={}){
+export function answerFrenchFromConversation({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
   const request=parseFrenchQuestion(question);
   if(!request)return null;
   let frames;
-  try{frames=collect(Array.isArray(history)?history:[],Array.isArray(storedCorrections)?storedCorrections:[]);}
+  try{frames=collect(Array.isArray(history)?history:[],Array.isArray(storedCorrections)?storedCorrections:[],
+    constructionLearner instanceof NativeConstructionLearner?constructionLearner:getNativeRuntimeConstructionLearner());}
   catch{return null;}
   let text=null;
   if(request.kind==='cause'||request.kind==='after'){
@@ -166,7 +232,7 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
   }
   if(request.kind==='actor'){
     const candidates=frames.filter(f=>f.kind==='event'&&f.predicate===request.predicate&&
-      f.patient===request.patient&&f.polarity===true);
+      possiblySamePatient(f.patient,request.patient)&&f.polarity===true);
     const distinct=[...new Set(candidates.map(f=>f.agent))];
     if(distinct.length===1)text='D’après ce que tu as indiqué, c’est '+publicLabel(distinct[0])+'.';
   }else if(request.kind==='property'){
@@ -183,4 +249,16 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
   }
   return text ? {text,source:'aura-native-local-semantics',evidence_scope:'same-session-user-statement-unverified',
     grammar_version:LOCAL_SEMANTIC_VERSION,coverage:'bounded-grammatical-question-answering'} : null;
+}
+
+// Exposed for audit and prospective counterfactual reasoning; never inserts
+// hypothetical or habitual frames into the asserted conversational memory.
+export function inspectFrenchEventRelations(source){
+ return analyzeFrenchEventRelations(source,parseFrenchStatement);
+}
+
+// One shared representation is returned for audit / causal ablation tools.
+// Its edges are descriptions of statements, never verified world history.
+export function inspectFrenchEventGraph(source){
+ return buildNativeEventGraph(source,parseFrenchStatement);
 }

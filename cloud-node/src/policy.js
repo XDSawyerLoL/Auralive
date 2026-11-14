@@ -68,6 +68,9 @@ export function publicSoul(soul) {
   const {
     current_intention: _currentIntention,
     dominant_thought: _dominantThought,
+    // This graph can contain private conversational entities and must NEVER
+    // be returned by the public soul/status endpoint.
+    concept_memory: _privateConceptMemory,
     ...safe
   } = soul;
   return safe;

@@ -51,6 +51,7 @@ jobs:
 
           cp -R cloud-node/src "$ROOT/src"
           cp -R cloud-node/data "$ROOT/data"
+          cp -R cloud-node/benchmarks "$ROOT/benchmarks"
           cp -R cloud-node/test "$ROOT/test"
           cp -R cloud-node/scripts "$ROOT/scripts"
           cp -R cloud-node/skills "$ROOT/skills"
@@ -82,6 +83,7 @@ jobs:
           test -f "$ROOT/server.js"
           test -f "$ROOT/src/server.js"
           test -s "$ROOT/data/fr_ud_gsd_compact.json"
+          test -s "$ROOT/benchmarks/fr_discourse_diagnostic_v1.json"
           test -f "$ROOT/src/agent_skills.js"
           test -f "$ROOT/test/agent_skills.test.js"
           test -f "$ROOT/skills/planning/SKILL.md"
