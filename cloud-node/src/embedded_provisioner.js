@@ -42,7 +42,13 @@ const MODEL_17B_Q4=Object.freeze({
 export function selectedEmbeddedModel(env=process.env) {
   const requested=String(env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION||'').trim();
   if(requested==='1.7b-q4')return MODEL_17B_Q4;
-  if(requested==='q4'||(env.AURA_LOCAL_LANGUAGE_ONLY==='true'&&requested!=='q8'))
+  // A managed Hostinger process frequently omits NODE_ENV, and the strict
+  // local language default is active in that situation. Prefer a smaller GGUF
+  // for a *new* installation, without discarding an existing working Q8.
+  const localByDefault=env.AURA_LOCAL_LANGUAGE_ONLY==='true' ||
+    (env.AURA_LOCAL_LANGUAGE_ONLY!=='false'
+      && env.CI!=='true'&&env.NODE_ENV!=='test');
+  if(requested==='q4'||(localByDefault&&requested!=='q8'))
     return MODEL_Q4;
   return MODEL;
 }
