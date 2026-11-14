@@ -5,6 +5,10 @@ const ACTIVE_STAGES=new Set([
  'extracting-cpu-runtime','downloading-open-model',
  'installed-verified','starting','verifying-inference'
 ]);
+const RESOURCE_BLOCKS=new Set([
+ 'embedded-insufficient-cgroup-headroom','embedded-insufficient-memory',
+ 'embedded-insufficient-cgroup-memory','embedded-thread-capacity-exhausted'
+]);
 const FATAL_CODES=new Set([
  'host-disallows-native-execution','embedded-incompatible-binary',
  'embedded-cpu-instruction-unsupported','embedded-unsupported-startup-option'
@@ -37,6 +41,10 @@ export function localDialogueReadiness({
   return {...base,phase:'retry-scheduled',reason:failure||p||status,
    retry_after_seconds:Math.max(1,Math.ceil((nextTime-now)/1000)),
    retryable:true};
+ }
+ if(!booting&&RESOURCE_BLOCKS.has(failure)){
+  return {...base,phase:'blocked',reason:failure,
+   retry_after_seconds:30,retryable:Boolean(autoProvision||runtime.installed)};
  }
  if(booting || (ACTIVE_STAGES.has(p)&&p!=='installed-verified'
     && runtime.status!=='startup-failed') ||
