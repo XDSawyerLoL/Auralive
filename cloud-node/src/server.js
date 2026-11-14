@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import Fastify from 'fastify';
 import { AiClient } from './ai.js';
-import { embeddedLanguageRuntime, shouldWarmInstalledLanguage } from './embedded_language.js';
+import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -3002,12 +3002,15 @@ export function startRuntimeLoop() {
   // Language bootstrap is independent from MySQL. The explicit Hostinger
   // auto-provision opt-in can install missing verified GGUF and llama.cpp
   // assets even when the database is down. Never run this in CI/tests.
-  if(shouldWarmInstalledLanguage()){
-    const installed=embeddedLanguageRuntime.installed();
-    const mayInstall=process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true'
-      && embeddedLanguageRuntime.canProvision();
-    if(installed||mayInstall){
-      void embeddedLanguageRuntime.start({allowProvision:mayInstall})
+  {
+    const policy=independentLocalLanguageBoot({
+      warmup:shouldWarmInstalledLanguage(),
+      installed:embeddedLanguageRuntime.installed(),
+      autoprovisionEnabled:process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED==='true',
+      canProvision:embeddedLanguageRuntime.canProvision(),
+    });
+    if(policy.start){
+      void embeddedLanguageRuntime.start({allowProvision:policy.allowProvision})
         .catch(error=>{
           app.log.warn({code:String(error?.code||'embedded-start-failed')},
             'AURA: independent local French warmup failed');
