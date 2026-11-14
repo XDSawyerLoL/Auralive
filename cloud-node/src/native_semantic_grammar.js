@@ -4,6 +4,7 @@ import {parseBoundedDiscourse} from './native_discourse_context.js';
 import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGraph} from './native_event_modality.js';
 import {makeNativeEventFrame,isNativeEventAssertable} from './native_event_frame.js';
 import {NativeConstructionLearner} from './native_construction_learning.js';
+import {getNativeRuntimeConstructionLearner} from './native_construction_runtime.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -216,7 +217,8 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
   const request=parseFrenchQuestion(question);
   if(!request)return null;
   let frames;
-  try{frames=collect(Array.isArray(history)?history:[],Array.isArray(storedCorrections)?storedCorrections:[],constructionLearner);}
+  try{frames=collect(Array.isArray(history)?history:[],Array.isArray(storedCorrections)?storedCorrections:[],
+    constructionLearner instanceof NativeConstructionLearner?constructionLearner:getNativeRuntimeConstructionLearner());}
   catch{return null;}
   let text=null;
   if(request.kind==='cause'||request.kind==='after'){
