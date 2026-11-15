@@ -1,0 +1,87 @@
+name: AURA exact production Q4 French conversation proof
+on:
+  push:
+    branches:
+      - fix/aura-local-gguf-speech-unblock-20261115
+    paths:
+      - .github/workflows/aura-exact-q4-french-proof.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-q4-conversation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download verified standalone llama-server for AURA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/native"
+          gh run download 43720654820 --repo "$GITHUB_REPOSITORY" --name aura-hostinger-static-musl --dir "$RUNNER_TEMP/native"
+          test -f "$RUNNER_TEMP/native/native/linux-x64/llama-server"
+          (cd "$RUNNER_TEMP/native/native/linux-x64" && sha256sum -c <(awk '{print $1"  llama-server"}' llama-server.sha256))
+          chmod u+x "$RUNNER_TEMP/native/native/linux-x64/llama-server"
+          "$RUNNER_TEMP/native/native/linux-x64/llama-server" --version
+      - name: Download actual 484 MB Q4 model used on Hostinger and verify SHA256
+        run: |
+          curl -fL --retry 3 --retry-delay 3 --connect-timeout 20 --max-time 450 \
+            'https://huggingface.co/tauqir02/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf' \
+            -o "$RUNNER_TEMP/Qwen3-0.6B-Q4_K_M.gguf"
+          echo "373db06783953f0981572d008f183eb2167b93304f5adbf7c4ce6ed6a91ee437  $RUNNER_TEMP/Qwen3-0.6B-Q4_K_M.gguf" | sha256sum -c
+      - name: Boot exact Q4 on 1 CPU thread and prove two real French answers
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="$RUNNER_TEMP/native/native/linux-x64/llama-server"
+          MODEL="$RUNNER_TEMP/Qwen3-0.6B-Q4_K_M.gguf"
+          export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+          "$BIN" -m "$MODEL" --host 127.0.0.1 --port 19474 \
+            --ctx-size 768 --threads 1 --threads-batch 1 --threads-http 1 \
+            --parallel 1 --batch-size 32 --ubatch-size 16 --no-warmup \
+            > "$RUNNER_TEMP/native-stderr.log" 2>&1 &
+          PID=$!
+          trap 'kill "$PID" 2>/dev/null || true' EXIT
+          ready=0
+          for i in $(seq 1 150); do
+            if curl -fsS --max-time 2 http://127.0.0.1:19474/health > /dev/null; then ready=1; break; fi
+            if ! kill -0 "$PID" 2>/dev/null; then
+              echo "Q4 server exited before health"; tail -c 700 "$RUNNER_TEMP/native-stderr.log"; exit 1
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const prompts=[
+              'Bonjour AURA. Présente-toi en une phrase simple en français.',
+              'Si je dis que ma porte est fermée et ensuite que je l’ouvre, dans quel état est-elle maintenant ? Réponds en français.'
+            ];
+            const responses=[];
+            for(const prompt of prompts){
+              const began=Date.now();
+              const r=await fetch('http://127.0.0.1:19474/v1/chat/completions',{
+                method:'POST',headers:{'content-type':'application/json'},
+                body:JSON.stringify({model:'local',stream:false,temperature:0.25,max_tokens:100,
+                  chat_template_kwargs:{enable_thinking:false},
+                  messages:[{role:'system',content:'Réponds en français, brièvement, sans exposer de raisonnement interne.'},
+                    {role:'user',content:prompt}]}),
+                signal:AbortSignal.timeout(90000)});
+              assert.equal(r.status,200);
+              const data=await r.json();
+              const answer=String(data.choices?.[0]?.message?.content||'').trim();
+              const tokens=Number(data.usage?.completion_tokens||0);
+              assert.ok(tokens>0,'No real token accounting');
+              assert.ok(answer.length>5,'No French utterance');
+              assert.ok(!/<think>|<\/think>/i.test(answer),'Internal thought leaked');
+              responses.push({prompt,answer:answer.slice(0,550),tokens,elapsed_ms:Date.now()-began});
+            }
+            console.log('REAL_EXACT_Q4_DIALOGUE='+JSON.stringify(responses));
+          })().catch(e=>{console.error(String(e));process.exitCode=1});
+          NODE
