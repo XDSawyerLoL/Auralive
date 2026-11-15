@@ -425,11 +425,21 @@ function freePort(){
     });
   });
 }
+export function hasBundledStaticCandidate(root=process.cwd()){
+  const dir=path.join(root,'native','linux-x64');
+  try{
+    const digest=String(fs.readFileSync(path.join(dir,'llama-server.sha256'),'utf8')).trim();
+    return /^[0-9a-f]{64}$/.test(digest)
+      && fs.statSync(path.join(dir,'llama-server')).isFile();
+  }catch{return false;}
+}
+
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=fetch,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
-    provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
-    Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
+    provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null,
+    detectStaticCandidate=hasBundledStaticCandidate}={}){
+    Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner,detectStaticCandidate});
     this.provisionedPaths=null;this.canonicalSource=false;
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
@@ -523,6 +533,7 @@ export class EmbeddedLanguageRuntime {
       // File basename only, never disclose filesystem paths or home folder.
       active_model_profile:item.modelFound&&typeof item.gguf==='string'&&item.gguf?path.basename(item.gguf):null,
       model_loaded_verified:Boolean(this.ready&&this.lastProbeAt),
+      bundled_static_candidate:Boolean(this.detectStaticCandidate?.()),
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -566,8 +577,14 @@ export class EmbeddedLanguageRuntime {
     const hasInstallation=this.installed();
     const unresolvedLibraries=this.lastFailure
       && classifyEmbeddedFailure(this.lastFailure).code==='embedded-shared-library-unresolved';
+    const bundledStaticPreferred=allowProvision && this.canProvision()
+      && !this.canonicalSource && Boolean(this.detectStaticCandidate?.());
+    // A cached dynamic server can be present but unable to serve a model on
+    // shared hosting. Prefer the packaged standalone musl binary, verified
+    // by EmbeddedProvisioner, even when the old cache looks installed.
     const needsCanonical = allowProvision && this.canProvision()
-      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource));
+      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource)
+        || bundledStaticPreferred);
     if(!hasInstallation && !needsCanonical)return false;
     this.booting=needsCanonical ? this.installAndBoot() : this.bootWithExecutable();
     try{return await this.booting;}
