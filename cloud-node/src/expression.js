@@ -21,7 +21,7 @@ export class ExpressionLayer {
   }
 
   async semanticSupport(plan, context = '', options = {}) {
-    if (process.env.AURA_NATIVE_FRENCH_MODE==='local-only') return '';
+    if (config.localLanguageOnly || process.env.AURA_NATIVE_FRENCH_MODE==='local-only') return '';
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
@@ -106,8 +106,26 @@ export class ExpressionLayer {
           ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
       }
       if(nativeMode==='local-only'){
+        // The symbolic grammar does not cover free conversation. A verified
+        // GGUF model or a local bridge may verbalize it, but NEVER Groq or
+        // OpenRouter. In the previous path this returned '' before trying
+        // either local generator, even when the model was responsive.
+        try {
+          const answer=normalize(await this.language.generate(plan,{
+            maxTokens:Math.max(120,Math.min(Number(options.maxTokens||650),1200)),
+            taskRole:String(options.taskRole||'french'),
+            localOnly:true,
+          }));
+          if(answer){
+            this.lastError='';
+            this.lastMode='local-generative-language';
+            return answer;
+          }
+        }catch(error){
+          this.lastError=normalize(error?.message||error).slice(0,500);
+        }
+        this.lastError=this.language.lastError||this.lastError||'local-generative-model-unavailable';
         this.lastMode='native-corpus-uncovered';
-        // No covert Groq/OpenRouter/remote fallback in local-only mode.
         return '';
       }
     }
@@ -142,6 +160,9 @@ export class ExpressionLayer {
   async diagnostic() {
     const language = await this.language.status();
     const corpusOnly=process.env.AURA_NATIVE_FRENCH_MODE==='local-only';
+    const strictLocal=corpusOnly||Boolean(config.localLanguageOnly);
+    const localModelReady=Boolean(language.verified_ready &&
+      ['hostinger-embedded','runtime-local'].includes(language.last_mode));
     const corpusReady=nativeFrenchCorpus.status().ready;
     return {
       version: ExpressionLayer.VERSION,
@@ -149,15 +170,15 @@ export class ExpressionLayer {
       corpus_local:nativeFrenchCorpus.status(),
       corpus_mode:String(process.env.AURA_NATIVE_FRENCH_MODE||'off'),
       corpus_is_open_domain:false,
-      natural_french_ready: corpusOnly?false:Boolean(language.verified_ready),
+      natural_french_ready: strictLocal?localModelReady:Boolean(language.verified_ready),
       mode: corpusOnly
-        ? (corpusReady?'native-corpus-limited':'native-corpus-not-installed')
+        ? (localModelReady?'learned-local-language-model':corpusReady?'native-corpus-limited':'native-corpus-not-installed')
         : language.verified_ready
         ? 'learned-language-model'
         : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
-      scripted_normal_path: corpusOnly,
+      scripted_normal_path: corpusOnly&&!localModelReady,
       strict_natural_language: Boolean(config.frenchLanguageRequired),
-      remote_language_calls_permitted: !corpusOnly,
+      remote_language_calls_permitted: !strictLocal,
       native_corpus_fully_fluent:false,
       fallback_count: this.fallbackCount,
       last_mode: this.lastMode,
