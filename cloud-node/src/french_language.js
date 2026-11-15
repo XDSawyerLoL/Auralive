@@ -725,7 +725,10 @@ export class FrenchLanguageFaculty {
     ].join(' ');
   }
 
-  async generate(plan, { maxTokens = 700, taskRole = 'french' } = {}) {
+  async generate(plan, { maxTokens = 700, taskRole = 'french', localOnly = false } = {}) {
+    // A caller may require an offline response for this individual turn. The
+    // global flag also remains authoritative. Neither may enable remote AI.
+    const strictlyLocal = Boolean(localOnly || config.localLanguageOnly);
     const prompt = this.prompt(plan);
     const system = this.system(plan);
     const started = Date.now();
@@ -744,7 +747,7 @@ export class FrenchLanguageFaculty {
     // GroqCloud Free is the preferred conversational model when the operator
     // explicitly confirms their organization has NO paid Developer billing.
     // Never interpret a configured key alone as proof of a free plan.
-    if(!config.localLanguageOnly&&this.groq?.enabled){
+    if(!strictlyLocal&&this.groq?.enabled){
       try{
         const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
         let result=await this.groq.generate(
@@ -822,7 +825,7 @@ export class FrenchLanguageFaculty {
     const embeddedAnswer = await tryEmbedded();
     if (embeddedAnswer) return embeddedAnswer;
 
-    if (!config.localLanguageOnly&&this.federation?.enabled) {
+    if (!strictlyLocal&&this.federation?.enabled) {
       try {
         // The full semantic JSON is appropriate for larger models, but the
         // free router may select a small or reasoning-heavy model. Use a
