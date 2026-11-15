@@ -39,6 +39,32 @@ for(const path of ['/healthz','/api/build','/api/language/ready','/api/language/
     record.failure_code=String(body?.failure_code||'').slice(0,120);
     record.status=String(body?.status||'').slice(0,100);
     record.boot_profile=String(body?.boot_profile||'').slice(0,50);
+    record.launch_mode=String(body?.launch_mode||'').slice(0,60);
+    record.failure_stage=String(body?.failure_stage||'').slice(0,80);
+    record.log_signals=Array.isArray(body?.log_signals)
+      ?body.log_signals.filter(x=>typeof x==='string').map(x=>x.slice(0,60)).slice(0,20):[];
+    record.process_exit={
+      code:Number.isInteger(body?.process_exit?.code)?body.process_exit.code:null,
+      signal:String(body?.process_exit?.signal||'').slice(0,20),
+    };
+    record.boot_attempts=Array.isArray(body?.boot_attempts)
+      ?body.boot_attempts.slice(-4).map(item=>({
+        profile:String(item.profile||'').slice(0,40),
+        outcome:String(item.outcome||'').slice(0,50),
+        failure_code:String(item.failure_code||'').slice(0,80),
+        exit_code:Number.isInteger(item.exit_code)?item.exit_code:null,
+        failure_stage:String(item.failure_stage||'').slice(0,80),
+        signals:Array.isArray(item.signals)?item.signals.slice(0,12):[],
+        health_seen:item.health_seen===true,
+        inference_verified:item.inference_verified===true,
+      })):[];
+    const mem=body?.memory_preflight||{};
+    record.memory_preflight={
+      safe_to_start:mem.safe_to_start===true,
+      limit_mb:Number.isFinite(mem.limit_mb)?mem.limit_mb:null,
+      available_mb:Number.isFinite(mem.available_mb)?mem.available_mb:null,
+      required_mb:Number.isFinite(mem.required_mb)?mem.required_mb:null,
+    };
    }
   }else record.response_type='non-json';
  }catch(error){record.error_code=String(error?.cause?.code||error?.name||'network-failed').slice(0,80);}
