@@ -4,6 +4,7 @@ Ce fichier propose la configuration à inscrire **sur l'environnement Node Hosti
 
 ```dotenv
 AURA_LOCAL_LANGUAGE_ONLY=true
+AURA_NATIVE_FRENCH_MODE=local-only
 AURA_ZERO_COST_MODE=true
 AURA_GROQ_FREE_ENABLED=false
 AURA_FREE_FEDERATION_ENABLED=false
@@ -13,6 +14,12 @@ AURA_EMBEDDED_AUTOPROVISION_ENABLED=true
 AURA_EMBEDDED_LANGUAGE_QUANTIZATION=q4
 AURA_LOCAL_ENCODER_ENABLED=false
 ```
+
+## Parcours du dialogue (correction du 15 novembre 2026)
+
+En mode `AURA_NATIVE_FRENCH_MODE=local-only`, AURA essaie d'abord une réponse symbolique fondée sur la conversation admise et sur le noyau. Quand cette voie ne couvre pas la demande, elle essaie **le modèle GGUF réellement responsive** ou un pont d'inférence local. L'absence d'un modèle vérifié reste une absence de réponse, et non une phrase simulée. Ni Groq ni OpenRouter ne sont appelés, même si une ancienne clé est encore configurée.
+
+Avec `AURA_NATIVE_FRENCH_MODE=prefer-local`, le modèle local vérifié est aussi essayé avant Groq, mais **ce mode autorise un repli distant**. Pour interdire tout fournisseur distant sur l'ensemble de la voie linguistique, garder `AURA_LOCAL_LANGUAGE_ONLY=true` et le mode `local-only` comme ci-dessus. Aucun de ces réglages ne résout à lui seul une limite mémoire, une erreur de bibliothèque native ou un refus d'exécuter un processus par Hostinger. `ready` ne peut être déclaré qu'après une inférence réellement réussie.
 
 ## Modèles réellement génératifs
 
