@@ -81,3 +81,32 @@ test('local-only mode never contacts Groq or OpenRouter when the GGUF answer is 
   else process.env.AURA_NATIVE_FRENCH_MODE=previous;
  }
 });
+
+test('prefer-local tries GGUF before an available Groq model',async()=>{
+ const previous=process.env.AURA_NATIVE_FRENCH_MODE;
+ process.env.AURA_NATIVE_FRENCH_MODE='prefer-local';
+ let remote=0,local=0;
+ try{
+  const expression=new ExpressionLayer({
+   enabled:true,
+   groq:{enabled:true,snapshot:()=>({enabled:true}),
+     generate:async()=>{remote++;return {answer:'Texte venu de Groq.',model:'free'};}},
+   federation:{enabled:false,snapshot:()=>({enabled:false})},
+  },{deterministicReply:()=>''});
+  expression.language.embedded={
+   status:()=>({ready:true,probe_verified:true,installed:true,
+     provisioning:{stage:'installed-verified'}}),
+   generate:async()=>{local++;return 'Je peux répondre directement depuis le moteur local.';},
+  };
+  const answer=await expression.verbalize({
+   act:'respond',facts:[],user_text:'Explique cet événement.',
+  });
+  assert.equal(answer,'Je peux répondre directement depuis le moteur local.');
+  assert.equal(local,1);
+  assert.equal(remote,0);
+  assert.equal(expression.language.lastBackend,'hostinger-embedded-llama');
+ }finally{
+  if(previous===undefined)delete process.env.AURA_NATIVE_FRENCH_MODE;
+  else process.env.AURA_NATIVE_FRENCH_MODE=previous;
+ }
+});
