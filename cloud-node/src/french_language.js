@@ -725,10 +725,11 @@ export class FrenchLanguageFaculty {
     ].join(' ');
   }
 
-  async generate(plan, { maxTokens = 700, taskRole = 'french', localOnly = false } = {}) {
-    // A caller may require an offline response for this individual turn. The
-    // global flag also remains authoritative. Neither may enable remote AI.
+  async generate(plan, { maxTokens = 700, taskRole = 'french', localOnly = false, preferLocal = false } = {}) {
+    // Local-only prohibits remote requests. Prefer-local tries the verified
+    // embedded model first, but may fall back to a configured free provider.
     const strictlyLocal = Boolean(localOnly || config.localLanguageOnly);
+    const localFirst = Boolean(strictlyLocal || preferLocal);
     const prompt = this.prompt(plan);
     const system = this.system(plan);
     const started = Date.now();
@@ -747,6 +748,7 @@ export class FrenchLanguageFaculty {
     // GroqCloud Free is the preferred conversational model when the operator
     // explicitly confirms their organization has NO paid Developer billing.
     // Never interpret a configured key alone as proof of a free plan.
+    const tryGroq=async()=>{
     if(!strictlyLocal&&this.groq?.enabled){
       try{
         const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
@@ -793,6 +795,12 @@ export class FrenchLanguageFaculty {
         this.lastError=safeError(error);
       }
     }
+      return '';
+    };
+    if(!localFirst){
+      const result=await tryGroq();
+      if(result)return result;
+    }
     // A broken optional native runtime must never block a configured cloud speech provider.
     // Run local inference only when health and inference have already been verified.
     const tryEmbedded = async () => {
@@ -824,6 +832,10 @@ export class FrenchLanguageFaculty {
     // A mere installed binary is not enough: readiness is checked above.
     const embeddedAnswer = await tryEmbedded();
     if (embeddedAnswer) return embeddedAnswer;
+    if(localFirst){
+      const result=await tryGroq();
+      if(result)return result;
+    }
 
     if (!strictlyLocal&&this.federation?.enabled) {
       try {
