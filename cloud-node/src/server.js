@@ -2381,12 +2381,13 @@ app.post('/api/cognition/initiative/feedback', async (request, reply) => {
 });
 
 async function localLanguageSnapshot(){
+  const localOnly=Boolean(config.localLanguageOnly || process.env.AURA_NATIVE_FRENCH_MODE==='local-only');
   let bridgeOnline=false;
-  if(config.localLanguageOnly&&bridge.enabled){
+  if(localOnly&&bridge.enabled){
     try{bridgeOnline=await bridge.workerOnline();}catch{}
   }
   return localDialogueReadiness({
-    localOnly:config.localLanguageOnly,
+    localOnly,
     runtime:embeddedLanguageRuntime.status(),
     booting:Boolean(embeddedLanguageRuntime.booting),
     bridgeOnline,
@@ -2441,6 +2442,7 @@ app.post('/api/chat', async (request, reply) => {
   const curiosityItem = null;
   const answer = unavailable ? '' : baseAnswer;
   const languageRuntime=unavailable?await localLanguageSnapshot():null;
+  const localInferenceMissing=Boolean(unavailable && languageRuntime?.local_only && !languageRuntime?.ready);
   cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
@@ -2454,12 +2456,17 @@ app.post('/api/chat', async (request, reply) => {
     language_runtime:languageRuntime,
     retryable: unavailable&&Boolean(languageRuntime?.retryable),
     service_status: unavailable ? {
-      code: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+      code: localInferenceMissing?'local-inference-not-ready'
+        :process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'local-corpus-unsupported-intent':'french-inference-unavailable',
-      message: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+      message: localInferenceMissing
+        ?'Le moteur GGUF local n’a pas validé son démarrage ni son inférence. Aucun fournisseur distant sollicité.'
+        :process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'Le moteur local ne sait pas encore formuler cet acte de langage. Aucun fournisseur distant sollicité.'
         :'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
-      recovery: process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
+      recovery: localInferenceMissing
+        ?'Consulter /api/language/embedded/status : vérifier le dernier échec, la mémoire et le modèle installé.'
+        :process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'Enrichir les schémas sémantiques et le réalisateur grammatical local.'
         :'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
     } : null,
