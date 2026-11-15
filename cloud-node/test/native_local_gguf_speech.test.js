@@ -24,7 +24,7 @@ test('local-only French corpus falls through to a verified GGUF and never sends 
      boot_profile:'low-memory',provisioning:{stage:'installed-verified'}}),
    generate:async(prompt,system)=>{
     offline++;
-    assert.match(prompt,/français|AURA|problème/i);
+    assert.match(prompt,/connexion est-elle lente/i);
     assert.match(system,/français naturel/i);
     return 'Je peux examiner plusieurs causes possibles, sans affirmer laquelle est vérifiée.';
    },
