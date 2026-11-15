@@ -39,6 +39,15 @@ for(const path of ['/healthz','/api/build','/api/language/ready','/api/language/
     record.failure_code=String(body?.failure_code||'').slice(0,120);
     record.status=String(body?.status||'').slice(0,100);
     record.boot_profile=String(body?.boot_profile||'').slice(0,50);
+    record.model_profile=String(body?.active_model_profile||'').slice(0,120);
+    record.model_requested=String(body?.requested_model_profile||'').slice(0,120);
+    record.resource_before_start={
+      limit_mb:Number.isFinite(body?.resource_before_start?.limit_mb)?body.resource_before_start.limit_mb:null,
+      current_mb:Number.isFinite(body?.resource_before_start?.current_mb)?body.resource_before_start.current_mb:null,
+      oom_events:Number.isInteger(body?.resource_before_start?.oom_events)?body.resource_before_start.oom_events:null,
+      oom_kills:Number.isInteger(body?.resource_before_start?.oom_kills)?body.resource_before_start.oom_kills:null,
+    };
+    record.oom_kills_during_start=Number.isInteger(body?.oom_kills_during_start)?body.oom_kills_during_start:null;
     record.launch_mode=String(body?.launch_mode||'').slice(0,60);
     record.failure_stage=String(body?.failure_stage||'').slice(0,80);
     record.log_signals=Array.isArray(body?.log_signals)
