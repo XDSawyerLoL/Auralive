@@ -80,6 +80,26 @@ for(const path of ['/healthz','/api/build','/api/language/ready','/api/language/
  record.elapsed_ms=Date.now()-started;
  report.endpoints.push(record);
 }
+// One harmless public chat turn is the only honest end-to-end test of speech.
+const trial={path:'/api/chat',test:'short-unscripted-french-reply',reachable:false,success:false};
+try{
+ const response=await fetch(base+'/api/chat',{
+  method:'POST',signal:AbortSignal.timeout(18000),
+  headers:{accept:'application/json','content-type':'application/json',
+   'user-agent':'AURA-incident-dialogue-test/2026-11-15'},
+  body:JSON.stringify({text:'Bonjour AURA. Peux-tu me répondre naturellement en français, et me dire ce que tu comprends de ce message ?'}),
+ });
+ trial.http_status=response.status;
+ trial.reachable=true;
+ const data=await response.json();
+ trial.answer=typeof data.answer==='string'?data.answer.slice(0,400):'';
+ trial.language_unavailable=data.language_unavailable===true;
+ trial.service_status_code=String(data.service_status?.code||'').slice(0,100);
+ trial.response_kind=String(data.response_kind||'').slice(0,100);
+ trial.success=Boolean(response.ok&&!trial.language_unavailable&&trial.answer.trim().length>=15);
+}catch(error){trial.error_code=String(error?.cause?.code||error?.name||'chat-request-failed').slice(0,70);}
+report.dialogue_test=trial;
+report.dialogue_proven=trial.success;
 const embedded=report.endpoints.find(x=>x.path==='/api/language/embedded/status');
 report.inference_proven=Boolean(embedded?.ready&&embedded?.probe_verified);
 report.reason=!report.dns?.resolved?'dns-not-resolved'
