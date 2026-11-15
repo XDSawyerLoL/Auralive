@@ -655,7 +655,11 @@ export class EmbeddedLanguageRuntime {
     child.on('exit',(code,signal)=>{
       if(this.child===child){
         this.lastProcessExit={code:code??null,signal:signal??null};
-        if(this.lastFailure && signal==='SIGTERM')return;
+        // The watchdog can time out while the native process is alive,
+        // then terminate it. Its eventual exit may be code 0 and no signal.
+        // Preserve the *first* failure (notably health-timeout), otherwise
+        // the operator only sees a misleading clean-exit-before-inference.
+        if(this.lastFailure)return;
         this.failureStage='native-process-exit';
         this.fail((stderr||stdout||'')+
           (code===0?(this.ready?' embedded-native-stopped-after-serving'
