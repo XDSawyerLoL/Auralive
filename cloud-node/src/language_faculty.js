@@ -4,7 +4,7 @@ import { one, query } from './db.js';
 import { retrieveExperiences } from './memory_retrieval.js';
 import { consolidateLessons } from './memory_consolidation.js';
 import {parseFrenchCorrection} from './native_semantic_grammar.js';
-import {parseNativeSessionDisclosure,NATIVE_SESSION_FACT_SCHEMA} from './native_session_discourse.js';
+import {parseNativeSessionDisclosure,parseNativeReplyToLearningPrompt,NATIVE_SESSION_FACT_SCHEMA} from './native_session_discourse.js';
 
 const VERSION = 'aura-language-faculty-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -72,7 +72,7 @@ export class LanguageFaculty {
       || provider.startsWith('hostinger-embedded-llama');
   }
 
-  async rememberCorrection({ sessionId, discourse, userText }) {
+  async rememberCorrection({ sessionId, discourse, userText, recentDialogue=[] }) {
     const id=clean(sessionId,96);
     if(!id)return false;
     // A concrete grammatical correction has a scoped, explicit representation.
@@ -85,7 +85,18 @@ export class LanguageFaculty {
     );
     // Session-specific declarative teaching, not a global user profile.
     // Each disclosure can be corrected by a later statement in the same SQL session.
-    const nativeFact=parseNativeSessionDisclosure(userText);
+    // The teaching question must be AURA's *immediately preceding* turn
+    // from the SQL session, not a guessed prompt or text from another user.
+    const recent=(Array.isArray(recentDialogue)?recentDialogue:[])
+      .filter(row=>/^\\d+$/.test(String(row?.id??''))&&
+        ['user','assistant'].includes(String(row?.role)))
+      .slice(0,32).sort((a,b)=>Number(a.id)-Number(b.id));
+    const ingress=recent.findLastIndex(row=>row.role==='user'&&
+      clean(row.content,240)===clean(userText,240));
+    const preceding=ingress>0?recent[ingress-1]:null;
+    const nativeFact=parseNativeSessionDisclosure(userText)||
+      (preceding?.role==='assistant'
+        ?parseNativeReplyToLearningPrompt(userText,preceding.content):null);
     if(nativeFact)await this.store.query(
       'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
       [id,'native-session-disclosure',JSON.stringify(nativeFact),
