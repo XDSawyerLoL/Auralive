@@ -107,7 +107,7 @@ function parseQuestion(question){
   return {kind:'preference'};
  if(/^(?:qu'est ce que j'aime|j'aime quoi|tu te souviens de ce que j'aime|quels sont mes gouts)$/.test(q))
   return {kind:'likes'};
- if(/^(?:quel est mon objectif|et mon objectif|tu te souviens de mon objectif|qu'est ce que je veux faire|qu'est ce que je souhaite faire)$/.test(q))
+ if(/^(?:quel est mon objectif|mon objectif|et mon objectif|tu te souviens de mon objectif|qu'est ce que je veux faire|qu'est ce que je souhaite faire)$/.test(q))
   return {kind:'goal'};
  const like=q.match(/^est ce que j'aime (.+)$/u);
  if(like&&valid(like[1]))return {kind:'likes-yes-no',value:like[1]};
