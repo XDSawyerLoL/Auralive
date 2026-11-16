@@ -2946,9 +2946,12 @@ export class CognitiveKernel {
       brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
       response_kind: languageUnavailable ? 'model-unavailable'
-        :(this.expression.lastMode==='native-social-kernel'
-          ||this.expression.lastMode==='native-corpus-language')
+        :String(this.expression.lastMode||'').startsWith('native-')
           ?'native-kernel':'model-generated',
+      speech_provenance: String(this.expression.lastMode||'unavailable').slice(0,80),
+      pretrained_language_generation_used:
+        !String(this.expression.lastMode||'').startsWith('native-')&&
+        Boolean(answer),
       retryable: languageUnavailable,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,
