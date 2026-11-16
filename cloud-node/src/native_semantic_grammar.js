@@ -5,6 +5,7 @@ import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGra
 import {makeNativeEventFrame,isNativeEventAssertable} from './native_event_frame.js';
 import {NativeConstructionLearner} from './native_construction_learning.js';
 import {getNativeRuntimeConstructionLearner} from './native_construction_runtime.js';
+import {nativeQuestionLearner} from './native_question_learning.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -83,6 +84,12 @@ export function parseFrenchStatement(text){
 }
 
 export function parseFrenchQuestion(text){
+  // Supervised interrogative grammar. This only recognizes a question;
+  // answers still require independent user-attributed event evidence.
+  if(process.env.AURA_NATIVE_QUESTIONS_ENABLED!=='false'){
+    const acquired=nativeQuestionLearner().parse(text);
+    if(acquired)return acquired;
+  }
   const q=words(text).replace(/^et\s+|^alors\s+/u,'').replace(/\?$/,'').trim();
   if(!/[?？]\s*$/u.test(String(text).trim())&&!/^(?:qui|pourquoi|de quelle couleur|est ce que)/.test(q))return null;
   // A clitic object is recoverable only when the session contains a
