@@ -48,3 +48,33 @@ test('negation, hypothetical, future, and unknown summaries produce no invented 
   'Ce matin, Léa a fermé le coffre.'
  ]),null);
 });
+
+
+test('production expression layer verbalizes an actual trained summary without invoking Qwen/Groq',async()=>{
+ const {ExpressionLayer}=await import('../src/expression.js');
+ const prior=process.env.AURA_NATIVE_FRENCH_MODE;
+ process.env.AURA_NATIVE_FRENCH_MODE='native-acquired';
+ let pretrainedCalls=0;
+ try{
+  const layer=new ExpressionLayer({
+   enabled:true,generate:async()=>{pretrainedCalls++;return 'Qwen';}
+  },{deterministicReply:()=>''});
+  layer.language.generate=async()=>{pretrainedCalls++;return 'Qwen';};
+  const answer=await layer.verbalize({
+   act:'respond',facts:[],user_text:"Récapitule ce que je t'ai dit ?",
+   immediate_dialogue_context:[
+    {role:'user',content:'Ce matin, Léa a fermé le coffre.'},
+    {role:'assistant',content:'Je prends note.'},
+    {role:'user',content:'Au bureau, Fatou a signé le dossier.'}
+   ]
+  });
+  assert.match(answer,/Léa aurait fermé le coffre/);
+  assert.match(answer,/Fatou aurait signé le dossier/);
+  assert.equal(pretrainedCalls,0);
+  assert.equal(layer.lastMode,'native-grammar-grounded');
+  assert.equal(layer.language.lastNucleusContract.accepted,true);
+ }finally{
+  if(prior===undefined)delete process.env.AURA_NATIVE_FRENCH_MODE;
+  else process.env.AURA_NATIVE_FRENCH_MODE=prior;
+ }
+});
