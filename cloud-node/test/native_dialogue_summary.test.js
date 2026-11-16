@@ -78,3 +78,47 @@ test('production expression layer verbalizes an actual trained summary without i
   else process.env.AURA_NATIVE_FRENCH_MODE=prior;
  }
 });
+
+
+test('AURA explicitly asks which actor is intended instead of hallucinating',async()=>{
+ const {ExpressionLayer}=await import('../src/expression.js');
+ const prior=process.env.AURA_NATIVE_FRENCH_MODE;
+ process.env.AURA_NATIVE_FRENCH_MODE='native-acquired';
+ let calls=0;
+ try{
+  const layer=new ExpressionLayer({
+   enabled:true,generate:async()=>{calls++;throw Error('Qwen not allowed');}
+  },{deterministicReply:()=>''});
+  layer.language.generate=async()=>{calls++;throw Error('Qwen not allowed');};
+  const reply=await layer.verbalize({
+   act:'respond',user_text:'Qui a fermé la porte ?',facts:[],
+   immediate_dialogue_context:[
+    {role:'user',content:'Léa a fermé la porte.'},
+    {role:'assistant',content:'D’accord.'},
+    {role:'user',content:'Fatou a fermé la porte.'}
+   ]
+  });
+  assert.match(reply,/Léa et Fatou/);
+  assert.match(reply,/De quelle personne parles-tu/);
+  assert.equal(layer.lastMode,'native-discourse-clarification');
+  assert.equal(calls,0);
+ }finally{
+  if(prior===undefined)delete process.env.AURA_NATIVE_FRENCH_MODE;
+  else process.env.AURA_NATIVE_FRENCH_MODE=prior;
+ }
+});
+test('ambiguity clarification refuses assistant-invented and conditional actors',async()=>{
+ const {clarifyFrenchAmbiguity}=await import('../src/native_semantic_grammar.js');
+ assert.equal(clarifyFrenchAmbiguity({
+  question:'Qui a fermé la porte ?',history:[
+   {role:'user',content:'Léa a fermé la porte.'},
+   {role:'assistant',content:'Fatou a fermé la porte.'}
+  ]
+ }),null);
+ assert.equal(clarifyFrenchAmbiguity({
+  question:'Qui a fermé la porte ?',history:[
+   {role:'user',content:'Léa a fermé la porte.'},
+   {role:'user',content:'Si Fatou a fermé la porte, alors je serai surpris.'}
+  ]
+ }),null);
+});
