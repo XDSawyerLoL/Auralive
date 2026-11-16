@@ -106,8 +106,26 @@ export class ExpressionLayer {
           ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
       }
       if(nativeMode==='native-acquired'){
-        // Strict developmental mode: do not borrow Qwen, Groq or another LLM.
-        // Only learned local structures are admitted; unknown intents abstain.
+        // A visibly attributed communication-repair utterance prevents a
+        // silent chat. This is a bounded built-in clarification, NOT language
+        // learned by training and NOT a pretence of open-domain fluency.
+        // It is allowed only on an ordinary user question; other nucleus
+        // decisions keep their safety-specific speech contracts.
+        if(plan?.act==='respond'&&normalize(plan.user_text)){
+          const repair="Je n'ai pas encore appris à répondre correctement à cette question. Peux-tu me donner un exemple ou préciser ce que tu veux savoir ?";
+          const checked=validateNucleusSpeech(plan,repair);
+          this.language.lastNucleusContract={
+            ...checked,origin:'AURA.native-conversation-repair-v1'};
+          if(checked.accepted){
+            this.lastMode='native-acquired-clarification';
+            this.lastError='native-construction-out-of-coverage';
+            this.language.lastBackend='aura-native-clarification-rule';
+            this.language.lastModel='';
+            this.language.lastLatencyMs=0;
+            this.language.lastError='native-construction-out-of-coverage';
+            return repair;
+          }
+        }
         this.lastMode='native-acquired-out-of-coverage';
         return '';
       }
