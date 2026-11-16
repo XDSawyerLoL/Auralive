@@ -61,3 +61,16 @@ Définir cette variable dans l'environnement Node.js **existant** de Hostinger, 
 Un `ready=true` dans ce mode indique uniquement la disponibilité **des constructions bornées** ; il ne prouve pas une conversation ouverte naturelle. La synthèse vocale fr-FR requiert encore une voix locale disponible dans le navigateur et une permission utilisateur. **Aucune vérification de déploiement et de sortie audio réelle sur Hostinger n'a encore été obtenue pour cette version.**
 
 La maîtrise d'une conversation complexe nouvelle n'est pas démontrée, malgré des tests unitaires réussis. Les prochaines évaluations doivent inclure des dialogues humains réellement inédits, les contextes longs, les sous-entendus et le transfert à des domaines non enseignés.
+
+
+## 16 novembre, passage du questionnaire au dialogue contextualisé
+
+La couche `native_semantic_grammar.js` peut désormais produire un **résumé attribué de plusieurs tours** (jusqu'à quatre événements sélectionnés dans une fenêtre bornée), et répondre à « Qu'est-ce que tu sais sur Léa ? ». Elle reprend les noms et articles effectivement présents dans les messages de l'utilisateur pour éviter de produire « lea a fermé coffre ». Les assertions corrigées ne réapparaissent pas ; les phrases de l'assistant ne deviennent jamais des preuves.
+
+Quand deux auteurs différents sont associés à la même action sur le même objet, `clarifyFrenchAmbiguity` renvoie une **question précise** au lieu d'en désigner un arbitrairement. Cette sortie est intégrée à `ExpressionLayer` uniquement dans le mode `AURA_NATIVE_FRENCH_MODE=native-acquired`, sans recours à Qwen. Les interrogations portant sur l'objet d'une action (« Qu'a ouvert Léa ? », « Qu'est-ce que Léa a ouvert ? ») sont désormais résolues uniquement si un seul objet correspond à l'événement rapporté.
+
+Ces améliorations sont des règles de composition et de restitution conditionnées par des constructions précédemment apprises ; elles **ne constituent pas** un modèle neuronal entraîné sur des conversations libres. Le mode natif peut encore s'abstenir ou demander une clarification pour une formulation jamais rencontrée, plutôt que d'inventer.
+
+Tests spécifiques de la nouvelle itération : plusieurs événements dans le même résumé, filtrage par acteur, révision après correction, refus des hypothèses et négations, intégration réelle à `ExpressionLayer` sans appel LLM, ambiguïté résolue par clarification, extraction d'objet, et refus des objets contradictoires. Validation CI globale sur le commit `d655f090eecb7034eb8008bad254af06f754ccf9` : **1 003/1 003** tests (run `43885458682`). Une correction ultérieure a ancré la reconnaissance des commandes de résumé pour éviter une correspondance partielle non souhaitée.
+
+Ni la version publique Hostinger ni la sortie vocale effective de l'appareil de l'utilisateur n'ont été vérifiées après ces changements.
