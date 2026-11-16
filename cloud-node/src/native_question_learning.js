@@ -6,6 +6,7 @@ const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
  .toLocaleLowerCase('fr-FR').replace(/[’‘]/g,"'").trim();
 const words=s=>fold(s).replace(/[?.,!]/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
 const safe=x=>/^[a-z-]{2,38}$/u.test(x);
+const safeFixed=x=>/^[a-z'-]{2,38}$/u.test(x);
 const slots=new Set(['@verb','@det','@patient']);
 const dets=new Set(['le','la','les','un','une','des']);
 const patterns=[
@@ -48,7 +49,7 @@ export class NativeQuestionLearner{
   // All non-slot tokens must be fixed observed question syntax.
   const grammar=toks.map((w,i)=>i===vi?'@verb':
     i===vi+1?'@det':i===vi+2?'@patient':w);
-  if(grammar.some(w=>!slots.has(w)&&!safe(w)&&w!=='a'&&w!=='tu'&&w!=='me'&&w!=='qui'))
+  if(grammar.some(w=>!slots.has(w)&&!safeFixed(w)&&w!=='a'))
    return {accepted:false};
   const key=grammar.join(' ');
   const group=this.groups.get(key)||{grammar,examples:new Map()};
