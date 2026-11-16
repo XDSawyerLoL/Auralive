@@ -214,6 +214,22 @@ function collect(history=[],stored=[],constructionLearner=null){
 }
 
 export function answerFrenchFromConversation({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
+  // Compose at most two independently evidenced questions; no generated facts.
+  // The grammar never copies an assistant answer into its own evidence.
+  const parts=String(question||'').trim().split(/\?\s*/u).map(x=>x.trim()).filter(Boolean);
+  if(parts.length>2)return null;
+  if(parts.length===2){
+    const replies=parts.map(text=>answerFrenchFromConversation({
+      question:text+' ?',history,storedCorrections,constructionLearner
+    }));
+    if(replies.some(row=>!row?.text||
+      row.evidence_scope!=='same-session-user-statement-unverified'))return null;
+    return {text:replies.map(row=>row.text).join(' '),
+      source:'aura-native-composed-dialogue',
+      evidence_scope:'same-session-user-statement-unverified',
+      grammar_version:LOCAL_SEMANTIC_VERSION,
+      coverage:'bounded-two-question-composition'};
+  }
   const request=parseFrenchQuestion(question);
   if(!request)return null;
   let frames;
