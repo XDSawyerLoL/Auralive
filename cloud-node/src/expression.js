@@ -3,7 +3,7 @@ import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.j
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
 import {nativeFrenchCorpus} from './native_french_corpus.js';
 import {answerFrenchFromConversation} from './native_semantic_grammar.js';
-import {answerNativeSessionDialogue} from './native_session_discourse.js';
+import {answerNativeSessionDialogue,nativeSessionLearningPrompt} from './native_session_discourse.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -76,6 +76,27 @@ export class ExpressionLayer {
           this.language.lastLatencyMs=0;
           this.language.lastError='';
           return recalled.text;
+        }
+      }
+      if(currentMode==='native-acquired'&&!recalled?.text){
+        const teaching=nativeSessionLearningPrompt({
+          question:plan?.user_text,
+          history:plan?.immediate_dialogue_context||[],
+          storedFacts:plan?.native_session_preferences||[],
+        });
+        if(teaching?.text){
+          const check=validateNucleusSpeech(plan,teaching.text);
+          this.language.lastNucleusContract={...check,
+            origin:'AURA.native-guided-learning-v1'};
+          if(check.accepted){
+            this.lastError='';
+            this.lastMode='native-guided-learning-question';
+            this.language.lastBackend='aura-native-guided-learning';
+            this.language.lastModel='';
+            this.language.lastLatencyMs=0;
+            this.language.lastError='';
+            return teaching.text;
+          }
         }
       }
     }
