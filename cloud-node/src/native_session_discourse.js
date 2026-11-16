@@ -119,9 +119,9 @@ function parseQuestion(question){
 // Compose independently grounded questions; never pretend that a missing
 // answer has been learned, and do not split ordinary coordinated objects.
 function splitComposedSessionQuestion(question){
- if(typeof question!=='string'||question.length>240||!/[?？]\\s*$/u.test(question))return null;
- const body=question.trim().replace(/[?？]\\s*$/u,'');
- const parts=body.split(/\\s*,\\s*(?=(?:quel|quelle|qu['’]|comment|est[- ]ce|mon|ma)\\b)|\\s+et\\s+(?=(?:quel|quelle|qu['’]|comment|est[- ]ce|mon|ma)\\b)/iu)
+ if(typeof question!=='string'||question.length>240||!/[?？]\s*$/u.test(question))return null;
+ const body=question.trim().replace(/[?？]\s*$/u,'');
+ const parts=body.split(/\s*,\s*(?=(?:quel|quelle|qu['’]|comment|est[- ]ce|mon|ma)\b)|\s+et\s+(?=(?:quel|quelle|qu['’]|comment|est[- ]ce|mon|ma)\b)/iu)
   .map(s=>s.trim()).filter(Boolean);
  if(parts.length<2||parts.length>3)return null;
  const questions=parts.map(part=>part+' ?');
