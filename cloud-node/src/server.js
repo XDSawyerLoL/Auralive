@@ -5,6 +5,7 @@ import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
 import {localDialogueReadiness} from './local_dialogue_readiness.js';
 import {getNativeRuntimeConstructionLearner,nativeRuntimeConstructionStatus} from './native_construction_runtime.js';
+import {nativeQuestionLearner} from './native_question_learning.js';
 import { FunctionalMedulla } from './functional_medulla.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
@@ -1638,7 +1639,10 @@ app.get('/api/brain/graph', async (request, reply) => {
 
 app.get('/api/medulla/status', async () => ({
   ...functionalMedulla.snapshot(),
-  local_language:embeddedLanguageRuntime.status().ready===true,
+  local_language:process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'
+    ?Boolean(getNativeRuntimeConstructionLearner()?.status().ready>0)
+    :embeddedLanguageRuntime.status().ready===true,
+  pretrained_model_suppressed:process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired',
 }));
 
 app.get('/api/language/embedded/status', async () => ({
@@ -1650,6 +1654,11 @@ app.get('/api/language/embedded/status', async () => ({
 // Never wait for a 150-second native startup in an HTTP request on shared hosting.
 app.post('/api/language/embedded/start', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
+  if(process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired')
+    return reply.code(409).send({
+      error:'Mode autonome : aucun démarrage de Qwen ou de modèle préentraîné autorisé.',
+      native_acquired:true,external_api_calls:0,
+    });
   const engine=kernel.expression.language.embedded;
   if (process.env.AURA_EMBEDDED_LANGUAGE_ENABLED === 'false')
     return reply.code(409).send({error:'Moteur local désactivé'});
@@ -1673,7 +1682,11 @@ app.post('/api/language/embedded/start', async (request, reply) => {
 // Public statistics only: no conversation text, paths, private memory or secrets.
 app.get('/api/language/native/training', async () => {
   getNativeRuntimeConstructionLearner();
+  const questions=nativeQuestionLearner().status();
   return {...nativeRuntimeConstructionStatus(),
+    question_constructions:questions,
+    supervised_session_learning:true,
+    no_pretrained_generation:process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired',
     stage:'bounded-acquired-french-constructions',
     general_conversation_proven:false,voice_audio_proven:false};
 });
