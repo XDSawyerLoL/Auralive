@@ -21,7 +21,7 @@ export class ExpressionLayer {
   }
 
   async semanticSupport(plan, context = '', options = {}) {
-    if (config.localLanguageOnly || process.env.AURA_NATIVE_FRENCH_MODE==='local-only') return '';
+    if (config.localLanguageOnly || ['local-only','native-acquired'].includes(process.env.AURA_NATIVE_FRENCH_MODE)) return '';
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
@@ -77,7 +77,7 @@ export class ExpressionLayer {
       return '';
     }
     const nativeMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
-    if(nativeMode==='local-only'||nativeMode==='prefer-local'){
+    if(nativeMode==='local-only'||nativeMode==='prefer-local'||nativeMode==='native-acquired'){
       // Only same-session statements admitted by the perceptual language gate
       // can justify a local answer. This is reported testimony, not world truth.
       const semantic=answerFrenchFromConversation({
@@ -104,6 +104,12 @@ export class ExpressionLayer {
       }else{
         this.lastError=nativeFrenchCorpus.status().ready
           ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
+      }
+      if(nativeMode==='native-acquired'){
+        // Strict developmental mode: do not borrow Qwen, Groq or another LLM.
+        // Only learned local structures are admitted; unknown intents abstain.
+        this.lastMode='native-acquired-out-of-coverage';
+        return '';
       }
       if(nativeMode==='local-only'){
         // The symbolic grammar does not cover free conversation. A verified
@@ -160,8 +166,9 @@ export class ExpressionLayer {
 
   async diagnostic() {
     const language = await this.language.status();
-    const corpusOnly=process.env.AURA_NATIVE_FRENCH_MODE==='local-only';
+    const corpusOnly=['local-only','native-acquired'].includes(process.env.AURA_NATIVE_FRENCH_MODE);
     const strictLocal=corpusOnly||Boolean(config.localLanguageOnly);
+    const ownLanguage=process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired';
     const localModelReady=Boolean(language.verified_ready &&
       ['hostinger-embedded','runtime-local'].includes(language.last_mode));
     const corpusReady=nativeFrenchCorpus.status().ready;
@@ -172,12 +179,13 @@ export class ExpressionLayer {
       corpus_mode:String(process.env.AURA_NATIVE_FRENCH_MODE||'off'),
       corpus_is_open_domain:false,
       natural_french_ready: strictLocal?localModelReady:Boolean(language.verified_ready),
-      mode: corpusOnly
+      mode: ownLanguage?'native-acquired-bounded' : corpusOnly
         ? (localModelReady?'learned-local-language-model':corpusReady?'native-corpus-limited':'native-corpus-not-installed')
         : language.verified_ready
         ? 'learned-language-model'
         : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
       scripted_normal_path: corpusOnly&&!localModelReady,
+      no_pretrained_language_generation:ownLanguage,
       strict_natural_language: Boolean(config.frenchLanguageRequired),
       remote_language_calls_permitted: !strictLocal,
       native_corpus_fully_fluent:false,
