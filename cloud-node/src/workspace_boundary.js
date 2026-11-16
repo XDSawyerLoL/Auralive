@@ -60,7 +60,7 @@ export function languageWorkspaceProjection(plan={},workspace,{privateView=false
       f?.schema==='aura-session-discourse-fact-v1'&&
       f?.provenance==='explicit-user-disclosure'&&
       f?.scope==='same-session-only'&&
-      ['name','favorite','preference','like'].includes(f.kind)&&
+      ['name','favorite','preference','like','goal'].includes(f.kind)&&
       typeof f.key==='string'&&f.key.length<=65&&
       typeof f.value==='string'&&f.value.length<=75&&
       typeof f.positive==='boolean'
