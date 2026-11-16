@@ -88,7 +88,7 @@ export class LanguageFaculty {
     // The teaching question must be AURA's *immediately preceding* turn
     // from the SQL session, not a guessed prompt or text from another user.
     const recent=(Array.isArray(recentDialogue)?recentDialogue:[])
-      .filter(row=>/^\\d+$/.test(String(row?.id??''))&&
+      .filter(row=>/^\d+$/.test(String(row?.id??''))&&
         ['user','assistant'].includes(String(row?.role)))
       .slice(0,32).sort((a,b)=>Number(a.id)-Number(b.id));
     const ingress=recent.findLastIndex(row=>row.role==='user'&&
