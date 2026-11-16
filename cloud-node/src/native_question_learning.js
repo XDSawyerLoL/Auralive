@@ -98,7 +98,10 @@ export class NativeQuestionLearner{
   const banned=new Set(['si','supposons','imaginons','imagine','ignore',
     'instructions','reponds','invente','affirme','affirmez',
     'pense','penses','croit','crois','dit','dites','demande','demandes',
-    'non','pas','jamais','sans','pourquoi','comment','lorsque']);
+    'non','pas','jamais','sans','pourquoi','comment','lorsque',
+    // Embedded beliefs, fiction and quotation remain outside factual QA.
+    'que','reve','rumeur','fiction','supposition','hypothese','pretend',
+    'pretends','pretendre','imagine','voudrait','aurait']);
   if(intro.some(word=>banned.has(word)))return null;
   const questionCues=new Set(['tu',"j'aimerais",'je','et','alors',
     "c'etait",'peux-tu','pourrais-tu','pourrais','sais-tu',
