@@ -30,3 +30,12 @@ test('native response provenance is not falsely labelled model-generated',()=>{
  assert.match(server,/response\?\.response_kind==='native-kernel'/u);
  assert.match(server,/nativeAcquiredMode\?'native-acquired-uncovered-intent'/u);
 });
+
+
+test('manual model-start route respects native-only mode, no hidden Qwen bypass',()=>{
+ assert.match(server,/app\.post\('\/api\/language\/embedded\/start'/u);
+ assert.match(server,/if\(process\.env\.AURA_NATIVE_FRENCH_MODE==='native-acquired'\)\s*return reply\.code\(409\)/u);
+ assert.match(server,/pretrained_model_suppressed:/u);
+ assert.match(server,/question_constructions:questions/u);
+ assert.match(server,/supervised_session_learning:true/u);
+});
