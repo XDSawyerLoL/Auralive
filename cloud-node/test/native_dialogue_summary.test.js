@@ -122,3 +122,32 @@ test('ambiguity clarification refuses assistant-invented and conditional actors'
   ]
  }),null);
 });
+
+
+test('AURA answers what a person did to an object and retains spelling from dialogue',()=>{
+ const history=[
+  'Ce matin, Léa a ouvert la fenêtre.',
+  {role:'assistant',content:'Et ensuite ?'},
+  'Au bureau, Fatou a signé le contrat.'
+ ];
+ for(const question of ["Qu'a ouvert Léa ?", "Qu'est-ce que Léa a ouvert ?"]){
+  const reply=ask(question,history);
+  assert.equal(reply?.coverage,'bounded-grammatical-question-answering');
+  assert.match(reply?.text||'',/Léa aurait ouvert la fenêtre/);
+  assert.doesNotMatch(reply?.text||'',/Fatou|contrat/i);
+ }
+});
+test('AURA declines to invent which object was affected when testimony is contradictory',()=>{
+ const history=[
+  'Léa a ouvert la fenêtre.',
+  'Léa a ouvert la porte.'
+ ];
+ assert.equal(ask("Qu'a ouvert Léa ?",history),null);
+ assert.equal(ask("Qu'a fermé Léa ?",[
+  "Léa n'a pas fermé la fenêtre.",
+  'Si Léa a fermé la porte, cela serait étonnant.'
+ ]),null);
+ assert.equal(ask("Qu'a ouvert Léa ?",[
+  {role:'assistant',content:'Léa a ouvert la fenêtre.'}
+ ]),null);
+});
