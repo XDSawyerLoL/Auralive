@@ -1,24 +1,34 @@
-// Optional operator-installed learner snapshot. Read-only runtime; never trains
-// on arbitrary users or remote text and never exposes the configured file path.
+// AURA learns bundled, supervised French constructions at first local use.
+// Operator-installed snapshots remain separate and read-only.
 import {readFileSync,statSync} from 'node:fs';
 import {NativeConstructionLearner} from './native_construction_learning.js';
-let cached,diagnostic={configured:false,ready:false,reason:'disabled'};
+import {trainNativeDialogueConstructions} from './native_builtin_dialogue_training.js';
+let cachedPath=null,cached=null,diagnostic={configured:false,ready:false,reason:'disabled'};
 export function getNativeRuntimeConstructionLearner(env=process.env){
+ if(env.AURA_NATIVE_CONSTRUCTIONS_ENABLED==='false')return null;
  const configured=String(env.AURA_NATIVE_CONSTRUCTIONS_FILE||'').trim();
- if(!configured)return null;
- if(cached!==undefined)return cached;
+ const cacheKey=configured||'__bundled_supervised_training__';
+ if(cachedPath===cacheKey)return cached;
  try{
-  const size=statSync(configured).size;
-  if(size<30||size>2_000_000)throw Error('size');
-  const parsed=JSON.parse(readFileSync(configured,'utf8'));
-  const learner=new NativeConstructionLearner(parsed);
-  if(!learner.status().ready)throw Error('no-trusted-constructions');
+  let learner,audit;
+  if(!configured){
+   ({learner,audit}=trainNativeDialogueConstructions());
+  }else{
+   const size=statSync(configured).size;
+   if(size<30||size>2_000_000)throw Error('size');
+   learner=new NativeConstructionLearner(JSON.parse(readFileSync(configured,'utf8')));
+  }
+  if(!learner.status().ready)throw Error('no-learned-constructions');
   cached=learner;
-  diagnostic={configured:true,ready:true,reason:'operator-curated-snapshot',status:learner.status()};
+  diagnostic={configured:true,ready:true,
+   reason:configured?'operator-curated-snapshot':'bundled-supervised-acquisition',
+   pretrained_llm:false,external_inference:false,
+   ...(audit?{audit}:{}),status:learner.status()};
  }catch{
   cached=null;
-  diagnostic={configured:true,ready:false,reason:'snapshot-unavailable-or-invalid'};
+  diagnostic={configured:true,ready:false,reason:'native-training-or-snapshot-invalid'};
  }
+ cachedPath=cacheKey;
  return cached;
 }
 export function nativeRuntimeConstructionStatus(){return {...diagnostic};}
