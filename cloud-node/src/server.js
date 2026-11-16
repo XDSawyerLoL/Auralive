@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
 import {localDialogueReadiness} from './local_dialogue_readiness.js';
+import {getNativeRuntimeConstructionLearner,nativeRuntimeConstructionStatus} from './native_construction_runtime.js';
 import { FunctionalMedulla } from './functional_medulla.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
@@ -1656,6 +1657,14 @@ app.post('/api/language/embedded/start', async (request, reply) => {
   });
   return reply.code(202).send({started:true,external_api_calls:0,paid_cost_eur:0,
     status:engine.status(),message:'Démarrage local demandé. Actualiser le diagnostic pour la preuve d’inférence.'});
+});
+
+// Public statistics only: no conversation text, paths, private memory or secrets.
+app.get('/api/language/native/training', async () => {
+  getNativeRuntimeConstructionLearner();
+  return {...nativeRuntimeConstructionStatus(),
+    stage:'bounded-acquired-french-constructions',
+    general_conversation_proven:false,voice_audio_proven:false};
 });
 
 app.get('/api/language/progress', async () => {
