@@ -225,7 +225,56 @@ function collect(history=[],stored=[],constructionLearner=null){
   return frames;
 }
 
+// Native synthesis of a small, explicit set of attributed user statements.
+// It does not present speaker claims as verified reality.
+const summarizeRequest=text=>{
+ const q=fold(text).replace(/[?!.]+$/u,'').trim();
+ if(/^(?:resume|recapitule|fais un resume)\s+(?:ce que je t'ai dit|notre echange|les faits|les evenements)$/u.test(q))
+  return {kind:'session-summary'};
+ const person=q.match(/^(?:que sais tu|qu'est ce que tu sais|rappelle moi ce que tu sais)\s+(?:sur|de|a propos de)\s+([\p{L}-]{2,40})$/u);
+ if(person)return {kind:'actor-summary',agent:person[1]};
+ return null;
+};
+const pastParticiple=new Map([
+ ['fermer','fermé'],['ouvrir','ouvert'],['deplacer','déplacé'],
+ ['signer','signé'],['cacher','caché'],['deposer','déposé'],
+ ['trouver','trouvé'],['garder','gardé'],['donner','donné'],
+ ['choisir','choisi'],
+]);
+const formatNativeSummary=(rows,agent)=>{
+ const all=rows.filter(row=>row?.kind==='event'&&row.polarity===true
+  &&row.agent&&row.patient&&row.predicate
+  &&pastParticiple.has(row.predicate)
+  &&/^[a-z -]{2,80}$/u.test(row.agent)&&/^[a-z -]{2,80}$/u.test(row.patient));
+ const related=agent?all.filter(row=>row.agent===agent):all;
+ // Repeated testimony cannot artificially inflate the summary.
+ const unique=[...new Map(related.map(row=>
+  [row.agent+'|'+row.predicate+'|'+row.patient,row])).values()].slice(-4);
+ if(!unique.length)return null;
+ const sentences=unique.map(row=>
+  publicLabel(row.agent)+' aurait '+pastParticiple.get(row.predicate)+' '+row.patient);
+ return 'D’après les événements que tu as rapportés, '+
+  sentences.map(x=>x.replace(/^./u,c=>c.toLowerCase())).join('; ')+'.';
+};
+
 export function answerFrenchFromConversation({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
+  // Ask for a contextual summary without using a pretrained model.
+  // Statements are still attributed to the speaker and correction rules apply.
+  const summary=summarizeRequest(question);
+  if(summary){
+    let observed;
+    try{
+      observed=collect(Array.isArray(history)?history:[],
+       Array.isArray(storedCorrections)?storedCorrections:[],
+       constructionLearner instanceof NativeConstructionLearner?
+        constructionLearner:getNativeRuntimeConstructionLearner());
+    }catch{return null;}
+    const text=formatNativeSummary(observed,summary.kind==='actor-summary'?summary.agent:null);
+    return text?{text,source:'aura-native-attributed-discourse-summary',
+      evidence_scope:'same-session-user-statement-unverified',
+      grammar_version:LOCAL_SEMANTIC_VERSION,
+      coverage:'bounded-multiturn-attributed-summary'}:null;
+  }
   // Compose at most two independently evidenced questions; no generated facts.
   // The grammar never copies an assistant answer into its own evidence.
   const parts=String(question||'').trim().split(/\?\s*/u).map(x=>x.trim()).filter(Boolean);
