@@ -127,7 +127,7 @@ test('a clitic follow-up resolves only one unique patient and one proven actor',
  ];
  assert.equal(actorOf(answerFrenchFromConversation({
   question:"Et qui l'a fermée ?",history,constructionLearner:learner
- })),null,'unsupported feminine participle cannot be inferred');
+ })),'lea','the observed feminine participle is supported by UD morphology');
  assert.equal(actorOf(answerFrenchFromConversation({
   question:"Et qui l'a fermé ?",history,constructionLearner:learner
  })),'lea');
