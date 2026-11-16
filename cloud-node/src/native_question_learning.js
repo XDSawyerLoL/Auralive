@@ -97,7 +97,7 @@ export class NativeQuestionLearner{
   // A reporting or hypothetical construction is NOT a question of actor.
   const banned=new Set(['si','supposons','imaginons','imagine','ignore',
     'instructions','reponds','invente','affirme','affirmez',
-    'pense','penses','croit','crois','dit','dites','demande','demandes',
+    'pense','penses','croit','crois','dit','dites','demande','demandes','imagines','imaginez',
     'non','pas','jamais','sans','pourquoi','comment','lorsque',
     // Embedded beliefs, fiction and quotation remain outside factual QA.
     'que','reve','rumeur','fiction','supposition','hypothese','pretend',
