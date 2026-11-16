@@ -116,3 +116,36 @@ test('composes two different evidenced questions in one 16-turn dialogue',()=>{
   history,constructionLearner:trained
  }),null);
 });
+
+
+test('a clitic follow-up resolves only one unique patient and one proven actor',()=>{
+ const learner=trainNativeDialogueConstructions().learner;
+ const history=[
+   {role:'user',content:'Ce matin, Léa a fermé la porte.'},
+   {role:'assistant',content:'Je note ton indication.'},
+   {role:'user',content:'Tu peux vérifier ?'}
+ ];
+ assert.equal(actorOf(answerFrenchFromConversation({
+  question:"Et qui l'a fermée ?",history,constructionLearner:learner
+ })),null,'unsupported feminine participle cannot be inferred');
+ assert.equal(actorOf(answerFrenchFromConversation({
+  question:"Et qui l'a fermé ?",history,constructionLearner:learner
+ })),'lea');
+ assert.equal(actorOf(answerFrenchFromConversation({
+  question:"Et qui l'a fermé ?",history:[
+   {role:'assistant',content:'Léa a fermé la porte.'}
+  ],constructionLearner:learner
+ })),null,'assistant speech is never a user fact');
+ assert.equal(answerFrenchFromConversation({
+  question:"Qui l'a fermé ?",history:[
+   {role:'user',content:'Léa a fermé la porte.'},
+   {role:'assistant',content:'Oui.'},
+   {role:'user',content:'Omar a fermé le portail.'}
+  ],constructionLearner:learner
+ }),null,'two possible objects cannot be guessed');
+ assert.equal(answerFrenchFromConversation({
+  question:"Qui l'a fermé ?",history:[
+   {role:'user',content:"Léa n'a pas fermé la porte."}
+  ],constructionLearner:learner
+ }),null,'negated action is not proof of completion');
+});
