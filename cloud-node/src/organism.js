@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { evolveHomeostasis, newSomaticSeed, ProcessSomaticSensor, publicSomaticState } from './somatic_dynamics.js';
+import {initialSocialHomeostasis,advanceSocialHomeostasis,chooseSocialAction,
+ socialMotivationContext,beginSocialTrial,observeSocialTrial} from './social_homeostasis.js';
 
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, Number(v || 0)));
 const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
@@ -15,7 +17,12 @@ export class AuraOrganism {
     const lastAt = Date.parse(String(state.homeostasis?.last_at || ''));
     const elapsed = Number.isFinite(lastAt) ? Math.max(0, (Date.now() - lastAt) / 1000) : 0;
     const duration = Math.max(Number(seconds) || 0, Math.min(3600, elapsed));
-    Object.assign(state, evolveHomeostasis(state, { signal, seconds: duration, sensor: this.sensor.sample() }));
+    const sample=this.sensor.sample();
+    Object.assign(state, evolveHomeostasis(state, { signal, seconds: duration, sensor: sample }));
+    // Functional epistemic needs evolve even without interaction, while
+    // recognition/praise alone cannot count as information gain or attachment.
+    state.autonomous_needs=advanceSocialHomeostasis(state.autonomous_needs,{
+      seconds:duration,resourcePressure:sample?.compute_pressure??0});
     return state.homeostasis;
   }
 
@@ -45,6 +52,8 @@ export class AuraOrganism {
       last_reason: 'organisme AURA actif',
       schema_revision: 10,
       authority: 'cloud-canonical',
+      autonomous_needs:initialSocialHomeostasis(),
+      social_contact_policy:{explicit_consent:false,external_delivery_enabled:false},
       homeostasis: {
         revision: 1, seed: newSomaticSeed(), steps: 0, last_at: stamp,
         last_signal: 'genesis', success_ema: 0.15, failure_ema: 0.05,
@@ -411,6 +420,38 @@ export class AuraOrganism {
     };
   }
 
+  // Dry-run of multiple action choices. There is NO outbound message.
+  planAutonomousNeedAction(input,{contactConsent=false,
+    conversationBusy=false}={}){
+    const state=this.migrate({organism:input});
+    return chooseSocialAction(state.autonomous_needs,{
+      contactConsent:contactConsent===true&&
+        state.social_contact_policy?.explicit_consent===true,
+      engagementAuthorized:contactConsent===true,
+      resourcePressure:state.homeostasis?.resource_pressure||0,
+      conversationBusy
+    });
+  }
+
+  // Only an existing, matched trial with independently verified consequence
+  // can change the expected effect of contacting another person.
+  beginNeedActionTrial(input,{id,action}={}){
+    const state=structuredClone(input);
+    const result=beginSocialTrial(state.autonomous_needs,{id,action});
+    if(result.accepted)state.autonomous_needs=result.state;
+    return {...result,state};
+  }
+  observeNeedActionTrial(input,{id,after,source,verified=false,
+    correlated=false,contactConsent=false}={}){
+    const state=structuredClone(input);
+    const result=observeSocialTrial(state.autonomous_needs,{
+      id,after,source,verified,correlated,contactConsent:
+      contactConsent===true&&state.social_contact_policy?.explicit_consent===true
+    });
+    if(result.accepted)state.autonomous_needs=result.state;
+    return {...result,state};
+  }
+
   afterReply(input, answer, success = true) {
     const state = structuredClone(input);
     // A fluent answer is NOT proof of correctness or successful execution.
@@ -582,6 +623,9 @@ export class AuraOrganism {
       },
       top_needs:needs,
       homeostasis:publicSomaticState(state.homeostasis),
+      autonomous_need_model:socialMotivationContext(state.autonomous_needs,{
+        contactConsent:false,resourcePressure:state.homeostasis?.resource_pressure||0
+      }),
       intention_field:state.intention_field,
       relationship:{
         familiarity:Number(state.relationship?.familiarity || 0),

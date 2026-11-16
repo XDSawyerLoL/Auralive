@@ -2165,14 +2165,18 @@ export class CognitiveKernel {
       measuredLookup('context_agenda',()=>privateView?this.agendaSnapshot():this.publicAgendaSnapshot()),
       privateView ? measuredLookup('context_continuity',()=>this.activitySinceLastConversation(conversationSession)) : skippedLookup('context_continuity',{}),
       measuredLookup('context_messages',()=>query(
-        privateView
+        process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'
+          ? `SELECT id,author,role,content,created_at FROM aura_cloud_messages
+             WHERE session_id=? ORDER BY id DESC LIMIT 28`
+          : privateView
           ? `SELECT id,author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id IN ('private-founder','')
              ORDER BY id DESC LIMIT 8`
           : `SELECT id,author,role,content,created_at FROM aura_cloud_messages
              WHERE session_id=?
              ORDER BY id DESC LIMIT 8`,
-        privateView ? [] : [conversationSession],
+        process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'
+          ? [conversationSession] : privateView ? [] : [conversationSession],
       ),'messages').catch(()=>[]),
       privateView ? this.knowledge.search(content,{limit:5}).catch(()=>[]) : Promise.resolve([]),
     ]);
@@ -2340,7 +2344,7 @@ export class CognitiveKernel {
     // without a user message and its matching database row.
     const immediateDialogue=immediateDialogueWindow(recentMessages,content,{
       perceptualBroadcast:true,
-      maxTurns:3,
+      maxTurns:process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'?18:3,
     });
     const dialogueMessages=mergeConversationViews(selectedMessages,immediateDialogue);
     if(immediateDialogue.length){
@@ -2613,6 +2617,8 @@ export class CognitiveKernel {
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
       sessionId: conversationSession, discourse: plan.discourse, userText: content,
+      recentDialogue:process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'
+        ?recentMessages:[],
     }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     plan = {
       ...plan,
@@ -2642,7 +2648,7 @@ export class CognitiveKernel {
     // Local semantic corrections are read from THIS SQL session only, AFTER
     // perception and attention. They remain unverified user statements.
     // No foreign session or unrelated autobiographical memory is loaded.
-    if(['local-only','prefer-local'].includes(process.env.AURA_NATIVE_FRENCH_MODE)
+    if(['local-only','prefer-local','native-acquired'].includes(process.env.AURA_NATIVE_FRENCH_MODE)
       &&/[?？]\s*$/.test(content)){
       plan.native_semantic_corrections=await this.language
         .nativeGrammarCorrections(conversationSession).catch(()=>[]);
@@ -2789,8 +2795,14 @@ export class CognitiveKernel {
         // History is optional while v18 is rolling out; never fabricate it.
       }
     }
+    // Dedicated personal-fact channel. Its source is exact-session SQL,
+    // never the globally selected memory or an untrusted plan property.
+    const nativeSessionFacts=process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'
+      &&/[?？]\s*$/.test(content)
+      ?await this.language.nativeSessionFacts(conversationSession).catch(()=>[])
+      :[];
     const languageGate=languageWorkspaceProjection(plan,workspace,{
-      privateView,immediateDialogue,
+      privateView,immediateDialogue,nativeSessionFacts,
     });
     if(!languageGate.allowed)
       await this.trace('workspace-denial','language-not-broadcast','',{
@@ -2934,9 +2946,12 @@ export class CognitiveKernel {
       brain_flow_id:brainFlowId,
       language_unavailable: languageUnavailable,
       response_kind: languageUnavailable ? 'model-unavailable'
-        :(this.expression.lastMode==='native-social-kernel'
-          ||this.expression.lastMode==='native-corpus-language')
+        :String(this.expression.lastMode||'').startsWith('native-')
           ?'native-kernel':'model-generated',
+      speech_provenance: String(this.expression.lastMode||'unavailable').slice(0,80),
+      pretrained_language_generation_used:
+        !String(this.expression.lastMode||'').startsWith('native-')&&
+        Boolean(answer),
       retryable: languageUnavailable,
       act: plan.act,
       cognition_version: CognitionEngine.VERSION,

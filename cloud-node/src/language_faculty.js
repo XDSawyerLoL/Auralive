@@ -4,6 +4,7 @@ import { one, query } from './db.js';
 import { retrieveExperiences } from './memory_retrieval.js';
 import { consolidateLessons } from './memory_consolidation.js';
 import {parseFrenchCorrection} from './native_semantic_grammar.js';
+import {parseNativeSessionDisclosure,parseNativeReplyToLearningPrompt,NATIVE_SESSION_FACT_SCHEMA} from './native_session_discourse.js';
 
 const VERSION = 'aura-language-faculty-v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -71,7 +72,7 @@ export class LanguageFaculty {
       || provider.startsWith('hostinger-embedded-llama');
   }
 
-  async rememberCorrection({ sessionId, discourse, userText }) {
+  async rememberCorrection({ sessionId, discourse, userText, recentDialogue=[] }) {
     const id=clean(sessionId,96);
     if(!id)return false;
     // A concrete grammatical correction has a scoped, explicit representation.
@@ -82,13 +83,32 @@ export class LanguageFaculty {
       [id,'native-semantic-correction',JSON.stringify(nativeCorrection),
         'user-statement-unverified',now()],
     );
+    // Session-specific declarative teaching, not a global user profile.
+    // Each disclosure can be corrected by a later statement in the same SQL session.
+    // The teaching question must be AURA's *immediately preceding* turn
+    // from the SQL session, not a guessed prompt or text from another user.
+    const recent=(Array.isArray(recentDialogue)?recentDialogue:[])
+      .filter(row=>/^\d+$/.test(String(row?.id??''))&&
+        ['user','assistant'].includes(String(row?.role)))
+      .slice(0,32).sort((a,b)=>Number(a.id)-Number(b.id));
+    const ingress=recent.findLastIndex(row=>row.role==='user'&&
+      clean(row.content,240)===clean(userText,240));
+    const preceding=ingress>0?recent[ingress-1]:null;
+    const nativeFact=parseNativeSessionDisclosure(userText)||
+      (preceding?.role==='assistant'
+        ?parseNativeReplyToLearningPrompt(userText,preceding.content):null);
+    if(nativeFact)await this.store.query(
+      'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
+      [id,'native-session-disclosure',JSON.stringify(nativeFact),
+        'user-statement-unverified',now()],
+    );
     const target=clean(discourse?.correction_target,300);
     if(discourse?.move==='correction'&&target)await this.store.query(
       'INSERT INTO aura_language_experiences(session_id,kind,note,evidence_status,created_at) VALUES(?,?,?,?,?)',
       [id,'user-correction',clean('Correction donnée par cet interlocuteur : '+userText,900),
         'user-statement-unverified',now()],
     );
-    return Boolean(nativeCorrection||discourse?.move==='correction'&&target);
+    return Boolean(nativeCorrection||nativeFact||discourse?.move==='correction'&&target);
   }
 
   async nativeGrammarCorrections(sessionId){
@@ -102,6 +122,26 @@ export class LanguageFaculty {
       try{
         const item=JSON.parse(String(row.note||''));
         return item?.type==='user-correction'?[item]:[];
+      }catch{return [];}
+    });
+  }
+
+  // Explicit facts only, retrieved by the exact SQL session key. No user ID,
+  // message text, project memory or cross-session fallback enters this method.
+  async nativeSessionFacts(sessionId){
+    const id=clean(sessionId,96);
+    if(!id)return [];
+    const rows=await this.store.query(
+      "SELECT note FROM aura_language_experiences WHERE session_id=? AND kind='native-session-disclosure' ORDER BY id DESC LIMIT 64",
+      [id],
+    );
+    return rows.reverse().flatMap(row=>{
+      try{
+        const item=JSON.parse(String(row.note||''));
+        return item?.schema===NATIVE_SESSION_FACT_SCHEMA&&
+          item?.scope==='same-session-only'&&
+          item?.provenance==='explicit-user-disclosure'?[{
+          ...item,source:'same-session-sql-experience'}]:[];
       }catch{return [];}
     });
   }

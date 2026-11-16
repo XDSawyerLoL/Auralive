@@ -73,3 +73,31 @@ test('low-memory French prompt is short, preserves the actual user message and n
  assert.match(prompt,/\/no_think/);
  assert.match(LOW_MEMORY_FRENCH_SYSTEM,/français naturel/);
 });
+
+test('Hostinger restart rediscovers a GGUF from provisioner temp-cache fallback',()=>{
+ const sandbox=fs.mkdtempSync(path.join(os.tmpdir(),'aura-temp-restart-'));
+ try{
+  const temp=path.join(sandbox,'tmp');
+  const root=path.join(sandbox,'app');
+  const cache=path.join(temp,'aura-language-runtime');
+  fs.mkdirSync(cache,{recursive:true});
+  fs.mkdirSync(root,{recursive:true});
+  fs.writeFileSync(path.join(cache,'llama-server'),'binary',{mode:0o755});
+  fs.writeFileSync(path.join(cache,'Qwen3-0.6B-Q4_K_M.gguf'),'gguf');
+  const recovered=locateEmbeddedRuntime({root,home:'',temp,quantization:'q4'});
+  assert.equal(recovered.binFound,true);
+  assert.equal(recovered.modelFound,true);
+  assert.equal(recovered.installed,true);
+  assert.equal(recovered.gguf,path.join(cache,'Qwen3-0.6B-Q4_K_M.gguf'));
+ }finally{fs.rmSync(sandbox,{recursive:true,force:true});}
+});
+
+test('failed GGUF inference reports its cause instead of an idle retry label',()=>{
+ const status=localDialogueReadiness({localOnly:true,autoProvision:true,
+  runtime:{status:'startup-failed',failure_code:'embedded-inference-probe-timeout',
+   installed:true,ready:false,probe_verified:false,provisioning:{stage:'installed-verified'}}});
+ assert.equal(status.ready,false);
+ assert.equal(status.phase,'startup-failed');
+ assert.equal(status.reason,'embedded-inference-probe-timeout');
+ assert.equal(status.retryable,true);
+});

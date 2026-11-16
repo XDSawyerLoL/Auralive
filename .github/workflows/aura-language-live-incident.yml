@@ -1,0 +1,31 @@
+name: AURA live language incident (read-only)
+on:
+  push:
+    branches:
+      - fix/aura-local-gguf-speech-unblock-20261115
+    paths:
+      - scripts/aura-language-live-incident.mjs
+      - .github/workflows/aura-language-live-incident.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose-live-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check live incident probe syntax
+        run: node --check scripts/aura-language-live-incident.mjs
+      - name: Probe Hostinger (read-only, zero inference calls)
+        run: node scripts/aura-language-live-incident.mjs
+      - name: Save redacted incident report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-language-live-incident
+          path: aura-language-live-incident.json
+          if-no-files-found: warn

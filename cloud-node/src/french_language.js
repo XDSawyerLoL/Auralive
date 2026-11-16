@@ -558,11 +558,13 @@ export class FrenchLanguageFaculty {
     const installing = embedded.provisioning?.enabled && !embedded.ready
       && !['not-started','installed-verified','blocked'].includes(stage);
     const provisionFailed = stage === 'blocked';
+    // Offline speech status must not report a Groq key as model readiness.
+    const offlineOnly = Boolean(config.localLanguageOnly || process.env.AURA_NATIVE_FRENCH_MODE==='local-only');
     // Native files alone do not establish that a model is operational.
-    const ready = config.localLanguageOnly
+    const ready = offlineOnly
       ?Boolean(embedded.ready&&embedded.probe_verified||local)
       :Boolean(groq.enabled || embedded.ready || federation.enabled || local);
-    const blockingReason = config.localLanguageOnly && !ready
+    const blockingReason = offlineOnly && !ready
       ?(provisionFailed?'embedded-language-installation-blocked'
         :embedded.failure_code||'embedded-language-not-responsive')
       : installing ? 'embedded-language-installing'
@@ -609,17 +611,21 @@ export class FrenchLanguageFaculty {
       setup_hint: setupHint,
       version: FrenchLanguageFaculty.VERSION,
       ready,
-      verified_ready: Boolean((groq.enabled && this.lastMode === 'groq-free')
-        || (embedded.ready && this.lastMode === 'hostinger-embedded')
-        || (federation.enabled && this.lastMode === 'zero-cost-federation') || (local && this.lastMode === 'runtime-local')),
-      primary: groq.enabled ? 'groq-free'
+      verified_ready: Boolean((embedded.ready && this.lastMode === 'hostinger-embedded')
+        || (local && this.lastMode === 'runtime-local')
+        || (!offlineOnly && ((groq.enabled && this.lastMode === 'groq-free')
+          || (federation.enabled && this.lastMode === 'zero-cost-federation')))),
+      primary: offlineOnly
+        ? (embedded.ready && embedded.probe_verified ? 'hostinger-embedded'
+          : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable')
+        : groq.enabled ? 'groq-free'
         : embedded.ready ? 'hostinger-embedded'
         : federation.enabled ? 'zero-cost-federation'
           : local ? 'runtime-local' : embeddedInstalled ? 'embedded-pending-start' : 'unavailable',
       embedded,
       groq,
       zero_cost: Boolean(groq.enabled || (federation.zero_cost_mode ?? true)),
-      federation_ready: Boolean(federation.enabled),
+      federation_ready: Boolean(federation.enabled) && !offlineOnly,
       local_ready: local,
       last_mode: this.lastMode,
       last_backend: this.lastBackend,
@@ -725,7 +731,11 @@ export class FrenchLanguageFaculty {
     ].join(' ');
   }
 
-  async generate(plan, { maxTokens = 700, taskRole = 'french' } = {}) {
+  async generate(plan, { maxTokens = 700, taskRole = 'french', localOnly = false, preferLocal = false } = {}) {
+    // Local-only prohibits remote requests. Prefer-local tries the verified
+    // embedded model first, but may fall back to a configured free provider.
+    const strictlyLocal = Boolean(localOnly || config.localLanguageOnly || process.env.AURA_NATIVE_FRENCH_MODE==='local-only');
+    const localFirst = Boolean(strictlyLocal || preferLocal);
     const prompt = this.prompt(plan);
     const system = this.system(plan);
     const started = Date.now();
@@ -744,7 +754,8 @@ export class FrenchLanguageFaculty {
     // GroqCloud Free is the preferred conversational model when the operator
     // explicitly confirms their organization has NO paid Developer billing.
     // Never interpret a configured key alone as proof of a free plan.
-    if(!config.localLanguageOnly&&this.groq?.enabled){
+    const tryGroq=async()=>{
+    if(!strictlyLocal&&this.groq?.enabled){
       try{
         const basePrompt=compactFrenchPrompt(plan, {maxChars:4500});
         let result=await this.groq.generate(
@@ -790,6 +801,12 @@ export class FrenchLanguageFaculty {
         this.lastError=safeError(error);
       }
     }
+      return '';
+    };
+    if(!localFirst){
+      const result=await tryGroq();
+      if(result)return result;
+    }
     // A broken optional native runtime must never block a configured cloud speech provider.
     // Run local inference only when health and inference have already been verified.
     const tryEmbedded = async () => {
@@ -821,8 +838,12 @@ export class FrenchLanguageFaculty {
     // A mere installed binary is not enough: readiness is checked above.
     const embeddedAnswer = await tryEmbedded();
     if (embeddedAnswer) return embeddedAnswer;
+    if(localFirst){
+      const result=await tryGroq();
+      if(result)return result;
+    }
 
-    if (!config.localLanguageOnly&&this.federation?.enabled) {
+    if (!strictlyLocal&&this.federation?.enabled) {
       try {
         // The full semantic JSON is appropriate for larger models, but the
         // free router may select a small or reasoning-heavy model. Use a

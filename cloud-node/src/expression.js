@@ -2,7 +2,8 @@ import { config } from './config.js';
 import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.js';
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
 import {nativeFrenchCorpus} from './native_french_corpus.js';
-import {answerFrenchFromConversation} from './native_semantic_grammar.js';
+import {answerFrenchFromConversation,clarifyFrenchAmbiguity} from './native_semantic_grammar.js';
+import {answerNativeSessionDialogue,nativeSessionLearningPrompt} from './native_session_discourse.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -21,7 +22,7 @@ export class ExpressionLayer {
   }
 
   async semanticSupport(plan, context = '', options = {}) {
-    if (process.env.AURA_NATIVE_FRENCH_MODE==='local-only') return '';
+    if (config.localLanguageOnly || ['local-only','native-acquired'].includes(process.env.AURA_NATIVE_FRENCH_MODE)) return '';
     if (!plan?.needs_semantic_support || !this.ai?.enabled) return '';
     const prompt = [
       'QUESTION UTILISATEUR',
@@ -54,6 +55,51 @@ export class ExpressionLayer {
 
   async verbalize(plan, options = {}) {
     const fallback = this.cognition.deterministicReply(plan);
+    // The native speaker can recall only user-declared, same-session facts
+    // passed through the trusted language workspace. No pretrained model,
+    // invented biography or unverified cross-session user recognition.
+    const currentMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
+    if(['native-acquired','local-only','prefer-local'].includes(currentMode)){
+      const recalled=answerNativeSessionDialogue({
+        question:plan?.user_text,history:plan?.immediate_dialogue_context||[],
+        storedFacts:plan?.native_session_preferences||[],
+      });
+      if(recalled?.text){
+        const check=validateNucleusSpeech(plan,recalled.text);
+        this.language.lastNucleusContract={...check,
+          origin:'AURA.native-session-user-disclosure-v1'};
+        if(check.accepted){
+          this.lastError='';
+          this.lastMode='native-session-grounded';
+          this.language.lastBackend='aura-native-session-discourse';
+          this.language.lastModel='';
+          this.language.lastLatencyMs=0;
+          this.language.lastError='';
+          return recalled.text;
+        }
+      }
+      if(currentMode==='native-acquired'&&!recalled?.text){
+        const teaching=nativeSessionLearningPrompt({
+          question:plan?.user_text,
+          history:plan?.immediate_dialogue_context||[],
+          storedFacts:plan?.native_session_preferences||[],
+        });
+        if(teaching?.text){
+          const check=validateNucleusSpeech(plan,teaching.text);
+          this.language.lastNucleusContract={...check,
+            origin:'AURA.native-guided-learning-v1'};
+          if(check.accepted){
+            this.lastError='';
+            this.lastMode='native-guided-learning-question';
+            this.language.lastBackend='aura-native-guided-learning';
+            this.language.lastModel='';
+            this.language.lastLatencyMs=0;
+            this.language.lastError='';
+            return teaching.text;
+          }
+        }
+      }
+    }
     // Explicit current-turn social intent can be expressed by the kernel
     // itself. A language provider must not invent AURA's curiosity or steer
     // the conversation. This is NOT a fake hidden thought or human emotion.
@@ -77,7 +123,7 @@ export class ExpressionLayer {
       return '';
     }
     const nativeMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
-    if(nativeMode==='local-only'||nativeMode==='prefer-local'){
+    if(nativeMode==='local-only'||nativeMode==='prefer-local'||nativeMode==='native-acquired'){
       // Only same-session statements admitted by the perceptual language gate
       // can justify a local answer. This is reported testimony, not world truth.
       const semantic=answerFrenchFromConversation({
@@ -105,9 +151,72 @@ export class ExpressionLayer {
         this.lastError=nativeFrenchCorpus.status().ready
           ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
       }
+      if(nativeMode==='native-acquired'&&plan?.act==='respond'){
+        const clarification=clarifyFrenchAmbiguity({
+          question:plan.user_text,
+          history:plan.immediate_dialogue_context||[],
+          storedCorrections:plan.native_semantic_corrections||[],
+        });
+        if(clarification?.text){
+          const checked=validateNucleusSpeech(plan,clarification.text);
+          this.language.lastNucleusContract={...checked,
+            origin:'AURA.native-grounded-clarification-v1'};
+          if(checked.accepted){
+            this.lastMode='native-discourse-clarification';
+            this.lastError='';
+            this.language.lastBackend='aura-native-corpus';
+            this.language.lastModel='';
+            this.language.lastLatencyMs=0;
+            this.language.lastError='';
+            return clarification.text;
+          }
+        }
+      }
+      if(nativeMode==='native-acquired'){
+        // A visibly attributed communication-repair utterance prevents a
+        // silent chat. This is a bounded built-in clarification, NOT language
+        // learned by training and NOT a pretence of open-domain fluency.
+        // It is allowed only on an ordinary user question; other nucleus
+        // decisions keep their safety-specific speech contracts.
+        if(plan?.act==='respond'&&normalize(plan.user_text)){
+          const repair="Je n'ai pas encore appris à répondre correctement à cette question. Peux-tu me donner un exemple ou préciser ce que tu veux savoir ?";
+          const checked=validateNucleusSpeech(plan,repair);
+          this.language.lastNucleusContract={
+            ...checked,origin:'AURA.native-conversation-repair-v1'};
+          if(checked.accepted){
+            this.lastMode='native-acquired-clarification';
+            this.lastError='native-construction-out-of-coverage';
+            this.language.lastBackend='aura-native-clarification-rule';
+            this.language.lastModel='';
+            this.language.lastLatencyMs=0;
+            this.language.lastError='native-construction-out-of-coverage';
+            return repair;
+          }
+        }
+        this.lastMode='native-acquired-out-of-coverage';
+        return '';
+      }
       if(nativeMode==='local-only'){
+        // The symbolic grammar does not cover free conversation. A verified
+        // GGUF model or a local bridge may verbalize it, but NEVER Groq or
+        // OpenRouter. In the previous path this returned '' before trying
+        // either local generator, even when the model was responsive.
+        try {
+          const answer=normalize(await this.language.generate(plan,{
+            maxTokens:Math.max(120,Math.min(Number(options.maxTokens||650),1200)),
+            taskRole:String(options.taskRole||'french'),
+            localOnly:true,
+          }));
+          if(answer){
+            this.lastError='';
+            this.lastMode='local-generative-language';
+            return answer;
+          }
+        }catch(error){
+          this.lastError=normalize(error?.message||error).slice(0,500);
+        }
+        this.lastError=this.language.lastError||this.lastError||'local-generative-model-unavailable';
         this.lastMode='native-corpus-uncovered';
-        // No covert Groq/OpenRouter/remote fallback in local-only mode.
         return '';
       }
     }
@@ -115,6 +224,7 @@ export class ExpressionLayer {
       const answer = normalize(await this.language.generate(plan, {
         maxTokens: Math.max(120, Math.min(Number(options.maxTokens || 650), 1200)),
         taskRole: String(options.taskRole || 'french'),
+        preferLocal: nativeMode==='prefer-local',
       }));
       if (answer) {
         this.lastError = '';
@@ -141,7 +251,11 @@ export class ExpressionLayer {
 
   async diagnostic() {
     const language = await this.language.status();
-    const corpusOnly=process.env.AURA_NATIVE_FRENCH_MODE==='local-only';
+    const corpusOnly=['local-only','native-acquired'].includes(process.env.AURA_NATIVE_FRENCH_MODE);
+    const strictLocal=corpusOnly||Boolean(config.localLanguageOnly);
+    const ownLanguage=process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired';
+    const localModelReady=Boolean(language.verified_ready &&
+      ['hostinger-embedded','runtime-local'].includes(language.last_mode));
     const corpusReady=nativeFrenchCorpus.status().ready;
     return {
       version: ExpressionLayer.VERSION,
@@ -149,15 +263,16 @@ export class ExpressionLayer {
       corpus_local:nativeFrenchCorpus.status(),
       corpus_mode:String(process.env.AURA_NATIVE_FRENCH_MODE||'off'),
       corpus_is_open_domain:false,
-      natural_french_ready: corpusOnly?false:Boolean(language.verified_ready),
-      mode: corpusOnly
-        ? (corpusReady?'native-corpus-limited':'native-corpus-not-installed')
+      natural_french_ready: strictLocal?localModelReady:Boolean(language.verified_ready),
+      mode: ownLanguage?'native-acquired-bounded' : corpusOnly
+        ? (localModelReady?'learned-local-language-model':corpusReady?'native-corpus-limited':'native-corpus-not-installed')
         : language.verified_ready
         ? 'learned-language-model'
         : (config.frenchLanguageRequired ? 'natural-language-unavailable' : 'degraded-deterministic-fallback'),
-      scripted_normal_path: corpusOnly,
+      scripted_normal_path: corpusOnly&&!localModelReady,
+      no_pretrained_language_generation:ownLanguage,
       strict_natural_language: Boolean(config.frenchLanguageRequired),
-      remote_language_calls_permitted: !corpusOnly,
+      remote_language_calls_permitted: !strictLocal,
       native_corpus_fully_fluent:false,
       fallback_count: this.fallbackCount,
       last_mode: this.lastMode,

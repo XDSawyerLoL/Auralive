@@ -5,6 +5,7 @@ import {classifyFrenchEventScope,analyzeFrenchEventRelations,buildNativeEventGra
 import {makeNativeEventFrame,isNativeEventAssertable} from './native_event_frame.js';
 import {NativeConstructionLearner} from './native_construction_learning.js';
 import {getNativeRuntimeConstructionLearner} from './native_construction_runtime.js';
+import {nativeQuestionLearner} from './native_question_learning.js';
 
 // Bounded, auditable, local interpretation of user-declared French facts.
 // This is NOT open-domain NLU and MUST NOT execute commands or infer ground truth.
@@ -13,7 +14,7 @@ const fold = value => String(value ?? '').toLocaleLowerCase('fr-FR')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
 const words = value => fold(value).replace(/[^\p{L}\p{N}' ]/gu, ' ').replace(/\s+/g, ' ').trim();
-const articles = /^(?:(?:le|la|les|un|une|des|du|de la|d'|l')\s*)+/;
+const articles = /^(?:(?:de la|le|la|les|un|une|des|du)\b\s+|[dl]['’]\s*)+/u;
 const entity = value => words(value).replace(articles, '').replace(/\s+(?:ne|n)$/,'').trim();
 const publicLabel = value => String(value || '').replace(/^./u, c => c.toLocaleUpperCase('fr-FR'));
 const AUXILIARIES = new Set(['a','as','ai','avons','avez','ont','avait','avaient','est','es','suis','sommes','etes','sont','etait','etaient']);
@@ -83,8 +84,27 @@ export function parseFrenchStatement(text){
 }
 
 export function parseFrenchQuestion(text){
-  const q=words(text).replace(/\?$/,'').trim();
+  // Supervised interrogative grammar. This only recognizes a question;
+  // answers still require independent user-attributed event evidence.
+  if(process.env.AURA_NATIVE_QUESTIONS_ENABLED!=='false'){
+    const acquired=nativeQuestionLearner().parse(text);
+    if(acquired)return acquired;
+  }
+  const q=words(text).replace(/^et\s+|^alors\s+/u,'').replace(/\?$/,'').trim();
   if(!/[?？]\s*$/u.test(String(text).trim())&&!/^(?:qui|pourquoi|de quelle couleur|est ce que)/.test(q))return null;
+  // Reverse the learned event arguments: what did a named actor act on?
+  // Only an overt actor and a verb in the UD-derived morphology are licensed.
+  let objectRequest=q.match(/^qu'a ([\p{L}-]{2,35}) ([\p{L}-]{2,40})$/u);
+  if(objectRequest&&verb(objectRequest[1]))
+    return {kind:'patient',predicate:verb(objectRequest[1]),agent:entity(objectRequest[2])};
+  objectRequest=q.match(/^qu'est ce que ([\p{L}-]{2,40}) a ([\p{L}-]{2,35})$/u);
+  if(objectRequest&&verb(objectRequest[2]))
+    return {kind:'patient',predicate:verb(objectRequest[2]),agent:entity(objectRequest[1])};
+  // A clitic object is recoverable only when the session contains a
+  // unique matching patient. Never guess from a name, stereotype or gender.
+  let elliptical=q.match(/^qui l'a ([\p{L}-]{2,35})$/u);
+  if(elliptical&&verb(elliptical[1]))
+    return {kind:'actor-object-clitic',predicate:verb(elliptical[1])};
   let m=q.match(/^qui\s+(?:a|ont|avait)?\s*(\p{L}+)\s+(.+)$/u);
   if(m&&verb(m[1]))return {kind:'actor',predicate:verb(m[1]),patient:cleanObject(m[2])};
   m=q.match(/^de quelle couleur (?:est|etait)\s+(.+)$/u);
@@ -136,7 +156,7 @@ function splitAssertions(value){
 function collect(history=[],stored=[],constructionLearner=null){
   const frames=[];
   let previousUserStatement=null;
-  for(const row of history.slice(-10)){
+  for(const row of history.slice(-24)){
     if(row?.role!=='user'){previousUserStatement=null;continue;}
     const scope=classifyFrenchEventScope(row.content);
     // A syntactically extractable agent is not evidence that the event took place.
@@ -213,7 +233,93 @@ function collect(history=[],stored=[],constructionLearner=null){
   return frames;
 }
 
+// Native synthesis of a small, explicit set of attributed user statements.
+// It does not present speaker claims as verified reality.
+const summarizeRequest=text=>{
+ const q=fold(text).replace(/[?!.]+$/u,'').trim();
+ if(/^(?:resume|recapitule|fais un resume)\s+(?:ce que je t'ai dit|notre echange|les faits|les evenements)$/u.test(q))
+  return {kind:'session-summary'};
+ const person=q.match(/^(?:que sais[- ]tu|qu'est[- ]ce que tu sais|rappelle[- ]moi ce que tu sais)\s+(?:sur|de|a propos de)\s+([\p{L}-]{2,40})$/u);
+ if(person)return {kind:'actor-summary',agent:person[1]};
+ return null;
+};
+const pastParticiple=new Map([
+ ['fermer','fermé'],['ouvrir','ouvert'],['deplacer','déplacé'],
+ ['signer','signé'],['cacher','caché'],['deposer','déposé'],
+ ['trouver','trouvé'],['garder','gardé'],['donner','donné'],
+ ['choisir','choisi'],
+]);
+// Preserve only observed surface spellings, never invent a new fact.
+const surfaceOf=(normalized,history,{article=false}={})=>{
+ const wanted=fold(normalized);
+ if(!wanted||wanted.split(' ').length>5)return publicLabel(normalized);
+ const tokens=String(normalized).split(' ').length;
+ const used=(Array.isArray(history)?history:[]).filter(r=>r?.role==='user')
+  .map(r=>String(r.content||'')).slice(-24).reverse();
+ for(const line of used){
+  const raw=line.match(/[\p{L}-]+/gu)||[];
+  for(let i=0;i<=raw.length-tokens;i++){
+   if(fold(raw.slice(i,i+tokens).join(' '))!==wanted)continue;
+   const candidate=raw.slice(i,i+tokens).join(' ');
+   if(article&&i>0&&['le','la','les','un','une','des'].includes(fold(raw[i-1])))
+    return raw[i-1]+' '+candidate;
+   if(!article)return candidate;
+  }
+ }
+ return (article?'':publicLabel(normalized))||normalized;
+};
+const formatNativeSummary=(rows,agent,history=[])=>{
+ const all=rows.filter(row=>row?.kind==='event'&&row.polarity===true
+  &&row.agent&&row.patient&&row.predicate
+  &&pastParticiple.has(row.predicate)
+  &&/^[a-z -]{2,80}$/u.test(row.agent)&&/^[a-z -]{2,80}$/u.test(row.patient));
+ const related=agent?all.filter(row=>row.agent===agent):all;
+ // Repeated testimony cannot artificially inflate the summary.
+ const unique=[...new Map(related.map(row=>
+  [row.agent+'|'+row.predicate+'|'+row.patient,row])).values()].slice(-4);
+ if(!unique.length)return null;
+ const sentences=unique.map(row=>
+  surfaceOf(row.agent,history)+' aurait '+pastParticiple.get(row.predicate)
+    +' '+surfaceOf(row.patient,history,{article:true}));
+ return 'D’après les événements que tu as rapportés, '+
+  sentences.join('; ')+'.';
+};
+
 export function answerFrenchFromConversation({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
+  // Ask for a contextual summary without using a pretrained model.
+  // Statements are still attributed to the speaker and correction rules apply.
+  const summary=summarizeRequest(question);
+  if(summary){
+    let observed;
+    try{
+      observed=collect(Array.isArray(history)?history:[],
+       Array.isArray(storedCorrections)?storedCorrections:[],
+       constructionLearner instanceof NativeConstructionLearner?
+        constructionLearner:getNativeRuntimeConstructionLearner());
+    }catch{return null;}
+    const text=formatNativeSummary(observed,summary.kind==='actor-summary'?summary.agent:null,
+      history);
+    return text?{text,source:'aura-native-attributed-discourse-summary',
+      evidence_scope:'same-session-user-statement-unverified',
+      grammar_version:LOCAL_SEMANTIC_VERSION,
+      coverage:'bounded-multiturn-attributed-summary'}:null;
+  }
+  // Compose at most two independently evidenced questions; no generated facts.
+  // The grammar never copies an assistant answer into its own evidence.
+  const parts=String(question||'').trim().split(/\?\s*/u).map(x=>x.trim()).filter(Boolean);
+  if(parts.length>2)return null;
+  if(parts.length===2){
+    const replies=parts.map(text=>answerFrenchFromConversation({
+      question:text+' ?',history,storedCorrections,constructionLearner
+    }));
+    if(replies.some(row=>!row?.text||
+      row.evidence_scope!=='same-session-user-statement-unverified'))return null;
+    return {text:replies.map(row=>row.text).join(' '),
+      source:'aura-native-composed-dialogue',
+      evidence_scope:'same-session-user-statement-unverified',
+      grammar_version:LOCAL_SEMANTIC_VERSION,
+      coverage:'bounded-two-question-composition'};
+  }
   const request=parseFrenchQuestion(question);
   if(!request)return null;
   let frames;
@@ -230,7 +336,23 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
     if(relations.length===1)text='D’après ce que tu as indiqué, '+
       (expected==='cause'?'parce que ':'ensuite ')+relations[0].explanation+'.';
   }
-  if(request.kind==='actor'){
+  if(request.kind==='patient'){
+    const candidates=frames.filter(f=>f.kind==='event'&&f.polarity===true&&
+      f.agent===request.agent&&f.predicate===request.predicate);
+    const distinct=[...new Set(candidates.map(f=>f.patient))];
+    if(distinct.length===1)
+      text='D’après ce que tu as indiqué, '+surfaceOf(request.agent,history)+
+        ' aurait '+(pastParticiple.get(request.predicate)||request.predicate)+
+        ' '+surfaceOf(distinct[0],history,{article:true})+'.';
+  }else if(request.kind==='actor-object-clitic'){
+    const related=frames.filter(f=>f.kind==='event'&&
+      f.predicate===request.predicate);
+    const patients=[...new Set(related.map(f=>f.patient))];
+    const positive=related.filter(f=>f.polarity===true);
+    const actors=[...new Set(positive.map(f=>f.agent))];
+    if(patients.length===1&&actors.length===1)
+      text='D’après ce que tu as indiqué, c’est '+publicLabel(actors[0])+'.';
+  }else if(request.kind==='actor'){
     const candidates=frames.filter(f=>f.kind==='event'&&f.predicate===request.predicate&&
       possiblySamePatient(f.patient,request.patient)&&f.polarity===true);
     const distinct=[...new Set(candidates.map(f=>f.agent))];
@@ -249,6 +371,36 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
   }
   return text ? {text,source:'aura-native-local-semantics',evidence_scope:'same-session-user-statement-unverified',
     grammar_version:LOCAL_SEMANTIC_VERSION,coverage:'bounded-grammatical-question-answering'} : null;
+}
+
+// Conversational repair: ask which user-claimed actor is intended when
+// two competing references are unresolved. This is NOT a factual answer.
+export function clarifyFrenchAmbiguity({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
+ const request=parseFrenchQuestion(question);
+ if(request?.kind!=='actor'&&request?.kind!=='actor-object-clitic')return null;
+ let frames;
+ try{
+  frames=collect(Array.isArray(history)?history:[],
+   Array.isArray(storedCorrections)?storedCorrections:[],
+   constructionLearner instanceof NativeConstructionLearner?
+    constructionLearner:getNativeRuntimeConstructionLearner());
+ }catch{return null;}
+ const candidates=frames.filter(f=>f.kind==='event'&&
+  f.predicate===request.predicate&&f.polarity===true&&
+  (request.kind==='actor-object-clitic'||
+   possiblySamePatient(f.patient,request.patient)));
+ const agents=[...new Set(candidates.map(f=>f.agent))];
+ const patients=[...new Set(candidates.map(f=>f.patient))];
+ if(agents.length!==2||patients.length!==1)return null;
+ const names=agents.map(x=>surfaceOf(x,history));
+ const patient=surfaceOf(patients[0],history,{article:true});
+ if(!names.every(x=>x.length>=2&&x.length<50)||!patient)return null;
+ return {text:'Tu as mentionné '+names[0]+' et '+names[1]+
+   ' pour '+patient+'. De quelle personne parles-tu ?',
+  source:'aura-native-attributed-clarification',
+  evidence_scope:'same-session-user-statement-unverified',
+  grammar_version:LOCAL_SEMANTIC_VERSION,
+  coverage:'bounded-two-actor-clarification'};
 }
 
 // Exposed for audit and prospective counterfactual reasoning; never inserts

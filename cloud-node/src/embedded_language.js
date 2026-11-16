@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
+import {tmpdir} from 'node:os';
 import { spawn } from 'node:child_process';
 import { embeddedProvisioner,selectedEmbeddedModel } from './embedded_provisioner.js';
 import {sanitizeNativeFrenchGeneration} from './native_local_generation_quality.js';
@@ -358,6 +359,7 @@ export function locateEmbeddedRuntime({
   binary = process.env.AURA_EMBEDDED_LLAMA_BIN || '',
   model = process.env.AURA_EMBEDDED_LANGUAGE_MODEL || '',
   quantization = process.env.AURA_EMBEDDED_LANGUAGE_QUANTIZATION || '',
+  temp = tmpdir(),
 } = {}) {
   let executable = binary ? safePath(binary) : '';
   let gguf = model ? safePath(model) : '';
@@ -380,6 +382,10 @@ export function locateEmbeddedRuntime({
     ...(override ? [safePath(override)] : []),
     path.join(root,'.aura-language-runtime'),
     path.join(root,'aura-language-runtime'),
+    // The provisioner can fall back to os.tmpdir() on restricted Hostinger
+    // accounts. On restart the in-memory provisionedPaths disappear; discover
+    // this cache before attempting another download of the model.
+    path.join(temp,'aura-language-runtime'),
     ...(home ? [
       path.join(home,'.cache','aura-language-runtime'),
       path.join(home,'.aura-language-runtime'),
@@ -419,11 +425,21 @@ function freePort(){
     });
   });
 }
+export function hasBundledStaticCandidate(root=process.cwd()){
+  const dir=path.join(root,'native','linux-x64');
+  try{
+    const digest=String(fs.readFileSync(path.join(dir,'llama-server.sha256'),'utf8')).trim();
+    return /^[0-9a-f]{64}$/.test(digest)
+      && fs.statSync(path.join(dir,'llama-server')).isFile();
+  }catch{return false;}
+}
+
 export class EmbeddedLanguageRuntime {
   constructor({discover=locateEmbeddedRuntime,spawnProcess=spawn,request=fetch,
     allocatePort=freePort,delay=pause,bootTimeoutMs=150_000,
-    provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null}={}){
-    Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner});
+    provisioner=discover===locateEmbeddedRuntime ? embeddedProvisioner : null,
+    detectStaticCandidate=hasBundledStaticCandidate}={}){
+    Object.assign(this,{discover,spawnProcess,request,allocatePort,delay,bootTimeoutMs,provisioner,detectStaticCandidate});
     this.provisionedPaths=null;this.canonicalSource=false;
     this.child=null;this.port=0;this.booting=null;this.ready=false;
     this.lastFailure='';this.cooldownUntil=0;this.lastSuccessAt='';this.lastLatencyMs=0;
@@ -517,6 +533,7 @@ export class EmbeddedLanguageRuntime {
       // File basename only, never disclose filesystem paths or home folder.
       active_model_profile:item.modelFound&&typeof item.gguf==='string'&&item.gguf?path.basename(item.gguf):null,
       model_loaded_verified:Boolean(this.ready&&this.lastProbeAt),
+      bundled_static_candidate:Boolean(this.detectStaticCandidate?.()),
       paid_model_api_required:false};
   }
   recordAttempt(outcome,detail={}){
@@ -560,8 +577,14 @@ export class EmbeddedLanguageRuntime {
     const hasInstallation=this.installed();
     const unresolvedLibraries=this.lastFailure
       && classifyEmbeddedFailure(this.lastFailure).code==='embedded-shared-library-unresolved';
+    const bundledStaticPreferred=allowProvision && this.canProvision()
+      && !this.canonicalSource && Boolean(this.detectStaticCandidate?.());
+    // A cached dynamic server can be present but unable to serve a model on
+    // shared hosting. Prefer the packaged standalone musl binary, verified
+    // by EmbeddedProvisioner, even when the old cache looks installed.
     const needsCanonical = allowProvision && this.canProvision()
-      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource));
+      && (!hasInstallation || (unresolvedLibraries && !this.canonicalSource)
+        || bundledStaticPreferred);
     if(!hasInstallation && !needsCanonical)return false;
     this.booting=needsCanonical ? this.installAndBoot() : this.bootWithExecutable();
     try{return await this.booting;}
@@ -655,7 +678,9 @@ export class EmbeddedLanguageRuntime {
     child.on('exit',(code,signal)=>{
       if(this.child===child){
         this.lastProcessExit={code:code??null,signal:signal??null};
-        if(this.lastFailure && signal==='SIGTERM')return;
+        // Preserve the first startup failure (notably health timeout).
+        // A later process exit may have code 0 after termination by watchdog.
+        if(this.lastFailure)return;
         this.failureStage='native-process-exit';
         this.fail((stderr||stdout||'')+
           (code===0?(this.ready?' embedded-native-stopped-after-serving'

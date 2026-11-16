@@ -44,8 +44,12 @@ test('Hostinger can warm an installed GGUF even without NODE_ENV=production',()=
   assert.equal(shouldWarmInstalledLanguage({CI:'',NODE_ENV:'production',AURA_EMBEDDED_LANGUAGE_ENABLED:'false'}),false);
   const server=fs.readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
   assert.match(server,/const warmup=shouldWarmInstalledLanguage\(\)/);
-  assert.match(server,/localLanguageRecoveryDecision\(/);
+  assert.match(server,/const functionalMedulla = new FunctionalMedulla\(/);
+  assert.match(server,/functionalMedulla.tick\(\)/);
   assert.match(server,/setInterval\(resumeLocalLanguage,30000\)/);
+  assert.match(server,/config\.localLanguageOnly && installed/);
+  assert.match(server,/config\.localLanguageOnly && embeddedLanguageRuntime\.installed\(\)/);
+  assert.match(server,/process\.env\.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'/);
   assert.match(server,/independentLocalLanguageBoot\(/);
 });
 

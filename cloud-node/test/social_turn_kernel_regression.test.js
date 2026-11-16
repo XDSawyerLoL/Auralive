@@ -100,7 +100,9 @@ test('backend uses SQL same-session ingress, native speech without memory or pro
  assert.match(k,/perceptualBroadcast:true/);
  assert.match(k,/current_ingress_verified:true/);
  assert.match(k,/nativeSocialIngress/);
- assert.match(k,/this\.expression\.lastMode==='native-social-kernel'/);
+ assert.match(k,/String\(this\.expression\.lastMode\|\|''\)\.startsWith\('native-'\)/);
+ assert.match(k,/speech_provenance:/);
+ assert.match(k,/pretrained_language_generation_used:/);
  assert.match(server,/response\?\.response_kind==='native-kernel'/);
  assert.doesNotMatch(server,/curiosityQuestion \? .*baseAnswer/);
 });
