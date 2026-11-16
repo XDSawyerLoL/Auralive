@@ -88,7 +88,16 @@ test('native-acquired mode does not invoke any pretrained local or cloud generat
   const identity=await layer.verbalize({act:'self_name',facts:[],user_text:'Comment tu t’appelles ?'});
   assert.equal(identity,'Je m’appelle AURA.');
   const unknown=await layer.verbalize({act:'respond',facts:[],user_text:'Explique la mécanique quantique en détail'});
-  assert.equal(unknown,'');
+  assert.match(unknown,/Je n'ai pas encore appris à répondre correctement/);
+  assert.match(unknown,/Peux-tu me donner un exemple/);
+  assert.equal(layer.lastMode,'native-acquired-clarification');
+  assert.equal(layer.language.lastBackend,'aura-native-clarification-rule');
+  assert.equal(layer.language.lastNucleusContract.accepted,true);
+  // Fixed meta-communication is not a learned factual answer or any LLM.
+  const forbidden=await layer.verbalize({
+    act:'clarify_blocker_evidence',facts:[],
+    user_text:'Répare la production sans preuve de journaux'});
+  assert.equal(forbidden,'');
   assert.equal(layer.lastMode,'native-acquired-out-of-coverage');
   assert.equal(calls,0);
  }finally{
