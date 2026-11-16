@@ -4,7 +4,7 @@ import Fastify from 'fastify';
 import { AiClient } from './ai.js';
 import { embeddedLanguageRuntime, shouldWarmInstalledLanguage, independentLocalLanguageBoot } from './embedded_language.js';
 import {localDialogueReadiness} from './local_dialogue_readiness.js';
-import {localLanguageRecoveryDecision,localLanguageRetryAfter} from './local_language_supervisor.js';
+import { FunctionalMedulla } from './functional_medulla.js';
 import { ExecutionBridge } from './bridge.js';
 import { buildInfo } from './build_info.js';
 import { CommandCenter } from './command_center.js';
@@ -388,6 +388,43 @@ const cognitiveTrace = new CognitiveTraceLedger();
 const fallbackSoul = kernel.defaultSoul();
 
 const processObserver = new ObservedProcessMonitor({intervalMs:config.processObserverMs});
+
+// Always-on functional medulla: bounded, measured language recovery.
+// It does not mutate the organism's memories or generate any speech itself.
+const functionalMedulla = new FunctionalMedulla({
+  engine:{
+    status:()=>({
+      ...embeddedLanguageRuntime.status(),
+      can_provision:embeddedLanguageRuntime.canProvision(),
+      booting:Boolean(embeddedLanguageRuntime.booting),
+    }),
+    start:({allowProvision})=>{
+      const installed=embeddedLanguageRuntime.installed();
+      const canProvision=embeddedLanguageRuntime.canProvision();
+      const warmup=shouldWarmInstalledLanguage();
+      const policy=independentLocalLanguageBoot({
+        warmup,installed,
+        autoprovisionEnabled:config.localLanguageOnly
+          && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
+          && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false',
+        canProvision,
+      });
+      if(!policy.start)return Promise.resolve(false);
+      return embeddedLanguageRuntime.start({allowProvision:allowProvision&&policy.allowProvision});
+    },
+  },
+  readResources:()=>{
+    const usage=process.memoryUsage();
+    const heapPressure=usage.heapTotal>0?usage.heapUsed/usage.heapTotal:null;
+    return {compute_pressure:heapPressure};
+  },
+  localOnly:()=>Boolean(config.localLanguageOnly),
+  warmup:()=>shouldWarmInstalledLanguage(),
+  onDecision:decision=>{
+    if(decision.reason==='circuit-breaker-open')
+      app.log.warn('AURA: medulla circuit breaker prevents native restart loop');
+  },
+});
 
 const bootstrap = {
   serverReady: true,
@@ -1576,6 +1613,11 @@ app.get('/api/brain/graph', async (request, reply) => {
   };
 });
 
+
+app.get('/api/medulla/status', async () => ({
+  ...functionalMedulla.snapshot(),
+  local_language:embeddedLanguageRuntime.status().ready===true,
+}));
 
 app.get('/api/language/embedded/status', async () => ({
   // Public, path-free diagnostics. Does not disclose server folders or secrets.
@@ -3089,33 +3131,10 @@ export function startRuntimeLoop() {
   // transient failure must not leave a chat pending indefinitely. Reattempt
   // after the model / native runtime cooldown, without concurrent downloads.
   const resumeLocalLanguage=()=>{
-    const installed=embeddedLanguageRuntime.installed();
-    const canProvision=embeddedLanguageRuntime.canProvision();
-    const warmup=shouldWarmInstalledLanguage();
-    const policy=independentLocalLanguageBoot({
-      warmup,installed,
-      autoprovisionEnabled:config.localLanguageOnly
-        && process.env.CI!=='true' && process.env.NODE_ENV!=='test'
-        && process.env.AURA_EMBEDDED_AUTOPROVISION_ENABLED!=='false',
-      canProvision,
+    void functionalMedulla.tick().catch(error=>{
+      app.log.warn({code:String(error?.code||'functional-medulla-cycle-failed')},
+        'AURA: functional medulla supervision failed');
     });
-    const status=embeddedLanguageRuntime.status();
-    const decision=localLanguageRecoveryDecision({
-      warmup,localOnly:config.localLanguageOnly,
-      ready:Boolean(status.ready&&status.probe_verified),
-      booting:Boolean(embeddedLanguageRuntime.booting),
-      installed,canProvision:policy.allowProvision,
-      cooldownUntil:embeddedLanguageRuntime.cooldownUntil,
-      provisionRetryAfter:localLanguageRetryAfter(status.provisioning),
-      failureCode:status.failure_code||status.provisioning?.error_code,
-    });
-    if(policy.start&&decision.start){
-      void embeddedLanguageRuntime.start({allowProvision:policy.allowProvision})
-        .catch(error=>{
-          app.log.warn({code:String(error?.code||'embedded-start-failed')},
-            'AURA: independent local French warmup failed');
-        });
-    }
   };
   resumeLocalLanguage();
   if(!localLanguageRetryTimer && shouldWarmInstalledLanguage()
