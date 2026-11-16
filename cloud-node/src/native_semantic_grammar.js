@@ -87,10 +87,10 @@ export function parseFrenchQuestion(text){
   if(!/[?？]\s*$/u.test(String(text).trim())&&!/^(?:qui|pourquoi|de quelle couleur|est ce que)/.test(q))return null;
   // A clitic object is recoverable only when the session contains a
   // unique matching patient. Never guess from a name, stereotype or gender.
-  let elliptical=q.match(/^qui l'a ([\\p{L}-]{2,35})$/u);
+  let elliptical=q.match(/^qui l'a ([\p{L}-]{2,35})$/u);
   if(elliptical&&verb(elliptical[1]))
     return {kind:'actor-object-clitic',predicate:verb(elliptical[1])};
-  let m=q.match(/^qui\\s+(?:a|ont|avait)?\\s*(\\p{L}+)\\s+(.+)$/u);
+  let m=q.match(/^qui\s+(?:a|ont|avait)?\s*(\p{L}+)\s+(.+)$/u);
   if(m&&verb(m[1]))return {kind:'actor',predicate:verb(m[1]),patient:cleanObject(m[2])};
   m=q.match(/^de quelle couleur (?:est|etait)\s+(.+)$/u);
   if(m)return {kind:'property',agent:entity(m[1]),predicate:'etre'};
