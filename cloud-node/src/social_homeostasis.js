@@ -86,11 +86,16 @@ export function chooseSocialAction(input,{contactConsent=false,
   // indefinitely even when nothing needs resolving.
   const currentNeed=Math.min(1,weightLoss(state.needs)/.35);
   const prediction=(row.count/(row.count+2))*mean*currentNeed;
-  // No privileged positive social prior. Not knowing the effect of contact
-  // is NOT treated as evidence of an automatic reward.
+  // Symmetric, bounded exploration of UNKNOWN action effects. No special
+  // bonus for speaking; local exploration wins first when resources allow.
+  // Low need means no compulsive experimentation or unsolicited chatter.
+  const exploration=row.count===0&&action!=='silence'?
+    Math.min(.16,currentNeed*(.15*state.needs.novelty_deficit+
+      .03*state.needs.uncertainty)):0;
   const intrusion=action==='seek_contact'?.035:0;
-  const score=action==='silence'?0:prediction-COST[action]-intrusion;
+  const score=action==='silence'?0:prediction+exploration-COST[action]-intrusion;
   return {action,count:row.count,predicted_gain:round(prediction),
+   epistemic_exploration:round(exploration),
    cost:round(COST[action]+intrusion),score:round(score)};
  }).sort((a,b)=>b.score-a.score||SOCIAL_ACTIONS.indexOf(a.action)-SOCIAL_ACTIONS.indexOf(b.action));
  return {action:ranked[0]?.action||'silence',ranked,
