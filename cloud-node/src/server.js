@@ -1733,6 +1733,16 @@ app.get('/api/kernel/soul', async (request, reply) => {
   return kernel.soul({ privateView: true });
 });
 
+// Safe public numerical diagnostic: no user messages, private memories,
+// source tokens, identity data, or authorization to send messages.
+app.get('/api/organism/motivation', async (_request,reply)=>{
+  reply.header('Cache-Control','no-store');
+  if(!bootstrap.runtimeReady)return {ready:false,reason:'organism-not-ready'};
+  const projection=await kernel.organismState({publicView:true});
+  return {ready:true,...projection.autonomous_need_model,
+    deployed_speech_verified:false};
+});
+
 app.get('/api/kernel/organism', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return { ready: false };
