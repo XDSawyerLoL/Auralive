@@ -217,7 +217,8 @@ export class InnerDialogueEngine {
     // An old, hard-coded social drive cannot override a causally trained
     // regulator. With the new model, speech must outperform local alternatives
     // AND have explicit social contact consent before any candidate appears.
-    if(organism.autonomous_needs?.version===SOCIAL_HOMEOSTASIS_VERSION){
+    const learnedRegulator=organism.autonomous_needs?.version===SOCIAL_HOMEOSTASIS_VERSION;
+    if(learnedRegulator){
       const opted=organism.social_contact_policy?.explicit_consent===true;
       const learned=chooseSocialAction(organism.autonomous_needs,{
         contactConsent:opted,
@@ -242,7 +243,9 @@ export class InnerDialogueEngine {
       ?(bounded(learned.value)-.5)*.16:0;
     const value=bounded(.2+social*.3+agency*.18+clarity*.14+learnedBias
       +doubt*.06-pressure*.32-silence*.16);
-    if(value<.55)return null;
+    // New engine uses evidence-relative action utility, never a fixed
+    // social-speech threshold; legacy snapshots retain the prior gate.
+    if(!learnedRegulator&&value<.55)return null;
     const time=Number.isFinite(Date.parse(String(now)))?new Date(now).toISOString():
       new Date().toISOString();
     const initial=String(receipt.baseline_action||'');
@@ -260,7 +263,10 @@ export class InnerDialogueEngine {
         baseline_action:initial,learned_action:learnedAction,
       },
       drive:{social:round(social),agency:round(agency),silence:round(silence),
-        compute_pressure:round(pressure),value:round(value),threshold:.55},
+        compute_pressure:round(pressure),
+        value:learnedRegulator?null:round(value),
+        threshold:learnedRegulator?null:.55,
+        selection:learnedRegulator?'learned-action-comparison':'legacy-drive'},
       evidence_scope:'local-counterfactual-only',
       external_success_verified:false,llm_used:false,
       status:'pending-opt-in',outbound_action_executed:false,
