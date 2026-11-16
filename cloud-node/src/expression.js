@@ -2,7 +2,7 @@ import { config } from './config.js';
 import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.js';
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
 import {nativeFrenchCorpus} from './native_french_corpus.js';
-import {answerFrenchFromConversation} from './native_semantic_grammar.js';
+import {answerFrenchFromConversation,clarifyFrenchAmbiguity} from './native_semantic_grammar.js';
 import {answerNativeSessionDialogue,nativeSessionLearningPrompt} from './native_session_discourse.js';
 
 function normalize(value) {
@@ -150,6 +150,27 @@ export class ExpressionLayer {
       }else{
         this.lastError=nativeFrenchCorpus.status().ready
           ?'native-corpus-unsupported-intent':'native-corpus-not-installed';
+      }
+      if(nativeMode==='native-acquired'&&plan?.act==='respond'){
+        const clarification=clarifyFrenchAmbiguity({
+          question:plan.user_text,
+          history:plan.immediate_dialogue_context||[],
+          storedCorrections:plan.native_semantic_corrections||[],
+        });
+        if(clarification?.text){
+          const checked=validateNucleusSpeech(plan,clarification.text);
+          this.language.lastNucleusContract={...checked,
+            origin:'AURA.native-grounded-clarification-v1'};
+          if(checked.accepted){
+            this.lastMode='native-discourse-clarification';
+            this.lastError='';
+            this.language.lastBackend='aura-native-corpus';
+            this.language.lastModel='';
+            this.language.lastLatencyMs=0;
+            this.language.lastError='';
+            return clarification.text;
+          }
+        }
       }
       if(nativeMode==='native-acquired'){
         // A visibly attributed communication-repair utterance prevents a
