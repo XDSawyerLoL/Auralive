@@ -401,7 +401,14 @@ const functionalMedulla = new FunctionalMedulla({
     start:({allowProvision})=>{
       const installed=embeddedLanguageRuntime.installed();
       const canProvision=embeddedLanguageRuntime.canProvision();
-      const warmup=shouldWarmInstalledLanguage();
+      // In strict local-only production mode, missing French speech is a
+      // critical fault: recover an already-installed GGUF even when an old
+      // optional warmup switch was disabled on the hosting environment.
+      // Never do this in test/CI or when the embedded engine is disabled.
+      const warmup=shouldWarmInstalledLanguage() ||
+        (config.localLanguageOnly && installed &&
+          process.env.CI!=='true' && process.env.NODE_ENV!=='test' &&
+          process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false');
       const policy=independentLocalLanguageBoot({
         warmup,installed,
         autoprovisionEnabled:config.localLanguageOnly
@@ -419,7 +426,10 @@ const functionalMedulla = new FunctionalMedulla({
     return {compute_pressure:heapPressure};
   },
   localOnly:()=>Boolean(config.localLanguageOnly),
-  warmup:()=>shouldWarmInstalledLanguage(),
+  warmup:()=>shouldWarmInstalledLanguage() ||
+    (config.localLanguageOnly && embeddedLanguageRuntime.installed() &&
+      process.env.CI!=='true' && process.env.NODE_ENV!=='test' &&
+      process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'),
   onDecision:decision=>{
     if(decision.reason==='circuit-breaker-open')
       app.log.warn('AURA: medulla circuit breaker prevents native restart loop');
@@ -3137,8 +3147,9 @@ export function startRuntimeLoop() {
     });
   };
   resumeLocalLanguage();
-  if(!localLanguageRetryTimer && shouldWarmInstalledLanguage()
-      && config.localLanguageOnly){
+  if(!localLanguageRetryTimer && config.localLanguageOnly &&
+      process.env.CI!=='true' && process.env.NODE_ENV!=='test' &&
+      process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'){
     localLanguageRetryTimer=setInterval(resumeLocalLanguage,30000);
     localLanguageRetryTimer.unref?.();
   }
