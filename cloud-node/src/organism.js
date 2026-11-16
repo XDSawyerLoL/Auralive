@@ -22,7 +22,7 @@ export class AuraOrganism {
     // Functional epistemic needs evolve even without interaction, while
     // recognition/praise alone cannot count as information gain or attachment.
     state.autonomous_needs=advanceSocialHomeostasis(state.autonomous_needs,{
-      seconds:duration,resourcePressure:sample.compute_pressure});
+      seconds:duration,resourcePressure:sample?.compute_pressure??0});
     return state.homeostasis;
   }
 
