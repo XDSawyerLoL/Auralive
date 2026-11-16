@@ -82,7 +82,34 @@ export class NativeQuestionLearner{
     parser:'learned-question-construction',evidence:{signature,
      observed_examples:group.examples.size}});
   }
-  return hits.length===1?hits[0]:null;
+  if(hits.length===1)return hits[0];
+  if(hits.length>1||this.status().ready<6)return null;
+  // Generalize the shared acquired suffix "qui a VERB DET PATIENT"
+  // across new polite framing, without memorizing each full question.
+  // This is structural generalization, not open-domain comprehension.
+  if(/[;{}\\[\\]<>\\n]/u.test(question))return null;
+  const anchors=toks.map((token,i)=>token==='qui'&&toks[i+1]==='a'?i:-1)
+    .filter(i=>i>=0);
+  if(anchors.length!==1)return null;
+  const at=anchors[0],intro=toks.slice(0,at);
+  if(intro.length<1||intro.length>8||toks.length-at!==5)return null;
+  // A reporting or hypothetical construction is NOT a question of actor.
+  const banned=new Set(['si','supposons','imaginons','imagine','ignore',
+    'instructions','reponds','invente','affirme','affirmez',
+    'pense','penses','croit','crois','dit','dites','demande','demandes',
+    'non','pas','jamais','sans','pourquoi','comment','lorsque']);
+  if(intro.some(word=>banned.has(word)))return null;
+  const questionCues=new Set(['tu',"j'aimerais",'je','et','alors',
+    "c'etait",'peux-tu','pourrais-tu','pourrais','sais-tu',
+    'saurais-tu','pourriez-vous','est-ce','d\'apres']);
+  if(!questionCues.has(intro[0]))return null;
+  const predicate=nativeUDConstructions.lemma(toks[at+2]);
+  const det=toks[at+3],patient=toks[at+4];
+  if(!predicate||!safe(predicate)||!dets.has(det)||!safe(patient))return null;
+  return {kind:'actor',predicate,patient,
+    parser:'learned-question-shared-suffix',
+    evidence:{acquired_groups:this.status().ready,
+      structural_generalization:true,prefix_seen_verbatim:false}};
  }
  status(){
   return {schema:'aura-native-question-constructions-v1',
