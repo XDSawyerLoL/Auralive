@@ -23,23 +23,29 @@ export function parseNativeSessionDisclosure(message){
  if(/\b(?:dit que|pense que|affirme que|imagine que|croit que)\b/iu.test(raw))
   return null;
  const flat=fold(raw);
+ // Keep the user's French diacritics and proper-noun capitalization in the
+ // utterance; the folded form is used only for matching and comparison.
+ const surface=value=>{
+  const pos=flat.indexOf(value);
+  return pos>=0?raw.slice(pos,pos+value.length):value;
+ };
  let m=flat.match(/^(?:je m'appelle|mon prenom est|mon nom est|moi c'est) ([\p{L}-]{2,35})$/u);
  if(m&&names.test(m[1]))return {
-  schema:NATIVE_SESSION_FACT_SCHEMA,kind:'name',key:'name',value:m[1],
+  schema:NATIVE_SESSION_FACT_SCHEMA,kind:'name',key:'name',value:surface(m[1]),
   positive:true,provenance:'explicit-user-disclosure',scope:'same-session-only'};
  m=flat.match(/^(?:mon|ma) ([\p{L}-]{2,45}?(?: [\p{L}-]{2,25}){0,2}) (?:prefere|preferee|favori|favorite) (?:est|c'est) (.+)$/u);
  if(m&&valid(m[2])){
   return {schema:NATIVE_SESSION_FACT_SCHEMA,kind:'favorite',
-   key:'favorite:'+m[1],value:m[2],positive:true,
+   key:'favorite:'+m[1],value:surface(m[2]),positive:true,
    provenance:'explicit-user-disclosure',scope:'same-session-only'};
  }
  m=flat.match(/^je prefere (.+?)(?: (?:au|a la|a l') .+)?$/u);
  if(m&&valid(m[1]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
-   kind:'preference',key:'preference',value:m[1],positive:true,
+   kind:'preference',key:'preference',value:surface(m[1]),positive:true,
    provenance:'explicit-user-disclosure',scope:'same-session-only'};
  m=flat.match(/^(?:(j'aime(?: bien)?)|(je n'aime (?:pas|plus|jamais))|(je aime(?: bien)?)) (.+)$/u);
  if(m&&valid(m[4]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
-   kind:'like',key:'like:'+m[4],value:m[4],
+   kind:'like',key:'like:'+m[4],value:surface(m[4]),
    positive:Boolean(m[1]||m[3]),provenance:'explicit-user-disclosure',
    scope:'same-session-only'};
  return null;
