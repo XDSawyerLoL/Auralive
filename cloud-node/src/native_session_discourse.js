@@ -54,15 +54,15 @@ const factValid=f=>f?.schema===NATIVE_SESSION_FACT_SCHEMA&&
  typeof f.positive==='boolean';
 function buildFacts(history,stored){
  const all=[];
- for(const row of Array.isArray(stored)?stored.slice(-64):[]){
-  if(factValid(row))all.push(row);
- }
- // Session SQL records cover long-range learning. The current live window
- // also captures a correction before its persistent write becomes visible.
+ // Live history can contain a disclosure not yet persisted. The SQL
+ // experience log is then applied last and wins on later explicit corrections.
  for(const row of Array.isArray(history)?history.slice(-32):[]){
   if(row?.role!=='user')continue;
   const value=parseNativeSessionDisclosure(row.content);
   if(value)all.push(value);
+ }
+ for(const row of Array.isArray(stored)?stored.slice(-64):[]){
+  if(factValid(row))all.push(row);
  }
  const state=new Map();
  for(const f of all){
