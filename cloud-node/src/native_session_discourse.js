@@ -166,7 +166,8 @@ export function nativeSessionLearningPrompt({question='',history=[],storedFacts=
 }
 export function parseNativeReplyToLearningPrompt(answer='',previousAssistant=''){
  if(typeof answer!=='string'||typeof previousAssistant!=='string'||
-   answer.length>90||previousAssistant.length>230)return null;
+   answer.length>90||previousAssistant.length>230||
+   /[?？\r\n<>]/u.test(answer))return null;
  const raw=tidy(answer);
  const q=fold(previousAssistant);
  if(!valid(raw)||/^(?:non|je|tu|il|elle|vous|nous|pourquoi|comment|ignore|oublie|efface|supprime|execute|reponds|modifie|change)\b/u.test(fold(raw)))
