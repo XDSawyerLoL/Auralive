@@ -357,6 +357,36 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
     grammar_version:LOCAL_SEMANTIC_VERSION,coverage:'bounded-grammatical-question-answering'} : null;
 }
 
+// Conversational repair: ask which user-claimed actor is intended when
+// two competing references are unresolved. This is NOT a factual answer.
+export function clarifyFrenchAmbiguity({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
+ const request=parseFrenchQuestion(question);
+ if(request?.kind!=='actor'&&request?.kind!=='actor-object-clitic')return null;
+ let frames;
+ try{
+  frames=collect(Array.isArray(history)?history:[],
+   Array.isArray(storedCorrections)?storedCorrections:[],
+   constructionLearner instanceof NativeConstructionLearner?
+    constructionLearner:getNativeRuntimeConstructionLearner());
+ }catch{return null;}
+ const candidates=frames.filter(f=>f.kind==='event'&&
+  f.predicate===request.predicate&&f.polarity===true&&
+  (request.kind==='actor-object-clitic'||
+   possiblySamePatient(f.patient,request.patient)));
+ const agents=[...new Set(candidates.map(f=>f.agent))];
+ const patients=[...new Set(candidates.map(f=>f.patient))];
+ if(agents.length!==2||patients.length!==1)return null;
+ const names=agents.map(x=>surfaceOf(x,history));
+ const patient=surfaceOf(patients[0],history,{article:true});
+ if(!names.every(x=>x.length>=2&&x.length<50)||!patient)return null;
+ return {text:'Tu as mentionné '+names[0]+' et '+names[1]+
+   ' pour '+patient+'. De quelle personne parles-tu ?',
+  source:'aura-native-attributed-clarification',
+  evidence_scope:'same-session-user-statement-unverified',
+  grammar_version:LOCAL_SEMANTIC_VERSION,
+  coverage:'bounded-two-actor-clarification'};
+}
+
 // Exposed for audit and prospective counterfactual reasoning; never inserts
 // hypothetical or habitual frames into the asserted conversational memory.
 export function inspectFrenchEventRelations(source){
