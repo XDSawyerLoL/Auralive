@@ -3,6 +3,7 @@ import { FrenchLanguageFaculty,validateNucleusSpeech } from './french_language.j
 import {NATIVE_SOCIAL_ACTS} from './social_turn_kernel.js';
 import {nativeFrenchCorpus} from './native_french_corpus.js';
 import {answerFrenchFromConversation} from './native_semantic_grammar.js';
+import {answerNativeSessionDialogue} from './native_session_discourse.js';
 
 function normalize(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -54,6 +55,30 @@ export class ExpressionLayer {
 
   async verbalize(plan, options = {}) {
     const fallback = this.cognition.deterministicReply(plan);
+    // The native speaker can recall only user-declared, same-session facts
+    // passed through the trusted language workspace. No pretrained model,
+    // invented biography or unverified cross-session user recognition.
+    const currentMode=String(process.env.AURA_NATIVE_FRENCH_MODE||'').trim();
+    if(['native-acquired','local-only','prefer-local'].includes(currentMode)){
+      const recalled=answerNativeSessionDialogue({
+        question:plan?.user_text,history:plan?.immediate_dialogue_context||[],
+        storedFacts:plan?.native_session_preferences||[],
+      });
+      if(recalled?.text){
+        const check=validateNucleusSpeech(plan,recalled.text);
+        this.language.lastNucleusContract={...check,
+          origin:'AURA.native-session-user-disclosure-v1'};
+        if(check.accepted){
+          this.lastError='';
+          this.lastMode='native-session-grounded';
+          this.language.lastBackend='aura-native-session-discourse';
+          this.language.lastModel='';
+          this.language.lastLatencyMs=0;
+          this.language.lastError='';
+          return recalled.text;
+        }
+      }
+    }
     // Explicit current-turn social intent can be expressed by the kernel
     // itself. A language provider must not invent AURA's curiosity or steer
     // the conversation. This is NOT a fake hidden thought or human emotion.
