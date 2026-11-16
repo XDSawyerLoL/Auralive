@@ -87,7 +87,8 @@ export class NativeQuestionLearner{
   // Generalize the shared acquired suffix "qui a VERB DET PATIENT"
   // across new polite framing, without memorizing each full question.
   // This is structural generalization, not open-domain comprehension.
-  if(/[;{}\\[\\]<>\\n]/u.test(question))return null;
+  if([';','{','}','[',']','<','>'].some(ch=>question.includes(ch))||
+    /[\r\n]/u.test(question))return null;
   const anchors=toks.map((token,i)=>token==='qui'&&toks[i+1]==='a'?i:-1)
     .filter(i=>i>=0);
   if(anchors.length!==1)return null;
