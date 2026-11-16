@@ -177,7 +177,8 @@ test('causal ablation changes contact decision, without learning silence wins',(
   consequences:{...state.consequences,
    seek_contact:{count:0,total_gain:0}}};
  const control=chooseSocialAction(ablated,canPropose);
- assert.equal(control.action,'silence');
+ assert.equal(control.action,'inspect_local',
+  'without the successful human outcome, exploration returns to local work');
  assert.ok(learned.ranked.find(x=>x.action==='seek_contact').score>0);
  assert.ok(control.ranked.find(x=>x.action==='seek_contact').score<0);
 });
