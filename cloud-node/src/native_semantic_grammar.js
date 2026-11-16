@@ -229,7 +229,7 @@ function collect(history=[],stored=[],constructionLearner=null){
 // It does not present speaker claims as verified reality.
 const summarizeRequest=text=>{
  const q=fold(text).replace(/[?!.]+$/u,'').trim();
- if(/^(?:resume|recapitule|fais un resume)\s+(?:ce que je t'ai dit|notre echange|les faits|les evenements)$/u.test(q))
+ if(/^(?:resume|recapitule|fais un resume)\s+(?:ce que je t'ai dit|notre echange|les faits|les evenements)|^(?:resume|recapitule)\s+(?:les evenements|les faits)$/u.test(q))
   return {kind:'session-summary'};
  const person=q.match(/^(?:que sais tu|qu'est ce que tu sais|rappelle moi ce que tu sais)\s+(?:sur|de|a propos de)\s+([\p{L}-]{2,40})$/u);
  if(person)return {kind:'actor-summary',agent:person[1]};
