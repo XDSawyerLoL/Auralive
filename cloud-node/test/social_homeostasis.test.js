@@ -120,3 +120,46 @@ test('AURA organism actually evolves functional needs, never sends a message',()
   .ranked.some(a=>a.action==='seek_contact'),false,
   'without explicit persistent consent, no contact option exists');
 });
+
+
+test('existing independent initiative cannot bypass causal learning and consent',async()=>{
+ const {InnerDialogueEngine}=await import('../src/inner_dialogue.js');
+ const engine=new InnerDialogueEngine();
+ const receipt={probe:'context_policy_ablation',outcome:'supported',
+  causal_change:true,external_success_verified:false,
+  origin:'kernel-autonomous-test',context:'dialogue_general',
+  experience_revision:4,at:'2026-11-16T14:00:00.000Z',
+  baseline_action:'defer',observed_action:'clarify'};
+ const other={identity:{dimensions:{}},receipt,previous:null,
+  viability:{optional_work_allowed:true},
+  now:'2026-11-16T14:10:00.000Z'};
+ const organism={homeostasis:{resource_pressure:.05},
+  besoin_de_silence:.1,curiosite_sociale:.94,
+  agency:.96,clarte:.95,frustration:.25,
+  autonomous_needs:{...initialSocialHomeostasis(),needs:deficit},
+  social_contact_policy:{explicit_consent:false}};
+ assert.equal(engine.proposeSocialInitiative({...other,organism}),null,
+  'fixed social-drive values must not force a proposal without consent');
+ organism.social_contact_policy.explicit_consent=true;
+ assert.equal(engine.proposeSocialInitiative({...other,organism}),null,
+  'consent alone cannot bypass local exploration or predicted utility');
+ let state=organism.autonomous_needs;
+ for(const [action,id,after] of [
+  ['inspect_local','trial_inner_local',deficit],
+  ['consolidate_memory','trial_inner_memory',deficit],
+  ['seek_contact','trial_inner_contact',recovered]
+ ]){
+  const episode=observed(state,id,action,after);
+  assert.equal(episode.accepted,true);
+  state=episode.state;
+  // A different verified need-state emerges, not a time-based trigger.
+  if(action==='seek_contact')state={...state,needs:deficit};
+ }
+ organism.autonomous_needs=state;
+ const candidate=engine.proposeSocialInitiative({...other,organism});
+ assert.equal(candidate?.status,'pending-opt-in');
+ assert.equal(candidate?.outbound_action_executed,false);
+ assert.equal(candidate?.llm_used,false);
+ organism.social_contact_policy.explicit_consent=false;
+ assert.equal(engine.proposeSocialInitiative({...other,organism}),null);
+});
