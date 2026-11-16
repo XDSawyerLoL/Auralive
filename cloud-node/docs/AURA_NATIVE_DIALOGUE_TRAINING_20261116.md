@@ -17,3 +17,21 @@ La génération de texte et la synthèse vocale sont distinctes. Une réponse na
 
 ## Prochaine lacune majeure
 Il faudra un corpus français conversationnel plus large et licite, des annotations de discours/intentions, un vrai entraînement statistique ou neuronal progressif, des tests humains tenus à l'écart et des ressources d'inférence compatibles avec l'hébergement. En l'état AURA **n'est pas capable de soutenir une conversation complexe libre** : ce travail pose une fondation mesurée plutôt que de masquer ce fait derrière un autre modèle.
+
+
+## Extension du 16 novembre : questions et discours
+
+- Le module `src/native_question_learning.js` acquiert 6 squelettes interrogatifs à partir de 72 démonstrations annotées. Les références grammaticales (verbe fléchi, article et objet) s'appuient sur le lexique UD French-GSD ; il ne contient pas de poids Qwen ni de modèle hébergé.
+- Les phrases « qui l'a fermé ? » utilisent un antécédent de discours uniquement si une action correspond à **un seul patient et un seul agent**. Plusieurs possibilités entraînent l'abstention.
+- `native-acquired` offre une réparation conversationnelle **explicitement programmée**, « Je n'ai pas encore appris… Peux-tu me donner un exemple ? ». Ce n'est **pas** une phrase que le modèle a apprise en autonomie. Elle évite le silence mais ne prétend pas répondre à une question inconnue.
+- `AURA_NATIVE_QUESTIONS_ENABLED=false` permet l'ablation des constructions interrogatives acquises, afin de prouver leur effet causal.
+
+## Deux batteries de développement, et leurs limites
+
+- **Batterie multi-tours de 100 cas** (`scripts/evaluate_native_multiturn_100.mjs`) : 70 cas résolubles et 30 cas où il faut s'abstenir ; 70/70 réponses correctes et 30/30 abstentions, contre 20/70 réponses correctes sans apprentissage des constructions. Données créées par le développeur, non indépendantes.
+- **Batterie de 48 structures interrogatives non apprises telles quelles** (`scripts/evaluate_native_structural_stress_48.mjs`) : diagnostic initial 0/36 questions résolubles, puis 30/36 après ajout d'une généralisation compositionnelle conservatrice du suffixe appris « qui a VERBE ARTICLE OBJET ». Douze cas négatifs n'ont pas été attribués à tort.
+- La deuxième batterie a servi au développement : son score final **ne peut donc plus être qualifié de validation aveugle ou de véritable généralisation hors ajustement**. Il faudra une nouvelle cohorte indépendante et figée par un évaluateur extérieur.
+- Les six cas encore refusés dans ce test impliquent notamment une nominalisation (« fermeture de ») sans lien lexical attesté entre nom et action ; AURA ne doit pas inventer ce lien.
+- Le français conversationnel ouvert, l'humour contextuel, les longues subordonnées, la référence aux époques, les changements de sujet et la voix audio ne sont pas démontrés par ces scores.
+
+L'objectif d'une conversation libre complexe n'est **pas atteint** par ce travail ; le reconnaître est une condition de progrès réel.
