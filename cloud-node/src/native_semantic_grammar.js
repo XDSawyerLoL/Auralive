@@ -231,7 +231,7 @@ const summarizeRequest=text=>{
  const q=fold(text).replace(/[?!.]+$/u,'').trim();
  if(/^(?:resume|recapitule|fais un resume)\s+(?:ce que je t'ai dit|notre echange|les faits|les evenements)|^(?:resume|recapitule)\s+(?:les evenements|les faits)$/u.test(q))
   return {kind:'session-summary'};
- const person=q.match(/^(?:que sais tu|qu'est ce que tu sais|rappelle moi ce que tu sais)\s+(?:sur|de|a propos de)\s+([\p{L}-]{2,40})$/u);
+ const person=q.match(/^(?:que sais[- ]tu|qu'est[- ]ce que tu sais|rappelle[- ]moi ce que tu sais)\s+(?:sur|de|a propos de)\s+([\p{L}-]{2,40})$/u);
  if(person)return {kind:'actor-summary',agent:person[1]};
  return null;
 };
@@ -241,7 +241,26 @@ const pastParticiple=new Map([
  ['trouver','trouvé'],['garder','gardé'],['donner','donné'],
  ['choisir','choisi'],
 ]);
-const formatNativeSummary=(rows,agent)=>{
+// Preserve only observed surface spellings, never invent a new fact.
+const surfaceOf=(normalized,history,{article=false}={})=>{
+ const wanted=fold(normalized);
+ if(!wanted||wanted.split(' ').length>5)return publicLabel(normalized);
+ const tokens=String(normalized).split(' ').length;
+ const used=(Array.isArray(history)?history:[]).filter(r=>r?.role==='user')
+  .map(r=>String(r.content||'')).slice(-24).reverse();
+ for(const line of used){
+  const raw=line.match(/[\p{L}-]+/gu)||[];
+  for(let i=0;i<=raw.length-tokens;i++){
+   if(fold(raw.slice(i,i+tokens).join(' '))!==wanted)continue;
+   const candidate=raw.slice(i,i+tokens).join(' ');
+   if(article&&i>0&&['le','la','les','un','une','des'].includes(fold(raw[i-1])))
+    return raw[i-1]+' '+candidate;
+   if(!article)return candidate;
+  }
+ }
+ return (article?'':publicLabel(normalized))||normalized;
+};
+const formatNativeSummary=(rows,agent,history=[])=>{
  const all=rows.filter(row=>row?.kind==='event'&&row.polarity===true
   &&row.agent&&row.patient&&row.predicate
   &&pastParticiple.has(row.predicate)
@@ -252,9 +271,10 @@ const formatNativeSummary=(rows,agent)=>{
   [row.agent+'|'+row.predicate+'|'+row.patient,row])).values()].slice(-4);
  if(!unique.length)return null;
  const sentences=unique.map(row=>
-  publicLabel(row.agent)+' aurait '+pastParticiple.get(row.predicate)+' '+row.patient);
+  surfaceOf(row.agent,history)+' aurait '+pastParticiple.get(row.predicate)
+    +' '+surfaceOf(row.patient,history,{article:true}));
  return 'D’après les événements que tu as rapportés, '+
-  sentences.map(x=>x.replace(/^./u,c=>c.toLowerCase())).join('; ')+'.';
+  sentences.join('; ')+'.';
 };
 
 export function answerFrenchFromConversation({question='',history=[],storedCorrections=[],constructionLearner=null}={}){
@@ -269,7 +289,8 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
        constructionLearner instanceof NativeConstructionLearner?
         constructionLearner:getNativeRuntimeConstructionLearner());
     }catch{return null;}
-    const text=formatNativeSummary(observed,summary.kind==='actor-summary'?summary.agent:null);
+    const text=formatNativeSummary(observed,summary.kind==='actor-summary'?summary.agent:null,
+      history);
     return text?{text,source:'aura-native-attributed-discourse-summary',
       evidence_scope:'same-session-user-statement-unverified',
       grammar_version:LOCAL_SEMANTIC_VERSION,
