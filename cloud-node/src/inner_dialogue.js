@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import {chooseSocialAction,SOCIAL_HOMEOSTASIS_VERSION} from './social_homeostasis.js';
 
 // An explicit, bounded internal working loop. "Voices" are competing
 // functional appraisal channels, not audible speech, consciousness, or the
@@ -213,6 +214,18 @@ export class InnerDialogueEngine {
       return null;
     const context=String(receipt.context||'');
     if(!/^(task|dialogue)_[a-z_]{3,50}$/.test(context))return null;
+    // An old, hard-coded social drive cannot override a causally trained
+    // regulator. With the new model, speech must outperform local alternatives
+    // AND have explicit social contact consent before any candidate appears.
+    if(organism.autonomous_needs?.version===SOCIAL_HOMEOSTASIS_VERSION){
+      const opted=organism.social_contact_policy?.explicit_consent===true;
+      const learned=chooseSocialAction(organism.autonomous_needs,{
+        contactConsent:opted,
+        engagementAuthorized:opted,
+        resourcePressure:organism.homeostasis?.resource_pressure||0,
+        conversationBusy:viability.conversation_busy===true});
+      if(learned.action!=='seek_contact')return null;
+    }
     const revision=Math.max(0,Math.trunc(Number(receipt.experience_revision)||0));
     if(revision===0||!Number.isFinite(Date.parse(String(receipt.at||''))))return null;
     const evidenceKey=context+':'+revision;
