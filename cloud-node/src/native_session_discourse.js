@@ -169,7 +169,7 @@ export function parseNativeReplyToLearningPrompt(answer='',previousAssistant='')
    answer.length>90||previousAssistant.length>230)return null;
  const raw=tidy(answer);
  const q=fold(previousAssistant);
- if(!valid(raw)||/^(?:non|je|tu|il|elle|vous|nous|pourquoi|comment)\b/u.test(fold(raw)))
+ if(!valid(raw)||/^(?:non|je|tu|il|elle|vous|nous|pourquoi|comment|ignore|oublie|efface|supprime|execute|reponds|modifie|change)\b/u.test(fold(raw)))
   return null;
  let kind='',key='';
  if(q==="je ne connais pas ton prenom dans cette conversation. comment souhaites-tu que je t'appelle ?"){
