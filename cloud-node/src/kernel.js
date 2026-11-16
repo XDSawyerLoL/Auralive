@@ -2617,6 +2617,8 @@ export class CognitiveKernel {
     // Scope corrections to the current conversation; reported observations are not independent evidence.
     await this.language.rememberCorrection({
       sessionId: conversationSession, discourse: plan.discourse, userText: content,
+      recentDialogue:process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'
+        ?recentMessages:[],
     }).catch((error) => { this.lastError = String(error?.message || error).slice(0, 500); });
     plan = {
       ...plan,
