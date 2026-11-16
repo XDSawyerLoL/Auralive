@@ -81,7 +81,11 @@ export function chooseSocialAction(input,{contactConsent=false,
  const ranked=candidates.map(action=>{
   const row=state.consequences[action],mean=row.count?
    row.total_gain/row.count:0;
-  const prediction=(row.count/(row.count+2))*mean;
+  // Past improvement matters only if the CURRENT state still has comparable
+  // regulatory error. Otherwise a previously useful contact would repeat
+  // indefinitely even when nothing needs resolving.
+  const currentNeed=Math.min(1,weightLoss(state.needs)/.35);
+  const prediction=(row.count/(row.count+2))*mean*currentNeed;
   // No privileged positive social prior. Not knowing the effect of contact
   // is NOT treated as evidence of an automatic reward.
   const intrusion=action==='seek_contact'?.035:0;
