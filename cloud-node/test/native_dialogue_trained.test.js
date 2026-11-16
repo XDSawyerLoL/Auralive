@@ -96,3 +96,23 @@ test('native-acquired mode does not invoke any pretrained local or cloud generat
   else process.env.AURA_NATIVE_FRENCH_MODE=before;
  }
 });
+
+
+test('composes two different evidenced questions in one 16-turn dialogue',()=>{
+ const trained=trainNativeDialogueConstructions().learner;
+ const history=[{role:'user',content:'Ce matin, Victor a signé le contrat.'},
+  ...Array.from({length:14},()=>({role:'user',content:'Bonjour.'})),
+  {role:'user',content:'Après la réunion, Léa a fermé la porte.'}];
+ const both=answerFrenchFromConversation({
+  question:'Qui a signé le contrat ? Et qui a fermé la porte ?',
+  history,constructionLearner:trained
+ });
+ assert.equal(both?.coverage,'bounded-two-question-composition');
+ assert.match(fold(both?.text),/victor/);
+ assert.match(fold(both?.text),/lea/);
+ // A single unsupported question invalidates the whole compound response.
+ assert.equal(answerFrenchFromConversation({
+  question:'Qui a signé le contrat ? Et qui a ouvert la lune ?',
+  history,constructionLearner:trained
+ }),null);
+});
