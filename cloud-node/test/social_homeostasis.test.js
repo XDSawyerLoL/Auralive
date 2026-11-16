@@ -163,3 +163,27 @@ test('existing independent initiative cannot bypass causal learning and consent'
  organism.social_contact_policy.explicit_consent=false;
  assert.equal(engine.proposeSocialInitiative({...other,organism}),null);
 });
+
+
+test('causal ablation changes contact decision, without learning silence wins',()=>{
+ let state={...initialSocialHomeostasis(),needs:deficit};
+ const success=observed(state,'trial_contact_ablation1','seek_contact',recovered);
+ assert.equal(success.accepted,true);
+ const target={uncertainty:.70,coherence:.10,novelty_deficit:.40,energy:.20};
+ state={...success.state,needs:target};
+ const learned=chooseSocialAction(state,canPropose);
+ assert.equal(learned.action,'seek_contact');
+ const ablated={...state,
+  consequences:{...state.consequences,
+   seek_contact:{count:0,total_gain:0}}};
+ const control=chooseSocialAction(ablated,canPropose);
+ assert.equal(control.action,'silence');
+ assert.ok(learned.ranked.find(x=>x.action==='seek_contact').score>0);
+ assert.ok(control.ranked.find(x=>x.action==='seek_contact').score<0);
+});
+test('heavy compute load protects all optional work and leaves silence possible',()=>{
+ const state={...initialSocialHomeostasis(),needs:deficit};
+ const decision=chooseSocialAction(state,{...canPropose,resourcePressure:.95});
+ assert.deepEqual(decision.ranked.map(x=>x.action),['silence']);
+ assert.equal(decision.external_message_authorized,false);
+});
