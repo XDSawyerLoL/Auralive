@@ -1053,7 +1053,7 @@ app.get('/api/capabilities', async (request) => {
     language: {
       ready: speechReady,
       native_acquired_ready: nativeAcquiredReady,
-      open_domain_ready: false,
+      open_domain_ready: Boolean(expressionDiagnostic.natural_french_ready),
       pretrained_language_generation_disabled: nativeSpeechMode,
       native_dialogue_ready: Boolean(bootstrap.runtimeReady),
       native_dialogue_version: CognitionEngine.VERSION,
