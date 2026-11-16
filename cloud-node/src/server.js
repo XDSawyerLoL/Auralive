@@ -400,6 +400,9 @@ const functionalMedulla = new FunctionalMedulla({
       booting:Boolean(embeddedLanguageRuntime.booting),
     }),
     start:({allowProvision})=>{
+      // The user's self-acquired mode must never launch borrowed Qwen weights.
+      if(process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired')
+        return Promise.resolve(false);
       const installed=embeddedLanguageRuntime.installed();
       const canProvision=embeddedLanguageRuntime.canProvision();
       // In strict local-only production mode, missing French speech is a
@@ -426,11 +429,12 @@ const functionalMedulla = new FunctionalMedulla({
     const heapPressure=usage.heapTotal>0?usage.heapUsed/usage.heapTotal:null;
     return {compute_pressure:heapPressure};
   },
-  localOnly:()=>Boolean(config.localLanguageOnly),
-  warmup:()=>shouldWarmInstalledLanguage() ||
+  localOnly:()=>Boolean(config.localLanguageOnly)&&process.env.AURA_NATIVE_FRENCH_MODE!=='native-acquired',
+  warmup:()=>process.env.AURA_NATIVE_FRENCH_MODE!=='native-acquired' &&
+    (shouldWarmInstalledLanguage() ||
     (config.localLanguageOnly && embeddedLanguageRuntime.installed() &&
       process.env.CI!=='true' && process.env.NODE_ENV!=='test' &&
-      process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'),
+      process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false')),
   onDecision:decision=>{
     if(decision.reason==='circuit-breaker-open')
       app.log.warn('AURA: medulla circuit breaker prevents native restart loop');
@@ -1030,6 +1034,10 @@ app.get('/api/capabilities', async (request) => {
         mode: 'unavailable',
         language: { ready: false, primary: 'unavailable', last_error: '' },
       };
+  const nativeSpeechMode=process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired';
+  const nativeAcquiredReady=Boolean(nativeSpeechMode&&bootstrap.runtimeReady&&
+    getNativeRuntimeConstructionLearner()?.status().ready>0);
+  const speechReady=Boolean(expressionDiagnostic.natural_french_ready||nativeAcquiredReady);
   const voiceFabricActuallyReady = Boolean(
     voiceStudio.enabled
     && voiceDiscovery?.ok
@@ -1043,13 +1051,16 @@ app.get('/api/capabilities', async (request) => {
     },
     memory: { ready: Boolean(bootstrap.dbReady) },
     language: {
-      ready: Boolean(expressionDiagnostic.natural_french_ready),
+      ready: speechReady,
+      native_acquired_ready: nativeAcquiredReady,
+      open_domain_ready: false,
+      pretrained_language_generation_disabled: nativeSpeechMode,
       native_dialogue_ready: Boolean(bootstrap.runtimeReady),
       native_dialogue_version: CognitionEngine.VERSION,
       faculty_version: String(expressionDiagnostic.language?.version || ''),
       provider: String(expressionDiagnostic.language?.primary || 'unavailable'),
       local_worker: Boolean(bridgeStatus?.worker_online),
-      fallback_only: !expressionDiagnostic.natural_french_ready,
+      fallback_only: !speechReady,
       mode: String(expressionDiagnostic.mode || 'unavailable'),
       normal_path_scripted: Boolean(expressionDiagnostic.scripted_normal_path),
       emergency_fallback_only: true,
@@ -2442,6 +2453,19 @@ app.post('/api/cognition/initiative/feedback', async (request, reply) => {
 });
 
 async function localLanguageSnapshot(){
+  if(process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired'){
+    const trained=getNativeRuntimeConstructionLearner();
+    const ready=Boolean(bootstrap.runtimeReady&&trained?.status().ready>0);
+    return {
+      schema:'aura-local-language-readiness-v1',local_only:true,
+      ready,model_verified:false,native_acquired_ready:ready,
+      pretrained_language_model_used:false,open_domain_ready:false,
+      phase:ready?'native-acquired-bounded':'native-acquired-unavailable',
+      reason:ready?'trained-grammar-present':'trained-grammar-unavailable',
+      retryable:!ready,retry_after_seconds:ready?0:5,model_profile:null,
+      training:nativeRuntimeConstructionStatus().status||null,
+    };
+  }
   const localOnly=Boolean(config.localLanguageOnly || process.env.AURA_NATIVE_FRENCH_MODE==='local-only');
   let bridgeOnline=false;
   if(localOnly&&bridge.enabled){
@@ -2503,7 +2527,9 @@ app.post('/api/chat', async (request, reply) => {
   const curiosityItem = null;
   const answer = unavailable ? '' : baseAnswer;
   const languageRuntime=unavailable?await localLanguageSnapshot():null;
-  const localInferenceMissing=Boolean(unavailable && languageRuntime?.local_only && !languageRuntime?.ready);
+  const nativeAcquiredMode=process.env.AURA_NATIVE_FRENCH_MODE==='native-acquired';
+  const localInferenceMissing=Boolean(unavailable && !nativeAcquiredMode &&
+    languageRuntime?.local_only && !languageRuntime?.ready);
   cognitiveTrace.finish(traceId,unavailable?'error':'done');
   return {
     ...response,
@@ -2518,15 +2544,20 @@ app.post('/api/chat', async (request, reply) => {
     retryable: unavailable&&Boolean(languageRuntime?.retryable),
     service_status: unavailable ? {
       code: localInferenceMissing?'local-inference-not-ready'
+        :nativeAcquiredMode?'native-acquired-uncovered-intent'
         :process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'local-corpus-unsupported-intent':'french-inference-unavailable',
       message: localInferenceMissing
         ?'Le moteur GGUF local n’a pas validé son démarrage ni son inférence. Aucun fournisseur distant sollicité.'
+        :nativeAcquiredMode
+        ?'AURA ne maîtrise pas encore cette formulation avec sa grammaire acquise. Aucun modèle externe sollicité.'
         :process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'Le moteur local ne sait pas encore formuler cet acte de langage. Aucun fournisseur distant sollicité.'
         :'Aucun moteur français ne répond actuellement. Aucun message artificiel généré.',
       recovery: localInferenceMissing
         ?'Consulter /api/language/embedded/status : vérifier le dernier échec, la mémoire et le modèle installé.'
+        :nativeAcquiredMode
+        ?'Enrichir les constructions linguistiques natives et demander un exemple à l’utilisateur.'
         :process.env.AURA_NATIVE_FRENCH_MODE==='local-only'
         ?'Enrichir les schémas sémantiques et le réalisateur grammatical local.'
         :'Consulter le diagnostic linguistique et réessayer après validation du modèle.',
@@ -3157,6 +3188,7 @@ export function startRuntimeLoop() {
   };
   resumeLocalLanguage();
   if(!localLanguageRetryTimer && config.localLanguageOnly &&
+      process.env.AURA_NATIVE_FRENCH_MODE!=='native-acquired' &&
       process.env.CI!=='true' && process.env.NODE_ENV!=='test' &&
       process.env.AURA_EMBEDDED_LANGUAGE_ENABLED!=='false'){
     localLanguageRetryTimer=setInterval(resumeLocalLanguage,30000);
