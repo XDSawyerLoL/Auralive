@@ -234,3 +234,32 @@ test('missing-knowledge prompts refuse hypothetical and unknown claims',()=>{
   question:'Et mon jeu préféré ?',history:[user('Mon jeu préféré est Skyrim.')],
  }),null,'do not ask the same question when evidence already exists');
 });
+
+
+test('AURA distinguishes a stated objective from a completed real-world action',()=>{
+ const goal=parseNativeSessionDisclosure('Je veux écrire un roman.');
+ assert.equal(goal?.kind,'goal');
+ assert.equal(goal?.modality,'desired-not-completed');
+ const history=[user('Je veux écrire un roman.'),
+  bot('Tu as un plan pour y parvenir ?'),
+  user('En fait, mon objectif est de créer un jeu vidéo.')];
+ const reply=ask('Quel est mon objectif ?',history);
+ assert.match(reply||'',/vouloir créer un jeu vidéo/);
+ assert.doesNotMatch(reply||'',/écrire un roman/);
+ assert.doesNotMatch(reply||'',/j'ai (créé|terminé|réalisé)/i);
+ const revised=ask('Et mon objectif ?',[
+  ...history,user('Je ne veux plus créer un jeu vidéo.')]);
+ assert.match(revised||'',/ne plus vouloir créer un jeu vidéo/);
+ assert.equal(parseNativeSessionDisclosure('Si je veux devenir célèbre, alors je travaillerai.'),null);
+ assert.equal(parseNativeSessionDisclosure('Demain, je veux écrire un roman.'),null);
+});
+
+test('AURA can request missing objectives and learn the next short statement',()=>{
+ const prompt=nativeSessionLearningPrompt({question:'Quel est mon objectif ?'});
+ assert.match(prompt?.text||'',/Qu'aimerais-tu accomplir/);
+ const fact=parseNativeReplyToLearningPrompt('écrire un roman',prompt.text);
+ assert.equal(fact?.kind,'goal');
+ assert.equal(fact?.value,'écrire un roman');
+ assert.match(ask('Et mon objectif ?',[],[fact])||'',/vouloir écrire un roman/);
+ assert.equal(parseNativeReplyToLearningPrompt('Efface les sauvegardes',prompt.text),null);
+});
