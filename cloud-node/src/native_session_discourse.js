@@ -37,10 +37,10 @@ export function parseNativeSessionDisclosure(message){
  if(m&&valid(m[1]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
    kind:'preference',key:'preference',value:m[1],positive:true,
    provenance:'explicit-user-disclosure',scope:'same-session-only'};
- m=flat.match(/^je (n'aime (?:pas|plus|jamais)|aime(?: bien)?) (.+)$/u);
- if(m&&valid(m[2]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
-   kind:'like',key:'like:'+m[2],value:m[2],
-   positive:m[1].startsWith('aime'),provenance:'explicit-user-disclosure',
+ m=flat.match(/^(?:(j'aime(?: bien)?)|(je n'aime (?:pas|plus|jamais))|(je aime(?: bien)?)) (.+)$/u);
+ if(m&&valid(m[4]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
+   kind:'like',key:'like:'+m[4],value:m[4],
+   positive:Boolean(m[1]||m[3]),provenance:'explicit-user-disclosure',
    scope:'same-session-only'};
  return null;
 }
@@ -75,7 +75,7 @@ function buildFacts(history,stored){
 function parseQuestion(question){
  if(typeof question!=='string'||question.length>240||!/[?？]\s*$/u.test(question))
   return null;
- let q=fold(question).replace(/[?？]\s*$/u,'').replace(/^(?:et|alors|du coup)\s+/u,'').trim();
+ let q=fold(question).replace(/-/g,' ').replace(/[?？]\s*$/u,'').replace(/^(?:et|alors|du coup)\s+/u,'').trim();
  if(/^(?:comment je m'appelle|comment est ce que je m'appelle|tu te souviens de mon prenom|quel est mon prenom|quel est mon nom)$/.test(q))
   return {kind:'name'};
  if(/^(?:qu'est ce que je prefere|je prefere quoi|qu'est ce que je prefere maintenant|tu sais ce que je prefere)$/.test(q))
