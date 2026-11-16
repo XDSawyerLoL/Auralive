@@ -13,7 +13,7 @@ const fold = value => String(value ?? '').toLocaleLowerCase('fr-FR')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim();
 const words = value => fold(value).replace(/[^\p{L}\p{N}' ]/gu, ' ').replace(/\s+/g, ' ').trim();
-const articles = /^(?:(?:le|la|les|un|une|des|du|de la|d'|l')\s*)+/;
+const articles = /^(?:(?:de la|le|la|les|un|une|des|du)\b\s+|[dl]['’]\s*)+/u;
 const entity = value => words(value).replace(articles, '').replace(/\s+(?:ne|n)$/,'').trim();
 const publicLabel = value => String(value || '').replace(/^./u, c => c.toLocaleUpperCase('fr-FR'));
 const AUXILIARIES = new Set(['a','as','ai','avons','avez','ont','avait','avaient','est','es','suis','sommes','etes','sont','etait','etaient']);
@@ -83,7 +83,7 @@ export function parseFrenchStatement(text){
 }
 
 export function parseFrenchQuestion(text){
-  const q=words(text).replace(/\?$/,'').trim();
+  const q=words(text).replace(/^et\s+|^alors\s+/u,'').replace(/\?$/,'').trim();
   if(!/[?？]\s*$/u.test(String(text).trim())&&!/^(?:qui|pourquoi|de quelle couleur|est ce que)/.test(q))return null;
   let m=q.match(/^qui\s+(?:a|ont|avait)?\s*(\p{L}+)\s+(.+)$/u);
   if(m&&verb(m[1]))return {kind:'actor',predicate:verb(m[1]),patient:cleanObject(m[2])};
@@ -136,7 +136,7 @@ function splitAssertions(value){
 function collect(history=[],stored=[],constructionLearner=null){
   const frames=[];
   let previousUserStatement=null;
-  for(const row of history.slice(-10)){
+  for(const row of history.slice(-24)){
     if(row?.role!=='user'){previousUserStatement=null;continue;}
     const scope=classifyFrenchEventScope(row.content);
     // A syntactically extractable agent is not evidence that the event took place.
