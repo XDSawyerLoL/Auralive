@@ -106,7 +106,7 @@ test('the trusted workspace rejects forged session records in plan and untrusted
  },workspace,{nativeSessionFacts:[spoofed,fact]});
  assert.equal(result.allowed,true);
  assert.equal(result.plan.native_session_preferences.length,1);
- assert.equal(result.plan.native_session_preferences[0].value,'skyrim');
+ assert.equal(result.plan.native_session_preferences[0].value,'Skyrim');
  assert.deepEqual(languageWorkspaceProjection({
   act:'respond',native_session_preferences:[fact],
  },workspace,{nativeSessionFacts:[]}).plan.native_session_preferences,[]);
