@@ -27,7 +27,7 @@ export function selectBroadcastMemories(workspace,{
   return {notes:selectedNotes,messages:selectedMessages,
     founderProfile:selectedFounder,refs:[...refs]};
 }
-export function languageWorkspaceProjection(plan={},workspace,{privateView=false,immediateDialogue=[]}={}){
+export function languageWorkspaceProjection(plan={},workspace,{privateView=false,immediateDialogue=[],nativeSessionFacts=[]}={}){
   if(!workspaceHas(workspace,'prefrontal','perception'))
     return {allowed:false,reason:'no-perceptual-broadcast',plan:null};
   const refs=selectedMemoryRefs(workspace);
@@ -49,8 +49,24 @@ export function languageWorkspaceProjection(plan={},workspace,{privateView=false
     ?immediateDialogue:[]).filter(row=>
       row?.source==='same-session-immediate-turn'&&
       ['user','assistant'].includes(String(row?.role))&&
-      /^\d+$/.test(String(row?.id??''))).slice(-3).map(row=>({
+      /^\d+$/.test(String(row?.id??''))).slice(-18).map(row=>({
       id:row.id,role:row.role,content:String(row.content||'').slice(0,550),
+    }));
+  // Trust only records retrieved by the kernel from the exact SQL session.
+  // Caller-provided plan.native_session_preferences is deliberately overwritten.
+  result.native_session_preferences=(Array.isArray(nativeSessionFacts)
+    ?nativeSessionFacts:[]).filter(f=>
+      f?.source==='same-session-sql-experience'&&
+      f?.schema==='aura-session-discourse-fact-v1'&&
+      f?.provenance==='explicit-user-disclosure'&&
+      f?.scope==='same-session-only'&&
+      ['name','favorite','preference','like'].includes(f.kind)&&
+      typeof f.key==='string'&&f.key.length<=65&&
+      typeof f.value==='string'&&f.value.length<=75&&
+      typeof f.positive==='boolean'
+    ).slice(-64).map(f=>({
+      schema:f.schema,kind:f.kind,key:f.key,value:f.value,
+      positive:f.positive,provenance:f.provenance,scope:f.scope,
     }));
   result.founder_profile=(Array.isArray(plan.founder_profile)
     ?plan.founder_profile:[]).filter(row=>
