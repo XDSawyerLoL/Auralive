@@ -188,3 +188,46 @@ test('heavy compute load protects all optional work and leaves silence possible'
  assert.deepEqual(decision.ranked.map(x=>x.action),['silence']);
  assert.equal(decision.external_message_authorized,false);
 });
+
+test('owner may revoke private social proposals and invalidate pending offers',async()=>{
+ const {CognitiveKernel}=await import('../src/kernel.js');
+ let saved=0;const trace=[];
+ const fake={
+  soulCache:{
+   organism:{social_contact_policy:{explicit_consent:false,external_delivery_enabled:false}},
+   social_initiative:{pending:{id:'abcdef012345abcdef012345',status:'pending-opt-in'}},
+  },
+  organism:{migrate:s=>structuredClone(s.organism)},
+  innerDialogue:{publicSocialInitiative:item=>item?{id:item.id}:null},
+  saveSoul:async()=>{saved++;},
+  trace:async(...args)=>{trace.push(args);},
+ };
+ const proto=CognitiveKernel.prototype;
+ assert.equal(proto.pendingSocialInitiative.call(fake),null);
+ assert.equal(await proto.acknowledgeSocialInitiative.call(fake,
+  'abcdef012345abcdef012345'),false);
+ const enabled=await proto.setSocialContactConsent.call(fake,true);
+ assert.deepEqual(enabled,{
+  ok:true,explicit_consent:true,external_delivery_enabled:false});
+ assert.equal(proto.pendingSocialInitiative.call(fake)?.id,'abcdef012345abcdef012345');
+ const withdrawn=await proto.setSocialContactConsent.call(fake,false);
+ assert.equal(withdrawn.explicit_consent,false);
+ assert.equal(proto.pendingSocialInitiative.call(fake),null);
+ assert.equal(fake.soulCache.social_initiative.pending,null);
+ assert.equal(await proto.acknowledgeSocialInitiative.call(fake,
+  'abcdef012345abcdef012345'),false);
+ assert.equal(saved,2);
+ assert.equal(trace.length,2);
+ assert.equal(fake.soulCache.organism.social_contact_policy.external_delivery_enabled,false);
+});
+test('social consent route is owner-only, origin-checked and opt-in boolean',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const server=readFileSync(new URL('../src/server.js',import.meta.url),'utf8');
+ const start=server.indexOf("app.post('/api/organism/motivation/consent'");
+ assert.ok(start>0);
+ const route=server.slice(start,start+650);
+ assert.match(route,/requirePrivate\(request,reply\)/);
+ assert.match(route,/sameOrigin\(request\)/);
+ assert.match(route,/typeof request.body\?\.enabled!=='boolean'/);
+ assert.match(route,/kernel.setSocialContactConsent\(request.body.enabled\)/);
+});

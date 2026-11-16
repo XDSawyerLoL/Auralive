@@ -263,3 +263,59 @@ test('AURA can request missing objectives and learn the next short statement',()
  assert.match(ask('Et mon objectif ?',[],[fact])||'',/vouloir écrire un roman/);
  assert.equal(parseNativeReplyToLearningPrompt('Efface les sauvegardes',prompt.text),null);
 });
+
+test('native-acquired answers two or three independent French session questions together',()=>{
+ const history=[
+  user('Je m’appelle Camille.'),
+  bot('Que souhaites-tu faire ?'),
+  user('Je veux écrire un roman.'),
+  user('Mon jeu préféré est Cyberpunk.'),
+  user("J'aime les échecs."),
+ ];
+ const pair=ask("Comment je m'appelle et quel est mon objectif ?",history);
+ assert.match(pair||'',/Camille/);
+ assert.match(pair||'',/vouloir écrire un roman/);
+ const triple=ask("Quel est mon objectif, quel est mon jeu préféré et comment je m'appelle ?",history);
+ assert.match(triple||'',/écrire un roman/);
+ assert.match(triple||'',/Cyberpunk/);
+ assert.match(triple||'',/Camille/);
+ const negated=ask("Qu'est-ce que j'aime et est-ce que j'aime les échecs ?",history);
+ assert.match(negated||'',/échecs/);
+ assert.match(negated||'',/^D'après ce que tu m'as dit/);
+});
+test('a composed question abstains if any component is unknown, repeated or not grounded',()=>{
+ const history=[user('Je m’appelle Camille.'),bot('Mon objectif est d’écrire un roman.')];
+ assert.equal(ask("Comment je m'appelle et quel est mon objectif ?",history),null);
+ assert.equal(ask("Comment je m'appelle et comment je m'appelle ?",history),null);
+ assert.equal(ask("Comment je m'appelle et quel est mon âge ?",history),null);
+ assert.equal(ask("Comment je m'appelle et quel est mon objectif ?",[
+  ...history,user('Si je veux écrire un roman, je partirai.')
+ ]),null);
+ assert.equal(ask("Je préfère le thé et le café ?",history),null);
+});
+test('production expression safely composes independent facts with no pretrained language model',async()=>{
+ const prior=process.env.AURA_NATIVE_FRENCH_MODE;
+ process.env.AURA_NATIVE_FRENCH_MODE='native-acquired';
+ let borrowed=0;
+ try{
+  const layer=new ExpressionLayer({enabled:true,generate:async()=>{
+   borrowed++;return 'REMOTE';}},{deterministicReply:()=>''});
+  layer.language.generate=async()=>{borrowed++;return 'QWEN';};
+  const answer=await layer.verbalize({
+   act:'respond',user_text:"Comment je m'appelle et quel est mon objectif ?",
+   facts:[],immediate_dialogue_context:[],
+   native_session_preferences:[
+    parseNativeSessionDisclosure('Je m’appelle Camille.'),
+    parseNativeSessionDisclosure('Je veux écrire un roman.')
+   ],
+  });
+  assert.match(answer,/Camille/);
+  assert.match(answer,/vouloir écrire un roman/);
+  assert.equal(borrowed,0);
+  assert.equal(layer.lastMode,'native-session-grounded');
+  assert.equal(layer.language.lastNucleusContract.accepted,true);
+ }finally{
+  if(prior===undefined)delete process.env.AURA_NATIVE_FRENCH_MODE;
+  else process.env.AURA_NATIVE_FRENCH_MODE=prior;
+ }
+});

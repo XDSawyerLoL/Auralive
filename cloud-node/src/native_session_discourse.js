@@ -116,7 +116,33 @@ function parseQuestion(question){
  if(fav)return {kind:'favorite',key:'favorite:'+cleanTopic(fav[1])};
  return null;
 }
+// Compose independently grounded questions; never pretend that a missing
+// answer has been learned, and do not split ordinary coordinated objects.
+function splitComposedSessionQuestion(question){
+ if(typeof question!=='string'||question.length>240||!/[?？]\s*$/u.test(question))return null;
+ const body=question.trim().replace(/[?？]\s*$/u,'');
+ const parts=body.split(/\s*,\s*(?=(?:quel|quelle|qu['’]|comment|est[- ]ce|mon|ma)\b)|\s+et\s+(?=(?:quel|quelle|qu['’]|comment|est[- ]ce|mon|ma)\b)/iu)
+  .map(s=>s.trim()).filter(Boolean);
+ if(parts.length<2||parts.length>3)return null;
+ const questions=parts.map(part=>part+' ?');
+ const parsed=questions.map(parseQuestion);
+ if(parsed.some(p=>!p))return null;
+ const keys=parsed.map(p=>[p.kind,p.key||'',p.value||''].join(':'));
+ if(new Set(keys).size!==keys.length)return null;
+ return questions;
+}
 export function answerNativeSessionDialogue({question='',history=[],storedFacts=[]}={}){
+ const composite=splitComposedSessionQuestion(question);
+ if(composite){
+  const answers=composite.map(part=>answerNativeSessionDialogue({question:part,history,storedFacts}));
+  if(answers.some(answer=>!answer?.text))return null;
+  return {text:answers.map(answer=>answer.text).join(' '),
+   source:'aura-native-session-discourse',
+   evidence_scope:'same-session-user-statement-unverified',
+   grammar_version:NATIVE_SESSION_FACT_SCHEMA,
+   coverage:'composed-session-facts-and-corrections',
+   question_count:answers.length,pretrained_llm:false};
+ }
  const request=parseQuestion(question);
  if(!request)return null;
  const state=buildFacts(history,storedFacts);

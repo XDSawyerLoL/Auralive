@@ -502,14 +502,41 @@ export class CognitiveKernel {
       .filter(([,v])=>Date.parse(String(v?.measured_at||''))>=limit));
   }
 
-  // Read-only, safe projection. No browser, service or model can author
-  // an initiative through this endpoint.
+  // Explicit owner-controlled permission for a proposal in the PRIVATE
+  // browser. This never enables email, push, unsolicited network delivery,
+  // or a language-model-generated initiative. Withdrawal invalidates queued
+  // proposals rather than leaving them visible after consent is revoked.
+  async setSocialContactConsent(enabled){
+    if(typeof enabled!=='boolean'||!this.soulCache)return {ok:false};
+    const organism=this.organism.migrate(this.soulCache);
+    organism.social_contact_policy={
+      explicit_consent:enabled,external_delivery_enabled:false,
+    };
+    this.soulCache.organism=organism;
+    if(!enabled){
+      const old=this.soulCache.social_initiative||{};
+      this.soulCache.social_initiative={...old,pending:null};
+    }
+    await this.saveSoul();
+    await this.trace('social-consent',enabled?'private-proposals-enabled':
+      'private-proposals-withdrawn','',{
+        explicit_consent:enabled,external_delivery_enabled:false,
+        authenticated_owner_action:true,no_external_message:true,
+      });
+    return {ok:true,explicit_consent:enabled,external_delivery_enabled:false};
+  }
+
+  // Read-only private projection, never a command to send a message.
   pendingSocialInitiative(){
+    if(this.soulCache?.organism?.social_contact_policy?.explicit_consent!==true)
+      return null;
     return this.innerDialogue.publicSocialInitiative(
       this.soulCache?.social_initiative?.pending);
   }
 
   async acknowledgeSocialInitiative(id){
+    if(this.soulCache?.organism?.social_contact_policy?.explicit_consent!==true)
+      return false;
     const stored=this.soulCache?.social_initiative;
     const pending=stored?.pending;
     if(!pending||String(pending.id)!==String(id||''))return false;

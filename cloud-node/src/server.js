@@ -1743,6 +1743,19 @@ app.get('/api/organism/motivation', async (_request,reply)=>{
     deployed_speech_verified:false};
 });
 
+ // No background delivery permission is granted here: the owner can enable
+ // PRIVATE browser proposals only, and can withdraw that permission anytime.
+// Only authenticated owner requests from the same origin may change consent.
+app.post('/api/organism/motivation/consent',async(request,reply)=>{
+  if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+  if(!sameOrigin(request))
+    return reply.code(403).send({error:'Origine non autorisée'});
+  if(typeof request.body?.enabled!=='boolean')
+    return reply.code(422).send({error:'enabled doit être un booléen'});
+  reply.header('Cache-Control','private, no-store');
+  return kernel.setSocialContactConsent(request.body.enabled);
+});
+
 app.get('/api/kernel/organism', async (request, reply) => {
   if (!requirePrivate(request, reply)) return;
   if (!bootstrap.runtimeReady) return { ready: false };
