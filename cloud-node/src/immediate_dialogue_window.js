@@ -10,14 +10,14 @@ export function immediateDialogueWindow(rows=[],currentText='',{
   const current=clean(currentText);
   const ordered=rows.filter(r=>r&&['user','assistant'].includes(String(r.role))&&
     /^\d+$/.test(String(r.id??''))&&clean(r.content))
-    .slice(0,12).sort((a,b)=>Number(a.id)-Number(b.id));
+    .slice(0,32).sort((a,b)=>Number(a.id)-Number(b.id));
   const ingress=ordered.findLastIndex(r=>r.role==='user'&&
     clean(r.content)===current);
   // Current-user ingress must exist in the same query. Otherwise no
   // short-term memory is admitted, and the model must not improvise history.
   if(ingress<0)return [];
   const prior=ordered.slice(0,ingress);
-  const safeLimit=Math.max(1,Math.min(3,Number(maxTurns)||3));
+  const safeLimit=Math.max(1,Math.min(18,Number(maxTurns)||3));
   return prior.slice(-safeLimit).map(r=>({
     id:r.id,role:r.role,content:clean(r.content).slice(0,550),
     source:'same-session-immediate-turn',
