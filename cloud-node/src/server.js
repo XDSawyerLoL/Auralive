@@ -36,6 +36,9 @@ import {createDigitalGenome,expressDigitalGenome,evolveDigitalGenome} from './di
 import {readableCognitionSnapshot} from './readable_cognition.js';
 import { buildBrainTelemetry } from './brain_telemetry.js';
 import { biologicalResearchSnapshot } from './biophysical_evidence.js';
+import {neurobiologyCoverageAudit} from './neurobiology_coverage.js';
+import {createNeuroGenome,expressNeuroGenome} from './neurodevelopmental_genome.js';
+import {initialGlialState,advanceGlialState,compareGlialUptake} from './biophysical_glia.js';
 import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
 import { calibrateHumanPassiveCell, validateHumanPassiveCell } from './human_ephys_calibration.js';
 import {constructHumanPassiveArbor,runPassiveArbor} from './biophysical_morphology.js';
@@ -2346,6 +2349,58 @@ app.post('/api/research/biophysics/human-arbor', async (request, reply) => {
 // Public research-only *frozen* evidence; includes no private soul state,
 // raw donor recordings, tokens, chat text, or unsanitized research uploads.
 // Does not mutate memory or emit simulated neural activity into the connectome.
+// Public science inventory contains static module labels only, no memories,
+// credentials, uploads or claims of human-brain equivalence.
+app.get('/api/research/neurobiology/coverage',async (_request,reply)=>{
+ reply.header('Cache-Control','public, max-age=300');
+ return neurobiologyCoverageAudit();
+});
+// Experiments run in private bounded memory only, never in AURA's Soul.
+// They cannot rewrite code or change the live decision engine.
+app.post('/api/research/neurobiology/genome',async(request,reply)=>{
+ if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+ if(!sameOrigin(request))
+  return reply.code(403).send({error:'Origine non autorisée'});
+ reply.header('Cache-Control','private, no-store');
+ try{
+  const body=request.body||{};
+  const genome=createNeuroGenome({seed:body.seed??'aura-research-genesis'});
+  const expression=expressNeuroGenome(genome,{
+   cell_type:body.cell_type,
+   development:body.development??.5,activity:body.activity??.5,
+   metabolic_pressure:body.metabolic_pressure??0,
+   inflammatory_signal:body.inflammatory_signal??0,
+   epigenetic_marks:body.epigenetic_marks??{},
+  });
+  return {ok:true,expression,sandbox_only:true,llm_used:false,
+   genome_id:genome.id,production_genome_unchanged:true,
+   genetic_analogy_not_biological_equivalence:true};
+ }catch(error){
+  if(error instanceof TypeError||error instanceof RangeError)
+   return reply.code(422).send({error:String(error.message).slice(0,180)});
+  throw error;
+ }
+});
+app.post('/api/research/neurobiology/glia',async(request,reply)=>{
+ if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+ if(!sameOrigin(request))
+  return reply.code(403).send({error:'Origine non autorisée'});
+ reply.header('Cache-Control','private, no-store');
+ const body=request.body||{};
+ try{
+  const state=body.state??initialGlialState();
+  const stimulus=body.stimulus??{};
+  const result=body.ablation===true?
+   compareGlialUptake(state,stimulus):advanceGlialState(state,stimulus);
+  return {ok:true,experiment:result,sandbox_only:true,llm_used:false,
+   human_glial_equivalence:false,production_state_unchanged:true};
+ }catch(error){
+  if(error instanceof TypeError||error instanceof RangeError)
+   return reply.code(422).send({error:String(error.message).slice(0,180)});
+  throw error;
+ }
+});
+
 app.get('/api/research/biophysics/evidence', async (request, reply) => {
   reply.header('Cache-Control','public, max-age=300');
   return biologicalResearchSnapshot();
