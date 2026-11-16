@@ -92,6 +92,14 @@ export function parseFrenchQuestion(text){
   }
   const q=words(text).replace(/^et\s+|^alors\s+/u,'').replace(/\?$/,'').trim();
   if(!/[?？]\s*$/u.test(String(text).trim())&&!/^(?:qui|pourquoi|de quelle couleur|est ce que)/.test(q))return null;
+  // Reverse the learned event arguments: what did a named actor act on?
+  // Only an overt actor and a verb in the UD-derived morphology are licensed.
+  let objectRequest=q.match(/^qu'a ([\p{L}-]{2,35}) ([\p{L}-]{2,40})$/u);
+  if(objectRequest&&verb(objectRequest[1]))
+    return {kind:'patient',predicate:verb(objectRequest[1]),agent:entity(objectRequest[2])};
+  objectRequest=q.match(/^qu'est ce que ([\p{L}-]{2,40}) a ([\p{L}-]{2,35})$/u);
+  if(objectRequest&&verb(objectRequest[2]))
+    return {kind:'patient',predicate:verb(objectRequest[2]),agent:entity(objectRequest[1])};
   // A clitic object is recoverable only when the session contains a
   // unique matching patient. Never guess from a name, stereotype or gender.
   let elliptical=q.match(/^qui l'a ([\p{L}-]{2,35})$/u);
@@ -328,7 +336,15 @@ export function answerFrenchFromConversation({question='',history=[],storedCorre
     if(relations.length===1)text='D’après ce que tu as indiqué, '+
       (expected==='cause'?'parce que ':'ensuite ')+relations[0].explanation+'.';
   }
-  if(request.kind==='actor-object-clitic'){
+  if(request.kind==='patient'){
+    const candidates=frames.filter(f=>f.kind==='event'&&f.polarity===true&&
+      f.agent===request.agent&&f.predicate===request.predicate);
+    const distinct=[...new Set(candidates.map(f=>f.patient))];
+    if(distinct.length===1)
+      text='D’après ce que tu as indiqué, '+surfaceOf(request.agent,history)+
+        ' aurait '+(pastParticiple.get(request.predicate)||request.predicate)+
+        ' '+surfaceOf(distinct[0],history,{article:true})+'.';
+  }else if(request.kind==='actor-object-clitic'){
     const related=frames.filter(f=>f.kind==='event'&&
       f.predicate===request.predicate);
     const patients=[...new Set(related.map(f=>f.patient))];
