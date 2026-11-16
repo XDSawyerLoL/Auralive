@@ -48,13 +48,25 @@ export function parseNativeSessionDisclosure(message){
    kind:'like',key:'like:'+m[4],value:surface(m[4]),
    positive:Boolean(m[1]||m[3]),provenance:'explicit-user-disclosure',
    scope:'same-session-only'};
+ // An intention is testimony about a desired action, never evidence that
+ // the action has already happened.
+ m=flat.match(/^(?:mon objectif est de|je veux|je souhaite|j'ai l'intention de) (.+)$/u);
+ if(m&&valid(m[1]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
+  kind:'goal',key:'goal',value:surface(m[1]),positive:true,
+  modality:'desired-not-completed',provenance:'explicit-user-disclosure',
+  scope:'same-session-only'};
+ m=flat.match(/^je ne veux plus (.+)$/u);
+ if(m&&valid(m[1]))return {schema:NATIVE_SESSION_FACT_SCHEMA,
+  kind:'goal',key:'goal',value:surface(m[1]),positive:false,
+  modality:'retracted-goal',provenance:'explicit-user-disclosure',
+  scope:'same-session-only'};
  return null;
 }
 const label=value=>value.replace(/^./u,s=>s.toLocaleUpperCase('fr-FR'));
 const cleanTopic=s=>fold(s).replace(/^(?:le|la|les|l') /u,'');
 const factValid=f=>f?.schema===NATIVE_SESSION_FACT_SCHEMA&&
  f.provenance==='explicit-user-disclosure'&&f.scope==='same-session-only'&&
- ['name','favorite','preference','like'].includes(f.kind)&&
+ ['name','favorite','preference','like','goal'].includes(f.kind)&&
  typeof f.value==='string'&&valid(f.value)&&
  typeof f.key==='string'&&f.key.length<=65&&
  typeof f.positive==='boolean';
@@ -95,6 +107,8 @@ function parseQuestion(question){
   return {kind:'preference'};
  if(/^(?:qu'est ce que j'aime|j'aime quoi|tu te souviens de ce que j'aime|quels sont mes gouts)$/.test(q))
   return {kind:'likes'};
+ if(/^(?:quel est mon objectif|et mon objectif|tu te souviens de mon objectif|qu'est ce que je veux faire|qu'est ce que je souhaite faire)$/.test(q))
+  return {kind:'goal'};
  const like=q.match(/^est ce que j'aime (.+)$/u);
  if(like&&valid(like[1]))return {kind:'likes-yes-no',value:like[1]};
  let fav=q.match(/^(?:quel est|quelle est|c'est quoi) (?:mon|ma) ([\p{L}-]{2,45}?(?: [\p{L}-]{2,25}){0,2}) (?:prefere|preferee|favori|favorite)$/u);
@@ -119,6 +133,11 @@ export function answerNativeSessionDialogue({question='',history=[],storedFacts=
   const v=state.get(request.key);
   if(v?.positive)result="Tu m'as indiqué que ton "+request.key.slice(9)+
     ' préféré est '+v.value+'.';
+ }
+ if(request.kind==='goal'){
+  const v=state.get('goal');
+  if(v?.positive)result="Tu m'as dit vouloir "+v.value+'.';
+  else if(v&&!v.positive)result="Tu m'as dit ne plus vouloir "+v.value+'.';
  }
  if(request.kind==='likes'){
   const liked=[...state.values()].filter(v=>v.kind==='like'&&v.positive);
@@ -153,6 +172,8 @@ export function nativeSessionLearningPrompt({question='',history=[],storedFacts=
   text="Tu ne m'as pas encore indiqué de préférence. Que préfères-tu ?";
  if(request.kind==='likes')
   text="Tu ne m'as pas encore dit ce que tu aimes. Qu'est-ce que tu aimes ?";
+ if(request.kind==='goal')
+  text="Tu ne m'as pas encore indiqué ton objectif. Qu'aimerais-tu accomplir ?";
  if(request.kind==='favorite'){
   const topic=request.key?.slice(9)||'';
   if(!/^[a-z-]{2,42}$/u.test(topic))return null;
@@ -180,6 +201,8 @@ export function parseNativeReplyToLearningPrompt(answer='',previousAssistant='')
   kind='preference';key='preference';
  }else if(q==="tu ne m'as pas encore dit ce que tu aimes. qu'est-ce que tu aimes ?"){
   kind='like';key='like:'+fold(raw);
+ }else if(q==="tu ne m'as pas encore indique ton objectif. qu'aimerais-tu accomplir ?"){
+  kind='goal';key='goal';
  }else{
   const m=q.match(/^tu ne me l'as pas encore indique\. (?:quel est ton|quelle est ta) ([a-z-]{2,42}) prefere?e? \?$/u);
   if(!m)return null;
