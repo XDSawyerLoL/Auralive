@@ -45,17 +45,17 @@ async function* textLines(path){
   for await(const chunk of stream){
    carry+=chunk.toString('utf8');
    let end;
-   while((end=carry.indexOf('\\n'))!==-1){
+   while((end=carry.indexOf('\n'))!==-1){
     let line=carry.slice(0,end);
     carry=carry.slice(end+1);
-    if(line.endsWith('\\r'))line=line.slice(0,-1);
+    if(line.endsWith('\r'))line=line.slice(0,-1);
     if(line.length>500000)throw new RangeError('source row too large');
     yield line;
    }
    if(carry.length>500000)throw new RangeError('source row too large');
   }
   if(carry.length){
-   if(carry.endsWith('\\r'))carry=carry.slice(0,-1);
+   if(carry.endsWith('\r'))carry=carry.slice(0,-1);
    yield carry;
   }
  }finally{stream.destroy();raw.destroy();}
