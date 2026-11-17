@@ -4,7 +4,6 @@
 import {createHash} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {createGunzip,gzipSync} from 'node:zlib';
-import {createInterface} from 'node:readline';
 import {writeFile} from 'node:fs/promises';
 export const HUMAN_GENE_ATLAS_SCHEMA='aura-human-gene-evidence-v1';
 export const HUMAN_GENE_SOURCES=Object.freeze({
@@ -35,16 +34,31 @@ async function verifyFile(path,sha256,label){
  if(actual.toLowerCase()!==sha256.toLowerCase())throw new Error(label+' SHA-256 mismatch');
  return actual;
 }
+// Readline's event-driven line queue can grow unbounded when gzip inflates
+// gigabytes faster than asynchronous record processing. Pull stream chunks
+// directly: every yield applies backpressure to the compressed input.
 async function* textLines(path){
- const raw=createReadStream(path);
- const stream=path.endsWith('.gz')?raw.pipe(createGunzip()):raw;
- const reader=createInterface({input:stream,crlfDelay:Infinity});
+ const raw=createReadStream(path,{highWaterMark:65536});
+ const stream=path.endsWith('.gz')?raw.pipe(createGunzip({chunkSize:65536})):raw;
+ let carry='';
  try{
-  for await(const line of reader){
-   if(line.length>500000)throw new RangeError('source row too large');
-   yield line;
+  for await(const chunk of stream){
+   carry+=chunk.toString('utf8');
+   let end;
+   while((end=carry.indexOf('\\n'))!==-1){
+    let line=carry.slice(0,end);
+    carry=carry.slice(end+1);
+    if(line.endsWith('\\r'))line=line.slice(0,-1);
+    if(line.length>500000)throw new RangeError('source row too large');
+    yield line;
+   }
+   if(carry.length>500000)throw new RangeError('source row too large');
   }
- }finally{reader.close();stream.destroy();}
+  if(carry.length){
+   if(carry.endsWith('\\r'))carry=carry.slice(0,-1);
+   yield carry;
+  }
+ }finally{stream.destroy();raw.destroy();}
 }
 function gtfAttributes(s){
  const out={};
