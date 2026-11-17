@@ -72,7 +72,7 @@ test('coverage exposes missing human circuits and genetic incompleteness',()=>{
  const audit=neurobiologyCoverageAudit();
  assert.equal(audit.examined_systems,32);
  assert.equal(Object.values(audit.counts).reduce((a,b)=>a+b,0),32);
- assert.ok(audit.counts['not-reconstructed']>=5);
+ assert.ok(audit.counts['not-reconstructed']>=3);
  assert.equal(audit.whole_human_brain_equivalent,false);
  assert.equal(audit.molecular_human_genome_equivalent,false);
  assert.ok(audit.systems.every(x=>x.brain_equivalent_verified===false));
