@@ -91,8 +91,8 @@ test('direct striatal route inhibits GPi; lesion changes effect of the same stim
   duration_ms:700,dt_ms:5,
   stimuli:[stimulus('striatum_d1',.95),stimulus('globus_pallidus_internal',.45)],
  },edge.id);
- assert.ok(result.ablated.rates.globus_pallidus_internal>
-  result.intact.rates.globus_pallidus_internal);
+ assert.ok(result.ablated.trace.reduce((sum,x)=>sum+x.bg_gpi,0)>
+  result.intact.trace.reduce((sum,x)=>sum+x.bg_gpi,0));
 });
 test('Purkinje-to-deep nucleus inhibition is causally demonstrable',()=>{
  const edge=CIRCUIT_MOTIFS.edges.find(e=>e.from==='cerebellum_purkinje'&&e.to==='cerebellum_deep');
@@ -100,7 +100,8 @@ test('Purkinje-to-deep nucleus inhibition is causally demonstrable',()=>{
   duration_ms:700,dt_ms:5,
   stimuli:[stimulus('cerebellum_purkinje',.9),stimulus('cerebellum_deep',.4)]
  },edge.id);
- assert.ok(result.ablated.rates.cerebellum_deep>result.intact.rates.cerebellum_deep);
+ assert.ok(result.ablated.trace.reduce((sum,x)=>sum+x.cerebellum_deep,0)>
+  result.intact.trace.reduce((sum,x)=>sum+x.cerebellum_deep,0));
 });
 test('adequate metabolic supply and glia yield different states than low supply',()=>{
  const good=simulate({duration_ms:1000,stimuli:[stimulus('thalamus_relay',.95)],
