@@ -42,7 +42,7 @@ jobs:
           done
           sha256sum GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz > SOURCE_SHA256.txt
           du -h GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz
-      - name: Compile 50k+ genes / 18k+ coding / 16k+ expression / 5k+ GO evidence
+      - name: Compile full GENCODE v50 isoforms and GO/GTEx evidence (up to 1m isoforms)
         shell: bash
         run: |
           set -euo pipefail
