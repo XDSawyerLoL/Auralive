@@ -1,4 +1,4 @@
-name: AURA Human Gene Atlas - real datasets
+name: AURA Human Gene Atlas - verified real datasets
 on:
   workflow_dispatch:
   push:
