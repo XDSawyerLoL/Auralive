@@ -41,3 +41,18 @@ Le modèle de cortex à six couches et les autres motifs de la PR #260 sont des 
 Les fichiers sources sont téléchargés **uniquement** sur GitHub Actions. Pour utilisation locale, consulter la commande `node cloud-node/scripts/compile_human_gene_atlas.mjs` et fournir les trois fichiers gzip ainsi que les SHA des fichiers reçus. Stocker l'artefact hors Hostinger et ne jamais incorporer de données personnelles (génotypes individuels, génomes privés).
 
 Le code et les tests ne déclarent **aucune émulation humaine intégrale, aucune conscience subjective prouvée, aucun modèle physiologique de 20 000 gènes**. La valeur scientifique apportée est un registre empirique véritable et falsifiable où chaque preuve est rattachée à un gène individuel, plutôt qu'un faux « génome » rempli de nombres arbitraires.
+
+
+## Exécution réelle confirmée — 17 novembre 2026
+Workflow public réel : https://github.com/XDSawyerLoL/Auralive/actions/runs/44086173621 (conclusion **success**), commit `22b742ad54647a7e526b933b7554095d826c38a4`.
+
+- **78 941** enregistrements `gene` GENCODE v50; **646 577** enregistrements `transcript`, tous conservés par préfiltrage en flux. Ce sont des entrées d'annotation, pas autant de gènes actifs physiologiquement.
+- **20 131** gènes codants dans la sélection GENCODE.
+- **57 804** gènes de tous types liés à des valeurs médianes TPM GTEx v10 dans le référentiel de gènes.
+- **18 710** gènes codants liés à au moins une annotation GOA (pas nécessairement preuve expérimentale directe; les niveaux de preuve sont conservés par entrée).
+- **Gate de couverture réussi** ; aucune revendication d'équivalence fonctionnelle humaine, `genome_executed:false`.
+- Artefact `aura-genecode-gtex-goa-audited-human-gene-evidence`, identifiant GitHub **14329242415**, archive ~**9,4 Mo**, expiration prévue **24 novembre 2026**. Contient `AURA_HUMAN_GENE_ATLAS_GRCH38.json.gz`, `AURA_COVERAGE.json`, `SOURCE_SHA256.txt`.
+- Filtrage GTF : l'empreinte du GTF officiel compressé et celle du fichier compressé de gènes/transcrits filtrés sont toutes deux disponibles. Seules les lignes `gene` et `transcript` servent à l'inventaire, pas les exons. L'artefact contient `source_preprocessing` pour tracer cette transformation.
+- Le script `scripts/query_human_gene_atlas.mjs` permet de consulter un gène documenté à partir d'un artefact téléchargé, avec le SHA-256 du **fichier JSON.gz extrait**. `src/human_gene_coverage.js` mesure notamment la proportion de gènes codants ayant des annotations GOA associées à des données expérimentales (à distinguer de la simple présence GO).
+
+**Limites fondamentales maintenues** : le nombre de gènes annotés n'est pas le nombre de fonctions biologiques comprises et reproduites. Les médianes GTEx v10 proviennent de tissu cérébral hétérogène, non d'un neurone individuel. Les associations GOA par symbole doivent être consolidées par des identifiants UniProt/Ensembl officiels avant toute certification. La relation TPM → canaux neuronaux reste une hypothèse de réseau, pas une calibration humaine. Aucune simulation de génome humain intégral, aucun déploiement Hostinger.
