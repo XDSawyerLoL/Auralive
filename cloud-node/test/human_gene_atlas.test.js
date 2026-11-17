@@ -5,6 +5,8 @@ import {mkdtempSync,writeFileSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {gzipSync,gunzipSync} from 'node:zlib';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {compileHumanGeneAtlas,writeHumanGeneAtlas,
  HUMAN_GENE_ATLAS_SCHEMA,loadGencodeGenes} from '../src/human_gene_atlas.js';
 import {deriveMeasuredNeuralInputs,simulateMeasuredGeneCircuit,
@@ -153,5 +155,20 @@ test('GAF negative evidence and GTF orphan features cannot be silently treated a
   assert.equal(t.orphan_transcripts,0);
   const fake=readFileSync(f.paths.gtf_path);
   assert.ok(fake.length>100);
+ }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('gene import CLI parses --gtf-sha256, --gct-sha256 and --gaf-sha256 arguments',()=>{
+ const f=fixtureFiles();
+ try{
+  const cmd=fileURLToPath(new URL('../scripts/compile_human_gene_atlas.mjs',import.meta.url));
+  const result=spawnSync(process.execPath,[cmd,'--gtf',f.paths.gtf_path,
+   '--gtf-sha256',f.paths.gtf_sha256,'--gct',f.paths.gct_path,
+   '--gct-sha256',f.paths.gct_sha256,'--gaf',f.paths.gaf_path,
+   '--gaf-sha256',f.paths.gaf_sha256,
+   '--out',join(f.dir,'out.json.gz')],{encoding:'utf8',timeout:15000});
+  assert.equal(result.status,1);
+  assert.match(result.stderr,/Incomplete source coverage/);
+  assert.doesNotMatch(result.stderr,/expected --key value pairs/);
  }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
