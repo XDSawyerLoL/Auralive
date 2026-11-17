@@ -158,3 +158,63 @@ def assess_active_fidelity(observed, predicted, dt_ms, *,
         'comparison_not_genome_or_brain_equivalence': True,
         'raw_voltage_exported': False,
     }
+
+
+def rank_preregistered_training_candidates(trials):
+    """Alternate training-only ranking; NEVER inspects the reserved sweep.
+
+    Its hand-declared objective penalizes missing/extra spikes and timing,
+    while retaining a below-threshold voltage criterion. This is an
+    experimental comparison, not a validated human-ion-channel fitting rule.
+    A legacy synthetic unit fixture without 'timing_fidelity' yields None.
+    """
+    if not isinstance(trials, list) or not 1 <= len(trials) <= 24:
+        raise ValueError('predeclared candidate grid required')
+    if any(not isinstance(row, dict) or not row.get('training')
+           or not isinstance(row['training'], list) or
+           not isinstance(row.get('candidate'), dict) for row in trials):
+        raise ValueError('invalid training trials')
+    if any('timing_fidelity' not in metrics
+           for row in trials for metrics in row['training']):
+        # Backward-compatibility with isolated mocks, never treated as
+        # measured human evidence.
+        return None
+    selected = []
+    for index, row in enumerate(trials):
+        losses = []
+        for metrics in row['training']:
+            fidelity = metrics['timing_fidelity']
+            if (fidelity.get('schema') != SCHEMA or
+                fidelity.get('comparison_not_genome_or_brain_equivalence') is not True):
+                raise ValueError('fidelity provenance schema mismatch')
+            rmse = fidelity['voltage_rmse_mV']
+            sub_rmse = fidelity['subthreshold_rmse_mV']
+            missed = fidelity['missed_spikes']
+            spurious = fidelity['false_positive_spikes']
+            if (any(isinstance(k, bool) or not isinstance(k, (int, float))
+                    or not math.isfinite(k) or k < 0 for k in
+                    (rmse, missed, spurious)) or
+                    (sub_rmse is not None and
+                     (not isinstance(sub_rmse, (float, int)) or
+                      not math.isfinite(sub_rmse) or sub_rmse < 0))):
+                raise ValueError('invalid training fidelity score')
+            timing = fidelity['timing_mae_ms']
+            if timing is not None and (not isinstance(timing, (int, float))
+                                      or not math.isfinite(timing) or timing < 0):
+                raise ValueError('invalid spike time errors')
+            # An empty subthreshold mask is a failure of evidence, NOT zero.
+            loss = (rmse + .6 * (sub_rmse if sub_rmse is not None else 100)
+                    + 8 * (missed + spurious)
+                    + 2 * (timing if timing is not None else 0))
+            losses.append(loss)
+        selected.append((sum(losses) / len(losses), index))
+    value, index = min(selected)
+    return {
+        'candidate': dict(trials[index]['candidate']),
+        'training_fidelity_loss': _round(value),
+        'training_only': True,
+        'used_heldout': False,
+        'candidate_index': index,
+        'loss_formula': 'voltage_rmse + 0.6*subthreshold_rmse + 8*(missed+extra AP) + 2*timing_MAE_ms; mean across training sweeps',
+        'criterion_physically_calibrated_to_human_population': False,
+    }
