@@ -107,7 +107,23 @@ def assess_active_fidelity(observed, predicted, dt_ms, *,
                         for k in range(1, len(observed)))
     predicted_dvdt = max((predicted[k] - predicted[k - 1]) / dt_ms
                          for k in range(1, len(predicted)))
+    # Screening gate is a PREDECLARED research diagnostic, not a human
+    # physiological equivalence certification. A quiescent control cannot
+    # pass even with identical voltages.
+    screen = (len(events_observed) >= 2 and len(events_predicted) >= 2
+              and f1 is not None and f1 >= .8
+              and timing_mae is not None and timing_mae <= 2
+              and rmse <= 10
+              and sub_rmse is not None and sub_rmse <= 8
+              and abs(max(observed)-max(predicted)) <= 15)
     return {
+        'phenomenological_screen_passed': bool(screen),
+        'screen_thresholds': {'min_recorded_spikes': 2, 'min_predicted_spikes': 2,
+                              'event_f1_min': .8, 'timing_mae_max_ms': 2,
+                              'voltage_rmse_max_mV': 10,
+                              'subthreshold_rmse_max_mV': 8,
+                              'absolute_peak_voltage_error_max_mV': 15},
+        'screen_is_biological_equivalence_certificate': False,
         'schema': SCHEMA,
         'samples': len(observed),
         'dt_ms': dt_ms,
