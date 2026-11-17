@@ -1,6 +1,6 @@
 """Pure synthetic unit fixtures: never presented as human NWB evidence."""
 import unittest
-from human_active_validation_metrics import assess_active_fidelity, SCHEMA
+from human_active_validation_metrics import assess_active_fidelity, rank_preregistered_training_candidates, SCHEMA
 
 DT = .05
 COUNT = 3000
@@ -29,6 +29,8 @@ class HumanSpikingFidelityTests(unittest.TestCase):
         self.assertEqual(x['voltage_rmse_mV'],0)
         self.assertEqual(x['subthreshold_rmse_mV'],0)
         self.assertFalse(x['active_firing_validated'])
+        self.assertTrue(x['phenomenological_screen_passed'])
+        self.assertFalse(x['screen_is_biological_equivalence_certificate'])
         self.assertFalse(x['metrics_from_real_data_verified_here'])
         self.assertFalse(x['raw_voltage_exported'])
         self.assertGreater(x['observed_max_dvdt_mV_per_ms'],0)
@@ -119,5 +121,34 @@ class HumanSpikingFidelityTests(unittest.TestCase):
         self.assertEqual(x['matched_spikes'],2)
         self.assertEqual(x['false_positive_spikes'],1)
         self.assertEqual(x['event_precision'],.666667)
+
+
+class ModelSelectionIsolationTests(unittest.TestCase):
+    def _trial(self, density, missed, rmse):
+        return {'candidate':{'na':density},'training':[{
+            'timing_fidelity':{
+                'schema':SCHEMA,
+                'comparison_not_genome_or_brain_equivalence':True,
+                'voltage_rmse_mV':rmse,
+                'subthreshold_rmse_mV':1,
+                'missed_spikes':missed,
+                'false_positive_spikes':0,
+                'timing_mae_ms':1 if missed==0 else None
+            }} for _ in range(2)]}
+
+    def test_ranking_prefers_training_spike_fidelity_not_smaller_voltage_rmse(self):
+        result=rank_preregistered_training_candidates([
+            self._trial(1,3,1),self._trial(2,0,3)])
+        self.assertEqual(result['candidate']['na'],2)
+        self.assertEqual(result['candidate_index'],1)
+        self.assertTrue(result['training_only'])
+        self.assertFalse(result['used_heldout'])
+        self.assertFalse(result['criterion_physically_calibrated_to_human_population'])
+
+    def test_missing_timing_in_legacy_mock_skips_comparison_without_claim(self):
+        self.assertIsNone(rank_preregistered_training_candidates([
+            {'candidate':{'na':1},'training':[{'loss':2}]}]))
+        with self.assertRaises(ValueError):
+            rank_preregistered_training_candidates([])
 
 if __name__=='__main__': unittest.main()
