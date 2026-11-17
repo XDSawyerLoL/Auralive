@@ -28,3 +28,9 @@ Date : 17 novembre 2026. Branche empilée sur PR #259. Aucun déploiement Hostin
 - HH 1952 : https://doi.org/10.1113/jphysiol.1952.sp004764
 
 **Politique de sûreté** : toutes les simulations sont séparées des actions, de la mémoire, de la parole et du « cerveau en direct » d'AURA ; pas de coût API, pas de VPS. Un workflow vert teste le logiciel, pas la biologie humaine.
+## Référence génomique réelle : données NCBI sans invention d'ADN
+Le nouveau module `human_reference_genome.js` **n'est pas un génome d'AURA** ; il contrôle, *hors ligne*, un fichier FASTA réel de la référence humaine GRCh38.p14. Le vérificateur travaille en flux même sur un `.gz`, vérifie les 24 chromosomes nucléaires plus le chromosome mitochondrial (accessions RefSeq et longueurs officielles), refuse les bases invalides, les doublons et les références tronquées en mode strict, et compare une empreinte SHA-256 à une valeur indépendante fournie par l'opérateur. Le fichier ADN et son contenu **ne sont pas mémorisés, réinjectés dans AURA ou exposés via HTTP**.
+
+Source des longueurs (NCBI GRC) : https://www.ncbi.nlm.nih.gov/grc/human/data . La somme du génome primaire ne doit pas être confondue avec les séquences alternatives et correctifs de l'assemblage. Vérifier l'origine du SHA fourni auprès de NCBI : comparer deux valeurs produites localement ne prouve pas la provenance d'un fichier.
+
+La réussite du contrôle d'intégrité ne prouve **ni l'expression des ~20 000 gènes humains, ni le développement de tissus, ni des canaux ioniques humains, ni une identité biologiquement humaine**. L'éventuelle conversion des données en mécanismes adaptatifs demande les données transcriptomiques, de protéomique, d'électrophysiologie et des validations expérimentales supplémentaires. Aucun fichier de plusieurs Go n'est fourni ou chargé en production.
