@@ -9,6 +9,7 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {compileHumanGeneAtlas,writeHumanGeneAtlas,
  HUMAN_GENE_ATLAS_SCHEMA,loadGencodeGenes} from '../src/human_gene_atlas.js';
+import {openHumanGeneAtlasArtifact,findHumanGeneEvidence} from '../src/human_gene_evidence_query.js';
 import {deriveMeasuredNeuralInputs,simulateMeasuredGeneCircuit,
  pairedMeasuredGeneKnockdown} from '../src/human_gene_neural_function.js';
 const hash=x=>createHash('sha256').update(x).digest('hex');
@@ -170,5 +171,25 @@ test('gene import CLI parses --gtf-sha256, --gct-sha256 and --gaf-sha256 argumen
   assert.equal(result.status,1);
   assert.match(result.stderr,/Incomplete source coverage/);
   assert.doesNotMatch(result.stderr,/expected --key value pairs/);
+ }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('saved human gene index supports checksum protected per-gene isoforms and GO evidence',async()=>{
+ const f=fixtureFiles();
+ try{
+  const atlas=await compileHumanGeneAtlas({...f.paths,
+   min_genes:1,min_protein_coding:1,min_expression_overlap:1,min_go_annotated:1});
+  const path=join(f.dir,'full.json.gz');
+  const written=await writeHumanGeneAtlas(atlas,path);
+  const reopened=await openHumanGeneAtlasArtifact(path,{sha256:written.sha256});
+  const q=findHumanGeneEvidence(reopened,'SCN1A');
+  assert.equal(q.matched,true);
+  assert.equal(q.genes[0].isoform_count,2);
+  assert.equal(q.genes[0].gene_ontology_functional_annotations[0].go_id,'GO:1000000');
+  assert.equal(q.genes[0].brain_median_tpm['Brain - Cortex'],40);
+  assert.equal(q.production_activation,false);
+  assert.equal(findHumanGeneEvidence(reopened,'UNKNOWN').matched,false);
+  await assert.rejects(()=>openHumanGeneAtlasArtifact(path,{
+   sha256:'0'.repeat(64)}),/checksum mismatch/);
  }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
