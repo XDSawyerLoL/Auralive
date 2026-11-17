@@ -50,11 +50,13 @@ function gtfAttributes(s){
  const out={};
  const reg=/([a-zA-Z][\w-]*)\s+"([^"]*)";/g;let m;
  while((m=reg.exec(s))!==null){
-  // GENCODE legitimately repeats transcript 'tag' attributes (basic,
-  // MANE, Ensembl canonical, etc.). Identity keys must remain unique.
+  // Multiple optional annotation keys (tag, ontology, annotations) may
+  // repeat. Identity fields must not contain conflicting values.
   if(Object.hasOwn(out,m[1])){
-   if(m[1]==='tag')continue;
-   throw new Error('duplicate GTF identity attribute');
+   if(['gene_id','gene_name','gene_type','transcript_id','transcript_type']
+     .includes(m[1])&&out[m[1]]!==m[2])
+    throw new Error('conflicting GTF identity attribute: '+m[1]);
+   continue;
   }
   out[m[1]]=m[2];
  }
