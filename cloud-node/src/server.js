@@ -41,6 +41,7 @@ import {createNeuroGenome,expressNeuroGenome} from './neurodevelopmental_genome.
 import {initialGlialState,advanceGlialState,compareGlialUptake} from './biophysical_glia.js';
 import {simulateAnatomicalMotifs,pairedCircuitAblation,CIRCUIT_MOTIFS} from './anatomical_circuit_motifs.js';
 import {initialPlasticSynapse,advancePlasticSynapse,compareSpikeOrder} from './neural_plasticity.js';
+import {simulateCoupledGenomeCircuit,pairedGeneticCircuitAblation} from './coupled_genome_circuits.js';
 import { runMicrocircuit, ablateMicroProjection } from './biophysical_microcircuit.js';
 import { calibrateHumanPassiveCell, validateHumanPassiveCell } from './human_ephys_calibration.js';
 import {constructHumanPassiveArbor,runPassiveArbor} from './biophysical_morphology.js';
@@ -2447,6 +2448,29 @@ app.post('/api/research/neurobiology/plasticity',async(request,reply)=>{
  }
 });
 
+// The genotype->circuit link exists ONLY as a private, bounded research
+// comparison. The digital genome neither stores DNA nor controls AURA.
+app.post('/api/research/neurobiology/coupled-genome',async(request,reply)=>{
+ if(!requirePrivate(request,reply)||!requireRuntime(reply))return;
+ if(!sameOrigin(request))return reply.code(403).send({error:'Origine non autorisée'});
+ reply.header('Cache-Control','private, no-store');
+ try{
+  const body=request.body||{};
+  const genome=createNeuroGenome({seed:body.seed??'aura-research-coupled-genesis'});
+  const params={genome,environment:body.environment??{},
+   circuit_options:body.circuit_options??{}};
+  const experiment=typeof body.locus==='string'?
+   pairedGeneticCircuitAblation({...params,locus:body.locus}):
+   simulateCoupledGenomeCircuit(params);
+  return {ok:true,experiment,production_state_unchanged:true,
+   human_gene_to_neuron_calibrated:false,no_genomic_DNA_download:true,
+   research_only:true,llm_used:false};
+ }catch(error){
+  if(error instanceof TypeError||error instanceof RangeError)
+   return reply.code(422).send({error:String(error.message).slice(0,180)});
+  throw error;
+ }
+});
 app.get('/api/research/biophysics/evidence', async (request, reply) => {
   reply.header('Cache-Control','public, max-age=300');
   return biologicalResearchSnapshot();
