@@ -42,7 +42,7 @@ jobs:
           done
           sha256sum GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz > SOURCE_SHA256.txt
           du -h GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz
-      - name: Compile GENCODE with bounded streaming transcript placement
+      - name: Compile GENCODE via backpressured gzip parser and bounded gene state
         shell: bash
         run: |
           set -euo pipefail
