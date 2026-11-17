@@ -142,7 +142,7 @@ test('GO evidence gates isolate absent biological annotations and reject arbitra
  assert.throws(()=>pairedMeasuredGeneKnockdown(clone,{
   symbol:'SCN1A',require_complete_data:false}),/not supported/);
  assert.throws(()=>deriveMeasuredNeuralInputs(atlas,{require_complete_data:false,
-  interventions:[{symbol:'GENE_D_120',scale:0}]}),/outside pre-registered/);
+  interventions:[{symbol:'NONEXISTENT',scale:0}]}),/outside pre-registered/);
  assert.throws(()=>simulateMeasuredGeneCircuit(atlas,{require_complete_data:false,
   brain_tissue:'Brain - imaginary'}),/no measured neural gene evidence/);
 });
