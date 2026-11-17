@@ -215,3 +215,21 @@ test('functional human gene atlas quantifies evidence without pretending every c
  assert.equal(low.observed.coding_with_both_tpm_and_goa,4);
  assert.ok(low.example_unmeasured_or_unannotated.length>=2);
 });
+
+test('streaming import accepts an out-of-order isoform and preserves its exact parent',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'aura-gtf-order-'));
+ try{
+  const id='ENSG00000111111.1';
+  const attr='gene_id "'+id+'"; gene_type "protein_coding"; gene_name "TEST"; ';
+  const text='chr1\tGENCODE\ttranscript\t10\t300\t.\t+\t.\t'+
+    attr+'transcript_id "ENST00000001111.1"; transcript_type "protein_coding";\n'+
+    'chr1\tGENCODE\tgene\t1\t500\t.\t+\t.\t'+attr+'\n';
+  const path=join(dir,'partial.gtf');writeFileSync(path,text);
+  const result=await loadGencodeGenes(path);
+  assert.equal(result.parsed_genes,1);
+  assert.equal(result.parsed_transcripts,1);
+  assert.equal(result.orphan_transcripts,0);
+  assert.equal(result.genes.get('ENSG00000111111').transcripts[0].id,
+    'ENST00000001111.1');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
