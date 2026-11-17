@@ -62,7 +62,7 @@ function initGene(id,attr,chr,start,end,strand){
   chr,start,end,strand,transcripts:[],brain_median_tpm:{},
   go_terms:[],go_terms_dropped:0};
 }
-export async function loadGencodeGenes(path,{max_genes=120000,max_transcripts=500000}={}){
+export async function loadGencodeGenes(path,{max_genes=120000,max_transcripts=1000000}={}){
  const genes=new Map(),pending=[],seenTranscript=new Set();
  let lines=0,transcripts=0,ignored=0;
  for await(const line of textLines(path)){
