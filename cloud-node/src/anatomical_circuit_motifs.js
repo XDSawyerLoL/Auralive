@@ -105,7 +105,8 @@ export function simulateAnatomicalMotifs({
   {node:'entorhinal',amplitude:.75,start_ms:0,end_ms:300}
  ],remove_projections=[],metabolic_supply=.9,
  inflammation=0,plasticity_enabled=true,glia_enabled=true,
- developmental_stage=.8
+ developmental_stage=.8,excitatory_gain=1,inhibitory_gain=1,
+ plasticity_learning_gain=1
 }={}){
  validate(duration_ms,5,2500,'duration');
  validate(dt_ms,1,10,'step');
@@ -113,6 +114,9 @@ export function simulateAnatomicalMotifs({
  validate(metabolic_supply,0,1,'metabolic supply');
  validate(inflammation,0,1,'inflammation');
  validate(developmental_stage,0,1,'development');
+ validate(excitatory_gain,.2,2,'excitatory gain');
+ validate(inhibitory_gain,.2,2,'inhibitory gain');
+ validate(plasticity_learning_gain,0,3,'plasticity gain');
  if(typeof plasticity_enabled!=='boolean'||typeof glia_enabled!=='boolean')
   throw new TypeError('boolean circuit flags required');
  if(!Array.isArray(stimuli)||stimuli.length>16)throw new RangeError('bounded stimuli');
@@ -165,7 +169,8 @@ export function simulateAnatomicalMotifs({
    s.resources=clamp(1-(1-s.resources)*Math.exp(-dt_ms/600));
    s.utilization=clamp(.22+(s.utilization-.22)*Math.exp(-dt_ms/150));
    const release=s.weight*s.resources*s.utilization*past;
-   drives[nodeIndex.get(edge.to)]+=edge.transmitter_class==='excitatory'?release:-release;
+   drives[nodeIndex.get(edge.to)]+=edge.transmitter_class==='excitatory'?
+    release*excitatory_gain:-release*inhibitory_gain;
    s.resources=clamp(s.resources-(dt_ms/40)*s.resources*s.utilization*past);
    s.utilization=clamp(s.utilization+.025*past*(1-s.utilization));
   }
@@ -182,7 +187,8 @@ export function simulateAnatomicalMotifs({
     const s=syn[Number(e.id.slice(11))];
     const pre=before[nodeIndex.get(e.from)],post=activity[nodeIndex.get(e.to)];
     // Co-activity rule is NOT STDP; event-level STDP is a separate model.
-    s.weight=clamp(s.weight+dt_ms*.00005*(pre*post-.05*post*post),.05,1);
+    s.weight=clamp(s.weight+dt_ms*.00005*plasticity_learning_gain*
+      (pre*post-.05*post*post),.05,1);
    }
   }
   history.push(Float64Array.from(activity));
@@ -213,6 +219,7 @@ export function simulateAnatomicalMotifs({
   simulated_populations_not_reconstructed_human_regions:true,
   measured_human_synaptic_fidelity:false,
   gene_transcriptome_calibrated:false,
+  experimental_expression_gains:{excitatory_gain,inhibitory_gain,plasticity_learning_gain},
   eeg_or_connectomics_validation:false,
   production_organism_unchanged:true,language_model_used:false};
 }
