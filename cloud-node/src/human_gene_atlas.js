@@ -147,8 +147,20 @@ export async function joinGtexBrainExpression(path,genes){
    columns=line.split('\t');
    if(columns[0]!=='Name'||columns[1]!=='Description')
     throw new Error('GCT header requires Name and Description');
-   selected=columns.map((name,i)=>({name,i})).filter(x=>/^Brain - /i.test(x.name));
-   if(selected.length<2)throw new Error('GTEx brain tissue columns missing');
+   // GTEx matrix headings use raw tissue IDs (Brain_Cortex), while
+   // the portal's human-readable labels use Brain - Cortex.
+   const humanLabel=name=>{
+    if(/^Brain[ _-]/i.test(name)){
+     const tail=name.replace(/^Brain[ _-]+/i,'').replace(/_/g,' ').replace(/^[- ]+/,'');
+     if(!tail)return null;
+     return 'Brain - '+tail;
+    }
+    return null;
+   };
+   selected=columns.map((raw,i)=>({name:humanLabel(raw),i}))
+    .filter(x=>x.name!==null);
+   if(selected.length<2)throw new Error('GTEx brain tissue columns missing; sample headers: '+
+    columns.slice(2,8).join(', ').slice(0,180));
    continue;
   }
   if(!columns)throw new Error('GTEx header missing');
