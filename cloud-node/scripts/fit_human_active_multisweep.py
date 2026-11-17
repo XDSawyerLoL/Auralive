@@ -21,6 +21,7 @@ from analyze_human_spiking_nwb import spike_report
 from export_allen_human_features import select_heldout_trace
 from run_human_swc_neuron import passive_geometry_parameters, read_human_features
 from run_human_active_hh_control import detect_events
+from human_active_validation_metrics import assess_active_fidelity
 
 
 def select_prespecified_sweeps(metadata):
@@ -101,6 +102,7 @@ def normalized_error(observed, simulated, dt):
         raise ValueError('Non-aligned observed/predicted voltage')
     if not all(math.isfinite(v) for v in observed+simulated):
         raise ArithmeticError('Non-finite membrane voltage')
+    metrics=assess_active_fidelity(observed,simulated,dt)
     obs_spikes=detect_events(observed,dt)
     pred_spikes=detect_events(simulated,dt)
     squared=sum((o-p)**2 for o,p in zip(observed,simulated))/len(observed)
@@ -118,6 +120,7 @@ def normalized_error(observed, simulated, dt):
         'loss':round(loss,6),
         'loss_definition':'RMSE(mV) + 5mV * abs(spike_count_difference)',
         'observation_origin':'real-Allen-NWB',
+        'timing_fidelity':metrics,
         'model_origin':'historic-squid-HH-kinetics-on-human-SWC',
     }
 

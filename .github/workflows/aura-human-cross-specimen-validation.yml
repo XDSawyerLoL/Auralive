@@ -9,6 +9,8 @@ on:
       - "cloud-node/scripts/test_plan_human_ephys_cohort.py"
       - "cloud-node/scripts/test_evaluate_human_transfer_cell.py"
       - "cloud-node/scripts/fit_human_active_multisweep.py"
+      - "cloud-node/scripts/human_active_validation_metrics.py"
+      - "cloud-node/scripts/test_human_active_validation_metrics.py"
   workflow_dispatch:
 
 permissions:
@@ -72,12 +74,18 @@ jobs:
                       'na':2.,'k':1.,'axon':1.}
                   assert result['no_production_write']
                   assert result['true_human_ion_channels_validated'] is False
+                  metrics=result['active_timing_fidelity']
+                  assert metrics['schema']=='aura-human-ephys-fidelity-v1'
+                  assert metrics['observed_spikes']==result['target_observed_spikes']
+                  assert metrics['predicted_spikes']==result['target_simulated_spikes']
+                  assert metrics['screen_is_biological_equivalence_certificate'] is False
                   result['stimulus_group']=label
                   reports.append(result)
           if len(reports)!=4:
               raise AssertionError('Two actual human cells, two currents per cell required')
           cohort['results']=reports
           cohort['experiment_result']='two actual human specimens, each with median and high-current evaluation; no target-specific active refit'
+          cohort['fidelity_screen_results']=[{'specimen':r['target_specimen'],'sweep':r['target_sweep'],'screen_passed':r['active_timing_fidelity']['phenomenological_screen_passed']} for r in reports]
           cohort['human_active_fidelity_certified']=False
           cohort['subjective_consciousness_inferred']=False
           cohort['nwb_raw_traces_in_report']=False

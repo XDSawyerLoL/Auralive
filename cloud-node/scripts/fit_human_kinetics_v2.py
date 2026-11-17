@@ -21,6 +21,7 @@ from export_allen_human_features import select_heldout_trace, file_sha256
 from fit_human_active_multisweep import (
     select_prespecified_sweeps, normalized_error, select_fit_candidate,
 )
+from human_active_validation_metrics import rank_preregistered_training_candidates
 from run_human_swc_neuron import (
     read_human_features, passive_geometry_parameters,
 )
@@ -203,8 +204,18 @@ def fit_reference(model, selection, records, *,candidates=None):
         if s not in train:raise RuntimeError('Heldout trace accessed during fit')
         return {'sweep_number':s,**model.simulate(records[s],param)}
     winner,trials=select_fit_candidate(candidates,train,evaluate)
+    # Precommit both candidates using TRAINING ONLY, before any heldout
+    # voltage is accessed. The historical winner remains unchanged.
+    alternate=rank_preregistered_training_candidates(trials)
     holdnum=hold[0]
     validation={'sweep_number':holdnum,**model.simulate(records[holdnum],winner['candidate'])}
+    alternative_validation=None
+    if alternate is not None:
+        if alternate['candidate']==winner['candidate']:
+            alternative_validation=dict(validation)
+        else:
+            alternative_validation={'sweep_number':holdnum,
+                **model.simulate(records[holdnum],alternate['candidate'])}
     return {
         'schema':SCHEMA,
         'reference_specimen':records[train[0]]['specimen_id'],
@@ -225,6 +236,15 @@ def fit_reference(model, selection, records, *,candidates=None):
         'mean_training_loss':winner['train_loss'],
         'training_metrics':winner['training'],
         'locked_holdout_metrics':validation,
+        'event_aware_training_comparison':{
+            'historical_train_winner_retained':True,
+            'alternate_training_selection':alternate,
+            'alternate_sealed_holdout_metrics':alternative_validation,
+            'candidate_selected_using_holdout':False,
+            'external_specimens_used_to_select':False,
+            'experimental_only_not_human_channel_calibration':True,
+            'no_change_to_live_AURA':True,
+        },
         'locked_holdout_used_for_selection':False,
         'heldout_independent_of_Allen_passive_feature_extraction':False,
         'independent_cells_evaluated':False,

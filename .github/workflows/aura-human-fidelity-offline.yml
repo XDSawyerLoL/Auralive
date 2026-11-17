@@ -1,0 +1,48 @@
+name: AURA human active fidelity offline numerical gates
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/aura-human-fidelity-offline.yml"
+      - "cloud-node/scripts/human_active_validation_metrics.py"
+      - "cloud-node/scripts/test_human_active_validation_metrics.py"
+      - "cloud-node/scripts/fit_human_active_multisweep.py"
+      - "cloud-node/scripts/evaluate_human_kinetics_transfer.py"
+      - "cloud-node/scripts/evaluate_human_transfer_cell.py"
+      - ".github/workflows/aura-human-effective-gating-v2.yml"
+      - ".github/workflows/aura-human-cross-specimen-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  numerical-falsification-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Synthetic numerical controls, NO claim of human-data validation
+        working-directory: cloud-node
+        env:
+          PYTHONPATH: scripts
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s scripts -p 'test_human_active_validation_metrics.py' -v
+          python -m unittest discover -s scripts -p 'test_fit_human_active_multisweep.py' -v
+          python -m unittest discover -s scripts -p 'test_fit_human_kinetics_v2.py' -v
+          python -m unittest discover -s scripts -p 'test_evaluate_human_transfer_cell.py' -v
+          python -m unittest discover -s scripts -p 'test_evaluate_human_kinetics_transfer.py' -v
+      - name: Explicitly separate simulated checks from future Allen NWB results
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### Scientific scope
+          These are **synthetic** numerical controls. They do NOT validate
+          human ion-channel kinetics. Human observed-versus-predicted AP
+          timing and voltage metrics require running the separate Allen NWB /
+          NEURON research workflows, with reference and heldout data isolated.
+          EOF

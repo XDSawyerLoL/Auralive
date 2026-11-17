@@ -86,4 +86,42 @@ class OriginalHumanConstrainedGatesTests(unittest.TestCase):
             fit_reference(model,selection,records,candidates=preregistered_candidates()[:1])
 
 
+
+class IndependentEventAwareCalibrationTests(unittest.TestCase):
+    def test_train_only_event_aware_candidate_can_differ_from_voltage_winner(self):
+        from human_active_validation_metrics import SCHEMA
+        class Spy:
+            def __init__(self):self.calls=[]
+            def simulate(self,record,params):
+                n=record['sweep_number']
+                self.calls.append((n,params['gna_soma']))
+                voltage_loss=1 if params['gna_soma']==.12 else 2
+                missed=3 if params['gna_soma']==.12 else 0
+                return {
+                    'loss':voltage_loss+(100 if n==44 else 0),
+                    'observed_spikes':3,
+                    'predicted_spikes':0 if missed else 3,
+                    'timing_fidelity':{
+                        'schema':SCHEMA,
+                        'comparison_not_genome_or_brain_equivalence':True,
+                        'voltage_rmse_mV':voltage_loss,
+                        'subthreshold_rmse_mV':1,
+                        'missed_spikes':missed,
+                        'false_positive_spikes':0,
+                        'timing_mae_ms':None if missed else 1}}
+        model=Spy()
+        selection={'training_sweep_numbers':[26,37],
+                   'validation_sweep_numbers':[44]}
+        records={n:fake_record(n) for n in (26,37,44)}
+        result=fit_reference(model,selection,records,
+            candidates=preregistered_candidates()[:2])
+        self.assertEqual(result['winner']['gna_soma'],.12)
+        alt=result['event_aware_training_comparison']
+        self.assertEqual(alt['alternate_training_selection']['candidate']['gna_soma'],.24)
+        self.assertFalse(alt['candidate_selected_using_holdout'])
+        self.assertEqual([n for n,_ in model.calls],[26,37,26,37,44,44])
+        self.assertEqual(result['locked_holdout_metrics']['loss'],101)
+        self.assertEqual(alt['alternate_sealed_holdout_metrics']['loss'],102)
+        self.assertTrue(alt['historical_train_winner_retained'])
+
 if __name__=='__main__':unittest.main()
