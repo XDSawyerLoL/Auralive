@@ -2,7 +2,7 @@
 // Each item is an explicitly bounded status rather than a percent 'complete'.
 export const NEUROBIOLOGY_COVERAGE_SCHEMA='aura-neurobiology-coverage-v1';
 const rows=[
- ['genome_and_gene_regulation','research-toy','digital_protogenome.js;neurodevelopmental_genome.js','Human genes, chromatin, transcriptomics and protein expression absent'],
+ ['genome_and_gene_regulation','research-toy','digital_protogenome.js;neurodevelopmental_genome.js;human_reference_genome.js','Offline GRCh38 reference FASTA integrity check added; real gene regulation, transcriptomics and protein expression still absent'],
  ['neuronal_membrane_passive','human-measurement-fitted-subset','human_ephys_calibration.js','Human single-cell passive features, not an active neuron or brain'],
  ['active_sodium_potassium_channels','research-toy','biophysical_microcircuit.js','Squid HH baseline and unvalidated human active-gate fitting'],
  ['calcium_channels_and_pumps','not-reconstructed','','Ion pumps, calcium channels and gradients absent'],
