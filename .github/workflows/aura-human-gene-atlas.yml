@@ -42,14 +42,27 @@ jobs:
           done
           sha256sum GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz > SOURCE_SHA256.txt
           du -h GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz
-      - name: Compile GENCODE via backpressured gzip parser and bounded gene state
+      - name: Preselect every GENCODE gene and transcript with O(1) RAM
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/aura-human-evidence"
+          gzip -dc GENCODE.gtf.gz |
+            awk -F '\t' '$3=="gene" || $3=="transcript"' |
+            gzip -1 > GENCODE.genes_isoforms.gtf.gz
+          gzip -t GENCODE.genes_isoforms.gtf.gz
+          sha256sum GENCODE.genes_isoforms.gtf.gz >> SOURCE_SHA256.txt
+          gzip -dc GENCODE.genes_isoforms.gtf.gz |
+            awk -F '\t' '{count[$3]++} END {print "retained genes",count["gene"],"retained transcripts",count["transcript"]}'
+      - name: Compile complete source gene+transcript evidence with bounded memory
         shell: bash
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/aura-human-evidence"
           node "$GITHUB_WORKSPACE/cloud-node/scripts/compile_human_gene_atlas.mjs" \
-            --gtf GENCODE.gtf.gz \
-            --gtf-sha256 "$(sha256sum GENCODE.gtf.gz | cut -d' ' -f1)" \
+            --gtf GENCODE.genes_isoforms.gtf.gz \
+            --gtf-sha256 "$(sha256sum GENCODE.genes_isoforms.gtf.gz | cut -d' ' -f1)" \
+            --original-gtf-sha256 "$(sha256sum GENCODE.gtf.gz | cut -d' ' -f1)" \
             --gct GTEx.gct.gz \
             --gct-sha256 "$(sha256sum GTEx.gct.gz | cut -d' ' -f1)" \
             --gaf GOA.gaf.gz \
