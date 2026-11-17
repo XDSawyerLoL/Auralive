@@ -114,7 +114,7 @@ class HumanSpikingFidelityTests(unittest.TestCase):
 
     def test_spike_order_matching_is_one_to_one(self):
         obs=trace((300,800))
-        pred=trace((320,350,800))
+        pred=trace((310,365,800))
         x=assess_active_fidelity(obs,pred,DT)
         self.assertEqual(x['matched_spikes'],2)
         self.assertEqual(x['false_positive_spikes'],1)
