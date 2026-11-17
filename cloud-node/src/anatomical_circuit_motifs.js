@@ -106,7 +106,7 @@ export function simulateAnatomicalMotifs({
  ],remove_projections=[],metabolic_supply=.9,
  inflammation=0,plasticity_enabled=true,glia_enabled=true,
  developmental_stage=.8,excitatory_gain=1,inhibitory_gain=1,
- plasticity_learning_gain=1
+ plasticity_learning_gain=1,conduction_gain=1
 }={}){
  validate(duration_ms,5,2500,'duration');
  validate(dt_ms,1,10,'step');
@@ -117,6 +117,7 @@ export function simulateAnatomicalMotifs({
  validate(excitatory_gain,.2,2,'excitatory gain');
  validate(inhibitory_gain,.2,2,'inhibitory gain');
  validate(plasticity_learning_gain,0,3,'plasticity gain');
+ validate(conduction_gain,.5,1.5,'conduction gain');
  if(typeof plasticity_enabled!=='boolean'||typeof glia_enabled!=='boolean')
   throw new TypeError('boolean circuit flags required');
  if(!Array.isArray(stimuli)||stimuli.length>16)throw new RangeError('bounded stimuli');
@@ -164,7 +165,9 @@ export function simulateAnatomicalMotifs({
   // Delay is determined by a past activity snapshot, NEVER future activity.
   for(const edge of active){
    const idx=Number(edge.id.slice(11)),s=syn[idx];
-   const pastTick=tick-Math.max(1,Math.ceil(edge.delay_ms/dt_ms));
+   const effectiveConduction=conduction_gain*(glia_enabled?
+    (.8+.2*glia.myelin_integrity/.8):1);
+   const pastTick=tick-Math.max(1,Math.ceil(edge.delay_ms/(dt_ms*effectiveConduction)));
    const past=pastTick>=0?history[pastTick][nodeIndex.get(edge.from)]:0;
    s.resources=clamp(1-(1-s.resources)*Math.exp(-dt_ms/600));
    s.utilization=clamp(.22+(s.utilization-.22)*Math.exp(-dt_ms/150));
@@ -219,7 +222,8 @@ export function simulateAnatomicalMotifs({
   simulated_populations_not_reconstructed_human_regions:true,
   measured_human_synaptic_fidelity:false,
   gene_transcriptome_calibrated:false,
-  experimental_expression_gains:{excitatory_gain,inhibitory_gain,plasticity_learning_gain},
+  experimental_expression_gains:{excitatory_gain,inhibitory_gain,
+   plasticity_learning_gain,conduction_gain},
   eeg_or_connectomics_validation:false,
   production_organism_unchanged:true,language_model_used:false};
 }
