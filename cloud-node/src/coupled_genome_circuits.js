@@ -38,6 +38,7 @@ export function simulateCoupledGenomeCircuit({
   excitatory_gain:round(.55+1.25*excit.expression.membrane_excitability),
   inhibitory_gain:round(.55+1.25*inhib.expression.inhibitory_excitability),
   plasticity_learning_gain:round(.10+2*excit.expression.learning_plasticity),
+  conduction_gain:round(.7+.6*oligo.expression.myelin_maintenance),
  };
  const modelEnvironment={
   metabolic_supply:clip(nutrient*(.75+.25*astro.expression.astrocyte_energy_reserve)),
@@ -91,6 +92,8 @@ export function pairedGeneticCircuitAblation({
   baseline_id:baseline.genome_id,perturbed_id:perturbed.genome_id,
   baseline,perturbed,rate_differences:delta,
   observed_effect_in_toy: Object.values(delta).some(v=>v!==0)||
+   baseline.circuit.trace.some((x,i)=>Object.keys(x).some(key=>
+    key!=='time_ms'&&Math.abs(x[key]-perturbed.circuit.trace[i][key])>1e-7))||
    baseline.circuit.plasticity.weight_changes.some((x,i)=>
     x.after!==perturbed.circuit.plasticity.weight_changes[i]?.after),
   causal_scope:'within-stipulated-numeric-model-only',
