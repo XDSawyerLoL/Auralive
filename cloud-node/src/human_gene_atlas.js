@@ -70,11 +70,15 @@ function initGene(id,attr,chr,start,end,strand){
   go_terms:[],go_terms_dropped:0};
 }
 export async function loadGencodeGenes(path,{max_genes=120000,max_transcripts=1000000}={}){
- const genes=new Map(),pending=[],seenTranscript=new Set();
- let lines=0,transcripts=0,ignored=0;
+ const genes=new Map(),pending=new Map(),seenTranscript=new Set();
+ let lines=0,transcripts=0,ignored=0,pendingCount=0;
  for await(const line of textLines(path)){
   if(line.startsWith('#')||!line.trim())continue;
   if(++lines>20000000)throw new RangeError('annotation line count exceeds research budget');
+  if(lines%2000000===0&&process.env.GITHUB_ACTIONS==='true')
+   process.stderr.write('[AURA GTF] '+lines+' features, '+genes.size+
+    ' genes, '+transcripts+' transcripts; heap='+
+    Math.round(process.memoryUsage().heapUsed/1048576)+' MB\\n');
   const cols=line.split('\t');
   if(cols.length!==9)throw new Error('GTF requires nine columns');
   if(cols[2]!=='gene'&&cols[2]!=='transcript')continue;
@@ -87,24 +91,29 @@ export async function loadGencodeGenes(path,{max_genes=120000,max_transcripts=10
   if(cols[2]==='gene'){
    if(genes.has(geneId))throw new Error('duplicate GENCODE gene '+geneId);
    if(genes.size>=max_genes)throw new RangeError('too many genes');
-   genes.set(geneId,initGene(geneId,attr,chr,start,end,cols[6]));
+   const gene=initGene(geneId,attr,chr,start,end,cols[6]);
+   genes.set(geneId,gene);
+   const backlog=pending.get(geneId);
+   if(backlog){gene.transcripts.push(...backlog);pendingCount-=backlog.length;
+    pending.delete(geneId);}
   }else{
    const transcriptId=attr.transcript_id;
    if(!transcriptId||transcriptId.length>70||seenTranscript.has(transcriptId))
     throw new Error('missing or duplicate isoform identifier');
    seenTranscript.add(transcriptId);
    if(++transcripts>max_transcripts)throw new RangeError('too many isoforms');
-   pending.push({geneId,transcriptId,biotype:attr.transcript_type||'unclassified'});
+   const isoform={id:transcriptId,biotype:attr.transcript_type||'unclassified'};
+   const gene=genes.get(geneId);
+   if(gene)gene.transcripts.push(isoform);
+   else{
+    if(++pendingCount>100000)throw new RangeError('out-of-order GTF transcript budget');
+    const backlog=pending.get(geneId)||[];backlog.push(isoform);
+    pending.set(geneId,backlog);
+   }
   }
  }
- let orphans=0;
- for(const t of pending){
-  const g=genes.get(t.geneId);
-  if(!g){orphans++;continue;}
-  g.transcripts.push({id:t.transcriptId,biotype:t.biotype});
- }
  return {genes,parsed_genes:genes.size,parsed_transcripts:transcripts,
-  orphan_transcripts:orphans,ignored_unrecognized_ids:ignored};
+  orphan_transcripts:pendingCount,ignored_unrecognized_ids:ignored};
 }
 export async function joinGtexBrainExpression(path,genes){
  if(!(genes instanceof Map))throw new TypeError('gene map required');
