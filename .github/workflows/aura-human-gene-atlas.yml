@@ -54,7 +54,7 @@ jobs:
           sha256sum GENCODE.genes_isoforms.gtf.gz >> SOURCE_SHA256.txt
           gzip -dc GENCODE.genes_isoforms.gtf.gz |
             awk -F '\t' '{count[$3]++} END {print "retained genes",count["gene"],"retained transcripts",count["transcript"]}'
-      - name: Compile complete source gene+transcript evidence with bounded memory
+      - name: Compile GENCODE gene catalog with normalized GTEx v10 Brain_* tissue labels
         shell: bash
         run: |
           set -euo pipefail
