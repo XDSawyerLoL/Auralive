@@ -1,0 +1,68 @@
+name: AURA Human Gene Atlas - real datasets
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/aura-human-transcriptome-functional-20261117
+    paths:
+      - .github/workflows/aura-human-gene-atlas.yml
+permissions:
+  contents: read
+concurrency:
+  group: aura-real-gene-atlas-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  import-real-genes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download public human GENCODE 50, GTEx v10 and GOA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aura-human-evidence"
+          cd "$RUNNER_TEMP/aura-human-evidence"
+          curl --fail --location --retry 4 --connect-timeout 30 --max-time 1000 \
+            --output GENCODE.gtf.gz \
+            'https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_50/gencode.v50.primary_assembly.annotation.gtf.gz'
+          curl --fail --location --retry 4 --connect-timeout 30 --max-time 800 \
+            --output GTEx.gct.gz \
+            'https://storage.googleapis.com/adult-gtex/bulk-gex/v10/rna-seq/GTEx_Analysis_v10_RNASeQCv2.4.2_gene_median_tpm.gct.gz'
+          curl --fail --location --retry 4 --connect-timeout 30 --max-time 1000 \
+            --output GOA.gaf.gz \
+            'https://current.geneontology.org/annotations/gaf/HUMAN-uniprot.gaf.gz'
+          for f in GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz; do
+            gzip -t "$f"
+          done
+          sha256sum GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz > SOURCE_SHA256.txt
+          du -h GENCODE.gtf.gz GTEx.gct.gz GOA.gaf.gz
+      - name: Compile 50k+ genes / 18k+ coding / 16k+ expression / 5k+ GO evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/aura-human-evidence"
+          node "$GITHUB_WORKSPACE/cloud-node/scripts/compile_human_gene_atlas.mjs" \
+            --gtf GENCODE.gtf.gz \
+            --gtf-sha256 "$(sha256sum GENCODE.gtf.gz | cut -d' ' -f1)" \
+            --gct GTEx.gct.gz \
+            --gct-sha256 "$(sha256sum GTEx.gct.gz | cut -d' ' -f1)" \
+            --gaf GOA.gaf.gz \
+            --gaf-sha256 "$(sha256sum GOA.gaf.gz | cut -d' ' -f1)" \
+            --out AURA_HUMAN_GENE_ATLAS_GRCH38.json.gz > AURA_COVERAGE.json
+          cat AURA_COVERAGE.json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({"coverage":d["counts"]["genes"],"coding":d["counts"]["protein_coding"],"tpm_matched":d["counts"]["expression_overlap"],"go_annotated":d["counts"]["go_annotated"],"gate_passed":d["complete_source_coverage_gate_passed"],"genome_executed":False},indent=2))'
+      - name: Upload audit and real gene evidence (not a biological emulator)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-genecode-gtex-goa-audited-human-gene-evidence
+          path: |
+            ${{ runner.temp }}/aura-human-evidence/AURA_HUMAN_GENE_ATLAS_GRCH38.json.gz
+            ${{ runner.temp }}/aura-human-evidence/AURA_COVERAGE.json
+            ${{ runner.temp }}/aura-human-evidence/SOURCE_SHA256.txt
+          retention-days: 7
