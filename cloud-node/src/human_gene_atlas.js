@@ -207,16 +207,21 @@ export async function compileHumanGeneAtlas({
  const actual={genes:genes.length,protein_coding:coding,
   expression_overlap:expr.matched_genes,go_annotated:functional.annotated_genes};
  const below=Object.keys(thresholds).filter(k=>actual[k]<thresholds[k]);
+ const officialMinimum={genes:50000,protein_coding:18000,
+  expression_overlap:16000,go_annotated:5000};
+ const officialBelow=Object.keys(officialMinimum)
+  .filter(k=>actual[k]<officialMinimum[k]);
  if(below.length&&!allow_incomplete)throw new Error(
   'Incomplete source coverage: '+below.map(k=>k+': '+actual[k]+'/'+thresholds[k]).join('; '));
  return {
-  schema:HUMAN_GENE_ATLAS_SCHEMA,annotation_assembly:'GRCh38.p14',
+  schema:HUMAN_GENE_ATLAS_SCHEMA,annotation_assembly:'GRCh38.p14',assembly_stated_by_source_selection_not_sequence_alignment:true,
   sources:HUMAN_GENE_SOURCES,source_sha256:sha,
   checksum_scope:'compares-to-caller-supplied-hash-not-independent-upstream-authenticity',
   genes,counts:{...actual,genes_with_transcript:withTranscripts,
    transcript_isoforms:indexed.parsed_transcripts,orphan_transcripts:indexed.orphan_transcripts,
    ...expr,...functional},minimum_coverage:thresholds,below_minimum:below,
-  complete_source_coverage_gate_passed:below.length===0,
+  complete_source_coverage_gate_passed:below.length===0&&officialBelow.length===0,
+  official_minimums:officialMinimum,official_coverage_gaps:officialBelow,
   all_genes_biologically_functional:false,
   cell_specific_transcriptomics_embedded:false,
   neural_function_from_GO_proven:false,
