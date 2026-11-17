@@ -64,6 +64,8 @@ def prepare_external_result(fit, cohort, specimen, sweep, metrics, swc_sha, nwb_
         'predicted_spikes':metrics['predicted_spikes'],
         'rmse_mV':metrics['rmse_mV'],
         'mae_mV':metrics['mae_mV'],
+        'active_timing_fidelity':metrics.get('timing_fidelity'),
+        'biological_accuracy_not_certified':True,
         'molecular_kinetics_identified':False,
         'kinetics_model_origin':SOURCE,
         'target_passive_features_used':True,
