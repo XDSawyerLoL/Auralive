@@ -4,7 +4,7 @@ import {compileHumanGeneAtlas,writeHumanGeneAtlas} from '../src/human_gene_atlas
 const args={};
 for(let i=2;i<process.argv.length;i+=2){
  const k=process.argv[i],v=process.argv[i+1];
- if(!/^--[a-z-]+$/.test(k)||!v||v.startsWith('--'))
+ if(!/^--[a-z0-9-]+$/.test(k)||!v||v.startsWith('--'))
   throw new TypeError('expected --key value pairs');
  if(Object.hasOwn(args,k))throw new Error('duplicate argument '+k);
  args[k]=v;
