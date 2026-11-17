@@ -10,6 +10,7 @@ import {fileURLToPath} from 'node:url';
 import {compileHumanGeneAtlas,writeHumanGeneAtlas,
  HUMAN_GENE_ATLAS_SCHEMA,loadGencodeGenes} from '../src/human_gene_atlas.js';
 import {openHumanGeneAtlasArtifact,findHumanGeneEvidence} from '../src/human_gene_evidence_query.js';
+import {auditHumanGeneEvidenceCoverage} from '../src/human_gene_coverage.js';
 import {deriveMeasuredNeuralInputs,simulateMeasuredGeneCircuit,
  pairedMeasuredGeneKnockdown} from '../src/human_gene_neural_function.js';
 const hash=x=>createHash('sha256').update(x).digest('hex');
@@ -192,4 +193,25 @@ test('saved human gene index supports checksum protected per-gene isoforms and G
   await assert.rejects(()=>openHumanGeneAtlasArtifact(path,{
    sha256:'0'.repeat(64)}),/checksum mismatch/);
  }finally{rmSync(f.dir,{recursive:true,force:true});}
+});
+
+test('functional human gene atlas quantifies evidence without pretending every coding gene is physiologically known',async()=>{
+ const atlas=await compiled();
+ const coverage=auditHumanGeneEvidenceCoverage(atlas);
+ assert.equal(coverage.totals.protein_coding,6);
+ assert.equal(coverage.totals.protein_coding_isoforms,12);
+ assert.equal(coverage.observed.coding_with_any_goa,6);
+ assert.equal(coverage.observed.coding_with_experimental_goa,6);
+ assert.equal(coverage.observed.coding_with_both_tpm_and_goa,6);
+ assert.equal(coverage.go_evidence_codes.IDA,6);
+ assert.equal(coverage.proportions.coding_any_goa,1);
+ assert.equal(coverage.full_human_genome_emulation,false);
+ assert.equal(coverage.experimentally_tested_gene_to_neuron_kinetics,false);
+ const missing=structuredClone(atlas);
+ missing.genes[0].go_terms=[];missing.genes[1].brain_median_tpm={};
+ const low=auditHumanGeneEvidenceCoverage(missing);
+ assert.equal(low.observed.coding_with_any_goa,5);
+ assert.equal(low.observed.coding_with_bulk_brain_tpm,5);
+ assert.equal(low.observed.coding_with_both_tpm_and_goa,4);
+ assert.ok(low.example_unmeasured_or_unannotated.length>=2);
 });
