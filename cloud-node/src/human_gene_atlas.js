@@ -50,7 +50,12 @@ function gtfAttributes(s){
  const out={};
  const reg=/([a-zA-Z][\w-]*)\s+"([^"]*)";/g;let m;
  while((m=reg.exec(s))!==null){
-  if(Object.hasOwn(out,m[1]))throw new Error('duplicate GTF attribute');
+  // GENCODE legitimately repeats transcript 'tag' attributes (basic,
+  // MANE, Ensembl canonical, etc.). Identity keys must remain unique.
+  if(Object.hasOwn(out,m[1])){
+   if(m[1]==='tag')continue;
+   throw new Error('duplicate GTF identity attribute');
+  }
   out[m[1]]=m[2];
  }
  return out;
