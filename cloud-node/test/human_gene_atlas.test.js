@@ -26,7 +26,7 @@ function fixtureFiles(){
    gtf+='chr'+(i+1)+'\tGENCODE\ttranscript\t100\t999\t.\t+\t.\t'+
     prefix+'transcript_id "ENST'+i+j+'.1"; transcript_type "protein_coding"; tag "basic"; tag "MANE_Select";\n';
  }
- const tissueCortex='Brain - Cortex',tissueCereb='Brain - Cerebellum';
+ const tissueCortex='Brain_Cortex',tissueCereb='Brain_Cerebellum';
  const gct=['#1.2','6\t4','Name\tDescription\t'+tissueCortex+'\t'+
   tissueCereb+'\tLiver\tMuscle - Skeletal'];
  const exp=[40,30,15,50,25,20];
