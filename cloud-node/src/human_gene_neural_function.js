@@ -139,7 +139,7 @@ export function simulateMeasuredGeneCircuit(atlas,{
  const circuit=simulateAnatomicalMotifs({...circuit_options,...measured.gains});
  return {
   schema:MEASURED_GENE_CIRCUIT_SCHEMA,measured,circuit,
-  evidence_is_not_causal_gene_function:false,
+  gene_function_causality_not_established:true,
   tissue_expression_is_not_cell_specific:true,
   human_gene_channel_kinetics_validated:false,
   production_state_unchanged:true,llm_used:false};
