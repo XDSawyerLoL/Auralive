@@ -6,6 +6,9 @@ on:
       - ".github/workflows/aura-human-effective-gating-v2.yml"
       - "cloud-node/scripts/aura_kinetics_mod/**"
       - "cloud-node/scripts/fit_human_kinetics_v2.py"
+      - "cloud-node/scripts/fit_human_active_multisweep.py"
+      - "cloud-node/scripts/human_active_validation_metrics.py"
+      - "cloud-node/scripts/test_human_active_validation_metrics.py"
       - "cloud-node/scripts/evaluate_human_kinetics_transfer.py"
       - "cloud-node/scripts/test_fit_human_kinetics_v2.py"
       - "cloud-node/scripts/test_evaluate_human_kinetics_transfer.py"
@@ -99,6 +102,8 @@ jobs:
           assert r['training_candidate_count']==12
           assert r['locked_holdout_metrics']['observed_spikes']==2
           assert r['locked_holdout_used_for_selection'] is False
+          assert r['locked_holdout_metrics']['timing_fidelity']['schema']=='aura-human-ephys-fidelity-v1'
+          assert r['locked_holdout_metrics']['timing_fidelity']['screen_is_biological_equivalence_certificate'] is False
           assert r['biologically_validated_human_channel'] is False
           print('Original Na/K effective gating fit:',r['locked_holdout_metrics'])
           PY
@@ -143,6 +148,8 @@ jobs:
               result=json.loads(outfile.read_text())
               assert result['target_active_data_used_for_fit'] is False
               assert result['transferred_active_parameters']==reference['winner']
+              assert result['active_timing_fidelity']['schema']=='aura-human-ephys-fidelity-v1'
+              assert result['active_timing_fidelity']['predicted_spikes']==result['predicted_spikes']
               results.append(result)
           public={
               'schema':'aura-human-original-active-cross-specimen-report-v1',
@@ -154,6 +161,8 @@ jobs:
               'reference_locked_holdout':reference['locked_holdout_metrics'],
               'original_NaK_parameters_frozen':reference['winner'],
               'external_tests':results,
+              'reference_holdout_phenomenological_screen_passed':reference['locked_holdout_metrics']['timing_fidelity']['phenomenological_screen_passed'],
+              'external_phenomenological_screen_results':[{'specimen':v['external_specimen'],'screen_passed':v['active_timing_fidelity']['phenomenological_screen_passed']} for v in results],
               'external_specimens_excluded_from_fit':True,
               'molecular_human_channel_gating_identified':False,
               'donor_independence_verified':False,
